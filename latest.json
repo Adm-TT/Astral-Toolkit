@@ -1,18 +1,21 @@
 {
- "version": "1.0.1",
- "date": "2026-10-26",
+ "version": "1.0.2",
+ "date": "2026-10-27",
  "notes": [
-  "第一次打开时可以导入旧版天枢的设置、配置、热键、路标和目标",
-  "旧版天枢还开着时提示热键冲突，可以一键关闭旧版",
-  "修复任务栏图标和旧版天枢混在一起、固定到任务栏后打不开的问题"
+  "位置实时显示：开着 r_DisplayInfo 2 时顶栏位置每 0.2 秒更新，带「实时」标记和所在星系，不用再打开库存",
+  "雷达信号按所在地点判断矿种：只报当地会刷的矿并标出当地概率，空旷太空不再报矿",
+  "修正尼克斯小行星带里被判成派罗星系",
+  "派罗的空间站、拉格朗日点、星球显示正式中文名；洞穴、前哨、残骸等地点也有中文名",
+  "升级、重启后旧窗口自动关闭",
+  "顶栏「实时」按钮多余的空白去掉了"
  ],
  "installer": {
-  "file": "AT_Setup_1.0.1.exe",
-  "size": 79613989,
-  "sha256": "703abc5c9eccccae2965a490844232ec2848168305becc96b81646e9da24e145",
+  "file": "AT_Setup_1.0.2.exe",
+  "size": 79819723,
+  "sha256": "561bdad7508eb87ad4a28380a9419493145754f05733f84bc527895aafb0c6f8",
   "urls": [
-   "https://gitee.com/Adm_TT/Astral-Toolkit/releases/download/v1.0.1/AT_Setup_1.0.1.exe",
-   "https://github.com/Adm-TT/Astral-Toolkit/releases/download/v1.0.1/AT_Setup_1.0.1.exe"
+   "https://gitee.com/Adm_TT/Astral-Toolkit/releases/download/v1.0.2/AT_Setup_1.0.2.exe",
+   "https://github.com/Adm-TT/Astral-Toolkit/releases/download/v1.0.2/AT_Setup_1.0.2.exe"
   ]
  }
 }
