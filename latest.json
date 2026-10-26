@@ -1,21 +1,21 @@
 {
- "version": "1.0.2",
+ "version": "1.0.3",
  "date": "2026-10-27",
  "notes": [
-  "位置实时显示：开着 r_DisplayInfo 2 时顶栏位置每 0.2 秒更新，带「实时」标记和所在星系，不用再打开库存",
-  "雷达信号按所在地点判断矿种：只报当地会刷的矿并标出当地概率，空旷太空不再报矿",
-  "修正尼克斯小行星带里被判成派罗星系",
-  "派罗的空间站、拉格朗日点、星球显示正式中文名；洞穴、前哨、残骸等地点也有中文名",
-  "升级、重启后旧窗口自动关闭",
-  "顶栏「实时」按钮多余的空白去掉了"
+  "修正：右上角坐标只有一行读出来、或有一位没认出来时，不再拿来导航（以前可能少一位、方向指错）",
+  "修正：没认出星系名时不再靠坐标乱猜，亚伦光环里不会再报「此处不刷船挖矿」",
+  "修正：停在矿带、飞进矿带、跳跃后，雷达信号马上按新地点判断矿种",
+  "修正：改了游戏缩放 / 分辨率后实时位置自动重新适配，不再一直占 CPU",
+  "派罗地名新装就有中文（不用先更新数据）",
+  "退出 AT 时只关它自己的窗口，不会误关自己开着的浏览器"
  ],
  "installer": {
-  "file": "AT_Setup_1.0.2.exe",
-  "size": 79819723,
-  "sha256": "561bdad7508eb87ad4a28380a9419493145754f05733f84bc527895aafb0c6f8",
+  "file": "AT_Setup_1.0.3.exe",
+  "size": 79831363,
+  "sha256": "b2452ecfec3c924b0763162f5e44ddb61ba1d8080d497e3d110576b28da7b5a2",
   "urls": [
-   "https://gitee.com/Adm_TT/Astral-Toolkit/releases/download/v1.0.2/AT_Setup_1.0.2.exe",
-   "https://github.com/Adm-TT/Astral-Toolkit/releases/download/v1.0.2/AT_Setup_1.0.2.exe"
+   "https://gitee.com/Adm_TT/Astral-Toolkit/releases/download/v1.0.3/AT_Setup_1.0.3.exe",
+   "https://github.com/Adm-TT/Astral-Toolkit/releases/download/v1.0.3/AT_Setup_1.0.3.exe"
   ]
  }
 }
