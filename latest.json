@@ -1,0 +1,19 @@
+{
+ "version": "1.0.0",
+ "date": "2026-10-26",
+ "notes": [
+  "AT 星际公民助手首个安装版：不用装 Python，双击安装",
+  "以后有新版本可在线升级，自动安装并重新打开，设置和记录保留",
+  "数据更新从 Gitee 下载数据包，国内更快",
+  "设置页「关于 AT」：版权声明、数据来源、开源组件许可"
+ ],
+ "installer": {
+  "file": "AT_Setup_1.0.0.exe",
+  "size": 79593186,
+  "sha256": "a959faa72a5922783fdbe5d963cf3a4086327a0f1e29c73ef338c8b1b03fc5a2",
+  "urls": [
+   "https://gitee.com/Adm_TT/Astral-Toolkit/releases/download/v1.0.0/AT_Setup_1.0.0.exe",
+   "https://github.com/Adm-TT/Astral-Toolkit/releases/download/v1.0.0/AT_Setup_1.0.0.exe"
+  ]
+ }
+}
