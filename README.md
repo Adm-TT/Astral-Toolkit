@@ -1,4 +1,4 @@
-# AT 星际公民助手（Astral Toolkit）
+# AT 星际公民助手（Astral Toolkit）AI Helped
 
 《星际公民》（Star Citizen）的免费玩家工具：采矿读屏和破碎方案、制造蓝图、导航、物品查询、维科洛兑换、库存和目标清单。Windows 桌面程序，离线运行。
 
