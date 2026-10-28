@@ -1,30 +1,29 @@
 {
- "version": "1.1.0",
- "date": "2026-10-28",
+ "version": "1.1.1",
+ "date": "2026-10-29",
  "notes": [
-  "空间站站内导航：25 个空间站分段指引，机库电梯、站内电梯、居住区电梯按步骤带路",
-  "修正右上角坐标单位读错导致的导航偏差",
-  "游戏数据改用自行解包的版本，游戏更新后能更快跟上",
-  "新增崩溃记录，反馈时自动附上",
-  "盘点确认更稳，重复条目自动合并",
-  "开源，许可证 AGPL-3.0"
+  "国内下载：新增国内镜像，香港服务器连不上时自动改从国内下载，在线更新、数据包、安装包都适用",
+  "检查更新连不上服务器时如实提示，不再误显示「已是最新版本」",
+  "出错提示改为中文"
  ],
- "file": "Dubhe_1.1.0.zip",
- "size": 3561606,
- "sha256": "4f3500e2753e22dd6cbe6c5288730f9bdcc52339f5159bd9e507cdbb36ce3d84",
+ "file": "Dubhe_1.1.1.zip",
+ "size": 3562923,
+ "sha256": "3129a1ed7ab3997659a1532dd7935d0e34473928f2a648de4ac50d6c183d2cf3",
  "urls": [
-  "https://dl.astral-trade.com/releases/v1.1.0/Dubhe_1.1.0.zip",
-  "https://gitee.com/Adm_TT/Astral-Toolkit/releases/download/v1.1.0/Dubhe_1.1.0.zip",
-  "https://github.com/Adm-TT/Astral-Toolkit/releases/download/v1.1.0/Dubhe_1.1.0.zip"
+  "https://dl.astral-trade.com/releases/v1.1.1/Dubhe_1.1.1.zip",
+  "https://at-dl-1323647399.cos.ap-guangzhou.myqcloud.com/releases/v1.1.1/Dubhe_1.1.1.zip",
+  "https://gitee.com/Adm_TT/Astral-Toolkit/releases/download/v1.1.1/Dubhe_1.1.1.zip",
+  "https://github.com/Adm-TT/Astral-Toolkit/releases/download/v1.1.1/Dubhe_1.1.1.zip"
  ],
  "installer": {
-  "file": "AT_Setup_1.1.0.exe",
-  "size": 2096197,
-  "sha256": "3f9c10a34b4a2006c826a9509d788e54c9dc06f4ce3ab120edaae5ee674993e6",
+  "file": "AT_Setup_1.1.1.exe",
+  "size": 2096270,
+  "sha256": "e8ac50d0eacae76e7542e38573d8669d5e8b442ad9c8712254ea10204c3221c8",
   "urls": [
-   "https://dl.astral-trade.com/releases/v1.1.0/AT_Setup_1.1.0.exe",
-   "https://gitee.com/Adm_TT/Astral-Toolkit/releases/download/v1.1.0/AT_Setup_1.1.0.exe",
-   "https://github.com/Adm-TT/Astral-Toolkit/releases/download/v1.1.0/AT_Setup_1.1.0.exe"
+   "https://dl.astral-trade.com/releases/v1.1.1/AT_Setup_1.1.1.exe",
+   "https://at-dl-1323647399.cos.ap-guangzhou.myqcloud.com/releases/v1.1.1/AT_Setup_1.1.1.exe",
+   "https://gitee.com/Adm_TT/Astral-Toolkit/releases/download/v1.1.1/AT_Setup_1.1.1.exe",
+   "https://github.com/Adm-TT/Astral-Toolkit/releases/download/v1.1.1/AT_Setup_1.1.1.exe"
   ]
  }
 }
