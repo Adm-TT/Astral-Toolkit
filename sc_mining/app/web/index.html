@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AT 星际公民助手</title>
+<link rel="icon" href="icon.png">
+<meta name="theme-color" content="#152851">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <nav class="rail" aria-label="功能">
+    <div class="brand">
+      <img id="brandmark" src="at-mark-dark.svg" alt="" width="28" height="28">
+      <span>AT<small class="en">星际公民助手</small></span>
+    </div>
+    <a href="#home" data-page="home"><i class="ic ic-home"></i>概览</a>
+    <a href="#live" data-page="live"><i class="ic ic-scan"></i>采矿助手<b class="pip" id="pip-live"></b></a>
+    <a href="#craft" data-page="craft"><i class="ic ic-craft"></i>制造</a>
+    <a href="#nav" data-page="nav"><i class="ic ic-nav"></i>导航<b class="pip" id="pip-nav"></b></a>
+    <a href="#item" data-page="item"><i class="ic ic-item"></i>物品查询<b class="pip" id="pip-hover"></b></a>
+    <a href="#wikelo" data-page="wikelo"><i class="ic ic-wk"></i>维科洛兑换</a>
+    <a href="#stock" data-page="stock"><i class="ic ic-box"></i>库存</a>
+    <a href="#goals" data-page="goals"><i class="ic ic-goal"></i>目标清单</a>
+    <div class="rail-spacer"></div>
+    <a href="#settings" data-page="settings"><i class="ic ic-gear"></i>设置与更新</a>
+    <a href="#" id="legal-link" class="legal-link"><i class="ic ic-legal"></i>免责声明</a>
+    <p class="rail-note">免费软件，与 CIG 无关。禁止用于利用漏洞或作弊，后果自负</p>
+    <a href="#" class="author" data-referral title="打开星际公民注册页（带作者邀请码）">
+      <span>作者 <b>Adm_TT</b></span><span>邀请码 STAR-4CNY-K3YT</span></a>
+  </nav>
+
+  <main class="main">
+    <header class="top">
+      <div class="omni">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M13 13 L18 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <input id="omni" type="search" placeholder="搜索物品、地点、矿物、蓝图、维科洛兑换" autocomplete="off" spellcheck="false">
+        <kbd>Ctrl K</kbd>
+        <div class="omni-pop" id="omni-pop" hidden></div>
+      </div>
+      <div class="where" id="where" title="根据游戏日志（打开库存的地点）判断；导航时识别右上角调试信息"></div>
+      <button type="button" class="btn small feed-tg" id="feed-tg" aria-pressed="true" aria-controls="feed">实时<b class="pip" aria-hidden="true"></b></button>
+    </header>
+    <div class="banner" id="banner" hidden></div>
+    <section class="page" id="page"></section>
+  </main>
+
+  <aside class="feed" id="feed" aria-label="实时">
+    <h2>实时</h2>
+    <p class="feed-note">与游戏悬浮窗同步</p>
+    <div id="hud"></div>
+    <div class="feed-empty" id="hud-empty">开启采矿助手、导航，或在游戏中鼠标停在物品上按 <kbd id="hk">F8</kbd>，结果显示在此处</div>
+  </aside>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+<!-- 阿塔暂时去掉（2026-10-26 用户定），文件在 tools/ata_备份/，恢复时把这两行加回来 -->
+<script src="app.js"></script>
+</body>
+</html>
