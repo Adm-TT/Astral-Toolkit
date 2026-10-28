@@ -1,54 +1,60 @@
 # AT 星际公民助手（Astral Toolkit）
 
-星际公民（Star Citizen）玩家自制的免费辅助工具：识别采矿扫描面板和雷达信号、计算破碎方案和精炼收益、物品查询（购买地点、掉落、价格）、制造蓝图、维科洛兑换、库存、导航和路标、游戏悬浮窗。Windows 桌面程序，中文界面。
+《星际公民》（Star Citizen）的免费玩家工具：采矿读屏和破碎方案、制造蓝图、导航、物品查询、维科洛兑换、库存和目标清单。Windows 桌面程序，离线运行。
 
-本仓库用于发布 AT 的安装包（在线更新）和数据包（「更新数据」）。
+*An unofficial, free Star Citizen helper (mining HUD reader, crafting, navigation, item lookup, inventory). Chinese UI. Licensed under AGPL-3.0.*
 
-## 下载和安装
+## 下载使用
 
-在「发行版」中下载最新的 `AT_Setup_x.y.z.exe`，双击安装，不需要安装 Python，也不需要管理员权限。
+到「发行版」下载 `AT_Setup_x.y.z.exe` 双击安装，不用装 Python：
 
-运行安装程序时 Windows 如果提示「Windows 已保护你的电脑」，点「更多信息」→「仍要运行」。AT 是免费的个人作品，没有购买数字签名证书；杀毒软件拦截时添加信任即可。
+- Gitee：https://gitee.com/Adm_TT/Astral-Toolkit/releases
+- GitHub：https://github.com/Adm-TT/Astral-Toolkit/releases
 
-已安装的 AT 会在启动时提示新版本，在「设置与更新」点「下载并升级」即可自动安装并重新打开，设置和记录都会保留。
+详细用法见 [使用说明.txt](使用说明.txt)，使用前请阅读 [免责声明.txt](免责声明.txt)。
 
-## 版权
+## 功能
 
-© 2026 Adm_TT　保留所有权利。
+- **采矿助手**：读游戏画面上的雷达信号和扫描面板，告诉你是什么矿、几块，给出破碎方案（用哪个矿头、功率开多少），算精炼后能拿到多少、值多少 aUEC
+- **制造**：蓝图要什么材料、从哪来；拖材料品质看成品属性；按矿反查能做什么；混料计算
+- **导航**：去没有量子信标的地方（洞穴、残骸、自定义路标），悬浮窗提示机头怎么转；小行星带导航
+- **物品查询**：在哪买、掉落、玩家市场价；矿物在哪挖。游戏里鼠标指着物品按 F8 直接查
+- **维科洛兑换**：每个兑换要交什么、材料去哪弄
+- **库存 / 目标清单**：按地点和仓位记东西，算离目标还差什么
 
-允许原样、免费转发 AT 的官方安装包。未经作者书面许可，禁止修改、反编译、发布修改版，禁止用于商业用途。第三方数据和开源组件按各自的条款和许可证使用。
+AT 靠截屏识别文字、读游戏写出的日志文件工作，防挂机和自动跑会模拟按键；不读写游戏内存，不改游戏文件。会联网检查更新、下载数据；按 F10 问题反馈时会把整屏截图、最近的识别截图、识别结果、当时位置和日志片段发给作者；F8 认物品名的一行字小截图（认错的都存，认对的抽一部分）也会攒批发送；两项设置里都能关。
 
-## 非官方声明
+## 从源码运行
 
-AT 是玩家自制的非官方工具，与 Cloud Imperium 集团旗下公司（包括 Cloud Imperium Games、Roberts Space Industries）没有任何关联，也未获得其认可。星际公民（Star Citizen）、Squadron 42 及源自游戏的名称、图像、物品、舰船等内容，归 Cloud Imperium Rights LLC 和 Cloud Imperium Rights Limited 所有。
+需要 Windows 10/11 和 Python 3.10–3.13。
 
-This is an unofficial Star Citizen fan-made tool, not affiliated with the Cloud Imperium group of companies. All content not authored by its author or users are property of their respective owners.
+1. 双击 `首次安装.bat`：找到合适的 Python（没有就装 3.12），在本文件夹里建 `.venv` 并装好依赖
+2. 运行：`.venv\Scripts\python.exe -m sc_mining.run`
+3. 第一次打开后在「设置与更新」里点「开始更新」（或者运行 `.venv\Scripts\python.exe -m sc_mining.run update`），游戏数据不在仓库里
 
-## 数据来源
+跑测试：`.venv\Scripts\python.exe -X utf8 -m tests.run_all`。要先更新过数据；仓库里不带游戏截图，用到截图的测试会自动跳过。
 
-AT 显示的游戏数据来自下列网站和社区项目，权利归原作者所有。为便于国内下载，部分数据整理后放在本仓库的数据包中转发，数据权利不变。数据可能有错漏或过时，仅供参考。
+## 目录
 
-| 来源 | 提供的数据 |
+| 位置 | 内容 |
 |---|---|
-| [SCMiner](https://scminer.rocks) | 矿物、雷达信号、采矿地点、车矿和手采矿 |
-| [UEX](https://uexcorp.space) | 矿价、精炼站加成、商店售卖地点、玩家市场价 |
-| [SC Market](https://scm.flowcld.com/market) | 玩家市场价 |
-| [scmdb.net](https://scmdb.net) | 制造蓝图、维科洛兑换 |
-| [starmap.space](https://starmap.space) | 星图和地点坐标 |
-| [星际公民掉落查询](https://scl.miao.network) | 掉落数据 |
-| [Star Citizen Wiki API](https://api.star-citizen.wiki) | 物品数值、物品清单和说明 |
-| [Star Citizen Wiki](https://starcitizen.tools) | 矿物品质分档（[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/deed.zh-hans)，改编使用） |
-| [erkul.games](https://www.erkul.games) | 舰船信号截面 |
-| [SC汉化盒子](https://github.com/StarCitizenToolBox/app) 及社区汉化项目 | 中文名称 |
+| `sc_mining/` | 程序代码；`app/` 是窗口（`server.py` 本机网页服务、`services.py` 接口、`web/` 界面） |
+| `tests/` | 测试，`run_all.py` 自带运行器，不用装 pytest |
+| `tools/` | 打包、发布、游戏文件解包等开发工具 |
+| `data/`、`userdata/` | 运行时生成：下载的数据、个人设置和记录（不在仓库里） |
 
-## 开源组件
+## 数据来源和致谢
 
-AT 使用了 RapidOCR、ONNX Runtime、NumPy、Pillow、OpenCV、mss 等开源组件和 D-DIN 字体，许可证原文见安装包中的「第三方许可.txt」。
+游戏数据来自下列网站和社区项目，权利归原作者所有（`sc_mining/names_zh.json`、`sc_mining/sc_glossary.json` 摘自汉化包，不属于 AGPL，权利归汉化项目）：SCMiner、UEX、SC Market、scmdb.net、starmap.space、星际公民掉落查询（scl.miao.network）、Star Citizen Wiki API、Star Citizen Wiki（矿物品质分档，CC BY-SA 4.0）、erkul.games、SC汉化盒子及社区汉化项目。游戏文件解包用的是 StarBreaker（MIT）。
 
-## 使用风险
+用到的开源组件（RapidOCR、ONNX Runtime、NumPy、Pillow、OpenCV、mss 等）和字体的许可证原文见 [第三方许可.txt](第三方许可.txt)。
 
-RSI 用户协议（EULA）禁止使用未经授权的自动化软件。AT 的防挂机、双击 W 自动跑会模拟键盘输入，可能导致账号受到处罚，是否使用由玩家自行判断并承担风险，可在设置中关闭。完整条款见安装包中的「免责声明.txt」。
+## 许可
 
-## 作者
+© 2026 Adm_TT。源代码按 [GNU Affero 通用公共许可证第 3 版（AGPL-3.0）](LICENSE) 开源：可以使用、修改、转发和发布修改版；转发 AT 或发布修改版时，须按 AGPL-3.0 让对方能拿到对应的完整源代码，让他人通过网络远程使用修改版时也一样，并保留版权和许可声明。
 
-Adm_TT（游戏 ID）
+AT 是玩家自制的非官方工具，与 Cloud Imperium 集团旗下公司无关联。星际公民及源自游戏的名称、图像等内容归 Cloud Imperium Rights LLC 和 Cloud Imperium Rights Limited 所有。
+
+本仓库只包含 AT 客户端；ATA 交易平台、服务器，以及阿塔的形象和声音不在开源范围内。
+
+作者：Adm_TT（游戏 ID）。还没注册星际公民的话，注册时可以填邀请码 `STAR-4CNY-K3YT`：https://www.robertsspaceindustries.com/enlist?referral=STAR-4CNY-K3YT

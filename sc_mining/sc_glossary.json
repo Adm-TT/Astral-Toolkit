@@ -1,0 +1,1369 @@
+{
+ "source": "用户提供的汉化包 global.ini；游戏版本 4.10.2",
+ "minerals": [
+  {
+   "en": "Quantainium",
+   "zh": "量子矿物",
+   "zh_refined": "量子矿物",
+   "zh_raw": "量子矿物原矿",
+   "category": "ship",
+   "rarity_en": "legendary",
+   "rarity_zh": "传说",
+   "signature": 3170
+  },
+  {
+   "en": "Stileron",
+   "zh": "稀钛铁",
+   "zh_refined": "稀钛铁",
+   "zh_raw": "稀钛铁矿",
+   "category": "ship",
+   "rarity_en": "legendary",
+   "rarity_zh": "传说",
+   "signature": 3185
+  },
+  {
+   "en": "Savrilium",
+   "zh": "萨维里金属",
+   "zh_refined": "萨维里金属",
+   "zh_raw": "萨维里矿石",
+   "category": "ship",
+   "rarity_en": "legendary",
+   "rarity_zh": "传说",
+   "signature": 3200
+  },
+  {
+   "en": "Ouratite",
+   "zh": "欧拉特烃",
+   "zh_refined": "欧拉特烃",
+   "zh_raw": "原欧拉特烃",
+   "category": "ship",
+   "rarity_en": "epic",
+   "rarity_zh": "史诗",
+   "signature": 3370
+  },
+  {
+   "en": "Riccite",
+   "zh": "愈金",
+   "zh_refined": "愈金",
+   "zh_raw": "愈金矿石",
+   "category": "ship",
+   "rarity_en": "epic",
+   "rarity_zh": "史诗",
+   "signature": 3385
+  },
+  {
+   "en": "Lindinium",
+   "zh": "林登金",
+   "zh_refined": "林登金",
+   "zh_raw": "林登金矿石",
+   "category": "ship",
+   "rarity_en": "epic",
+   "rarity_zh": "史诗",
+   "signature": 3400
+  },
+  {
+   "en": "Beryl",
+   "zh": "绿柱石",
+   "zh_refined": "绿柱石",
+   "zh_raw": "绿柱石原矿",
+   "category": "ship",
+   "rarity_en": "rare",
+   "rarity_zh": "稀有",
+   "signature": 3540
+  },
+  {
+   "en": "Taranite",
+   "zh": "塔兰导电石",
+   "zh_refined": "塔兰导电石",
+   "zh_raw": "塔兰导电石原矿",
+   "category": "ship",
+   "rarity_en": "rare",
+   "rarity_zh": "稀有",
+   "signature": 3555
+  },
+  {
+   "en": "Borase",
+   "zh": "波射石",
+   "zh_refined": "波射石",
+   "zh_raw": "波射矿石",
+   "category": "ship",
+   "rarity_en": "rare",
+   "rarity_zh": "稀有",
+   "signature": 3570
+  },
+  {
+   "en": "Gold",
+   "zh": "金",
+   "zh_refined": "金",
+   "zh_raw": "金矿石",
+   "category": "ship",
+   "rarity_en": "rare",
+   "rarity_zh": "稀有",
+   "signature": 3585
+  },
+  {
+   "en": "Bexalite",
+   "zh": "贝沙电气石",
+   "zh_refined": "贝沙电气石",
+   "zh_raw": "贝沙电气石原矿",
+   "category": "ship",
+   "rarity_en": "rare",
+   "rarity_zh": "稀有",
+   "signature": 3600
+  },
+  {
+   "en": "Laranite",
+   "zh": "砬兰石",
+   "zh_refined": "砬兰石",
+   "zh_raw": "砬兰石原矿",
+   "category": "ship",
+   "rarity_en": "uncommon",
+   "rarity_zh": "罕见",
+   "signature": 3825
+  },
+  {
+   "en": "Aslarite",
+   "zh": "阿斯莱晶体",
+   "zh_refined": "阿斯莱晶体",
+   "zh_raw": "阿斯莱晶体原矿",
+   "category": "ship",
+   "rarity_en": "uncommon",
+   "rarity_zh": "罕见",
+   "signature": 3840
+  },
+  {
+   "en": "Titanium",
+   "zh": "钛",
+   "zh_refined": "钛",
+   "zh_raw": "钛矿石",
+   "category": "ship",
+   "rarity_en": "uncommon",
+   "rarity_zh": "罕见",
+   "signature": 3855
+  },
+  {
+   "en": "Tungsten",
+   "zh": "钨",
+   "zh_refined": "钨",
+   "zh_raw": "钨矿石",
+   "category": "ship",
+   "rarity_en": "uncommon",
+   "rarity_zh": "罕见",
+   "signature": 3870
+  },
+  {
+   "en": "Agricium",
+   "zh": "艾格瑞金属",
+   "zh_refined": "艾格瑞金属",
+   "zh_raw": "艾格瑞矿石",
+   "category": "ship",
+   "rarity_en": "uncommon",
+   "rarity_zh": "罕见",
+   "signature": 3895
+  },
+  {
+   "en": "Torite",
+   "zh": "托瑞特金属",
+   "zh_refined": "托瑞特金属",
+   "zh_raw": "托瑞特矿石",
+   "category": "ship",
+   "rarity_en": "uncommon",
+   "rarity_zh": "罕见",
+   "signature": 3900
+  },
+  {
+   "en": "Hephaestanite",
+   "zh": "火神石",
+   "zh_refined": "火神石",
+   "zh_raw": "火神石原矿",
+   "category": "ship",
+   "rarity_en": "common",
+   "rarity_zh": "普通",
+   "signature": 4180
+  },
+  {
+   "en": "Tin",
+   "zh": "锡",
+   "zh_refined": "锡",
+   "zh_raw": "锡矿石",
+   "category": "ship",
+   "rarity_en": "common",
+   "rarity_zh": "普通",
+   "signature": 4195
+  },
+  {
+   "en": "Quartz",
+   "zh": "石英",
+   "zh_refined": "石英",
+   "zh_raw": "石英原矿",
+   "category": "ship",
+   "rarity_en": "common",
+   "rarity_zh": "普通",
+   "signature": 4210
+  },
+  {
+   "en": "Corundum",
+   "zh": "刚玉",
+   "zh_refined": "刚玉",
+   "zh_raw": "刚玉原矿",
+   "category": "ship",
+   "rarity_en": "common",
+   "rarity_zh": "普通",
+   "signature": 4225
+  },
+  {
+   "en": "Copper",
+   "zh": "铜",
+   "zh_refined": "铜",
+   "zh_raw": "铜矿石",
+   "category": "ship",
+   "rarity_en": "common",
+   "rarity_zh": "普通",
+   "signature": 4240
+  },
+  {
+   "en": "Silicon",
+   "zh": "硅",
+   "zh_refined": "硅",
+   "zh_raw": "原硅",
+   "category": "ship",
+   "rarity_en": "common",
+   "rarity_zh": "普通",
+   "signature": 4255
+  },
+  {
+   "en": "Iron",
+   "zh": "铁",
+   "zh_refined": "铁",
+   "zh_raw": "铁原矿",
+   "category": "ship",
+   "rarity_en": "common",
+   "rarity_zh": "普通",
+   "signature": 4270
+  },
+  {
+   "en": "Aluminum",
+   "zh": "铝",
+   "zh_refined": "铝",
+   "zh_raw": "铝矿石",
+   "category": "ship",
+   "rarity_en": "common",
+   "rarity_zh": "普通",
+   "signature": 4285
+  },
+  {
+   "en": "Ice",
+   "zh": "冰",
+   "zh_refined": "压缩冰",
+   "zh_raw": "原冰",
+   "category": "ship",
+   "rarity_en": "common",
+   "rarity_zh": "普通",
+   "signature": 4300
+  },
+  {
+   "en": "Hadanite",
+   "zh": "哈丹水晶",
+   "zh_refined": "哈丹水晶",
+   "zh_raw": "哈丹水晶原矿",
+   "category": "other",
+   "rarity_en": "",
+   "rarity_zh": "",
+   "signature": null
+  },
+  {
+   "en": "Aphorite",
+   "zh": "紫钠水晶",
+   "zh_refined": "紫钠水晶",
+   "zh_raw": "紫钠水晶原矿",
+   "category": "other",
+   "rarity_en": "",
+   "rarity_zh": "",
+   "signature": null
+  },
+  {
+   "en": "Dolivine",
+   "zh": "暗橄榄石",
+   "zh_refined": "暗橄榄石",
+   "zh_raw": "暗橄榄石原矿",
+   "category": "other",
+   "rarity_en": "",
+   "rarity_zh": "",
+   "signature": null
+  },
+  {
+   "en": "Janalite",
+   "zh": "加纳石",
+   "zh_refined": "加纳石",
+   "zh_raw": "加纳石原矿",
+   "category": "other",
+   "rarity_en": "",
+   "rarity_zh": "",
+   "signature": null
+  },
+  {
+   "en": "Beradom",
+   "zh": "冰蓝珀",
+   "zh_refined": "冰蓝珀",
+   "zh_raw": "冰蓝珀原矿",
+   "category": "other",
+   "rarity_en": "",
+   "rarity_zh": "",
+   "signature": null
+  },
+  {
+   "en": "Feynmaline",
+   "zh": "熵瞬晶",
+   "zh_refined": "熵瞬晶",
+   "zh_raw": "熵瞬晶原矿",
+   "category": "other",
+   "rarity_en": "",
+   "rarity_zh": "",
+   "signature": null
+  },
+  {
+   "en": "Glacosite",
+   "zh": "冰碛棉",
+   "zh_refined": "冰碛棉",
+   "zh_raw": "冰碛棉原矿",
+   "category": "other",
+   "rarity_en": "",
+   "rarity_zh": "",
+   "signature": null
+  },
+  {
+   "en": "Carinite",
+   "zh": "科力晶",
+   "zh_refined": "科力晶",
+   "zh_raw": "科力晶原矿",
+   "category": "other",
+   "rarity_en": "",
+   "rarity_zh": "",
+   "signature": null
+  },
+  {
+   "en": "Jaclium",
+   "zh": "杰金",
+   "zh_refined": "杰金",
+   "zh_raw": "杰金矿石",
+   "category": "other",
+   "rarity_en": "",
+   "rarity_zh": "",
+   "signature": null
+  },
+  {
+   "en": "Saldynium",
+   "zh": "烁迪银",
+   "zh_refined": "烁迪银",
+   "zh_raw": "烁迪银矿石",
+   "category": "other",
+   "rarity_en": "",
+   "rarity_zh": "",
+   "signature": null
+  },
+  {
+   "en": "Diamond",
+   "zh": "钻石",
+   "zh_refined": "钻石",
+   "zh_raw": "钻石原矿",
+   "category": "other",
+   "rarity_en": "",
+   "rarity_zh": "",
+   "signature": null
+  },
+  {
+   "en": "Cobalt",
+   "zh": "钴",
+   "zh_refined": "钴",
+   "zh_raw": "",
+   "category": "other",
+   "rarity_en": "",
+   "rarity_zh": "",
+   "signature": null
+  },
+  {
+   "en": "Atlasium",
+   "zh": "巨神合金",
+   "zh_refined": "巨神合金",
+   "zh_raw": "",
+   "category": "other",
+   "rarity_en": "",
+   "rarity_zh": "",
+   "signature": null
+  },
+  {
+   "en": "Dymantium",
+   "zh": "代曼合金",
+   "zh_refined": "代曼合金",
+   "zh_raw": "",
+   "category": "other",
+   "rarity_en": "",
+   "rarity_zh": "",
+   "signature": null
+  },
+  {
+   "en": "Inert Materials",
+   "zh": "惰性物质",
+   "zh_refined": "",
+   "zh_raw": "",
+   "category": "other",
+   "rarity_en": "",
+   "rarity_zh": "",
+   "signature": null
+  }
+ ],
+ "ui_terms": [
+  {
+   "key": "hud_mining_scanning_depositmass",
+   "en": "Mass:",
+   "zh": "质量："
+  },
+  {
+   "key": "hud_mining_scanning_resistance",
+   "en": "Resistance:",
+   "zh": "抗性："
+  },
+  {
+   "key": "hud_mining_scanning_instability",
+   "en": "Instability:",
+   "zh": "不稳定性："
+  },
+  {
+   "key": "hud_mining_scanning_depositcomposition",
+   "en": "Composition",
+   "zh": "组成"
+  },
+  {
+   "key": "hud_mining_scanning_scanresults",
+   "en": "Scan Results",
+   "zh": "扫描结果"
+  },
+  {
+   "key": "hud_mining_scanning_scanning",
+   "en": "Scanning...",
+   "zh": "扫描中..."
+  },
+  {
+   "key": "hud_mining_scanning_type",
+   "en": "Type:",
+   "zh": "类型:"
+  },
+  {
+   "key": "hud_mining_scanning_signalstrength",
+   "en": "Signal Strength",
+   "zh": "信号强度"
+  },
+  {
+   "key": "hud_mining_calculating_resistance",
+   "en": "Calculating Resistance",
+   "zh": "正在计算抗性"
+  },
+  {
+   "key": "hud_mining_calculating_instability",
+   "en": "Calculating Instability",
+   "zh": "正在计算不稳定性"
+  },
+  {
+   "key": "hud_mining_mass_prefix",
+   "en": "Mass:",
+   "zh": "质量："
+  },
+  {
+   "key": "hud_mining_resistance",
+   "en": "Resistance",
+   "zh": "抗性"
+  },
+  {
+   "key": "hud_mining_instability",
+   "en": "Instability",
+   "zh": "不稳定性"
+  },
+  {
+   "key": "hud_mining_empty_elements",
+   "en": "Inert Materials",
+   "zh": "惰性物质"
+  },
+  {
+   "key": "hud_mining_deposit_power",
+   "en": "Deposit Energy Level",
+   "zh": "岩石能量水平"
+  },
+  {
+   "key": "hud_mining_power_optimal",
+   "en": "Optimal",
+   "zh": "最佳"
+  },
+  {
+   "key": "hud_mining_power_overcharge",
+   "en": "Overcharge",
+   "zh": "过载"
+  },
+  {
+   "key": "hud_mining_power_chargelevel",
+   "en": "Charge Level",
+   "zh": "充能水平"
+  },
+  {
+   "key": "hud_mining_power_laserintensity",
+   "en": "Laser Intensity",
+   "zh": "激光强度"
+  },
+  {
+   "key": "hud_mining_laser_throttle",
+   "en": "Laser Throttle",
+   "zh": "激光节流阀"
+  },
+  {
+   "key": "hud_mining_laser_mode",
+   "en": "Fracture Mode",
+   "zh": "碎裂模式"
+  },
+  {
+   "key": "hud_mining_extraction_mode",
+   "en": "Extraction Mode",
+   "zh": "提取模式"
+  },
+  {
+   "key": "hud_mining_extraction_throughput",
+   "en": "Extraction Throughput",
+   "zh": "提取产量"
+  },
+  {
+   "key": "hud_mining_cargo_content",
+   "en": "Cargo Content",
+   "zh": "货物内容"
+  },
+  {
+   "key": "hud_mining_container_status",
+   "en": "Container Status",
+   "zh": "货物容量"
+  },
+  {
+   "key": "hud_mining_cargo_max_capacity",
+   "en": "Cargo Full",
+   "zh": "货舱已满"
+  },
+  {
+   "key": "hud_mining_warning_cargo_full",
+   "en": "Warning: Cargo Full",
+   "zh": "警告：货舱已满"
+  },
+  {
+   "key": "hud_mining_volatilecargo",
+   "en": "Volatile Cargo Detected",
+   "zh": "侦测到不稳定货物"
+  },
+  {
+   "key": "hud_mining_stats_window_size",
+   "en": "Window Size",
+   "zh": "窗口尺寸"
+  },
+  {
+   "key": "hud_mining_stats_optimal_rate",
+   "en": "Optimal Charge Rate",
+   "zh": "最佳功率"
+  },
+  {
+   "key": "hud_mining_stats_overcharge_rate",
+   "en": "Overcharge Rate",
+   "zh": "过高功率"
+  },
+  {
+   "key": "hud_mining_stats_fracture_damage",
+   "en": "Fracture Power",
+   "zh": "击碎功率"
+  },
+  {
+   "key": "hud_mining_stats_extraction_damage",
+   "en": "Extraction Power",
+   "zh": "提取功率"
+  },
+  {
+   "key": "hud_mining_stats_shatter_damage",
+   "en": "Shatter Damage",
+   "zh": "击碎伤害"
+  },
+  {
+   "key": "hud_mining_stats_cluster_factor",
+   "en": "Cluster Factor",
+   "zh": "聚集中"
+  },
+  {
+   "key": "hud_mining_stats_filter_percentage",
+   "en": "Inert Material Level",
+   "zh": "惰性物质含量"
+  },
+  {
+   "key": "hud_mining_consumables_activemodules",
+   "en": "Active Modules",
+   "zh": "激活模组"
+  },
+  {
+   "key": "hud_mining_consumables_passive",
+   "en": "Passive",
+   "zh": "被动"
+  },
+  {
+   "key": "hud_scanning_info_rs_signature",
+   "en": "RS Signature",
+   "zh": "RS信号"
+  },
+  {
+   "key": "hud_scanning_info_mass",
+   "en": "Mass",
+   "zh": "质量"
+  },
+  {
+   "key": "hud_scanning_info_instability",
+   "en": "Instability",
+   "zh": "不稳定性"
+  },
+  {
+   "key": "scan_data_composition",
+   "en": "Composition",
+   "zh": "纯度"
+  },
+  {
+   "key": "ui_Mining_MiningLaser_DifficultyForecast_Title",
+   "en": "Difficulty Forecast",
+   "zh": "难度评级"
+  },
+  {
+   "key": "ui_Mining_MiningLaser_DifficultyForecast_Easy",
+   "en": "Easy",
+   "zh": "简单"
+  },
+  {
+   "key": "ui_Mining_MiningLaser_DifficultyForecast_Fair",
+   "en": "Medium",
+   "zh": "中等"
+  },
+  {
+   "key": "ui_Mining_MiningLaser_DifficultyForecast_Challenging",
+   "en": "Hard",
+   "zh": "困难"
+  },
+  {
+   "key": "ui_Mining_MiningLaser_DifficultyForecast_Extreme",
+   "en": "Challenging",
+   "zh": "极难"
+  },
+  {
+   "key": "ui_Mining_MiningLaser_DifficultyForecast_Impossible",
+   "en": "Impossible",
+   "zh": "地狱"
+  },
+  {
+   "key": "ui_Mining_Gadgets",
+   "en": "Mining Gadgets",
+   "zh": "采矿器具"
+  },
+  {
+   "key": "ui_Mining_Consumables",
+   "en": "Mining Modules",
+   "zh": "采矿模组"
+  },
+  {
+   "key": "ui_Mining_Laser_Heads",
+   "en": "Mining Laser Heads",
+   "zh": "采矿激光钻头"
+  },
+  {
+   "key": "hud_mining_modifier_resistance",
+   "en": "Resistance modifier",
+   "zh": "抗性"
+  },
+  {
+   "key": "hud_mining_modifier_instability",
+   "en": "Instability modifier",
+   "zh": "不稳定性"
+  },
+  {
+   "key": "hud_mining_modifier_laserpower",
+   "en": "Laser Power modifier",
+   "zh": "激光功率"
+  },
+  {
+   "key": "hud_mining_modifier_optimal_window_size",
+   "en": "Optimal Window Size modifier",
+   "zh": "充能绿区"
+  },
+  {
+   "key": "hud_mining_modifier_optimal_window_rate",
+   "en": "Optimal Charge Rate modifier",
+   "zh": "最佳充能率"
+  },
+  {
+   "key": "hud_mining_modifier_catastrophic_window_rate",
+   "en": "Catastrophic Charge Rate modifier",
+   "zh": "过载充能率"
+  },
+  {
+   "key": "hud_mining_modifier_cluster_factor",
+   "en": "Cluster Factor modifier",
+   "zh": "富集系数"
+  },
+  {
+   "key": "hud_mining_modifier_shatter_damage",
+   "en": "Shatter Damage modifier",
+   "zh": "碎裂伤害"
+  },
+  {
+   "key": "hud_mining_modifier_extractionrate",
+   "en": "Extraction Rate modifier",
+   "zh": "吸取速率"
+  },
+  {
+   "key": "hud_mining_modifier_filter",
+   "en": "Inert Filter modifier",
+   "zh": "惰性物质过滤"
+  },
+  {
+   "key": "hud_mining_modifier_charge_increase",
+   "en": "Charge modifier",
+   "zh": "充能"
+  }
+ ],
+ "asteroid_types": [
+  {
+   "key": "hud_mining_asteroid_name_1",
+   "en": "Asteroid (E-Type)",
+   "zh": "小行星（E 型）"
+  },
+  {
+   "key": "hud_mining_asteroid_name_2",
+   "en": "Asteroid (M-Type)",
+   "zh": "小行星（M 型）"
+  },
+  {
+   "key": "hud_mining_asteroid_name_3",
+   "en": "Asteroid (P-Type)",
+   "zh": "小行星（P 型）"
+  },
+  {
+   "key": "hud_mining_asteroid_name_4",
+   "en": "Asteroid (Q-Type)",
+   "zh": "小行星（Q 型）"
+  },
+  {
+   "key": "hud_mining_asteroid_name_5",
+   "en": "Asteroid (C-Type)",
+   "zh": "小行星（C 型）"
+  },
+  {
+   "key": "hud_mining_asteroid_name_6",
+   "en": "Asteroid (S-Type)",
+   "zh": "小行星（S 型）"
+  },
+  {
+   "key": "hud_mining_asteroid_name_7",
+   "en": "Asteroid (I-Type)",
+   "zh": "小行星（I 型）"
+  }
+ ],
+ "rock_types": [
+  {
+   "key": "hud_mining_rock_name_1",
+   "en": "Shale Deposit",
+   "zh": "页岩矿床"
+  },
+  {
+   "key": "hud_mining_rock_name_2",
+   "en": "Granite Deposit",
+   "zh": "花岗岩矿床"
+  },
+  {
+   "key": "hud_mining_rock_name_3",
+   "en": "Igneous Deposit",
+   "zh": "火成岩矿床"
+  },
+  {
+   "key": "hud_mining_rock_name_4",
+   "en": "Obsidian Deposit",
+   "zh": "黑曜石矿床"
+  },
+  {
+   "key": "hud_mining_rock_name_5",
+   "en": "Gneiss Deposit",
+   "zh": "片麻岩矿床"
+  },
+  {
+   "key": "hud_mining_rock_name_6",
+   "en": "Quartzite Deposit",
+   "zh": "石英岩矿床"
+  },
+  {
+   "key": "hud_mining_rock_name_7",
+   "en": "Felsic Deposit",
+   "zh": "长英质矿床"
+  },
+  {
+   "key": "hud_mining_rock_name_8",
+   "en": "Atacamite Deposit",
+   "zh": "氯铜矿床"
+  },
+  {
+   "key": "hud_mining_rock_name_9",
+   "en": "Quantanium Deposit",
+   "zh": "量子燃料矿床"
+  }
+ ],
+ "equipment": [
+  {
+   "key": "item_Mining_Consumable_Brandt",
+   "category": "active_module",
+   "en": "Brandt",
+   "zh": "布兰特 模组",
+   "pack_note": "-30%炸伤|+35%功率|+15%抗性"
+  },
+  {
+   "key": "item_Mining_Consumable_Forel",
+   "category": "active_module",
+   "en": "Forel",
+   "zh": "羊皮纸 模组",
+   "pack_note": "+50%提取功率|-60%红区速度|+15%抗性"
+  },
+  {
+   "key": "item_Mining_Consumable_Lifeline",
+   "category": "active_module",
+   "en": "Lifeline",
+   "zh": "生命线 模组",
+   "pack_note": "-20%不稳定|-15%抗性|+60%红区速度"
+  },
+  {
+   "key": "item_Mining_Consumable_Optimum",
+   "category": "active_module",
+   "en": "Optimum",
+   "zh": "顶胜 模组",
+   "pack_note": "-10%不稳定|-80%红区速度|-15%功率"
+  },
+  {
+   "key": "item_Mining_Consumable_Rime",
+   "category": "active_module",
+   "en": "Rime",
+   "zh": "白霜 模组",
+   "pack_note": "-25%抗性|-15%功率|-10%炸伤"
+  },
+  {
+   "key": "item_Mining_Consumable_Stampede",
+   "category": "active_module",
+   "en": "Stampede",
+   "zh": "热潮 模组",
+   "pack_note": "-10%不稳定|+35%功率|-10%炸伤|-15%提取功率"
+  },
+  {
+   "key": "item_Mining_Consumable_Surge",
+   "category": "active_module",
+   "en": "Surge",
+   "zh": "电涌 模组",
+   "pack_note": "+50%功率|-15%抗性|+10%不稳定"
+  },
+  {
+   "key": "item_Mining_Consumable_Torpid",
+   "category": "active_module",
+   "en": "Torpid",
+   "zh": "缓释 模组",
+   "pack_note": "+60%绿区速度|-60%红区速度|+40%炸伤"
+  },
+  {
+   "key": "item_Mining_Gadget_Gadget5",
+   "category": "gadget",
+   "en": "BoreMax",
+   "zh": "至钻",
+   "pack_note": "-70%不稳定|+30%聚集|+10%抗性"
+  },
+  {
+   "key": "item_Mining_Gadget_Gadget3",
+   "category": "gadget",
+   "en": "Okunis",
+   "zh": "奥昆尼斯",
+   "pack_note": "+50%绿区|+100%绿区速度|-20%聚集"
+  },
+  {
+   "key": "item_Mining_Gadget_Gadget1",
+   "category": "gadget",
+   "en": "Optimax",
+   "zh": "优佳",
+   "pack_note": "-30%抗性|+60%聚集|-30%绿区"
+  },
+  {
+   "key": "item_Mining_Gadget_Gadget4",
+   "category": "gadget",
+   "en": "Sabir",
+   "zh": "萨比尔",
+   "pack_note": "+50%绿区|-50%抗性|+15%不稳定性"
+  },
+  {
+   "key": "item_Mining_Gadget_Gadget6",
+   "category": "gadget",
+   "en": "Stalwart",
+   "zh": "坚燃",
+   "pack_note": "-35%不稳定|+30%聚集|+50%绿区速度|-30%绿区"
+  },
+  {
+   "key": "item_Mining_Gadget_Gadget2",
+   "category": "gadget",
+   "en": "Waveshift",
+   "zh": "波移",
+   "pack_note": "-35%不稳定|+100%绿区|-30%绿区速度"
+  },
+  {
+   "key": "item_Mining_MiningLaser_Greycat_Default_S1",
+   "category": "mining_laser",
+   "en": "Arbor MH1",
+   "zh": "刀轴 MH1 型采矿激光器",
+   "pack_note": "-35%不稳定|+40%绿区|+25%抗性|-30%废料"
+  },
+  {
+   "key": "item_Mining_MiningLaser_Greycat_Default_S2",
+   "category": "mining_laser",
+   "en": "Arbor MH2",
+   "zh": "刀轴 MH2 型采矿激光器",
+   "pack_note": "-35%不稳定|+40%绿区|+25%抗性|-40%废料"
+  },
+  {
+   "key": "item_Mining_MiningLaser_Greycat_Default_S0",
+   "category": "mining_laser",
+   "en": "Arbor MHV",
+   "zh": "刀轴 MHV 采矿激光器",
+   "pack_note": ""
+  },
+  {
+   "key": "item_Mining_MiningLaser_Greycat_Default_SV",
+   "category": "mining_laser",
+   "en": "Arbor MHV",
+   "zh": "刀轴 MHV 型采矿激光器",
+   "pack_note": ""
+  },
+  {
+   "key": "item_Mining_MiningLaser_Thermyte_2_SV",
+   "category": "mining_laser",
+   "en": "Helix",
+   "zh": "螺旋 S 型采矿激光器",
+   "pack_note": ""
+  },
+  {
+   "key": "item_Mining_MiningLaser_Thermyte_2_S1",
+   "category": "mining_laser",
+   "en": "Helix I",
+   "zh": "螺旋 I 型采矿激光器",
+   "pack_note": "-30%抗性|-40%绿区|-30%废料"
+  },
+  {
+   "key": "item_Mining_MiningLaser_Thermyte_2_S2",
+   "category": "mining_laser",
+   "en": "Helix II",
+   "zh": "螺旋 II 型采矿激光器",
+   "pack_note": "-30%抗性|-40%绿区|-40%废料"
+  },
+  {
+   "key": "item_Mining_MiningLaser_Shubin_1_S1",
+   "category": "mining_laser",
+   "en": "Hofstede-S1",
+   "zh": "霍夫斯泰德-S1 型采矿激光器",
+   "pack_note": "-30%抗性|+20%绿区速度|+10%不稳定|-30%废料"
+  },
+  {
+   "key": "item_Mining_MiningLaser_Shubin_1_S2",
+   "category": "mining_laser",
+   "en": "Hofstede-S2",
+   "zh": "霍夫斯泰德-S2 型采矿激光器",
+   "pack_note": "-30%抗性|+20%绿区速度|+10%不稳定|-40%废料"
+  },
+  {
+   "key": "item_Mining_MiningLaser_Shubin_1_SV",
+   "category": "mining_laser",
+   "en": "Hofstede-SV",
+   "zh": "霍夫斯泰德-SV 型采矿激光器",
+   "pack_note": ""
+  },
+  {
+   "key": "item_Mining_MiningLaser_Thermyte_1_S1",
+   "category": "mining_laser",
+   "en": "Impact I",
+   "zh": "冲击 I 型采矿激光器",
+   "pack_note": "-10%不稳定|+20%绿区|-40%绿区速度|+10%抗性|-30%废料"
+  },
+  {
+   "key": "item_Mining_MiningLaser_Thermyte_1_S2",
+   "category": "mining_laser",
+   "en": "Impact II",
+   "zh": "冲击 II 型采矿激光器",
+   "pack_note": "-10%不稳定|+20%绿区|-40%绿区速度|+10%抗性|-40%废料"
+  },
+  {
+   "key": "item_Mining_MiningLaser_Thermyte_1_SV",
+   "category": "mining_laser",
+   "en": "Impact S",
+   "zh": "冲击 S 型采矿激光器",
+   "pack_note": ""
+  },
+  {
+   "key": "item_Mining_MiningLaser_Shubin_2_S1",
+   "category": "mining_laser",
+   "en": "Klein-S1",
+   "zh": "克莱恩-S1 型采矿激光器",
+   "pack_note": "-45%抗性|+20%绿区速度|+35%不稳定|-30%废料"
+  },
+  {
+   "key": "item_Mining_MiningLaser_Shubin_2_S2",
+   "category": "mining_laser",
+   "en": "Klein-S2",
+   "zh": "克莱恩-S2 型采矿激光器",
+   "pack_note": "-45%抗性|+20%绿区速度|+35%不稳定|-40%废料"
+  },
+  {
+   "key": "item_Mining_MiningLaser_Shubin_2_SV",
+   "category": "mining_laser",
+   "en": "Klein-SV",
+   "zh": "克莱恩-SV 型采矿激光器",
+   "pack_note": ""
+  },
+  {
+   "key": "item_Mining_MiningLaser_Greycat_1_S1",
+   "category": "mining_laser",
+   "en": "Lancet MH1",
+   "zh": "柳叶刀 MH1 型采矿激光器",
+   "pack_note": "-10%不稳定|+40%绿区速度|-60%绿区|-30%废料"
+  },
+  {
+   "key": "item_Mining_MiningLaser_Greycat_1_S2",
+   "category": "mining_laser",
+   "en": "Lancet MH2",
+   "zh": "柳叶刀 MH2 型采矿激光器",
+   "pack_note": "-10%不稳定|+40%绿区速度|-60%绿区|-40%废料"
+  },
+  {
+   "key": "item_Mining_MiningLaser_Greycat_1_SV",
+   "category": "mining_laser",
+   "en": "Lancet MHV",
+   "zh": "柳叶刀 MHV 型采矿激光器",
+   "pack_note": "-30%不稳定|-50%抗性|-30%充能"
+  },
+  {
+   "key": "item_Mining_MiningLaser_Drake_Default_S0",
+   "category": "mining_laser",
+   "en": "Pitman",
+   "zh": "石工采矿激光器",
+   "pack_note": "+25%抗性|+35%不稳定|-40%绿区速度|-30%废料"
+  },
+  {
+   "key": "item_Mining_Modules_Passive_THCN_Power_BTGL_Name",
+   "category": "passive_module",
+   "en": "Deluge",
+   "zh": "洪暴 模组",
+   "pack_note": "-15.5%抗性|+15%功率|-15%提取功率"
+  },
+  {
+   "key": "item_Mining_Modules_Passive_FLTR_MK1",
+   "category": "passive_module",
+   "en": "FLTR",
+   "zh": "FLTR 模组",
+   "pack_note": "-20%废料|-15%提取功率"
+  },
+  {
+   "key": "item_Mining_Modules_Passive_FLTR_MK2",
+   "category": "passive_module",
+   "en": "FLTR-L",
+   "zh": "FLTR-L 模组",
+   "pack_note": "-23%废料|-10%提取功率"
+  },
+  {
+   "key": "item_Mining_Modules_Passive_FLTR_MK3",
+   "category": "passive_module",
+   "en": "FLTR-XL",
+   "zh": "FLTR-XL 模组",
+   "pack_note": "-24%废料|-5%提取功率"
+  },
+  {
+   "key": "item_Mining_Modules_Passive_Focus_MK1",
+   "category": "passive_module",
+   "en": "Focus",
+   "zh": "聚焦 模组",
+   "pack_note": "+30%绿区|-15%功率"
+  },
+  {
+   "key": "item_Mining_Modules_Passive_Focus_MK2",
+   "category": "passive_module",
+   "en": "Focus II",
+   "zh": "聚焦 II 模组",
+   "pack_note": "+37%绿区|-10%功率"
+  },
+  {
+   "key": "item_Mining_Modules_Passive_Focus_MK3",
+   "category": "passive_module",
+   "en": "Focus III",
+   "zh": "聚焦 III 模组",
+   "pack_note": "+40%绿区|-5%功率"
+  },
+  {
+   "key": "item_Mining_Modules_Passive_THCN_Resistance_BTGL_Name",
+   "category": "passive_module",
+   "en": "Overrun",
+   "zh": "超限 模组",
+   "pack_note": "-24.8%抗性|+8%功率|-15%提取功率"
+  },
+  {
+   "key": "item_Mining_Modules_Passive_Rieger_MK1",
+   "category": "passive_module",
+   "en": "Rieger",
+   "zh": "里格 模组",
+   "pack_note": "+15%功率|-10%绿区"
+  },
+  {
+   "key": "item_Mining_Modules_Passive_Rieger_MK2",
+   "category": "passive_module",
+   "en": "Rieger-C2",
+   "zh": "里格-C2 模组",
+   "pack_note": "+20%功率|-3%绿区"
+  },
+  {
+   "key": "item_Mining_Modules_Passive_Rieger_MK3",
+   "category": "passive_module",
+   "en": "Rieger-C3",
+   "zh": "里格-C3 模组",
+   "pack_note": "+25%功率|-1%绿区"
+  },
+  {
+   "key": "item_Mining_Modules_Passive_Torrent_MK1",
+   "category": "passive_module",
+   "en": "Torrent",
+   "zh": "洪流 模组",
+   "pack_note": "+30%绿区速度|-10%绿区"
+  },
+  {
+   "key": "item_Mining_Modules_Passive_Torrent_MK2",
+   "category": "passive_module",
+   "en": "Torrent II",
+   "zh": "洪流 II 模组",
+   "pack_note": "+35%绿区速度|-3%绿区"
+  },
+  {
+   "key": "item_Mining_Modules_Passive_Torrent_MK3",
+   "category": "passive_module",
+   "en": "Torrent III",
+   "zh": "洪流 III 模组",
+   "pack_note": "+40%绿区速度|-1%绿区"
+  },
+  {
+   "key": "item_Mining_Modules_Passive_Vaux_MK1",
+   "category": "passive_module",
+   "en": "Vaux",
+   "zh": "沃克斯 模组",
+   "pack_note": "+15%提取功率|-20%绿区速度"
+  },
+  {
+   "key": "item_Mining_Modules_Passive_Vaux_MK2",
+   "category": "passive_module",
+   "en": "Vaux-C2",
+   "zh": "沃克斯-C2 模组",
+   "pack_note": "+20%提取功率|-15%绿区速度"
+  },
+  {
+   "key": "item_Mining_Modules_Passive_Vaux_MK3",
+   "category": "passive_module",
+   "en": "Vaux-C3",
+   "zh": "沃克斯-C3 模组",
+   "pack_note": "+25%提取功率|-5%绿区速度"
+  },
+  {
+   "key": "item_Mining_Modules_Passive_XTR_MK1",
+   "category": "passive_module",
+   "en": "XTR",
+   "zh": "XTR 模组",
+   "pack_note": "+15%绿区|-5%废料|-15%提取功率"
+  },
+  {
+   "key": "item_Mining_Modules_Passive_XTR_MK2",
+   "category": "passive_module",
+   "en": "XTR-L",
+   "zh": "XTR-L 模组",
+   "pack_note": "+22%绿区|-5.7%废料|-10%提取功率"
+  },
+  {
+   "key": "item_Mining_Modules_Passive_XTR_MK3",
+   "category": "passive_module",
+   "en": "XTR-XL",
+   "zh": "XTR-XL 模组",
+   "pack_note": "+22%绿区|-5.7%废料|-10%提取功率"
+  }
+ ],
+ "refining_methods": [
+  {
+   "key": "refinery_ui_ProcessingType_SlowCareful",
+   "en": "Dinyx Solventation",
+   "zh": "德尼克斯熔解法",
+   "zh_rating": "速度极慢 // 开销低 // 成品率高"
+  },
+  {
+   "key": "refinery_ui_ProcessingType_NormalCareful",
+   "en": "Ferron Exchange",
+   "zh": "费荣交换法",
+   "zh_rating": "速度慢 // 开销中等 // 成品率高"
+  },
+  {
+   "key": "refinery_ui_ProcessingType_FastCareful",
+   "en": "Pyrometric Chromalysis",
+   "zh": "控温色谱熔解法",
+   "zh_rating": "速度慢 // 开销高 // 成品率高"
+  },
+  {
+   "key": "refinery_ui_ProcessingType_NormalNormal",
+   "en": "Electrostarolysis",
+   "zh": "电解化晶提纯法",
+   "zh_rating": "速度中等 // 开销中等 // 成品率中等"
+  },
+  {
+   "key": "refinery_ui_ProcessingType_SlowNormal",
+   "en": "Thermonatic Deposition",
+   "zh": "热力沉积法",
+   "zh_rating": "速度慢 // 开销低 // 成品率中等"
+  },
+  {
+   "key": "refinery_ui_ProcessingType_FastNormal",
+   "en": "Gaskin Process",
+   "zh": "加斯金提纯法",
+   "zh_rating": "速度快 // 开销高 // 成品率高"
+  },
+  {
+   "key": "refinery_ui_ProcessingType_SlowWasteful",
+   "en": "Kazen Winnowing",
+   "zh": "卡赞风选法",
+   "zh_rating": "速度中等 // 开销低 // 成品率低"
+  },
+  {
+   "key": "refinery_ui_ProcessingType_NormalWasteful",
+   "en": "Cormack Method",
+   "zh": "科马克加工法",
+   "zh_rating": "速度中等 // 开销中等 // 成品率低"
+  },
+  {
+   "key": "refinery_ui_ProcessingType_FastWasteful",
+   "en": "XCR Reaction",
+   "zh": "XCR 反应法",
+   "zh_rating": "速度快 // 开销高 // 成品率低"
+  }
+ ],
+ "locations": [
+  {
+   "key": "RR_ARC_L1",
+   "en": "ARC-L1",
+   "zh": "弧 L1 广袤森林站"
+  },
+  {
+   "key": "RR_ARC_L2",
+   "en": "ARC-L2",
+   "zh": "弧 L2 活力小径站"
+  },
+  {
+   "key": "RR_ARC_L4",
+   "en": "ARC-L4",
+   "zh": "弧 L4 黯淡幽谷站"
+  },
+  {
+   "key": "RR_CRU_L1",
+   "en": "CRU-L1",
+   "zh": "十 L1 雄心伟梦站"
+  },
+  {
+   "key": "RR_HUR_L1",
+   "en": "HUR-L1",
+   "zh": "赫 L1 绿色林地站"
+  },
+  {
+   "key": "RR_HUR_L2",
+   "en": "HUR-L2",
+   "zh": "赫 L2 坚贞梦想站"
+  },
+  {
+   "key": "RR_MIC_L1",
+   "en": "MIC-L1",
+   "zh": "微 L1 浅边站"
+  },
+  {
+   "key": "RR_MIC_L2",
+   "en": "MIC-L2",
+   "zh": "微 L2 长林站"
+  },
+  {
+   "key": "RR_MIC_L5",
+   "en": "MIC-L5",
+   "zh": "微 L5 现代伊卡洛斯站"
+  },
+  {
+   "key": "RR_P2_L4",
+   "en": "Checkmate",
+   "zh": "死局空间站"
+  },
+  {
+   "key": "RR_P3",
+   "en": "Orbituary",
+   "zh": "轨道讣闻站"
+  },
+  {
+   "key": "RR_P6",
+   "en": "Ruin Station",
+   "zh": "废墟空间站"
+  },
+  {
+   "key": "Delamar_Levski",
+   "en": "Levski",
+   "zh": "列夫斯基"
+  },
+  {
+   "key": "Stanton_Pyro_JPStation",
+   "en": "Pyro Gateway (Stanton)",
+   "zh": "派罗星门"
+  },
+  {
+   "key": "Stanton_Nyx_JPStation",
+   "en": "Nyx Gateway (Stanton)",
+   "zh": "尼克斯星门"
+  },
+  {
+   "key": "Stanton_Terra_JPStation",
+   "en": "Terra Gateway (Stanton)",
+   "zh": "泰拉星门"
+  },
+  {
+   "key": "Pyro_Nyx_JPStation",
+   "en": "Nyx Gateway (Pyro)",
+   "zh": "尼克斯星门"
+  },
+  {
+   "key": "Pyro_Stanton_JPStation",
+   "en": "Stanton Gateway (Pyro)",
+   "zh": "斯坦顿星门"
+  },
+  {
+   "key": "Nyx_Pyro_JPStation",
+   "en": "Pyro Gateway (Nyx)",
+   "zh": "派罗星门"
+  },
+  {
+   "key": "Nyx_Stanton_JPStation",
+   "en": "Stanton Gateway (Nyx)",
+   "zh": "斯坦顿星门"
+  },
+  {
+   "key": "Stanton1_Lorville",
+   "en": "Lorville",
+   "zh": "罗威尔"
+  },
+  {
+   "key": "Stanton2_Orison",
+   "en": "Orison",
+   "zh": "奥里森"
+  },
+  {
+   "key": "Stanton3_Area18",
+   "en": "Area18",
+   "zh": "18区"
+  },
+  {
+   "key": "Stanton4_NewBabbage",
+   "en": "New Babbage",
+   "zh": "新巴贝奇"
+  }
+ ]
+}

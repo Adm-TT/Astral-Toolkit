@@ -1,0 +1,4 @@
+mss
+pillow
+numpy
+rapidocr_onnxruntime
