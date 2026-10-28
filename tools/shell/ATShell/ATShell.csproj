@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- AT 窗口外壳（2026-10-27）：WinUI 3 + Mica + 系统标题栏按钮 + WebView2。源码在 tools\shell\ATShell（app.manifest、icon.ico、icon.png 也在这），tools\build_standalone.py 编好放进 AT 的 shell\ 文件夹 -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>ATShell</RootNamespace>
+    <AssemblyName>ATShell</AssemblyName>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <SelfContained>true</SelfContained>
+    <WindowsAppSdkDeploymentManagerInitialize>false</WindowsAppSdkDeploymentManagerInitialize>
+    <Nullable>enable</Nullable>
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>icon.ico</ApplicationIcon>
+    <Version>1.0.0</Version>
+    <Product>AT 星际公民助手</Product>
+    <Company>Adm_TT</Company>
+    <!-- 瘦身：裁掉用不上的 .NET 代码、不要调试符号、不要别的语言的资源 -->
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>partial</TrimMode>
+    <DebugType>none</DebugType>
+    <SatelliteResourceLanguages>zh-Hans</SatelliteResourceLanguages>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- 只要界面（WinUI，含 WebView2 控件）和窗口（InteractiveExperiences），不要 AI / ML / 小组件这些 -->
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="1.8.*" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" Version="1.8.*" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" Version="1.8.*" />
+    <TrimmerRootAssembly Include="Microsoft.WinUI" />
+    <TrimmerRootAssembly Include="Microsoft.InteractiveExperiences.Projection" />
+    <TrimmerRootAssembly Include="Microsoft.WindowsAppRuntime.Bootstrap.Net" />
+    <TrimmerRootAssembly Include="Microsoft.Windows.ApplicationModel.WindowsAppRuntime.Projection" />
+    <Content Include="icon.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="icon.png" CopyToOutputDirectory="PreserveNewest" />
+    <!-- AT 标志（标题栏里画，和网页侧栏同一个文件；2026-10-28） -->
+    <Content Include="..\..\..\sc_mining\app\web\at-mark-dark.svg" Link="at-mark-dark.svg" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\..\sc_mining\app\web\at-mark-light.svg" Link="at-mark-light.svg" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
