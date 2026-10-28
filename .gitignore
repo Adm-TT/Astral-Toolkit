@@ -1,0 +1,14 @@
+# 运行时生成 / 个人数据 / 本机环境
+.venv/
+data/
+userdata/
+dist/
+build/
+__pycache__/
+*.pyc
+Dubhe.exe
+_launcher_build.exe
+# 测试截图（游戏画面，不公开）
+tests/samples/
+tests/ingame/
+测试数据/
