@@ -184,7 +184,8 @@ _TASK_OWNERSHIP = [
         "_desktop", "_system_info", "export_logs", "_fb_dir", "feedback_report", "feedback_list",
         "feedback_export", "feedback_clear", "cockpit_check", "overlay_move", "set_settings",
         "update_data", "about_info", "open_source_site", "third_party_licenses", "open_referral",
-        "agree", "show", "quit", "HOTKEYS", "_online"
+        "agree", "show", "quit", "HOTKEYS", "_online", "_hotkey_values", "hotkey_conflicts",
+        "_FB_LAST", "_ORE_LAST"
     }),
     (_t_trade, {
         "WIKI_TYPE_ZH", "search", "item_search", "_wiki_cat", "_zh_of", "item_info",

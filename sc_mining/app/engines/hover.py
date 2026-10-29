@@ -37,7 +37,7 @@ class _Hover:
 
     def _run(self):
         import ctypes
-        from ... import settings
+        from ...core import settings
         from ...trade.console import VK
         # 每个热键按下去做什么：(要不要占着「忙」, 动作)。占着忙的同一时间只跑一个（都要截屏或输 /showlocation）
         acts = {"trade_capture_key": (True, lambda: (_S().item_key_pressed(), bus.run_task("hover", self._recognize, title="识别物品"))),

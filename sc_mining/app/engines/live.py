@@ -45,7 +45,7 @@ class _Live:
 
     def _save_miss(self, img, why, raw, log):
         """采矿助手没出结果的画面自动存下来：之后从这些图找原因（2026-10-23 用户反馈「部分矿物扫描失败」，当时没有图）"""
-        from ... import paths
+        from ...core import paths
         stamp = time.strftime("%H%M%S")
         try:
             log.write(f"{time.strftime('%F %T')} MISS {why} {raw}\n")
@@ -120,7 +120,7 @@ class _Live:
 
     def _run_gpu(self, ev):
         """采矿助手开着时用显卡 OCR 小进程，结束（手动关、自动关、出错）就关掉它，内存还给系统（2026-10-27）"""
-        from ... import gpu_ocr
+        from ...system import gpu_ocr
         try:
             gpu_ocr.acquire()
         except Exception:
@@ -132,7 +132,7 @@ class _Live:
                     break
                 except Exception as e:
                     import traceback
-                    from ... import paths
+                    from ...core import paths
                     msg = f"采矿助手出错（第 {attempt + 1} 次）：{e!r}"
                     try:
                         with open(paths.log("live_log.txt"), "a", encoding="utf-8") as f:
@@ -157,7 +157,7 @@ class _Live:
 
     def _fail_off(self, ev, why):
         """连着出错：自己关掉并告诉玩家（和 _auto_off 一样收尾）"""
-        from ... import settings
+        from ...core import settings
         with self.lock:
             if ev.is_set():
                 return
@@ -175,7 +175,7 @@ class _Live:
 
     def _auto_off(self, ev, log):
         """太久没看到扫描面板和信号：自己关掉（在识别线程里调用，不能 join 自己）"""
-        from ... import settings
+        from ...core import settings
         try:
             log.write(f"{time.strftime('%F %T')} AUTO_OFF {self.IDLE_CLOSE} 秒没看到扫描面板和信号，采矿助手自动关闭\n")
             log.flush()
@@ -210,8 +210,9 @@ class _Live:
     def _run(self, ev=None):
         import collections
         import numpy as np
-        from ... import paths, screen
-        from ...signals import find_signatures, describe_all, match_signature
+        from ...core import paths
+        from ...mining import screen
+        from ...mining.signals import find_signatures, describe_all, match_signature
         ev = ev or self.stop_ev
         alive = lambda: not ev.is_set()               # 只看本会话的开关
         shots = paths.shots("live")
@@ -291,11 +292,11 @@ class _Live:
                 # 高度表、气压会被拼成「质量 0.7、抗性 76」，以前因此一直当面板开着，信号识别整段暂停（2026-10-23 Calliope）
                 panel_now = screen.panel_seen(scan, raw)
                 if panel_now:                          # 看着面板：读位置别占识别引擎（2026-10-27 悬浮窗晚 10–18 秒）
-                    from ...displayinfo import yield_ocr
+                    from ...navigation.displayinfo import yield_ocr
                     yield_ocr()
                 scan_off = bool(_S()._off("scan"))
                 if scan_off:                           # 远程关了：面板在不在照样判断（雷达靠它避开面板上的数字），结果不用；
-                    from ...parse import parse_scan, parse_bag   # 投票队列清掉、悬浮窗旧结果收起、不算「读不全」（Codex 2026-10-27）
+                    from ...mining.parse import parse_scan, parse_bag   # 投票队列清掉、悬浮窗旧结果收起、不算「读不全」（Codex 2026-10-27）
                     scan, bag = parse_scan([]), parse_bag([])
                     recent.clear()
                     part.clear()
@@ -330,19 +331,19 @@ class _Live:
                     sigs = frozenset(v for v, *_ in found)
                     if sigs:
                         last_sig_t = now
-                        from ...displayinfo import yield_ocr
+                        from ...navigation.displayinfo import yield_ocr
                         yield_ocr()
                     area = _S()._area_now() if sigs and sigs == sig_prev else None
                     # 产矿区变了（飞进矿带、跳跃）也要重新发：以前只看信号数值，同样的 7,200 会一直停在旧地点的说法
-                    from ...mining_area import rocks_stamp
-                    from ...signals import _mine_file
-                    from ...paths import file_stamp
+                    from ...mining.mining_area import rocks_stamp
+                    from ...mining.signals import _mine_file
+                    from ...core.paths import file_stamp
                     shown_key = (sigs, frozenset((v, f) for v, f, *_ in found), (area or {}).get("name"), (area or {}).get("zh"),
                                  rocks_stamp(), file_stamp(_mine_file()))     # 换了石头表、读数改没改过、自己起了名都重发
                     if sigs and sigs == sig_prev and shown_key != sig_shown and alive():
                         where = _S()._where_now() if any(not match_signature(v) for v in sigs) else None
                         lines = _S()._mark_goal_lines(describe_all(found, where, area))
-                        from ...signals import guesses as _g
+                        from ...mining.signals import guesses as _g
                         unknown = [v for v in sorted(sigs) if v and not any(e for *_, e in _g(v, where, area))]
                         msg = {"lines": lines, "at": time.strftime("%H:%M:%S"), "area": (area or {}).get("zh", ""),
                                "unknown": unknown}       # 没认准的：窗口里可以起名记下（2026-10-27）

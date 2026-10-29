@@ -65,7 +65,7 @@ class _Nav:
     def target_label(self):
         if not self.target:
             return ""
-        from ...navigate import label
+        from ...navigation.navigate import label
         return label(self.target)
 
     def use_space(self, target):
@@ -153,7 +153,7 @@ class _Nav:
     def add_fix(self, g, clip=None, session=None):
         """太空路标：拿到一次 /showlocation 坐标 → 距离、近了多少、偏离角、多久到，推给窗口和悬浮窗。
         剪贴板监听和 F9 可能拿到同一份坐标：查重、记录、发布都在同一把锁里做，同一份只算一次"""
-        from ... import navigate as n
+        from ...navigation import navigate as n
         g = tuple(g)
         with self.fix_lock:
             if session is not None and session != self.session:
@@ -188,7 +188,7 @@ class _Nav:
     def _run_space(self, target, ev, sess):
         """去太空路标：只用 /showlocation 的坐标（玩家社区的通用做法），不读右上角、不靠机头朝向。
         按一键定位热键 AT 替你输；自己在聊天框输 /showlocation 也行（盯着剪贴板）"""
-        from ... import navigate as n
+        from ...navigation import navigate as n
         key, hint = _S().fix_key_hint()
         with self.fix_lock:
             if sess != self.session:
@@ -205,7 +205,7 @@ class _Nav:
             ev.wait(0.3)
 
     def _run(self, ev=None, sess=None):
-        from ... import navigate as n
+        from ...navigation import navigate as n
         ev = ev or self.stop_ev
         sess = self.session if sess is None else sess
         target = self.target
@@ -332,7 +332,7 @@ class _GameEvents:
             self.thread.start()
 
     def _run(self):
-        from ...gamelog import EventTail
+        from ...system.gamelog import EventTail
         tail = EventTail()
         while True:
             if _S()._off("game_events"):

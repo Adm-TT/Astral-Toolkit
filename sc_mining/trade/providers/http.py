@@ -65,7 +65,7 @@ class UrllibClient:
         full = url + ('?' + urllib.parse.urlencode(params) if params else '')
         req = urllib.request.Request(full, headers={'User-Agent': self.UA, 'Accept': 'application/json',
                                                    'Accept-Encoding': 'gzip, deflate', **(headers or {})})
-        from ...net import decode
+        from ...core.net import decode
         try:
             with urllib.request.urlopen(req, timeout=timeout) as r:
                 body = decode(r.read(), r.headers.get('Content-Encoding'))

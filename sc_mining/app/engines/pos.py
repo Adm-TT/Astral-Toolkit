@@ -29,7 +29,7 @@ class _Pos:
     CALIB_EVERY = 2.0          # 字模还没校准好：每 2 秒用识别引擎认一次来学（一般 3～5 次就好，好了就停）；读不到会自己放慢
 
     def __init__(self):
-        from ...displayinfo import Reader
+        from ...navigation.displayinfo import Reader
         self.reader = Reader(every=1.0)
         self.latest = (0.0, None, None)    # (时间, 星系坐标, 那次读到的全部信息)：坐标变了才换
         self.read_at = 0.0                 # 最后一次读到位置（坐标没变也算）的截图时间
@@ -60,8 +60,8 @@ class _Pos:
             bus.publish("status", _S().status())
 
     def _run(self):
-        from ... import navigate as n, gridtext
-        from ...showloc import game_foreground
+        from ...navigation import navigate as n, gridtext
+        from ...system.showloc import game_foreground
         was = False
         while True:
             try:
@@ -70,7 +70,7 @@ class _Pos:
                 fg = True
             ready = False
             try:
-                from ...perf import game_area
+                from ...core.perf import game_area
                 ready = gridtext.ready(game_area()["height"])
             except Exception:
                 pass
@@ -93,7 +93,7 @@ class _Pos:
                 if ok_at != seen and info.get("global"):
                     self.fast = bool(info.get("fast"))
                     if info.get("location"):
-                        from ...position import display_label
+                        from ...navigation.position import display_label
                         lab = display_label(info["location"])
                         old = self.label[1]
                         self.label = (time.time(), lab or old)
@@ -148,7 +148,7 @@ class _LogWatch:
             self.thread.start()
 
     def _run(self):
-        from ...position import from_log
+        from ...navigation.position import from_log
         while True:
             try:
                 hit = from_log()

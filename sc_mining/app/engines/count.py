@@ -33,7 +33,7 @@ class _Count:
     def start(self):
         if not _S().WIN or self.running():
             return {"running": self.running()}
-        from ... import stockplaces as SP
+        from ...crafting import stockplaces as SP
         here = SP.current_place()
         place = here["label"] if here else _S()._place_of(_S().trade().db.get("last_location", "") or "")[0]
         if not place:
@@ -66,7 +66,7 @@ class _Count:
     def _run(self, ev):
         import ctypes
         from ctypes import wintypes
-        from ...screen import grab
+        from ...mining.screen import grab
         from ...trade import console as C
         last_hit = time.time()
         prev_pos, still_since, done_pos, tries = None, time.time(), None, 0
