@@ -74,8 +74,9 @@
 
       <div class="rt-body" id="rt-body">
         <!-- 实时截图：极简单图，紧贴在运行日志上方 -->
-        <div class="rt-screen-view" id="rt-screen-view">
-          <img id="rt-preview-img" src="/api/screenshot" alt="实时截图" loading="lazy">
+        <div class="rt-screen-view empty" id="rt-screen-view">
+          <div class="rt-screen-empty" id="rt-screen-empty">暂无截图</div>
+          <img id="rt-preview-img" alt="实时截图" style="display: none;" loading="lazy">
         </div>
 
         <!-- 运行日志终端窗口 -->

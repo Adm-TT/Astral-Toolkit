@@ -150,14 +150,6 @@ class Handler(BaseHTTPRequestHandler):
         qs = parse_qs(urlparse(self.path).query)
         full = qs.get("full", ["0"])[0] == "1"
         data, meta = bus.get_preview_bytes(full=full)
-        if not data:
-            try:
-                from ..core.perf import grab_screen
-                img = grab_screen()
-                bus.update_preview(img, source="screen", force=True)
-                data, meta = bus.get_preview_bytes(full=full)
-            except Exception as e:
-                return self._send(500, json.dumps({"error": str(e)}))
         if data:
             self.send_response(200)
             self.send_header("Content-Type", "image/jpeg")

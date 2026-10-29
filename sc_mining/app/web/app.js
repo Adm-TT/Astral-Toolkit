@@ -362,9 +362,10 @@ function clearRuntimeLogsUi() {
 
 function updateRuntimePreview(meta) {
   state.previewMeta = meta;
+  const container = document.getElementById("rt-screen-view");
   const img = document.getElementById("rt-preview-img");
   const dot = document.getElementById("rt-dot");
-  if (img) {
+  if (img && meta && meta.bytes) {
     img.src = `/api/screenshot?token=${encodeURIComponent(TOKEN)}&_t=${encodeURIComponent(meta.t || Date.now())}`;
   }
   if (dot) dot.classList.remove("idle");
@@ -374,6 +375,19 @@ function initRuntimeMonitor() {
   const clearBtn = document.getElementById("rt-clear-btn");
   const toggleBtn = document.getElementById("rt-toggle-btn");
   const monitor = document.getElementById("rt-monitor");
+  const container = document.getElementById("rt-screen-view");
+  const img = document.getElementById("rt-preview-img");
+
+  if (img) {
+    img.addEventListener("load", () => {
+      container?.classList.remove("empty");
+      img.style.display = "block";
+    });
+    img.addEventListener("error", () => {
+      container?.classList.add("empty");
+      img.style.display = "none";
+    });
+  }
 
   clearBtn?.addEventListener("click", async () => {
     try {

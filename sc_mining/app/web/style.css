@@ -270,6 +270,20 @@ kbd {
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
+}
+.rt-screen-empty {
+  font-size: 11px;
+  color: var(--faint);
+  letter-spacing: 0.5px;
+  user-select: none;
+  pointer-events: none;
+}
+.rt-screen-view:not(.empty) .rt-screen-empty {
+  display: none !important;
+}
+.rt-screen-view.empty #rt-preview-img {
+  display: none !important;
 }
 #rt-preview-img {
   width: 100%;
