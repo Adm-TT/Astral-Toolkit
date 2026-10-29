@@ -62,6 +62,8 @@ def update_preview(img, source="live", force=False):
             tw = min(360, w)
             th = max(1, int(h * (tw / w)))
             thumb = img.resize((tw, th))
+            if thumb.mode != "RGB":
+                thumb = thumb.convert("RGB")
             bio = io.BytesIO()
             thumb.save(bio, format="JPEG", quality=75)
             _preview_thumb_bytes = bio.getvalue()
@@ -70,6 +72,8 @@ def update_preview(img, source="live", force=False):
             fw = min(1280, w)
             fh = max(1, int(h * (fw / w)))
             fimg = img if fw >= w else img.resize((fw, fh))
+            if fimg.mode != "RGB":
+                fimg = fimg.convert("RGB")
             bio_full = io.BytesIO()
             fimg.save(bio_full, format="JPEG", quality=80)
             _preview_full_bytes = bio_full.getvalue()
@@ -82,7 +86,8 @@ def update_preview(img, source="live", force=False):
                 "source": source,
                 "bytes": len(_preview_thumb_bytes),
             }
-        except Exception:
+        except Exception as e:
+            runtime_log(f"截图预览处理异常: {e}", tag="SYS", level="WARN")
             return
     publish("runtime_preview", _preview_meta)
 

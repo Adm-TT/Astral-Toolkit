@@ -382,13 +382,21 @@ function initRuntimeMonitor() {
   if (img) {
     img.addEventListener("load", () => {
       container?.classList.remove("empty");
-      img.style.display = "block";
     });
     img.addEventListener("error", () => {
       container?.classList.add("empty");
-      img.style.display = "none";
     });
+    // 初始化时尝试加载后台已有的截图缓存
+    if (TOKEN) {
+      img.src = `/api/screenshot?token=${encodeURIComponent(TOKEN)}&_t=${Date.now()}`;
+    }
   }
+
+  container?.addEventListener("click", () => {
+    if (!container.classList.contains("empty") && TOKEN) {
+      window.open(`/api/screenshot?token=${encodeURIComponent(TOKEN)}&full=1&_t=${Date.now()}`, "_blank");
+    }
+  });
 
   clearBtn?.addEventListener("click", async () => {
     try {

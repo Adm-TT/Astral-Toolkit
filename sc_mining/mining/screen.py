@@ -412,8 +412,9 @@ def grab():
     from ..core.perf import grab_screen
     img = grab_screen()
     try:
+        import threading
         from ..app import bus
-        bus.update_preview(img, source="live")
+        threading.Thread(target=bus.update_preview, args=(img,), kwargs={"source": "live"}, daemon=True).start()
     except Exception:
         pass
     return img

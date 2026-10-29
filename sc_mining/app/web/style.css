@@ -283,13 +283,15 @@ kbd {
   display: none !important;
 }
 .rt-screen-view.empty #rt-preview-img {
-  display: none !important;
+  opacity: 0;
+  pointer-events: none;
 }
 #rt-preview-img {
   width: 100%;
   height: 100%;
   object-fit: contain;
   display: block;
+  transition: opacity 0.15s ease;
 }
 
 /* 运行日志终端 */
