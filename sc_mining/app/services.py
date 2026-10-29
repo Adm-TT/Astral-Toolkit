@@ -157,6 +157,9 @@ _live = _Live()
 _pos = _Pos()
 _count = _Count()
 _hover = _Hover()
+_cam_filter = _CamFilter()
+_steady = _Steady()
+_logwatch = _LogWatch()
 
 
 # ================================================================ 动态挂载并 Re-export 全部 Tasks 任务层
@@ -243,7 +246,12 @@ for _mod, _symbols in _TASK_OWNERSHIP:
 def start_background():
     """打开天枢主窗口时启动后台服务：热键监听、定时查更新、搜索索引预热、未发送反馈补发、原矿扫描续跑"""
     from ..core import settings
+    if not settings.load().get("agreed"):
+        return
     _hover.start()
+    _pos.start()
+    _logwatch.start()
+    _game_events.start()
     _online = getattr(sys.modules[__name__], "_online", {})
     if not _online.get("loop"):
         _online["loop"] = True
