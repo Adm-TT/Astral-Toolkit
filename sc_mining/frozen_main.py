@@ -19,7 +19,7 @@ def _velopack():
         velopack.App().run()
     except Exception:                          # 组件坏了：写进日志，照常打开 AT（钩子调用由 main 拦下，不会走到这里以外）
         try:
-            from sc_mining import paths
+            from sc_mining.core import paths
             with open(paths.LOGS / "velopack_error.txt", "a", encoding="utf-8") as f:
                 f.write(traceback.format_exc())
         except Exception:
@@ -37,10 +37,10 @@ def main():
     args = sys.argv[1:]
     cmd = args[0] if args else "menu"
     if cmd == "ocrworker":                      # 显卡 OCR 小进程（采矿助手开着时，2026-10-27）：只认字，别的都不跑
-        from sc_mining import gpu_ocr
+        from sc_mining.system import gpu_ocr
         gpu_ocr.worker_main()
         sys.exit(0)
-    from sc_mining import paths
+    from sc_mining.core import paths
     try:
         paths.seed_data()                       # Velopack 版：新版本第一次运行，把自带的数据放到外面的 data\
         paths.import_inno()                     # 直接装 Velopack 版的老用户：把老 Inno 版的设置和记录搬过来
@@ -53,7 +53,7 @@ def main():
     silent = run._no_console()
     try:
         if cmd == "helpers":
-            from sc_mining import helpers
+            from sc_mining.system import helpers
             helpers.main(int(args[1]) if len(args) > 1 else 0)
         elif cmd == "admin":
             run.run_entry(args[1] if len(args) > 1 else "menu")

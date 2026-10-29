@@ -184,8 +184,8 @@ def cell_labels(img, cursor, tokens=None, size=None):
 
 
 def _is_mineral(zh, en):
-    from ..data import SIGNATURES
-    from ..i18n import mineral_en
+    from ..mining.data import SIGNATURES
+    from ..core.i18n import mineral_en
     return (en or "").strip().lower() in {k.lower() for k in SIGNATURES} or bool(zh and mineral_en(zh))
 
 
@@ -230,7 +230,7 @@ def _hover_lines(info, en, zh):
     if info.get("how"):
         lines.append(f"获取：{info['how']}")
     try:
-        from .. import wikelo
+        from ..crafting import wikelo
         name = info.get("name") or en
         got = [c for c in wikelo.load() if any(wikelo._same(x, name) or (zh and wikelo._same(x, zh)) for x in [c.get("rz", ""), *c.get("rewards", [])])]
         if got:
@@ -242,7 +242,7 @@ def _hover_lines(info, en, zh):
     except Exception:
         pass
     try:
-        from .. import crafting
+        from ..crafting import crafting
         fold = lambda x: re.sub(r"[^a-z0-9一-鿿]", "", (x or "").lower())
         want = {fold(info.get("name")), fold(en), fold(zh)} - {""}
         bps = [b for b in crafting.blueprints() if fold(b["n"]) in want or fold(b["z"]) in want]
@@ -300,7 +300,7 @@ def _hover_more(at, zh, en, info, quality=None, canon=True):
         except Exception as e:
             out["prices"] = {"error": f"价格查询失败：{e}", "quality": _tier(quality), "op": "sell"}
     try:
-        from ..loot import info as loot_info
+        from ..crafting.loot import info as loot_info
         out["loot"] = loot_info(info.get("name") or en, zh)
     except Exception as e:
         out["loot"] = {"error": f"掉落数据查询失败：{e}"}
@@ -312,7 +312,7 @@ def _hover_more(at, zh, en, info, quality=None, canon=True):
 def hover_once(img=None):
     """F8：认出鼠标指着的物品，马上把名字和本机数据（哪里买、维科洛、制造）显示到悬浮窗；
     要联网的（玩家市场价、掉落）放到后台，查到了再补上。以前要等联网全查完才显示，慢好几秒"""
-    from ..screen import grab
+    from ..mining.screen import grab
     from ..trade import console as C
     why = _off("item")
     if why:
@@ -363,7 +363,7 @@ def hover_once(img=None):
     craft = None
     if not mineral and row_q is None and cell_q is None:   # 制造出来的东西没写品质：按加成行倒推各材料槽（和盘点同一套，老大 2026-10-27 反馈 F8 显示品质 0）
         try:
-            from ..crafting import parse_mods, solve_slots, for_item, craft_text
+            from ..crafting.crafting import parse_mods, solve_slots, for_item, craft_text
             mods = parse_mods(tokens)
             res = solve_slots(for_item(en, zh), mods) if mods else None
             if res and res["exact"]:                       # 加成对不上蓝图（认错数字 / 蓝图不对）：不当品质（Codex 2026-10-27）
@@ -390,6 +390,6 @@ def hover_once(img=None):
     threading.Thread(target=_hover_more, args=(at, zh, en, info, quality, bool(canon)), daemon=True, name="hover-more").start()
     threading.Thread(target=C._hover_log, args=(img, tokens, name, note), daemon=True).start()
     if canon:                                              # 帮助改进识别：名字那几行 + 汉化包里的正确名字（后台存，不拖慢 F8）
-        from .. import train_data
+        from ..system import train_data
         threading.Thread(target=train_data.from_tooltip, args=(img, tokens, name, canon), daemon=True).start()
     return {"ok": True, "ms": int((t3 - t0) * 1000)}

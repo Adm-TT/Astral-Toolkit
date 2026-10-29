@@ -13,12 +13,12 @@ import time
 try:
     from ..crafting import goals as G
 except ImportError:
-    from .. import goals as G
+    from ..crafting import goals as G
 
 try:
     from ..crafting import wikelo
 except ImportError:
-    from .. import wikelo
+    from ..crafting import wikelo
 
 try:
     from ..crafting.crafting import (
@@ -52,7 +52,7 @@ try:
         variant_note,
     )
 except ImportError:
-    from ..crafting import (  # type: ignore
+    from ..crafting.crafting import (  # type: ignore
         PROP_KEY,
         LOWER_BETTER,
         GEAR_ZH,
@@ -83,8 +83,8 @@ except ImportError:
         variant_note,
     )
 
-from ..data import best_price
-from ..locations import where, zh_name
+from ..mining.data import best_price
+from ..mining.locations import where, zh_name
 from ..trade.console import material_source, SOURCE_ZH
 
 
@@ -119,7 +119,7 @@ def clear_caches():
 
 
 try:
-    from ..data_pack import CACHE_HOOKS as _CACHE_HOOKS
+    from ..update.data_pack import CACHE_HOOKS as _CACHE_HOOKS
     _CACHE_HOOKS.append(clear_caches)
 except Exception:
     pass

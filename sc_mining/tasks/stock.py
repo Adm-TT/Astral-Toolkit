@@ -96,7 +96,7 @@ def _stock_kind(zh, en, ukey):
 
 def _place_of(location):
     """库存里记的位置 → (地点叫法, 仓位, 地点信息或 None)：「新巴贝奇｜待卖」→ (新巴贝奇, 待卖, …)；New Babbage → (新巴贝奇, 总仓, …)"""
-    from .. import stockplaces as SP
+    from ..crafting import stockplaces as SP
     place, b = SP.split_loc(location)
     p = SP.match(place)
     return (p["label"] if p else place), b, p
@@ -197,15 +197,15 @@ def _row_value(prices, item_id, qkey, ukey, raw):
 @api
 def stock():
     """库存页：每一行（地点、仓位、类别、最后变动、目标占用、不给目标用、估值）、左边的地点树（带仓位）、当前位置、最近记录"""
-    from .. import stockplaces as SP
-    from .. import goals as G
+    from ..crafting import stockplaces as SP
+    from ..crafting import goals as G
     from ..trade.names import has_chinese
     t = trade()
     custom = list(t.db.get("stock_custom_places", []) or [])
     bins = _bins(t)
     changed = t.inventory.last_changes()
     reserved = G.reserved_keys(t)
-    from ..crafting import craft_text
+    from ..crafting.crafting import craft_text
     try:
         crafts = t.inventory.craft_map()
     except Exception:
@@ -290,7 +290,7 @@ def _place_for(location, bin=None):
     """入库 / 移库的目标 → 库存里记的叫法「地点」或「地点｜仓位」。
     地点：列表里的用标准中文名（New Babbage → 新巴贝奇），别的（船、前哨、自己起的名字）检查一下、记进「自己的地点」。
     仓位：bin=None 时用地点的默认仓位；「总仓」或空 = 不分仓位；别的名字没建过就顺手建上"""
-    from .. import stockplaces as SP
+    from ..crafting import stockplaces as SP
     place, b = SP.split_loc(location)
     if "｜" in str(location or "") and bin is None:
         bin = b
@@ -362,7 +362,7 @@ def stock_add(id="", qty=1, quality="", location=""):
 @api
 def craft_slots_for(en="", zh=""):
     """入库时：制造出来的东西有哪些材料槽要填品质（1.6.67）；不是能制造的返回 []"""
-    from ..crafting import for_item, craft_slots
+    from ..crafting.crafting import for_item, craft_slots
     return craft_slots(for_item(en, zh)) if (en or zh) else []
 
 
@@ -372,7 +372,7 @@ def stock_add_named(name="", qty=0, unit="", quality="", location="", en="", zh=
     从联想里点选的会带上 en / zh / kind，直接用，不再猜；矿物默认按 SCU，其他默认按个；交易库里没有的自动建成本地物品。
     位置：地点列表里的用标准中文名，别的记成自己的地点；source：从哪录的（库存页 / F8 / 物品查询）"""
     _invalidate_short()
-    from .. import goals as G
+    from ..crafting import goals as G
     name = (name or "").strip()
     if en:
         u = unit or ("SCU" if kind == "矿物" else "个")
@@ -539,7 +539,7 @@ def stock_relocate(location="", to="", bin=None):
 @api
 def stock_keep_custom(location=""):
     """「未归类」里的位置其实没错（比如船名）：留下来当自己的地点"""
-    from .. import stockplaces as SP
+    from ..crafting import stockplaces as SP
     try:
         name = SP.check_name(location)
     except ValueError as e:
@@ -556,7 +556,7 @@ def stock_keep_custom(location=""):
 @api
 def stock_places():
     """选地点用：游戏里所有能存东西的地方（按星系、星球排好）、自己的地点、当前位置"""
-    from .. import stockplaces as SP
+    from ..crafting import stockplaces as SP
     t = trade()
     return {"places": [SP.public(p) for p in SP.places()], "custom": list(t.db.get("stock_custom_places", []) or []),
             "here": SP.current_place(), "last": t.db.get("last_location", ""), "bins": _bins(t)}
@@ -565,7 +565,7 @@ def stock_places():
 @api
 def stock_place_add(name=""):
     """选地点时自己写的名字：能对上列表的就用列表里的；对不上的检查一下（不能只有数字）记成自己的地点"""
-    from .. import stockplaces as SP
+    from ..crafting import stockplaces as SP
     p = SP.match(name)
     if p:
         return SP.public(p)
@@ -579,7 +579,7 @@ def stock_place_add(name=""):
 @api
 def stock_bin_save(place="", name="", desc="", default=False, old=""):
     """新建仓位 / 改仓位（名字、描述、是不是默认）。改名时这个仓位里的东西一起换过去（一笔移库，能撤销）"""
-    from .. import stockplaces as SP
+    from ..crafting import stockplaces as SP
     _invalidate_short()
     t = trade()
     try:
@@ -618,7 +618,7 @@ def stock_bin_save(place="", name="", desc="", default=False, old=""):
 @api
 def stock_bin_delete(place="", name=""):
     """删仓位：里面的东西放回这个地点的总仓（一笔移库，能撤销）"""
-    from .. import stockplaces as SP
+    from ..crafting import stockplaces as SP
     _invalidate_short()
     t = trade()
     bins = _bins(t)
@@ -642,7 +642,7 @@ def stock_bin_delete(place="", name=""):
 @api
 def stock_reserve(id="", qkey="", location="", ukey="", on=True):
     """这一行「不给目标用」（比如留着卖的）：目标不算它；再点一次取消"""
-    from .. import goals as G
+    from ..crafting import goals as G
     _invalidate_short()
     t = trade()
     keys = list(t.db.get(G.RESERVED, []) or [])

@@ -19,7 +19,7 @@ from ..app import bus
 _places = {}
 
 try:
-    from ..data_pack import CACHE_HOOKS as _CACHE_HOOKS
+    from ..update.data_pack import CACHE_HOOKS as _CACHE_HOOKS
     _CACHE_HOOKS.append(_places.clear)
 except Exception:
     pass
@@ -137,7 +137,7 @@ _ORE_LAST = _OreLastProxy()
 
 # ---------------------------------------------------------------- 导航与地点搜索
 def _place_row(p):
-    from ..navigate import label, body_label, TYPE_ZH, QT_ZH
+    from ..navigation.navigate import label, body_label, TYPE_ZH, QT_ZH
     key = f"{p['b']}|{p['t']}|{p.get('id') or p['n']}"     # 城里同名地点靠 id 区分（Codex 2026-10-27）
     _places[key] = p
     typ = (p.get("area") or p.get("city_zh") or TYPE_ZH["City"]) if p["t"] == "City" else TYPE_ZH.get(p["t"], p["t"])
@@ -148,7 +148,7 @@ def _place_row(p):
 
 @api
 def nav_search(q=""):
-    from ..navigate import search as s
+    from ..navigation.navigate import search as s
     hits, total = s(q, limit=30)
     return {"rows": [_place_row(p) for p in hits], "total": total}
 
@@ -157,7 +157,7 @@ def nav_search(q=""):
 def nav_near(kind=""):
     """导航页「医院 / 空港 / 买船」：知道当前位置就直接导航到最近的那个，列表按远近排；
     位置不知道就只列出来让玩家自己挑（2026-10-27 老大定）"""
-    from .. import navigate as n
+    from ..navigation import navigate as n
     if kind not in n.NEAR_KINDS and kind not in n.SITE_KINDS:
         return {"error": "不支持的分类"}
     data = n.load()
@@ -200,7 +200,7 @@ def nav_near(kind=""):
 @api
 def nav_site():
     """现在在哪个主城 / 空间站里、这里有哪些分类（导航页那排按钮，2026-10-27）；不在就 site=None"""
-    from .. import navigate as n
+    from ..navigation import navigate as n
     t, g, info = _pos.current
     info = info or {}
     if not g or time.time() - t > POS_FRESH:
@@ -221,13 +221,13 @@ def nav_site():
 
 @api
 def nav_plan(key=""):
-    from ..navigate import load, latlon, pos, approaches, label, compass
+    from ..navigation.navigate import load, latlon, pos, approaches, label, compass
     p = _places.get(key)
     if not p:
         return {"error": "未找到此地点，需重新搜索"}
     data = load()
     if p.get("space"):
-        from ..navigate import space_landmarks
+        from ..navigation.navigate import space_landmarks
         t = (p["x"], p["y"], p["z"])
         marks = sorted(((math.dist(m[1], t), m[0]) for m in space_landmarks(p["sys"], data)))[:3]
         return {**_place_row(p), "lat": None, "lon": None, "alt": None, "system": p["sys"],
@@ -255,7 +255,7 @@ def nav_start(key=""):
 @api
 def nav_mode(mode="auto"):
     """导航页的开关：实时定位（ground / auto）/ 手动定位（space，只用 /showlocation）；正在导航就按新方式重新开始"""
-    from .. import settings
+    from ..core import settings
     if mode not in ("auto", "ground", "space"):
         return {"error": "导航方式仅支持 实时定位 / 手动定位"}
     settings.update(nav_mode=mode)
@@ -268,7 +268,7 @@ def nav_mode(mode="auto"):
 @api
 def sig_name(value=0, name=""):
     """给雷达信号起名记下（下次认到这个数直接显示）；名字空 = 删掉"""
-    from ..signals import set_my_signature
+    from ..mining.signals import set_my_signature
     try:
         v = int(value)
     except (TypeError, ValueError):
@@ -280,7 +280,7 @@ def sig_name(value=0, name=""):
 
 @api
 def sig_names():
-    from ..signals import my_signatures
+    from ..mining.signals import my_signatures
     return {"mine": my_signatures()}
 
 
@@ -299,7 +299,7 @@ def nav_refresh():
 # ---------------------------------------------------------------- 路标管理
 @api
 def waypoints():
-    from .. import navigate as n
+    from ..navigation import navigate as n
     data = n.load()
     out = []
     for p in n.waypoints():
@@ -317,7 +317,7 @@ def waypoints():
 
 @api
 def waypoint_add(name="", body="", lat=None, lon=None, alt=0.0, here=False):
-    from .. import navigate as n
+    from ..navigation import navigate as n
     data = n.load()
     if not name.strip():
         return {"error": "需填写路标名称"}
@@ -346,7 +346,7 @@ def waypoint_add(name="", body="", lat=None, lon=None, alt=0.0, here=False):
 @api
 def waypoint_preview(text=""):
     """粘贴框里的 /showlocation 结果 → 认出在哪个星球、经纬度、高度（还没保存）；不是坐标返回 error"""
-    from .. import navigate as n
+    from ..navigation import navigate as n
     g = n.parse_clip(text or "")
     if not g:
         return {"error": "未找到坐标：需粘贴聊天框中 /showlocation 输出的那一行（Coordinates: x:… y:… z:…）"}
@@ -364,7 +364,7 @@ def waypoint_preview(text=""):
 @api
 def waypoint_from_text(name="", text=""):
     """粘贴 /showlocation 的输出新建路标（星球自动认，名字自己起）"""
-    from .. import navigate as n
+    from ..navigation import navigate as n
     if not name.strip():
         return {"error": "需填写路标名称"}
     g = n.parse_clip(text or "")
@@ -378,7 +378,7 @@ def waypoint_from_text(name="", text=""):
 
 @api
 def waypoint_delete(name=""):
-    from ..navigate import delete_waypoint
+    from ..navigation.navigate import delete_waypoint
     delete_waypoint(name)
     return waypoints()
 
@@ -389,7 +389,7 @@ def _where_now():
     信号值不在飞船矿表里时才用（地面的 3,000 是手采矿，太空的 3,000 是残骸）。
     需要右上角调试信息（r_DisplayInfo 2）；结果记 60 秒，读不到 20 秒内不再试"""
     import re
-    from .. import navigate as n
+    from ..navigation import navigate as n
     now = time.time()
     if now - _WHERE["t"] < 60:
         return _WHERE["v"]
@@ -425,7 +425,8 @@ def _area_now():
     """玩家现在在哪个产矿区（mining_area.area），认不出返回 None。雷达信号只报当地会刷的矿（2026-10-27 用户要求
     「位置和矿种对得上号」）。只用后台 10 秒内读到的位置；星系必须是右上角线索定下的（只靠坐标猜的不算，
     三个星系坐标系重叠，猜错会把真矿判成「不刷」，Codex 2026-10-27 补审）。同一次读数只算一次"""
-    from .. import navigate as n, mining_area
+    from ..navigation import navigate as n
+    from ..mining import mining_area
     now = time.time()
     t, g, info = _pos.current
     if not g or now - t > AREA_MAX_AGE:
@@ -464,7 +465,7 @@ def hotkey_conflicts(cfg=None):
     """热键撞了（settings.json 手改的、旧版本留下的）：只有排在前面的生效，要明确告诉玩家哪个失效"""
     if cfg is None:
         try:
-            from .. import settings
+            from ..core import settings
             cfg = settings.load()
         except Exception:
             cfg = {}
@@ -491,7 +492,7 @@ def fix_key_hint():
 
 def settings_key(k, default):
     try:
-        from .. import settings
+        from ..core import settings
         return settings.load().get(k) or default
     except Exception:
         return default
@@ -500,7 +501,7 @@ def settings_key(k, default):
 # ---------------------------------------------------------------- 路标保存与快捷记录
 def _wp_log(msg):
     try:
-        from .. import paths
+        from ..core import paths
         with open(paths.log("nav_log.txt"), "a", encoding="utf-8") as f:
             f.write(f"{time.strftime('%F %T')} 路标 {msg}\n")
     except OSError:
@@ -515,7 +516,7 @@ def _surface_limit(here):
 def _save_here(name, g, info=None):
     """在 g（/showlocation 给的星系坐标，米）记一个路标：星球上/贴地记星球坐标，太空或高轨道记星系坐标。返回说明。
     只用 /showlocation 的坐标换算，不掺右上角调试信息（也不用从右上角学来的偏差）"""
-    from .. import navigate as n
+    from ..navigation import navigate as n
     data = n.load()
     here = n.locate(g, data=data, use_offset=False)
     if here.get("inside") and here.get("height_m", 0) < _surface_limit(here):
@@ -548,8 +549,8 @@ def _start_here_watch():
         return
 
     def run():
-        from ..navigate import read_clipboard
-        from ..showloc import wait_new_coords
+        from ..navigation.navigate import read_clipboard
+        from ..system.showloc import wait_new_coords
         old = read_clipboard()
         while _HERE["name"] and time.time() < _HERE["until"]:
             g, clip = wait_new_coords(old, 1.0)
@@ -571,7 +572,7 @@ def _start_here_watch():
 def mark_here():
     """游戏里按热键（默认 F7）：替你在聊天框输入 /showlocation，读剪贴板里的坐标记成路标。
     点过「用当前位置新建」就用那里填的名字，否则按时间和地点起名"""
-    from ..showloc import showlocation
+    from ..system.showloc import showlocation
     g, why = showlocation(log=_wp_log)
     if not g:
         _note_hud("路标", f"未保存：{why}", 8)
@@ -591,7 +592,7 @@ def mark_here():
 # ---------------------------------------------------------------- 原矿记录
 def _coord_desc(g):
     """/showlocation 坐标 → 「戴玛，海拔 1,234 m」这种说明（只说明，不记路标）"""
-    from .. import navigate as n
+    from ..navigation import navigate as n
     data = n.load()
     here = n.locate(g, data=data, use_offset=False)
     if here.get("inside") and here.get("height_m", 0) < _surface_limit(here):
@@ -602,7 +603,7 @@ def _coord_desc(g):
 @api
 def ore_record(here=False):
     """记下最近这块矿。here=True（游戏里按热键）：顺便替玩家输 /showlocation，把坐标一起记下；窗口里点的不记坐标"""
-    from .. import ore_log
+    from ..mining import ore_log
     view = _ORE_LAST.get("view")
     if not view:
         _note_hud("原矿", "暂无扫描结果，先扫描矿石", 5)
@@ -611,7 +612,7 @@ def ore_record(here=False):
     where = ""
     if here:
         try:
-            from ..showloc import showlocation
+            from ..system.showloc import showlocation
             g, why = showlocation(log=_wp_log)
         except Exception as e:
             g, why = None, str(e)
@@ -635,14 +636,14 @@ def ore_record(here=False):
 
 @api
 def ore_list():
-    from .. import ore_log
+    from ..mining import ore_log
     rows = list(reversed(ore_log.load()))
     return {"rows": rows, "rocks": sorted({r.get("rock") or "?" for r in rows})}
 
 
 @api
 def ore_delete(id=""):
-    from .. import ore_log
+    from ..mining import ore_log
     rec = ore_log.delete(id)
     if not rec:
         return {"error": "此记录已不存在"}
@@ -652,7 +653,7 @@ def ore_delete(id=""):
 
 @api
 def ore_restore(rec=None):
-    from .. import ore_log
+    from ..mining import ore_log
     rec = ore_log.restore(rec)
     bus.publish("ore_log", {"changed": True})
     return rec
@@ -661,7 +662,7 @@ def ore_restore(rec=None):
 @api
 def ore_go(id=""):
     """「去这里」：把这条记录的坐标记成路标（同一条只记一次），然后开始导航"""
-    from .. import ore_log
+    from ..mining import ore_log
     rec = next((r for r in ore_log.load() if r.get("id") == id), None)
     if not rec:
         return {"error": "此记录已不存在"}
@@ -688,7 +689,7 @@ def ore_go(id=""):
 @api
 def halo_options():
     """小行星带页要的选项：10 条带、出发点、量子引擎、上次选的引擎、悬浮窗上正挂着的方案"""
-    from .. import halo
+    from ..navigation import halo
     return {"bands": [halo.band_row(r) for r in halo.BANDS],
             "points": [{"key": k, "label": halo.point_zh(k)} for k in halo.points()],
             "qds": [{"name": f"{a} ({b})", "speed": v} for a, b, v in halo.QDS],
@@ -698,7 +699,8 @@ def halo_options():
 @api
 def halo_routes(frm="ARC-L1", band=5, qd=""):
     """从 frm 出发、能在第 band 带断开的所有目标"""
-    from .. import halo, settings
+    from ..navigation import halo
+    from ..core import settings
     try:
         row = halo.band(band)
     except (TypeError, ValueError):
@@ -715,8 +717,8 @@ def halo_routes(frm="ARC-L1", band=5, qd=""):
 @api
 def halo_pin(frm="", to="", band=5, qd=""):
     """把这条路线挂到悬浮窗：游戏里看着 HUD 剩余距离断开；断开后按一键定位键（或自己输 /showlocation）核对在不在带里"""
-    from .. import halo
-    from .. import navigate as n
+    from ..navigation import halo
+    from ..navigation import navigate as n
     try:
         r = halo.route(frm, to, band, halo.qd_speed(qd or settings_key("halo_qd", "Atlas (S1)")))
     except (TypeError, ValueError):
@@ -753,7 +755,7 @@ def halo_unpin():
 def _halo_watch(sess, ev):
     """挂着方案时：读右上角的实时坐标自动核对（每秒一次）；读不到时玩家自己在聊天框输 /showlocation 也能核对
     （/showlocation 只在必要时用，2026-10-27 用户定；太空导航进行中时剪贴板归导航管）"""
-    from .. import navigate as n
+    from ..navigation import navigate as n
     seen_live, live_at, prev, arr = None, 0.0, None, _game_events.arrived_at
     while not ev.is_set():
         try:
@@ -779,7 +781,7 @@ def _halo_watch(sess, ev):
 def halo_check(g, clip=None, sess=None):
     """拿到 /showlocation 坐标：离恒星多远、在不在要去的那条带里。
     F9 和剪贴板监听可能拿到同一份坐标：查重、发布在同一把锁里；方案已取下或换了就丢掉"""
-    from .. import halo
+    from ..navigation import halo
     with _HALO["lock"]:
         p = _HALO["plan"]
         if not p or (sess is not None and sess != _HALO["sess"]):
@@ -800,8 +802,8 @@ def halo_check(g, clip=None, sess=None):
 def fix_here():
     """游戏里按一键定位热键（默认 F9）：导航去太空路标时，替你输 /showlocation 更新距离和偏离角；
     挂着小行星带方案时，核对现在在不在那条带里"""
-    from .. import navigate as n
-    from ..showloc import showlocation
+    from ..navigation import navigate as n
+    from ..system.showloc import showlocation
     if (not _nav.target or not _nav.space_mode) and _HALO["plan"]:
         sess = _HALO["sess"]                     # 等坐标期间方案取下或换了，这次结果就作废
         g, clip = showlocation(log=_wp_log)

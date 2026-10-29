@@ -49,7 +49,7 @@ def _cmd():
     from ..core import paths
     if paths.FROZEN:
         return [sys.executable, "ocrworker"]
-    return [sys.executable, "-X", "utf8", "-m", "sc_mining.gpu_ocr"]
+    return [sys.executable, "-X", "utf8", "-m", "sc_mining.system.gpu_ocr"]
 
 
 def _start():

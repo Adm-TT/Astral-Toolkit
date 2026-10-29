@@ -64,7 +64,7 @@ class Trade:
             print(f"库存单位换算没成功：{e}")
         # 1.6.39：以前手打的位置能对上地点列表的（New Babbage、Area18…）改成列表里的叫法（真要改时先备份，记一笔移库能撤销）
         try:
-            from ..stockplaces import match
+            from ..crafting.stockplaces import match
 
             def canon(loc):
                 p = match(loc)
@@ -237,7 +237,7 @@ def select_region(image):
     import tkinter as tk
     from PIL import ImageTk, ImageEnhance
     try:
-        from ..overlay import hud
+        from ..app.overlay import hud
         h = hud()
         root = tk.Toplevel(h.root) if h.ok else tk.Tk()
     except Exception:
@@ -303,21 +303,21 @@ HELP = """交易（UEX + SCM 玩家市场 · 库存）
 
 
 def ask(trade=None):
-    from .. import settings
+    from ..core import settings
     cfg = settings.load()
     key = cfg.get("trade_capture_key") or "F8"
     t = trade or Trade()
     print(HELP.format(key=key))
     print()
     try:
-        from ..overlay import hud
+        from ..app.overlay import hud
         ov = hud()
     except Exception:
         ov = None
     if ov and ov.ok:
         ov.set("交易", f"鼠标停在物品上按 {key}：查价 / 入库\n或在助手窗口输入物品名查价")
     if sys.platform == "win32":
-        from ..showloc import is_admin
+        from ..system.showloc import is_admin
         if not is_admin():
             print(f"⚠ 助手不是管理员身份：游戏是管理员权限运行时，游戏里按 {key} 助手收不到。请重开助手并在确认框点「是」。\n")
     editor = LineEditor("交易 > ")
@@ -429,8 +429,8 @@ def handle(t, cmd, ov=None):
 
 def material_source(name_en):
     """维科洛材料去哪弄：商店能买就给最便宜的店；是矿就给最好的矿点"""
-    from .. import shops
-    from ..wikelo import source_note
+    from ..crafting import shops
+    from ..crafting.wikelo import source_note
     note = source_note(name_en)
     if note:
         return note
@@ -438,7 +438,7 @@ def material_source(name_en):
     if tip:
         return tip
     try:
-        from ..locations import where as mine_where, zh_name
+        from ..mining.locations import where as mine_where, zh_name
         base = _re.sub(r"\s*\(.*?\)", "", name_en).strip()
         rows = mine_where(base)
         if rows:
@@ -452,7 +452,7 @@ def material_source(name_en):
 def loot_source(name_en, name_zh=""):
     """开箱掉落一句话（scl.miao.network 的掉落表）：概率最高的箱子在哪些地方；没有掉落返回空"""
     try:
-        from ..loot import info
+        from ..crafting.loot import info
         d = info(name_en, name_zh, top=2, online=False)   # 本机没有明细就算没有，不在页面里逐个材料联网等（细查 2026-10-28）
     except Exception:
         return ""
@@ -470,7 +470,9 @@ def loot_source(name_en, name_zh=""):
 
 
 def finder_flow(query):
-    from .. import shops, acquire, loot
+    from ..crafting import shops
+    from ..crafting import acquire
+    from ..crafting import loot
     query = query.strip() or _input("找哪件东西（中文或英文）> ").strip()
     if not query:
         return
@@ -497,7 +499,7 @@ def finder_flow(query):
 
 
 def wikelo_flow(query):
-    from .. import wikelo
+    from ..crafting import wikelo
     rows = wikelo.search(query)
     if not rows:
         print("没有相关的维科洛兑换（可以搜奖励名、兑换名或材料名，例：维科洛 阿波罗 / 维科洛 科力晶）")
@@ -516,7 +518,7 @@ def wikelo_flow(query):
 
 def extra_info(zh, en, item=None):
     """悬停识别后附加：怎么弄到（买/同款/掉落）、维科洛兑换用途"""
-    from .. import acquire
+    from ..crafting import acquire
     return acquire.text(item.name if item else en, zh)
 
 
@@ -788,7 +790,7 @@ def _fold(text):
 
 def _cursor_on_image(img):
     """鼠标位置换算成截图像素坐标（截图是游戏画面，见 perf.game_area，1.6.46）"""
-    from ..perf import cursor_on_image
+    from ..core.perf import cursor_on_image
     return cursor_on_image(img)
 
 
@@ -850,7 +852,7 @@ def _match_names(search, want):
 
 def hover_flow(t, ov=None):
     """游戏里把鼠标停在物品上、出现说明框时按热键：认出物品，显示价格，可以顺手入库"""
-    from ..screen import grab
+    from ..mining.screen import grab
     img = grab()
     cx, cy = _cursor_on_image(img) if sys.platform == "win32" else (img.width // 2, img.height // 2)
     box = (0, 0, img.width, img.height)       # 说明框可能在鼠标任意一侧、而且很高，整屏识别
@@ -914,7 +916,7 @@ def hover_flow(t, ov=None):
 def _hover_log(crop, tokens, name, note=""):
     """每次 F8 的截图和识别结果存一份（只留最近 20 张），方便排查认错的情况。note：各步骤耗时"""
     try:
-        from .. import paths
+        from ..core import paths
         d = paths.shots("hover")
         stamp = time.strftime("%H%M%S")
         crop.convert("RGB").resize((crop.width // 2, crop.height // 2)).save(d / f"{stamp}.jpg", quality=80)
@@ -927,7 +929,7 @@ def _hover_log(crop, tokens, name, note=""):
 
 
 def capture_flow(t, ov=None):
-    from ..screen import grab
+    from ..mining.screen import grab
     if ov:
         ov.hide()
     img = grab()

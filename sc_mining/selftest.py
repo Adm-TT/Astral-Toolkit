@@ -8,14 +8,20 @@ import sys
 import time
 import traceback
 
-MODULES = ("run", "screen", "parse", "signals", "laser", "data", "refinery", "crafting", "wikelo", "goals", "navigate",
-           "showloc", "overlay", "helpers", "perf", "perfmon", "itemsearch", "shops", "loot", "localization", "data_pack",
-           "update_check", "upgrade", "legacy", "displayinfo", "position", "cockpit", "tray", "i18n", "app.server", "app.services",
-           "app.bus", "trade.console", "trade.ocr", "trade.inventory")
+MODULES = (
+    "run", "mining.screen", "mining.parse", "mining.signals", "mining.laser", "mining.data", "mining.refinery",
+    "crafting.crafting", "crafting.wikelo", "crafting.goals", "navigation.navigate",
+    "system.showloc", "app.overlay", "system.helpers", "core.perf", "core.perfmon",
+    "crafting.itemsearch", "crafting.shops", "crafting.loot", "update.localization", "update.data_pack",
+    "update.update_check", "update.upgrade", "update.legacy", "navigation.displayinfo",
+    "navigation.position", "system.cockpit", "app.tray", "core.i18n",
+    "app.server", "app.services", "app.bus", "trade.console", "trade.ocr", "trade.inventory",
+    "tasks.mining", "tasks.hover", "tasks.count", "tasks.stock", "tasks.system", "tasks.navigation", "tasks.trade", "tasks.goals",
+)
 
 
 def main():
-    from . import paths
+    from .core import paths
     rows, ok_all = [], True
     t_all = time.perf_counter()
 
@@ -56,14 +62,14 @@ def main():
         return f"{len(out)} 个数据文件可读"
 
     def search():
-        from . import itemsearch
+        from .crafting import itemsearch
         r = itemsearch.find("霍夫斯泰德")
         if not r:
             raise AssertionError("搜不到「霍夫斯泰德」")
         return f"「霍夫斯泰德」{len(r)} 条，第一条 {r[0]['zh']} {r[0]['en']}"
 
     def breaking():
-        from . import laser
+        from .mining import laser
         p = laser.recommend(9800, 45, 3.2)
         if not p:
             raise AssertionError("没有破碎方案")
@@ -72,7 +78,7 @@ def main():
     ocr = {}
 
     def ocr_engine():
-        from . import perf
+        from .core import perf
         t = time.perf_counter()
         perf.rapidocr()
         ocr["load"] = (time.perf_counter() - t) * 1000
@@ -80,7 +86,7 @@ def main():
 
     def scan_panel():
         from PIL import Image
-        from . import screen
+        from .mining import screen
         img = None
         for p in (paths.ROOT / "selftest" / "scan1.png", paths.SAMPLES / "scan1.png"):
             if p.exists():
@@ -99,7 +105,7 @@ def main():
         return f"{scan.main_mineral} {scan.mass:,.0f} kg 抗性 {scan.resistance}%；第一次 {times[0]:,.0f} ms，第二次 {times[1]:,.0f} ms"
 
     def overlay_paint():
-        from . import overlay
+        from .app import overlay
         overlay.paint({"扫描": "金｜8,000 kg\n螺旋 Helix II｜功率 60%"}, scale=1.0)
         import tkinter  # noqa: F401  悬浮窗用
         return "悬浮窗能画、tkinter 可用"

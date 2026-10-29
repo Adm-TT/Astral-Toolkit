@@ -12,12 +12,12 @@ def recognize(image, urgent=False, offset=(0, 0), native=False):
     global _engine
     import numpy as np
     if _engine is None:
-        from ..perf import rapidocr
+        from ..core.perf import rapidocr
         _engine = rapidocr()
     arr = np.asarray(image.convert('RGB'))[:, :, ::-1]
     kw = {'_native': True} if native and hasattr(_engine, 'urgent') else {}
     if urgent and hasattr(_engine, 'urgent'):
-        from ..perf import boost
+        from ..core.perf import boost
         with boost():
             result = _engine.urgent(arr, **kw)
     else:
@@ -39,7 +39,7 @@ def read_line(image):
     global _engine
     import numpy as np
     if _engine is None:
-        from ..perf import rapidocr
+        from ..core.perf import rapidocr
         _engine = rapidocr()
     arr = np.asarray(image.convert('RGB'))[:, :, ::-1]
     result = _engine(arr, use_det=False, use_cls=False, use_rec=True)

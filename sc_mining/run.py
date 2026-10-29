@@ -66,7 +66,7 @@ def pick_index():
 
 
 def _pip(*pkgs):
-    from .paths import FROZEN
+    from .core.paths import FROZEN
     if FROZEN:                              # 独立打包版自带全部组件，不用也不能 pip 安装
         print("独立版自带全部组件，无需安装")
         return True
@@ -99,7 +99,7 @@ def install():
 
 def live():
     print("进游戏后在采矿模式下扫描石头，结果会显示在这里。按 Ctrl+C 退出\n")
-    from . import screen
+    from .mining import screen
     sys.argv = ["screen"]
     screen.main()
 
@@ -110,12 +110,12 @@ def demo():
 
 
 def where():
-    from .locations import ask
+    from .mining.locations import ask
     ask()
 
 
 def craft():
-    from .crafting import ask
+    from .crafting.crafting import ask
     ask()
 
 
@@ -124,7 +124,7 @@ class Relaunched(Exception):
 
 
 def nav():
-    from .navigate import ask
+    from .navigation.navigate import ask
     ask()
 
 
@@ -134,7 +134,7 @@ def trade():
 
 
 def assist():
-    from .helpers import menu as m
+    from .system.helpers import menu as m
     m()
 
 
@@ -161,13 +161,13 @@ def run_entry(name):
 def _is_unpack(fn):
     """这项更新对应的本地文件是不是我们自己解包的版本（source == "unpack"）：是就不用网站版覆盖"""
     import json as _j
-    from . import paths
+    from .core import paths
     mod = getattr(fn, "__module__", "") or ""
     if mod == "sc_mining.build_crafting":
-        from . import build_crafting
+        from .crafting import build_crafting
         if build_crafting.unpacked() is not None:          # 本机有解包原文件：交给它自己按解包版重编（不会去 scmdb），游戏更新后新蓝图才进得来（二十一审）
             return False
-    for f in {"sc_mining.navigate": ["starmap.json"], "sc_mining.build_crafting": ["crafting.json"]}.get(mod, []):
+    for f in {"sc_mining.navigation.navigate": ["starmap.json"], "sc_mining.navigate": ["starmap.json"], "sc_mining.crafting.build_crafting": ["crafting.json"], "sc_mining.build_crafting": ["crafting.json"]}.get(mod, []):
         try:
             if _j.loads(paths.data(f).read_text(encoding="utf-8")).get("source") == "unpack":
                 return True
@@ -181,7 +181,9 @@ def update(direct=False, web_ok=()):
     Gitee、GitHub 都连不上才改从各数据网站直接下载（矿价、商店 UEX，蓝图 scmdb，星图 starmap.space，掉落 scl.miao.network）。
     direct=True：跳过数据包、直接从各网站下载（作者发布数据包前用，tools/make_data_pack.py）。
     web_ok：本机是解包版也照样从网站下的模块名（make_data_pack 下了 starmap.space 后会用 unpack_starmap 重新合并，只取自转相位和玩家补充的点）"""
-    from . import uex, build_crafting, navigate, shops, localization, loot, data_pack
+    from .crafting import build_crafting, loot, shops
+    from .navigation import navigate
+    from .update import data_pack, localization, uex
     sources = (("矿价和精炼站加成（UEX）", uex.refresh), ("制造蓝图 + 维科洛兑换（scmdb）", build_crafting.update),
                ("星图导航数据（starmap.space）", navigate.update), ("商店售卖地点（UEX）", shops.update),
                ("掉落数据（scl.miao.network）", loot.update))
@@ -262,12 +264,13 @@ MENU = [
 
 
 def menu(console=False, restart=False):
-    from . import paths
+    from .core import paths
     try:
         paths.migrate()                 # 旧版本散落的文件搬到 data/ 和 userdata/
     except Exception:
         traceback.print_exc()
-    from . import showloc, settings, helpers
+    from .core import settings
+    from .system import helpers, showloc
     from .app.server import _single_instance, release_instance
     # 只允许开一个天枢：已经开着就把它的窗口叫出来，这次直接退出（不再弹管理员确认框、不再重复挂热键）
     if not _single_instance(restart):
@@ -303,8 +306,8 @@ def console_menu():
 
 
 def _menu_loop():
-    from .data import GAME_VERSION
-    from .helpers import status_line
+    from .mining.data import GAME_VERSION
+    from .system.helpers import status_line
     while True:
         print("\n" + "=" * 50)
         print(f"  AT · 游戏数据 {GAME_VERSION}")
@@ -333,10 +336,10 @@ def _menu_loop():
 
 ENTRIES = {"menu": menu, "restart": lambda: menu(restart=True), "console": console_menu, "install": install, "live": live, "demo": demo, "update": update,
            "prices": update, "where": where, "craft": craft, "trade": trade, "nav": lambda: __import__(
-               "sc_mining.navigate", fromlist=["ask"]).ask()}
+               "sc_mining.navigation.navigate", fromlist=["ask"]).ask()}
 
 def _crash_log():
-    from . import paths
+    from .core import paths
     paths.crash_log()
 
 
@@ -345,7 +348,7 @@ def _no_console():
     _crash_log()
     if sys.stdout is not None:
         return False
-    from . import paths
+    from .core import paths
     f = open(paths.log("app_log.txt"), "a", encoding="utf-8", buffering=1)
     sys.stdout = sys.stderr = f
     print(f"\n==== {__import__('time').strftime('%F %T')} 启动 ====")

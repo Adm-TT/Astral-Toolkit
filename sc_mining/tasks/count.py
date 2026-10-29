@@ -168,7 +168,7 @@ def _read_item(img, cursor):
     craft = None
     if not mineral:                  # 1.6.67：制造出来的东西没有品质数，只有加成行 → 按蓝图倒推各材料槽的品质，记平均
         try:
-            from ..crafting import parse_mods, solve_slots, for_item
+            from ..crafting.crafting import parse_mods, solve_slots, for_item
             mods = parse_mods(tokens)
             res = solve_slots(for_item(en, zh), mods) if mods else None
             if res and res["exact"]:                       # 加成对不上蓝图：不当品质（Codex 2026-10-27）
@@ -186,7 +186,7 @@ def _kl(k):
 
 def _count_review(place, items):
     """本轮盘点 → 和账上对：rows（看到的，账上多少 → 游戏里多少）、missing（账上有、这轮没看到）"""
-    from .. import goals as G
+    from ..crafting import goals as G
     t = trade()
     rev = t.inventory.revision()                       # 先记版本号再读账：读账这会儿别处写了，确认时才查得出来（二审 2026-10-28）
     book = [l for l in t.inventory.list_stock() if _place_of(l.key.location)[0] == place]
@@ -243,7 +243,7 @@ def count_state():
 @api
 def count_apply(zero=None):
     """确认对账：看到的按游戏里的数改；zero：账上有、这轮没看到、要清零的行（[[物品, 品质, 位置, 单位], …]）"""
-    from .. import goals as G
+    from ..crafting import goals as G
     from ..trade.models import StockKey
     rv, _count.review = _count.review, None             # 先拿走：连点两下「确认」第二下直接提示没有待确认的
     if not rv:

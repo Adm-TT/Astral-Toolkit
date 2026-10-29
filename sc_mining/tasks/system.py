@@ -42,7 +42,7 @@ def _services():
 
 def _hud():
     try:
-        from ..overlay import hud
+        from ..app.overlay import hud
         return hud()
     except Exception:
         srv = _services()
@@ -83,7 +83,7 @@ def hotkey_conflicts(cfg=None):
     """热键撞了（settings.json 手改的、旧版本留下的）：只有排在前面的生效，要明确告诉玩家哪个失效"""
     if cfg is None:
         try:
-            from .. import settings
+            from ..core import settings
             cfg = settings.load()
         except Exception:
             cfg = {}
@@ -102,8 +102,10 @@ def hotkey_conflicts(cfg=None):
 # ---------------------------------------------------------------- 状态与系统信息
 @api
 def status():
-    from .. import settings, helpers, showloc
-    from ..data import GAME_VERSION
+    from ..core import settings
+    from ..system import helpers
+    from ..system import showloc
+    from ..mining.data import GAME_VERSION
     cfg = settings.load()
     srv = _services()
 
@@ -124,17 +126,17 @@ def status():
            "position": None, "data": _data_versions(), "displayinfo": pos_reader_active,
            "version": _version(), "new_version": _upgrade_found(), "game_size": None,
            "game_events": game_events_dict,
-           "frozen": __import__("sc_mining.paths", fromlist=["FROZEN"]).FROZEN,
-           "vpk": __import__("sc_mining.paths", fromlist=["VELOPACK"]).VELOPACK}
+           "frozen": __import__("sc_mining.core.paths", fromlist=["FROZEN"]).FROZEN,
+           "vpk": __import__("sc_mining.core.paths", fromlist=["VELOPACK"]).VELOPACK}
     if WIN:
-        from ..perf import game_size
+        from ..core.perf import game_size
         out["game_size"] = game_size()                          # 游戏画面多大：低于 1080 高时页面上提醒识别会不准
     try:
-        from ..position import current
+        from ..navigation.position import current
         here = current()
         if here:
             out["position"] = {"label": here["label"], "minutes": int(here["age"] // 60), "sys": here["sys"]}
-            from ..stockplaces import match
+            from ..crafting.stockplaces import match
             p = match(here["label"], here["sys"])               # 库存入库默认放这里（地点列表里的叫法）
             out["place"] = {"label": p["label"], "path": p["path"], "minutes": int(here["age"] // 60)} if p else None
     except Exception:
@@ -146,7 +148,7 @@ def status():
         if lab and time.time() - lab_t < 3 * 3600:
             log_t = 0.0
             try:
-                from ..position import from_log
+                from ..navigation.position import from_log
                 hit = from_log()
                 log_t = hit[0] if hit else 0.0
             except Exception:
@@ -164,19 +166,19 @@ def status():
 
 def _gridtext_status():
     try:
-        from .. import gridtext
+        from ..navigation import gridtext
         return gridtext.status()
     except Exception:
         return {}
 
 
 def _version():
-    from ..version import VERSION
+    from ..core.version import VERSION
     return VERSION
 
 
 def _data_versions():
-    from .. import paths
+    from ..core import paths
     out = {}
     try:
         out["loc"] = (paths.DATA / "loc" / "version.txt").read_text(encoding="utf-8").strip()
@@ -186,12 +188,12 @@ def _data_versions():
         p = paths.DATA / name
         out[key] = time.strftime("%Y-%m-%d", time.localtime(p.stat().st_mtime)) if p.exists() else ""
     try:
-        from ..loot import load_index
+        from ..crafting.loot import load_index
         idx = load_index(False)
         out["loot"] = (idx or {}).get("version", "")
     except Exception:
         out["loot"] = ""
-    from ..data_pack import local_version
+    from ..update.data_pack import local_version
     out["pack"] = local_version()                    # 数据包版本（2026-10-26 起数据从 Gitee 的数据包更新）
     return out
 
@@ -212,7 +214,7 @@ def _desktop():
 
 def _system_info():
     """导出日志时附带的一页说明：版本、系统、屏幕、数据版本（不含任何个人数据）"""
-    from .. import paths
+    from ..core import paths
     lines = [f"AT 版本：{_version()}", f"导出时间：{time.strftime('%Y-%m-%d %H:%M:%S')}",
              f"Windows：{platform.platform()}", f"Python：{sys.version.split()[0]}"]
     try:
@@ -222,7 +224,7 @@ def _system_info():
     except Exception:
         pass
     try:
-        from .. import showloc
+        from ..system import showloc
         lines.append(f"AT 管理员身份：{'是' if showloc.is_admin() else '否'}；游戏管理员身份：{'是' if showloc.game_elevated() else '否/未运行'}")
     except Exception:
         pass
@@ -237,7 +239,7 @@ def _system_info():
         # onnxruntime 的显卡版包名是 onnxruntime-directml：哪个装了写哪个
         names = ("rapidocr_onnxruntime", "onnxruntime", "onnxruntime-directml", "numpy", "pillow", "mss")
         lines.append("组件：" + "，".join(x for x in map(ver, names) if x))
-        from ..perf import ocr_device
+        from ..core.perf import ocr_device
         lines.append(f"文字识别用：{ocr_device()}")
     except Exception:
         pass
@@ -249,7 +251,7 @@ def _system_info():
 @api
 def export_logs():
     """「导出日志」：运行日志 + 设置 + 一页系统说明打成一个压缩包，放到桌面，并在文件夹里选中它"""
-    from .. import paths
+    from ..core import paths
     out = _desktop() / time.strftime("AT日志_%Y%m%d_%H%M%S.zip")      # 精确到秒，不会盖掉同一分钟导出的另一份
     files = 0
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
@@ -282,7 +284,7 @@ def _upgrade_found():
     """下载/桌面/微信/QQ 里有没有更新的 AT 安装包（10 分钟找一次，找一次不到 0.1 秒）"""
     if time.time() - _found["at"] > 600:
         try:
-            from ..upgrade import find_packages
+            from ..update.upgrade import find_packages
             _found["rows"] = find_packages()
         except Exception:
             _found["rows"] = []
@@ -297,7 +299,8 @@ def _upgrade_found():
 
 def _online_info(force=False):
     """网上有没有新版本（只在后台线程里调：最多等几秒）"""
-    from .. import settings, update_check
+    from ..core import settings
+    from ..update import update_check
     if not settings.load().get("update_online", True) or not update_check.enabled():
         _online["info"] = None
         return None
@@ -326,11 +329,12 @@ def _online_public(info):
 @api
 def upgrade_check(online=False):
     """online=True：顺便到网上查一次（设置页「检查更新」；最多等 5 秒×2）"""
-    from ..upgrade import find_packages, rollback_options
-    from .. import update_check, vpk
+    from ..update.upgrade import find_packages, rollback_options
+    from ..update import update_check
+    from ..update import vpk
     if vpk.installed():                       # Velopack 安装版：不找本地安装包；回滚 = 从 AT 服务器装回上一个版本
         _found.update(at=time.time(), rows=[])
-        from ..upgrade import ver, current
+        from ..update.upgrade import ver, current
         if online:
             try:
                 _, pv = vpk.check(rollback=True)
@@ -354,7 +358,7 @@ def upgrade_check(online=False):
     err = update_check.last_error() if online and not info else ""
     pub = _online_public(info)
     if vpk.installed():                       # 有没有新版本以 Velopack 更新源为准；大小不显示（增量下载，实际很小）
-        from ..upgrade import ver, current
+        from ..update.upgrade import ver, current
         nv = _online.get("vpk_new") or ""
         if nv and ver(nv) > current():
             same = pub and pub["version"] == nv
@@ -379,7 +383,7 @@ def _task_print():
 
 
 def _vpk_rollback_task():
-    from .. import vpk
+    from ..update import vpk
     v = vpk.install(rollback=True, progress=_task_print())
     print(f"✅ 已下载 AT {v}，AT 将关闭并自动安装，完成后自动重新打开")
     time.sleep(1.5)
@@ -389,8 +393,8 @@ def _vpk_rollback_task():
 
 
 def _online_task():
-    from .. import update_check
-    from .. import vpk
+    from ..update import update_check
+    from ..update import vpk
     if vpk.installed():                          # Velopack 安装版：只下改过的部分，AT 退出后换文件、自动重新打开
         v = vpk.install(progress=_task_print())
         print(f"✅ 已下载 AT {v}，AT 将关闭并自动安装，完成后自动重新打开")
@@ -403,7 +407,7 @@ def _online_task():
         raise ValueError("未找到新版本")
     path = update_check.download(info)
     _found["at"] = 0.0
-    from ..paths import FROZEN
+    from ..core.paths import FROZEN
     if FROZEN:                                   # 独立安装版：运行新的安装程序，AT 先退出，装完自动重新打开
         update_check.launch_installer(path)
         print(f"✅ 已下载 AT {info['version']}，AT 将关闭并自动安装，完成后自动重新打开（约半分钟）")
@@ -418,7 +422,7 @@ def _online_task():
 def upgrade_online():
     """「下载并升级」：下载网上的新版本，核对后照常升级（先备份，能回滚）。
     Velopack 安装版直接问更新源有没有新版本（latest.json 读不到也能升）"""
-    from .. import vpk
+    from ..update import vpk
     if not _online.get("info") and not vpk.installed():
         return {"error": "未找到新版本，点击「检查更新」后重试"}
     if bus.run_task_once("upgrade", _online_task, title="升级 AT") is None:
@@ -430,7 +434,7 @@ def upgrade_online():
 def upgrade_rollback(path=""):
     """回滚到旧版本（稳定版 / 自动备份 / 旧安装包）：和升级同一套流程，装之前也会先备份现在的版本。
     Velopack 安装版：path = VPK_PREV，从 AT 服务器装回上一个版本"""
-    from .. import vpk
+    from ..update import vpk
     if path == VPK_PREV:
         if not vpk.installed():
             return {"error": "只有安装版能这样回滚"}
@@ -442,7 +446,7 @@ def upgrade_rollback(path=""):
 
 @api
 def upgrade_mark_stable():
-    from ..upgrade import mark_stable
+    from ..update.upgrade import mark_stable
     try:
         p = mark_stable()
     except Exception as e:
@@ -452,7 +456,7 @@ def upgrade_mark_stable():
 
 def _drop_upload(path):
     """手动上传的包（userdata/upgrade/<随机名>/…）装完就删；别处的包（下载文件夹、备份）不动"""
-    from .. import paths
+    from ..core import paths
     try:
         p = Path(path).resolve()
         d = (paths.USER / "upgrade").resolve()
@@ -463,7 +467,7 @@ def _drop_upload(path):
 
 
 def _upgrade_task(path):
-    from .. import upgrade
+    from ..update import upgrade
     try:
         r = upgrade.apply(path)
     except ValueError as e:
@@ -480,10 +484,10 @@ def _upgrade_task(path):
 
 @api
 def upgrade_apply(path=""):
-    from ..paths import FROZEN
+    from ..core.paths import FROZEN
     if FROZEN:                              # 独立打包版：程序在 _internal 里，按旧方式覆盖源码会出错
         return {"error": FROZEN_UPGRADE_MSG}
-    from ..upgrade import check
+    from ..update.upgrade import check
     try:
         check(path)
     except ValueError as e:
@@ -513,7 +517,7 @@ def upgrade_receive(name, write):
     每次写到 userdata/upgrade/<随机名>/Dubhe_x.y.z.zip（独立文件，两次上传互不覆盖，升级任务读的时候也不会被下一次上传改掉），
     write(f) 负责把内容写进打开的文件（抛异常=没收完），收完先校验再交给升级任务；没启动成功就把这份删掉。
     升级任务用完（成功或失败）会删掉这个随机文件夹（_upgrade_task）。"""
-    from .. import paths
+    from ..core import paths
     if not re.match(r"^Dubhe_\d+\.\d+\.\d+\.zip$", name or "", re.I):
         return {"error": "需要 AT 安装包（Dubhe_版本号.zip）"}
     if bus.task_running("upgrade"):
@@ -556,14 +560,14 @@ def upgrade_upload(name="", data=""):
 @api
 def upgraded():
     """刚升级完重启后：窗口弹一句「已升级到 x」"""
-    from ..upgrade import just_upgraded, adopt_previous
+    from ..update.upgrade import just_upgraded, adopt_previous
     d = just_upgraded() or {}
     if d.get("from"):
         try:
             adopt_previous(d["from"])          # 旧版本自己不会备份（1.6.18 及以前）：找到它的安装包就收进备份
         except Exception:
             pass
-        from ..upgrade import ver
+        from ..update.upgrade import ver
         d["rollback"] = ver(d["to"]) < ver(d["from"])
     return d
 
@@ -575,8 +579,9 @@ _legacy = {"rows": None}
 @api
 def legacy_scan():
     """安装版：电脑上的旧版天枢（压缩包版），以及哪些正开着。ask=True 表示还没问过要不要导入"""
-    from .. import legacy, settings
-    from ..paths import FROZEN
+    from ..update import legacy
+    from ..core import settings
+    from ..core.paths import FROZEN
     if not FROZEN:
         return {"found": [], "running": [], "ask": False}
     if _legacy["rows"] is None:
@@ -595,7 +600,8 @@ def legacy_scan():
 @api
 def legacy_import(path=""):
     """把旧版的设置、路标、目标等复制过来，然后重新打开 AT（热键、悬浮窗按新设置重新挂）"""
-    from .. import legacy, settings
+    from ..update import legacy
+    from ..core import settings
     if path not in [r["path"] for r in (_legacy["rows"] or [])]:
         return {"error": "未找到这个旧版"}
     try:
@@ -614,7 +620,7 @@ def legacy_import(path=""):
 
 @api
 def legacy_skip():
-    from .. import settings
+    from ..core import settings
     settings.update(legacy_checked=True)
     return {"ok": True}
 
@@ -622,7 +628,7 @@ def legacy_skip():
 @api
 def legacy_quit(path=""):
     """关掉正在运行的旧版天枢（请它自己退出）"""
-    from .. import legacy
+    from ..update import legacy
     if path not in [r["path"] for r in (_legacy["rows"] or [])]:
         return {"error": "未找到这个旧版"}
     try:
@@ -638,7 +644,7 @@ _ORE_LAST = {"view": None}                  # 最近一次出的采矿助手结�
 
 
 def _fb_dir():
-    from .. import paths
+    from ..core import paths
     d = paths.USER / "feedback"
     d.mkdir(parents=True, exist_ok=True)
     return d
@@ -648,8 +654,9 @@ def _fb_dir():
 def feedback_report(kind="auto", note="", img=None):
     """一键反馈：现在的整屏截图 + 最近几帧采矿助手截图 + OCR 原文 + 当时显示的结果 + 日志尾巴，打成一个文件夹和 zip
     放在 userdata\\feedback\\。kind：scan（矿物认错）/ signal（信号不对）/ item（F8 认错）/ auto"""
-    from .. import paths, screen
-    from ..screen import grab
+    from ..core import paths
+    from ..mining import screen
+    from ..mining.screen import grab
     stamp = time.strftime("%Y%m%d_%H%M%S")
     kind = kind if kind in ("scan", "signal", "item", "auto") else "auto"
     d = _fb_dir() / f"{stamp}_{kind}"
@@ -689,7 +696,7 @@ def feedback_report(kind="auto", note="", img=None):
             "hud": dict(getattr(_hud(), "sections", {}) or {}), "live": live_running, "live_paused": live_paused,
             "where_now": where_now, "nav": nav_label, "nav_space": nav_space}
     try:
-        from .. import settings
+        from ..core import settings
         cfg = settings.load()
         info["settings"] = {k: cfg.get(k) for k in ("mining_ship", "mining_loadouts", "admin", *(n for n, _, _ in HOTKEYS))}
     except Exception:
@@ -711,7 +718,7 @@ def feedback_report(kind="auto", note="", img=None):
     with zipfile.ZipFile(zp, "w", zipfile.ZIP_DEFLATED) as z:
         for f in d.iterdir():
             z.write(f, f"{d.name}/{f.name}")
-    from .. import feedback_up
+    from ..system import feedback_up
     upload = feedback_up.enabled()
     hm = f"{stamp[-6:-4]}:{stamp[-4:-2]}:{stamp[-2:]}"
     try:
@@ -785,7 +792,7 @@ def feedback_clear():
 @api
 def cockpit_check():
     """辅助进程双击 W 时问：现在画面中间有没有飞行 HUD（用主程序的识别引擎，辅助进程不用自己加载一份）"""
-    from .. import cockpit
+    from ..system import cockpit
     try:
         flying, hits = cockpit.flight_hud()
     except Exception as e:
@@ -804,7 +811,8 @@ def overlay_move(on=False):
 
 @api
 def set_settings(**kw):
-    from .. import settings, helpers
+    from ..core import settings
+    from ..system import helpers
     allowed = {"anti_afk", "afk_seconds", "autorun", "autorun_sprint", "admin", "hud_scale", "hud_plate", "hud_theme"} | {k for k, _, _ in HOTKEYS}
     if "stock_mode" in kw and kw["stock_mode"] not in ("simple", "pro"):
         kw.pop("stock_mode")
@@ -841,7 +849,7 @@ def set_settings(**kw):
     cfg = settings.update(**{k: v for k, v in kw.items() if k in allowed})
     if clear_train:
         try:
-            from .. import train_data
+            from ..system import train_data
             train_data.clear()
         except Exception:
             pass
@@ -900,7 +908,7 @@ def open_source_site(i=0):
 @api
 def third_party_licenses():
     """开源组件许可证原文（安装目录的「第三方许可.txt」，打包时由 tools/collect_licenses.py 生成）"""
-    from .. import paths
+    from ..core import paths
     p = paths.ROOT / "第三方许可.txt"
     try:
         return {"text": p.read_text(encoding="utf-8-sig")}
@@ -921,11 +929,11 @@ AGREE_TEXT = "本软件是免费软件"
 @api
 def agree(text=""):
     """第一次打开：必须一字不差地输入「本软件是免费软件」才能用"""
-    from .. import settings
+    from ..core import settings
     if (text or "").strip() != AGREE_TEXT:
         return {"error": f"需完整输入：{AGREE_TEXT}"}
     settings.update(agreed=True)
-    from .. import helpers
+    from ..system import helpers
     helpers.start()
     start_background()
     return status()
@@ -940,7 +948,7 @@ def start_background():
             return
     except Exception:
         pass
-    from .. import settings
+    from ..core import settings
     if not settings.load().get("agreed"):
         return
     if not _online.get("loop"):
@@ -948,7 +956,7 @@ def start_background():
         threading.Thread(target=_online_loop, daemon=True, name="update").start()
     if not _online.get("fb_retry"):
         _online["fb_retry"] = True
-        from .. import feedback_up
+        from ..system import feedback_up
         threading.Thread(target=lambda: feedback_up.retry_pending(_fb_dir()), daemon=True, name="feedback-retry").start()
 
 

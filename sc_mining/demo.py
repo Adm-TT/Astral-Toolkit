@@ -2,11 +2,11 @@
 
 python -m sc_mining.demo
 """
-from . import data
-from .signals import describe
-from .laser import recommend
-from .refinery import best_stations, methods, unpriced, sell_plan
-from .uex import apply_live
+from .mining import data
+from .mining.signals import describe
+from .mining.laser import recommend
+from .mining.refinery import best_stations, methods, unpriced, sell_plan
+from .update.uex import apply_live
 
 
 def ask(prompt, cast=float):
@@ -35,7 +35,7 @@ def main():
         print(f"  {i}. {p.summary()}")
 
     if input("\n破完了要记录结果用于校准吗？(y/N) ").strip().lower() == "y":
-        from .laser import record
+        from .mining.laser import record
         heads = input("  用了哪些矿头（helix_ii,hofstede_s2,arbor_mh2 逗号分隔）：").strip()
         gadget = input("  贴了什么工具（sabir/optimax/boremax/okunis/waveshift/stalwart，没有直接回车）：").strip()
         thr = ask("  功率开到多少 %：") / 100

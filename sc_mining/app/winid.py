@@ -97,7 +97,7 @@ def brand_window(root, timeout=20.0):
         return
 
     def run():
-        from ..paths import FROZEN
+        from ..core.paths import FROZEN
         if FROZEN:                      # 安装版：从任务栏重新打开运行 AT.exe
             exe = Path(sys.executable)
             # 图标用 shell\icon.ico：任务栏从 PyInstaller 打的 AT.exe 里取不出图标，会显示成白纸（2026-10-28 用户反馈，实测 .ico 正常）

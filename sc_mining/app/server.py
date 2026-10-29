@@ -226,14 +226,14 @@ SHELL_FALLBACK = 3          # ATShell.exe 打不开 WebView2 时的退出码：�
 
 def shell_exe():
     """AT 自己的窗口外壳（2026-10-27，WinUI 3 + WebView2，tools 外的 AT_build 下的 shell 编好放进 shell 文件夹）；没有返回 None"""
-    from .. import paths
+    from ..core import paths
     p = paths.ROOT / "shell" / "ATShell.exe"
     return p if p.exists() else None
 
 
 def open_window(url):
     """打开 AT 窗口：有外壳用外壳（标题栏融进界面、系统分屏菜单），没有或打不开就用 Edge 应用窗口（以前的做法）"""
-    from .. import paths
+    from ..core import paths
     shell = shell_exe()
     if shell:
         try:
@@ -265,7 +265,7 @@ def open_window(url):
 
 
 def _open_edge(url):
-    from .. import paths
+    from ..core import paths
     exe = _browser()
     if not exe:
         import webbrowser
@@ -300,7 +300,7 @@ def _call_old(url, action):
 def _try_lock():
     """只开一个 AT 的锁：锁住 userdata/instance.lock 这个文件。锁上了返回打开的文件，已经被别的 AT 锁着返回 None。
     AT 退出（哪怕是被强制结束）时 Windows 会自动解锁；管理员身份、普通身份开的都认这同一把锁"""
-    from .. import paths
+    from ..core import paths
     f = open(paths.USER / "instance.lock", "a+b")
     try:
         if sys.platform == "win32":
@@ -333,7 +333,7 @@ def _single_instance(restart=False):
     返回 True 表示这次要启动"""
     if getattr(_single_instance, "mine", False):
         return True
-    from .. import paths
+    from ..core import paths
     f = _try_lock()
     if f:
         _single_instance.lock, _single_instance.mine = f, True
@@ -395,7 +395,7 @@ def _close_edge():
     if proc is None:
         return
     try:
-        from .. import paths
+        from ..core import paths
         from .winid import close_windows, profile_pids
         pids = {proc.pid}
         is_shell = str((getattr(proc, "args", None) or [""])[0]).lower().endswith("atshell.exe")
@@ -415,7 +415,7 @@ def _close_edge():
 
 def _relaunch():
     """托盘「重新启动」：开一个新的 AT（它会等这个退出），这个退出"""
-    from .. import paths
+    from ..core import paths
     subprocess.Popen(paths.self_cmd("restart"), cwd=str(paths.ROOT),
                      creationflags=0x08000000 if sys.platform == "win32" else 0)
     QUIT.set()
@@ -425,24 +425,24 @@ def main(open_ui=True, port=0, restart=False):
     if open_ui and not _single_instance(restart):
         return
     bus.install_router()
-    from ..perf import lower_priority
+    from ..core.perf import lower_priority
     lower_priority()
     server = Server(("127.0.0.1", port), Handler)
     url = f"http://127.0.0.1:{server.server_address[1]}/#t={TOKEN}"
     STATE["url"] = url
     threading.Thread(target=server.serve_forever, daemon=True, name="http").start()
-    from ..overlay import hud
+    from .overlay import hud
     hud()
     services.start_background()
     print(f"AT 已启动（端口 {server.server_address[1]}）")
     try:
-        from .. import paths
+        from ..core import paths
         (paths.USER / "window_url.txt").write_text(url, encoding="utf-8")
     except Exception:
         pass
     tray = None
     if open_ui:
-        from ..tray import Tray
+        from .tray import Tray
         tray = Tray(Path(__file__).resolve().parent / "icon.ico", on_open=show_window, on_restart=_relaunch,
                     on_quit=QUIT.set)
         tray.start()

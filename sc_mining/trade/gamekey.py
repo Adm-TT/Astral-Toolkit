@@ -16,8 +16,8 @@ def _fold(s):
 
 
 def _index():
-    from ..itemsearch import wiki_items
-    from ..paths import DATA
+    from ..crafting.itemsearch import wiki_items
+    from ..core.paths import DATA
     rows = wiki_items()
     if _IDX["key"] is rows and _IDX["by_name"]:
         return _IDX

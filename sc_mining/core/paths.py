@@ -112,7 +112,7 @@ def self_cmd(entry, *args):
     if FROZEN:
         return [sys.executable, entry, *map(str, args)]
     if entry == "helpers":
-        return [sys.executable, "-X", "utf8", "-m", "sc_mining.helpers", *map(str, args)]
+        return [sys.executable, "-X", "utf8", "-m", "sc_mining.system.helpers", *map(str, args)]
     return [sys.executable, "-X", "utf8", "-m", "sc_mining.run", entry, *map(str, args)]
 
 

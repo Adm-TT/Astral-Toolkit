@@ -35,7 +35,7 @@ def api(fn):
 # ================================================================ 基础 HUD 与按键状态
 def _hud():
     try:
-        from ..overlay import hud
+        from .overlay import hud
         return hud()
     except Exception:
         return None
@@ -49,7 +49,7 @@ _OFF_TOLD = set()
 def _off(feature):
     """这个功能有没有被远程关掉（latest.json 的 disabled，update_check.disabled）"""
     try:
-        from .. import update_check
+        from ..update import update_check
         why = update_check.disabled(feature)
     except Exception:
         return None
@@ -242,22 +242,22 @@ for _mod, _symbols in _TASK_OWNERSHIP:
 # ================================================================ 运行时后台服务与诊断
 def start_background():
     """打开天枢主窗口时启动后台服务：热键监听、定时查更新、搜索索引预热、未发送反馈补发、原矿扫描续跑"""
-    from .. import settings
+    from ..core import settings
     _hover.start()
     _online = getattr(sys.modules[__name__], "_online", {})
     if not _online.get("loop"):
         _online["loop"] = True
         threading.Thread(target=_online_loop, daemon=True, name="update").start()
-        from .. import itemsearch
+        from ..crafting import itemsearch
         itemsearch.warm_up()
     if not _online.get("fb_retry"):
         _online["fb_retry"] = True
-        from .. import feedback_up
+        from ..system import feedback_up
         threading.Thread(target=lambda: feedback_up.retry_pending(_fb_dir()), daemon=True, name="feedback-retry").start()
     if settings.load().get("live_on"):
         _live.start()
     try:
-        from ..perfmon import monitor
+        from ..core.perfmon import monitor
         monitor.start()
     except Exception:
         pass

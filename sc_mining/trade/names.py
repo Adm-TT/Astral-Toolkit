@@ -13,7 +13,7 @@ _PAREN = re.compile(r'\s*[（(][^）)]*[）)]\s*')
 
 @lru_cache(maxsize=1)
 def table():
-    from ..paths import DATA
+    from ..core.paths import DATA
     path = DATA / 'zh_names.json'
     try:
         raw = json.loads(path.read_text(encoding='utf-8'))
@@ -46,12 +46,12 @@ def _known_names():
     """商店和掉落数据里所有物品的英文名（折叠过的）；数据还没下载就是空的"""
     out = set()
     try:
-        from .. import shops
+        from ..crafting import shops
         out |= {_fold_en(v[0]) for v in shops.load(auto_update=False).get('items', {}).values()}
     except Exception:
         pass
     try:
-        from .. import loot
+        from ..crafting import loot
         out |= {_fold_en(r[1]) for r in (loot.load_index(False) or {}).get('rows') or []}
     except Exception:
         pass
@@ -121,8 +121,8 @@ def _mineral(zh, en):
     全部矿物（船挖、地面车、手挖、杰金 / 烁迪银这类新矿）的中文名、矿石名、英文名。
     以前只查船挖矿物表、而且「最像的就算」：杰金矿石 → 愈金、烁迪银矿石 → 萨维里金属（2026-10-24 用户截图）"""
     try:
-        from ..data import SIGNATURES
-        from ..i18n import _tables, mineral_en, mineral_zh
+        from ..mining.data import SIGNATURES
+        from ..core.i18n import _tables, mineral_en, mineral_zh
     except Exception:
         return None
     by_en = {k.lower(): k for k in SIGNATURES}
@@ -136,7 +136,7 @@ def _mineral(zh, en):
 def _mineral_near(zh):
     """矿名认错一个字（烁迪银 → 炼迪银）：字数一样、只差一个字、至少 4 个字，才算是那个矿；差得多就不猜"""
     try:
-        from ..i18n import _tables, mineral_zh
+        from ..core.i18n import _tables, mineral_zh
     except Exception:
         return None
     z = _norm_zh(zh)

@@ -154,8 +154,8 @@ def search(q=""):
 def item_search(q=""):
     """物品查询搜索（1.6.41 起商店、掉落、汉化包一起搜，见 itemsearch.py）。
     src：shop 商店有数据 / loot 只在掉落数据里 / loc 商店和掉落数据里都没有（只有汉化包里有名字）"""
-    from .. import itemsearch
-    from ..i18n import shop_cat_zh
+    from ..crafting import itemsearch
+    from ..core.i18n import shop_cat_zh
     return [{"id": r["shop"], "name": r["en"], "zh": r["zh"], "category": shop_cat_zh(r["cat"]) or _wiki_cat(r),
              "src": "shop" if r["shop"] is not None else "loot" if r["loot"] else "wiki" if r.get("wiki") else "loc"}
             for r in itemsearch.find(q, limit=30)]
@@ -194,9 +194,9 @@ def _zh_of(en):
 def item_info(name="", zh="", id=None, loot=True, exact=False):
     """exact=True：从物品查询 / 顶上搜索框的结果点进来的（名字是准的）。
     掉落明细本机没有时不上网等（loot 里给 pending），窗口再调 item_loot 后台取（2026-10-28 用户反馈卡 10 秒）"""
-    from .. import acquire
+    from ..crafting import acquire
     d = acquire.info(name, zh, id, show_loot=loot, exact=bool(exact), loot_online=False)
-    from ..i18n import gear_zh_of_item, shop_cat_zh
+    from ..core.i18n import gear_zh_of_item, shop_cat_zh
     d["zh"] = gear_zh_of_item(d["name"]) or d.get("zh") or _zh_of(d["name"])   # 采矿装备的中文不带型号，和配置区一致
     if d.get("category"):
         d["category"] = shop_cat_zh(d["category"])
@@ -209,7 +209,7 @@ def item_info(name="", zh="", id=None, loot=True, exact=False):
 def item_loot(name="", zh=""):
     """物品查询里掉落那一块：明细本机没有时窗口在后面单独调这个（会上网，最多等 15 秒，不挡别的）"""
     try:
-        from ..loot import info as loot_info
+        from ..crafting.loot import info as loot_info
         return {"loot": loot_info(name, zh)}
     except Exception as e:
         return {"loot": {"error": f"掉落数据出错：{e}"}}
@@ -219,7 +219,7 @@ def item_loot(name="", zh=""):
 def nav_shop(shop="", place=""):
     """物品查询里点一处商店 → 导航过去（2026-10-28 用户定）。先找主城 / 空间站里这家店的点（城里导航），
     没有就导航到这个地点本身（星图）"""
-    from .. import navigate as n
+    from ..navigation import navigate as n
     data = n.load()
     brand = re.sub(r"[^a-z]", "", (shop.split(" - ")[0] or "").lower())
     place = (place or "").split(" · ")[-1].strip()      # 商店行的地点是「Stanton · MicroTech · New Babbage」，只要最后一段（2026-10-28 反馈：点了说没这个地点）
@@ -315,10 +315,10 @@ def _market_rows(id, quality="q0", op="sell"):
 
 @api
 def mineral_search(q=""):
-    from ..data import SIGNATURES
-    from ..gems import GEMS
-    from ..i18n import mineral_zh
-    from ..locations import _match_zh
+    from ..mining.data import SIGNATURES
+    from ..mining.gems import GEMS
+    from ..core.i18n import mineral_zh
+    from ..mining.locations import _match_zh
     names = list(SIGNATURES) + list(GEMS)              # 地面小矿（车矿、手采）也能搜
     en_names = {k.lower(): k for k in names}
     out = []
@@ -336,14 +336,14 @@ def mineral_search(q=""):
 
 def _mine_nav(loc, mineral):
     """矿点 → 怎么导航过去：Aaron Halo 用小行星带导航（挑这种矿最多的带）；别的星球、卫星、小行星带去导航页搜它"""
-    from ..halo import BANDS
+    from ..navigation.halo import BANDS
     if loc["kind"] in ("Cave", "Interior"):          # 校准站矿洞、Breaker 站内部：没有能量子跳的点
         return {"kind": "none", "hint": "不能直接导航"}
     if loc["name"] == "Aaron Halo":
         bands = sorted((r for r in BANDS if mineral in r[5]), key=lambda r: -r[4])
         return {"kind": "halo", "band": bands[0][0] if bands else 5,
                 "hint": f"第{bands[0][0]}带最多" if bands else "此矿物不是任何一条带的主要矿物，选择密度最高的第5带"}
-    from ..locations import zh_name
+    from ..mining.locations import zh_name
     if re.fullmatch(r"(ARC|CRU|HUR|MIC)-L\d", loc["name"]):
         return {"kind": "hint", "hint": f"在星图中选择 {loc['name']} 量子跳跃，矿物位于该处小行星中"}
     m = re.search(r"\(([^)]+)\)", loc["name"])
@@ -355,9 +355,9 @@ def _mine_nav(loc, mineral):
 
 @api
 def mineral_info(name=""):
-    from ..data import best_price, REFINERIES, RARITY
-    from ..i18n import mineral_zh, station_zh
-    from ..locations import where, zh_name, _SYS_ZH, _TYPE_ZH
+    from ..mining.data import best_price, REFINERIES, RARITY
+    from ..core.i18n import mineral_zh, station_zh
+    from ..mining.locations import where, zh_name, _SYS_ZH, _TYPE_ZH
     rows = []
     for pct, loc in where(name)[:30]:
         others = sorted(((best_price(m)[0], m) for m in loc["minerals"] if m != name), reverse=True)[:3]
@@ -368,16 +368,16 @@ def mineral_info(name=""):
     bonus = sorted(((b.get(name, 0), st) for st, (sys_, b) in REFINERIES.items()), reverse=True)
     uses = ""
     try:
-        from ..crafting import uses_report
+        from ..crafting.crafting import uses_report
         uses = uses_report(name)
     except Exception:
         pass
     try:
-        from ..crafting import mat_summary
+        from ..crafting.crafting import mat_summary
         craft_count = mat_summary(name)["count"]
     except Exception:
         craft_count = 0
-    from ..gems import GEMS
+    from ..mining.gems import GEMS
     gem = GEMS.get(name)
     if gem:                                   # 地面小矿：不精炼，卖原矿；写类型、信号、终端价、不稳定性、抗性
         gem = {"kind": gem["kind"], "rs": gem["rs"], "price": gem["price"], "inst": gem["inst"], "res": gem["res"]}

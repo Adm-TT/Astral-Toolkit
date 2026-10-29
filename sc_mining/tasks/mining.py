@@ -69,7 +69,7 @@ _live = _LiveProxy()
 
 def settings_key(k, default=None):
     try:
-        from .. import settings
+        from ..core import settings
         return settings.load().get(k, default)
     except Exception:
         return default
@@ -113,7 +113,7 @@ def _marker_on():
     if time.time() - _MK_CFG["at"] > 2:
         _MK_CFG["at"] = time.time()
         try:
-            from .. import settings
+            from ..core import settings
             _MK_CFG["on"] = settings.load().get("nav_marker", True) is not False
         except Exception:
             _MK_CFG["on"] = True
@@ -127,8 +127,8 @@ def _marker_tick(target, data, state, shown, ref=None):
     """导航记号（2026-10-27）：每圈先判断该不该显示（还没算出位置、到了、跨星系、1.5 秒没读到、切出游戏、玩家关了、
     采矿助手开着——记号窗口读屏时会被涂黑，会挡住扫描面板和雷达信号），不该显示就收起；
     该显示且右上角有新截图（停着只转镜头也算）就按镜头朝向和视角重算位置。返回这次画的截图时间，收起了返回 None"""
-    from .. import navigate as n
-    from ..showloc import game_foreground
+    from ..navigation import navigate as n
+    from ..system.showloc import game_foreground
     t, g, info = _pos.current
     h = state.get("here")
     cam = (info or {}).get("camdir")
@@ -145,8 +145,8 @@ def _marker_tick(target, data, state, shown, ref=None):
     if t == shown:
         return shown
     try:
-        from ..displayinfo import last_fov
-        from ..perf import game_area
+        from ..navigation.displayinfo import last_fov
+        from ..core.perf import game_area
         a = game_area()
         fov = info.get("fov") or last_fov() or 70.0
         tg = n.target_global(target, data, info.get("t"), ref)
@@ -161,7 +161,7 @@ def _marker_tick(target, data, state, shown, ref=None):
 def _nav_log(here, info, view):
     """导航时每次算出新位置记一行（logs/nav_log.txt），方向不对时用来查是哪一步的问题"""
     try:
-        from .. import paths
+        from ..core import paths
         p = paths.log("nav_log.txt")
         if p.exists() and p.stat().st_size > 300_000:
             p.write_text("\n".join(p.read_text(encoding="utf-8").splitlines()[-1000:]) + "\n", encoding="utf-8")
@@ -178,7 +178,7 @@ def _nav_log(here, info, view):
 
 def _space_view(g, target, data):
     """导航去太空路标：没有南北，给直线距离、先量子跳到哪、对准哪个标记偏几度"""
-    from .. import navigate as n
+    from ..navigation import navigate as n
     s = n.space_guide(g, target, data)
     out = {"space": True, "same_body": False, "inside": False, "text": n.space_text(g, target, data)}
     if not s["same_system"]:
@@ -190,7 +190,7 @@ def _space_view(g, target, data):
 
 def _station_view(g, target, data, when=None, prev=None, info=None):
     """拉格朗日点 / 跳跃点空间站里走路：距离按米、按站自己的朝向分上下；转向靠机头那一行和屏幕记号"""
-    from .. import navigate as n
+    from ..navigation import navigate as n
     out = {"space": True, "city": True, "station": True, "inside": True, "same_body": True}
     try:                                                   # 先核对星系：别的星系同一个坐标也可能有东西（二审 2026-10-27）
         system, sure = n.system_info(g, data, **{k: (info or {}).get(k) or "" for k in ("zone", "location", "solar_id")})
@@ -213,7 +213,7 @@ def _station_view(g, target, data, when=None, prev=None, info=None):
 
 
 def _nav_view(here, target, data, steady=None, prev=None):
-    from .. import navigate as n
+    from ..navigation import navigate as n
     out = {"text": n.here_text(here, data), "inside": here["inside"], "body": n.body_label(here["body"]),
            "same_body": here["inside"] and here["body"] == target["b"]}
     if not out["same_body"]:
@@ -248,7 +248,7 @@ def _nav_view(here, target, data, steady=None, prev=None):
 # ---------------------------------------------------------------- 实时读屏与扫描面板解析
 def _game_front():
     """游戏窗口在不在最前面：True / False；判断不了（不是 Windows、读不到前台窗口）返回 None——照常识别"""
-    from .. import showloc
+    from ..system import showloc
     return showloc.game_front()
 
 
@@ -261,8 +261,8 @@ def scu_text(v):
 
 def _station_bonus(station, minerals):
     """精炼站对这块石头里的矿的加成：只有一种值钱的矿写「+3%」，几种不一样就写「铁 +3%、金 -2%」，都是 0 返回空"""
-    from ..data import REFINERIES, best_price
-    from ..i18n import mineral_zh
+    from ..mining.data import REFINERIES, best_price
+    from ..core.i18n import mineral_zh
     bonus = REFINERIES.get(station, ("", {}))[1]
     worth = sorted(minerals, key=lambda m: -(minerals[m] * (best_price(m)[0] or 0)))
     worth = [m for m in worth if (best_price(m)[0] or 0) > 0] or worth
@@ -279,9 +279,9 @@ def _lots(scan, plan=None):
     品质写上这种矿的第几档（quality.py，4.8 起每种矿只有 7 档）。plan = (精炼方式, 站点)：按它算这一份精炼后多少。
     精炼保留品质、不同品质精炼完还是分开的两份（expcarry、scopique、The Impound），所以按份算"""
     total = scan.total_scu
-    from ..i18n import mineral_zh
-    from ..quality import tier_of
-    from ..refinery import refined_scu, INERT
+    from ..core.i18n import mineral_zh
+    from ..mining.quality import tier_of
+    from ..mining.refinery import refined_scu, INERT
     groups = defaultdict(list)
     for i, (n, p, q) in enumerate(scan.composition):
         if n and n != INERT:
@@ -330,10 +330,10 @@ def _lots_hud(lots):
 
 def scan_view(scan, bag, cut=False):
     """一块石头的读屏结果（窗口用）。cut=True：面板被屏幕右边挡住，品质和总 SCU 读不到，只有破碎方案和成分占比"""
-    from ..i18n import mineral_zh, method_zh, station_zh
-    from ..laser import recommend
-    from ..data import best_price, GADGETS
-    from ..refinery import refined_plan
+    from ..core.i18n import mineral_zh, method_zh, station_zh
+    from ..mining.laser import recommend
+    from ..mining.data import best_price, GADGETS
+    from ..mining.refinery import refined_plan
     rock = mineral_zh(scan.main_mineral) if scan.main_mineral else "?"
     out = {"rock": rock, "mass": scan.mass, "resistance": scan.resistance, "instability": scan.instability,
            "difficulty": scan.difficulty or "", "minerals": [], "refine": [], "sell": [], "craft": [], "craft_mats": [], "goal": [], "plans": [],
@@ -355,7 +355,7 @@ def scan_view(scan, bag, cut=False):
     if minerals:
         for i, (method, station, value, rscu, fee, hours) in enumerate(refined_plan(minerals)):
             bonus = _station_bonus(station, minerals)
-            from ..refinery import refined_scu
+            from ..mining.refinery import refined_scu
             per = refined_scu(minerals, station, method)
             out["refine"].append({"method": method_zh(method), "station": station_zh(station), "value": value,
                                   "scu": rscu, "fee": fee, "hours": hours, "bonus": bonus, "amount": scu_text(rscu),
@@ -392,9 +392,9 @@ def scan_view(scan, bag, cut=False):
     rich["comp"] = sorted(groups.values(), key=lambda g: (g["inert"], -float(g["pct"][:-1] or 0)))
     if minerals:
         try:
-            from ..crafting import quality_hints
+            from ..crafting.crafting import quality_hints
             out["craft"] = list(quality_hints(scan.composition))
-            from ..crafting import mat_summary
+            from ..crafting.crafting import mat_summary
             best = {}
             for nm, pct, qq in scan.composition:
                 if nm and nm not in ("Inert Materials", "?"):
@@ -420,7 +420,7 @@ def scan_view(scan, bag, cut=False):
     if plans:
         hud.insert(1, plans[0].short())
         p0 = plans[0]
-        from ..laser import gadget_label
+        from ..mining.laser import gadget_label
         heads = p0.names + (f" + {gadget_label(p0.gadget)}" if p0.gadget else "")
         rich["advice"] = {"heads": heads, "power": f"建议功率 {p0.throttle * 100:.0f}%" if p0.breakable else "满功率也无法破碎"}
     contents, used, cap = bag
@@ -436,7 +436,7 @@ def scan_view(scan, bag, cut=False):
 
 @api
 def live_start():
-    from .. import settings
+    from ..core import settings
     _live.start()
     settings.update(live_on=True)          # 记住：重启、升级后自动接着扫
     return {"running": True}
@@ -444,7 +444,7 @@ def live_start():
 
 @api
 def live_stop():
-    from .. import settings
+    from ..core import settings
     _live.stop()
     settings.update(live_on=False)
     return {"running": False}
@@ -460,7 +460,7 @@ STAT_ZH = {"power": "功率", "extract": "提取功率", "res": "抗性", "insta
 def _gear_summary(key, lo):
     """一条船当前配置的汇总：同时操作的矿头总功率、满功率能破多重（抗性 30%；使用萨比尔 Sabir 时）。
     和破碎方案同一套公式（laser.evaluate）：在 crew 个矿头的组合里取最强的"""
-    from ..laser import HeadSetup, evaluate, active_model, gadget_label
+    from ..mining.laser import HeadSetup, evaluate, active_model, gadget_label
     craft = lo.get("craft") or [None] * len(lo["heads"])
     setups = [HeadSetup(k, mods, craft[i]) for i, (k, mods) in enumerate(lo["heads"])]
     model, k = active_model()
@@ -474,15 +474,15 @@ def _gear_summary(key, lo):
 def _gear(ship=None):
     """配置区要的东西：几条船、每条船现在的配置（每个矿头加上模组后的读数、汇总）、能选的矿头和模组。
     名字一律「中文 English」（2026-10-26 用户定：霍夫斯泰德 Hofstede-S2）"""
-    from ..data import SHIPS, HEADS, MODULES, DEFAULT_LOADOUTS, AUTHOR_MOLE
-    from ..laser import ship_loadout, current_ship, clean_loadout, HeadSetup, _mult
-    from ..i18n import gear_label
+    from ..mining.data import SHIPS, HEADS, MODULES, DEFAULT_LOADOUTS, AUTHOR_MOLE
+    from ..mining.laser import ship_loadout, current_ship, clean_loadout, HeadSetup, _mult
+    from ..core.i18n import gear_label
 
     def fmt(d, keys):
         return "，".join(f"{STAT_ZH[k]} {d[k]:+g}%" for k in keys if d.get(k))
 
-    from ..laser import craft_slots, craft_mult
-    from ..quality import tiers
+    from ..mining.laser import craft_slots, craft_mult
+    from ..mining.quality import tiers
 
     def power(k, craft):
         """矿头自己的激光功率（不算模组）：商店买的 → 自造的"""
@@ -520,7 +520,7 @@ def _gear(ship=None):
     mods = [{"key": k, "name": gear_label(m["name"]), "en": m["name"], "desc": fmt(m, ("power", "extract", "res", "instab", "window", "rate", "filter")),
              "group": next((g for p, g in MOD_GROUPS if k.startswith(p)), "其他")}
             for k, m in MODULES.items()]
-    from ..laser import chosen_ship
+    from ..mining.laser import chosen_ship
     return {"ship": current_ship(), "chosen": chosen_ship() is not None, "ships": ships, "heads": heads, "modules": mods,
             "groups": list(dict.fromkeys(g for _, g in MOD_GROUPS))}
 
@@ -533,9 +533,9 @@ def mining_gear():
 @api
 def set_mining_gear(ship="mole", loadout=None, reset=False):
     """选船 / 保存这条船的配置（reset=True 恢复出厂配置）"""
-    from .. import settings
-    from ..data import SHIPS
-    from ..laser import clean_loadout
+    from ..core import settings
+    from ..mining.data import SHIPS
+    from ..mining.laser import clean_loadout
     if ship not in SHIPS:
         raise ValueError("未找到此飞船")
     saved = dict(settings.load().get("mining_loadouts") or {})
@@ -551,7 +551,7 @@ def set_mining_gear(ship="mole", loadout=None, reset=False):
 @api
 def manual_scan(mass=0, resistance=0, instability=0):
     """手动输入扫描数据：只算破碎方案"""
-    from ..laser import recommend
+    from ..mining.laser import recommend
     plans = recommend(float(mass), float(resistance), float(instability))
     return [{"heads": p.names, "short": p.short(), "summary": p.summary(),
              "ratio": p.ratio, "breakable": p.breakable, "comfortable": p.comfortable,
