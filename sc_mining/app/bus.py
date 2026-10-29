@@ -226,13 +226,16 @@ def run_task(task_id, fn, *args, title="", **kw):
     def body():
         _task.id = task_id
         publish("task", {"id": task_id, "title": title, "state": "running"})
+        runtime_log(f"任务开始: {title or task_id}", tag=task_id.upper(), level="INFO")
         try:
             result = fn(*args, **kw)
             publish("task", {"id": task_id, "title": title, "state": "done", "result": result})
+            runtime_log(f"任务结束: {title or task_id}", tag=task_id.upper(), level="INFO")
         except Exception as e:
             import traceback
             traceback.print_exc(file=sys.stdout)
             publish("task", {"id": task_id, "title": title, "state": "error", "error": str(e)})
+            runtime_log(f"任务出错: {title or task_id} - {e}", tag=task_id.upper(), level="ERROR")
         finally:
             r = sys.stdout
             if isinstance(r, _Router):
@@ -240,6 +243,7 @@ def run_task(task_id, fn, *args, title="", **kw):
                     rest = r.buf.pop(key)
                     if rest:
                         publish("log", {"task": task_id, "line": rest})
+                        runtime_log(rest, tag=task_id.upper(), level="INFO")
             _task.id = None
 
     th = threading.Thread(target=body, daemon=True, name=f"task-{task_id}")

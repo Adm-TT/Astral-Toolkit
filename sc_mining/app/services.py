@@ -3566,7 +3566,9 @@ def hover_once(img=None):
     t0 = time.time()
     _last_hover.clear()
     _last_hover["at"] = "识别中"                          # 上一次 F8 后台还没查完的价格，不再往悬浮窗上写
+    bus.runtime_log("触发 F8 物品悬停识别，截取画面...", tag="HOVER", level="INFO")
     img = img or grab()
+    bus.update_preview(img, source="hover", force=True)
     t1 = time.time()
     bus.publish("hover", {"state": "working"})
     _item_hud("识别中…", 30)                          # 按下就有反应
@@ -3575,6 +3577,7 @@ def hover_once(img=None):
     t2 = time.time()
     if not name:
         msg = "未找到物品说明框。鼠标停在物品上，等说明框出现后再按"
+        bus.runtime_log(f"F8 未找到物品说明框 (耗时 {(t2 - t1) * 1000:.0f}ms)。请在说明框弹出后再次按下 F8", tag="HOVER", level="WARN")
         bus.publish("hover", {"state": "miss", "msg": msg})
         _item_hud("未识别到物品\n鼠标停在物品上，等说明框出现后再按", 10)
         threading.Thread(target=C._hover_log, args=(img, tokens, None, f"识别({where}) {(t2 - t1) * 1000:.0f}ms"),
@@ -3622,6 +3625,7 @@ def hover_once(img=None):
     _last_hover.update(at=at, id=None, lines=lines)
     _item_hud("\n".join(lines))                  # 没数据的行不显示；市场价查到了再补上
     t3 = time.time()
+    bus.runtime_log(f"F8 成功识别: {zh or en}" + (f" | 品质 {quality}" if quality is not None else "") + (f" | {qty_text(qty, unit)}" if qty else "") + f" (耗时 {(t3 - t0) * 1000:.0f}ms)", tag="HOVER", level="INFO")
     bus.publish("hover", {"state": "ok", "zh": zh, "en": en, "info": info, "market": None, "candidates": [],
                           "pending": True, "at": at, "quality": quality, "qty": qty, "unit": unit,
                           "tier": _tier(quality), "craft": craft})
@@ -3674,6 +3678,7 @@ def _hover_more(at, zh, en, info, quality=None, canon=True):
         except Exception:
             pass
     if item is not None:
+        bus.runtime_log(f"F8 匹配市场: {item.name}，正在获取价格...", tag="HOVER", level="INFO")
         _last_hover["id"] = item.id
         bus.publish("hover_more", dict(out))
         try:
@@ -3695,6 +3700,7 @@ def _hover_more(at, zh, en, info, quality=None, canon=True):
         out["loot"] = {"error": f"掉落数据查询失败：{e}"}
     if _last_hover.get("at") == at:
         bus.publish("hover_more", out)
+        bus.runtime_log(f"F8 价格与数据同步完成: {zh or en}", tag="HOVER", level="INFO")
 
 
 _last_hover = {}
@@ -4059,3 +4065,9 @@ def runtime_clear_logs():
     """清空前端实时运行日志"""
     bus.clear_runtime_logs()
     return {"ok": True}
+
+
+@api
+def hover_trigger():
+    """手动触发一次 F8 物品悬停识别"""
+    return bus.run_task("hover", hover_once, title="F8物品识别")

@@ -258,6 +258,7 @@ function connect() {
         }
         $("#pip-hover").className = "pip";
       } else if (data.state === "ok") {
+        appendRuntimeLog({ time: new Date().toTimeString().slice(0, 8), tag: "HOVER", level: "INFO", line: `成功识别: ${data.zh || data.en} (品质 ${data.quality ?? "无"})` });
         state.sel++; data.info.marketId = data.market?.id || "";
         state.item = data.info; state.itemFrom = "F8";
         state.market = data.market; state.candidates = data.candidates;
@@ -266,7 +267,11 @@ function connect() {
         location.hash = "#item";
         if (page === "item") renderPage();
       } else if (data.state === "miss") {
+        appendRuntimeLog({ time: new Date().toTimeString().slice(0, 8), tag: "HOVER", level: "WARN", line: "未识别到说明框：" + (data.msg || "鼠标停在物品上") });
         toast(data.msg);
+      }
+      if (data.state === "working") {
+        appendRuntimeLog({ time: new Date().toTimeString().slice(0, 8), tag: "HOVER", level: "INFO", line: "正在分析鼠标悬停区域文字..." });
       }
       $("#pip-hover").className = "pip" + (data.state === "working" ? " new" : "");
     } else if (kind === "hover_more") {
@@ -278,6 +283,7 @@ function connect() {
         else if ("market" in data && !data.market) state.prices = null;
         if ("loot" in data && state.item) state.item.loot = data.loot;
         if (page === "item") drawItem();
+        appendRuntimeLog({ time: new Date().toTimeString().slice(0, 8), tag: "HOVER", level: "INFO", line: `市场与价格补全: ${state.item?.zh || state.item?.name || ""}` });
       }
     } else if (kind === "log") {
       (state.logs[data.task] ||= []).push(data.line);

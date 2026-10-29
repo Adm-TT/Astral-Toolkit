@@ -63,7 +63,11 @@ class _Hover:
                             act()
                         elif not self.busy:
                             self.busy = True
+                            if name == "trade_capture_key":
+                                bus.runtime_log("捕获到 F8 快捷键，触发悬停识别...", tag="HOVER", level="INFO")
                             act()
+                        elif name == "trade_capture_key":
+                            bus.runtime_log("F8 正在识别中，请稍候...", tag="HOVER", level="WARN")
                     prev[name] = down
                 time.sleep(0.03)
 
