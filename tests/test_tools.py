@@ -1892,29 +1892,24 @@ def test_hover_ignores_chat_hud_and_markers(monkeypatch):
     assert not sure                                            # 地点标记：下面没有「体积」之类，不算说明框
     item = [T("实准枪口补偿器2", 900, 300), T("VeraCompensator2", 900, 324), T("体积：20uSCU", 900, 348)]
     assert C.tooltip_pick(chat + item, (960, 540)) == (("实准枪口补偿器2", "VeraCompensator2"), True)
-    # 中间没有说明框、鼠标在别处（物品栏在屏幕边上）→ 整屏找，只认有把握的
+    # 新识别机制：按鼠标横向分级（首选局部 -> 备选局部 30~70% -> 全屏兜底）
     calls = []
     def fake(img, urgent=False, offset=(0, 0)):
         calls.append(offset)
-        return [] if len(calls) == 1 else chat + marker + hud
+        return [] if len(calls) <= 2 else chat + marker + hud
     monkeypatch.setattr(ocr, "recognize", fake)
     img = Image.new("RGB", (1920, 1080))
     toks, name, where = S._read_tooltip(img, (100, 540))
-    assert name is None and where == "整屏" and len(calls) == 2
+    assert name is None and where == "整屏" and len(calls) == 3
     calls.clear()
-    monkeypatch.setattr(ocr, "recognize", lambda img, urgent=False, offset=(0, 0): [] if not calls.append(1) and len(calls) == 1 else chat + item)
+    monkeypatch.setattr(ocr, "recognize", lambda img, urgent=False, offset=(0, 0): [] if not calls.append(1) and len(calls) <= 2 else chat + item)
     toks, name, where = S._read_tooltip(img, (100, 540))
     assert name == ("实准枪口补偿器2", "VeraCompensator2") and where == "整屏"
-    # 1.6.42：鼠标在中间、中间这块连「体积 / 制造商 / 物品类型」都没有（开着船按了 F8）→ 不整屏找，马上说没认出
+    # 鼠标在中间（50%~70%）：两轮局部未找到时进入整屏兜底
     calls.clear()
+    monkeypatch.setattr(ocr, "recognize", lambda img, urgent=False, offset=(0, 0): [] if not calls.append(1) and len(calls) <= 2 else chat + item)
     toks, name, where = S._read_tooltip(img, (960, 540))
-    assert name is None and where == "中间" and calls == [1]
-    # 中间有说明框的样子、但名字没认准 → 照旧整屏找
-    calls.clear()
-    monkeypatch.setattr(ocr, "recognize", lambda img, urgent=False, offset=(0, 0):
-                        [T("体积：20uSCU", 900, 348)] if not calls.append(1) and len(calls) == 1 else chat + item)
-    toks, name, where = S._read_tooltip(img, (960, 540))
-    assert name == ("实准枪口补偿器2", "VeraCompensator2") and where == "整屏" and len(calls) == 2
+    assert name == ("实准枪口补偿器2", "VeraCompensator2") and where == "整屏" and len(calls) == 3
 
 
 def test_live_signals_pause_while_scan_panel_open(monkeypatch, tmp_path):

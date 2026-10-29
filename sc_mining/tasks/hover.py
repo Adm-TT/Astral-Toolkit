@@ -14,10 +14,53 @@ from ..app import bus
 
 WIN = sys.platform == "win32"
 
-# 物品说明框识别区域：整个中间部分（从左到右 25% ~ 75%，纵向覆盖 0% ~ 100% 全高）
-HOVER_REGION = (0.25, 0.0, 0.75, 1.0)
+# 物品说明框识别区域配置：按鼠标横向位置自适应分级识别
+# 纵向不考虑（覆盖 0.0 ~ 1.0 全高）
+HOVER_REGIONS = {
+    "30-50%": (0.30, 0.0, 0.50, 1.0),
+    "50-70%": (0.50, 0.0, 0.70, 1.0),
+    "30-70%": (0.30, 0.0, 0.70, 1.0),
+    "中间": (0.30, 0.0, 0.70, 1.0),
+    "整屏": (0.0, 0.0, 1.0, 1.0),
+}
+# 兼容旧导入：默认中间区域 (30% ~ 70%)
+HOVER_REGION = HOVER_REGIONS["中间"]
 
 _last_hover = {}
+
+
+def get_hover_regions(cursor, width):
+    """根据鼠标横向位置返回识别区域列表：[(left, top, right, bottom, name), ...]
+    识别都是按照从左向右，从上到下不考虑（全高 0%~100%）。
+    - 鼠标在 0-30%: 首选 30%-50%，失败备选 30%-70%
+    - 鼠标在 30%-50%: 首选 50%-70%，失败备选 30%-70%
+    - 鼠标在 50%-70%: 首选 30%-50%，失败备选 30%-70%
+    - 鼠标在 70%-100%: 首选 50%-70%，失败备选 30%-70%
+    - 鼠标异常(None或越界): 首选中间 30%-70%
+    """
+    if cursor is None or cursor[0] is None or not width or width <= 0:
+        l, t, r, b = HOVER_REGIONS["中间"]
+        return [(l, t, r, b, "中间")]
+    rx = cursor[0] / width
+    if rx < 0.0 or rx > 1.0:
+        l, t, r, b = HOVER_REGIONS["中间"]
+        return [(l, t, r, b, "中间")]
+
+    mid_l, mid_t, mid_r, mid_b = HOVER_REGIONS["30-70%"]
+    fallback_region = (mid_l, mid_t, mid_r, mid_b, "30-70%")
+
+    if rx < 0.30:
+        l, t, r, b = HOVER_REGIONS["30-50%"]
+        return [(l, t, r, b, "30-50%"), fallback_region]
+    elif rx < 0.50:
+        l, t, r, b = HOVER_REGIONS["50-70%"]
+        return [(l, t, r, b, "50-70%"), fallback_region]
+    elif rx < 0.70:
+        l, t, r, b = HOVER_REGIONS["30-50%"]
+        return [(l, t, r, b, "30-50%"), fallback_region]
+    else:
+        l, t, r, b = HOVER_REGIONS["50-70%"]
+        return [(l, t, r, b, "50-70%"), fallback_region]
 
 
 # ---------------------------------------------------------------- 依赖转发辅助
@@ -68,29 +111,38 @@ def _goal_text(g):
 
 # ---------------------------------------------------------------- OCR 与说明框解析
 def _read_tooltip(img, cursor):
-    """→ (文字, (中文名, 英文名) 或 None, 认的范围)"""
+    """→ (文字, (中文名, 英文名) 或 None, 认的范围)
+    识别机制：
+    1. 按照从左向右，从上到下不考虑（全高 0%~100%）。
+    2. 先确定鼠标位置，按 0~30%、30%~50%、50%~70%、70%~100% 匹配首选区域。
+    3. 首选区域未成功识别，再尝试 30%~70% 中间区域。
+    4. 均未命中时，使用全屏兜底。
+    5. 鼠标位置异常则直接尝试中间 30%~70%，失败后再全屏兜底。
+    """
     from ..trade import console as C
     from ..trade.ocr import recognize
     W, H = img.size
-    l, t, r, b = HOVER_REGION
-    box = (int(W * l), int(H * t), int(W * r), int(H * b))
-    tokens = recognize(img.crop(box), urgent=True, offset=box[:2])
-    name, sure = C.tooltip_pick(tokens, cursor, img)
-    if name and sure:
-        return tokens, name, "中间"
-    # 中间这块连说明框的样子（体积 / 制造商 / 物品类型…）都没有、鼠标也在中间：多半是开着船按了 F8，
-    # 不再整屏找（整屏一次 5~16 秒，2026-10-23 两位玩家在驾驶位上按 F8 都等了很久，CPU 也白占）
-    inside = cursor is None or (box[0] <= cursor[0] <= box[2] and box[1] <= cursor[1] <= box[3])
-    if inside and not any(C._is_anchor(k.text) for k in tokens):
-        if name and C.plausible_name(*name):
-            return tokens, name, "中间"
-        return tokens, None, "中间"
+    regions = get_hover_regions(cursor, W)
+    best_candidate = None
+
+    for l, t, r, b, label in regions:
+        box = (int(W * l), int(H * t), int(W * r), int(H * b))
+        tokens = recognize(img.crop(box), urgent=True, offset=box[:2])
+        name, sure = C.tooltip_pick(tokens, cursor, img)
+        if name and sure:
+            return tokens, name, label
+        if name and C.plausible_name(*name) and not best_candidate:
+            best_candidate = (tokens, name, label)
+
+    # 都不行的时候全屏兜底
     full = recognize(img, urgent=True)
     name_full, sure_full = C.tooltip_pick(full, cursor, img)
-    if name_full and sure_full:                       # 整屏找：必须名字下面紧跟「体积/制造商/物品类型…」才算物品说明框
-        return full, name_full, "整屏"                 # （不然会把全局聊天、飞船 HUD、地点标记当成物品，2026-10-23 用户反馈）
-    if name and C.plausible_name(*name):              # 中间认到但没把握：像物品名才要（2026-10-23 全量样本测试：碎字、系统界面会被当物品）
-        return tokens, name, "中间"
+    if name_full and sure_full:
+        return full, name_full, "整屏"
+    if best_candidate:
+        return best_candidate
+    if name_full and C.plausible_name(*name_full):
+        return full, name_full, "整屏"
     return full, None, "整屏"
 
 
@@ -366,9 +418,9 @@ def hover_once(img=None):
         can_reuse = False
         if where == "整屏":
             can_reuse = True
-        else:
+        elif where in HOVER_REGIONS:
             cw, ch = int(img.width * 0.065), int(img.height * 0.11)
-            l, t, r, b = HOVER_REGION
+            l, t, r, b = HOVER_REGIONS[where]
             box_hover = (int(img.width * l), int(img.height * t), int(img.width * r), int(img.height * b))
             if cx - cw >= box_hover[0] and cy - ch >= box_hover[1] and cx + cw <= box_hover[2] and cy + ch // 6 <= box_hover[3]:
                 can_reuse = True
