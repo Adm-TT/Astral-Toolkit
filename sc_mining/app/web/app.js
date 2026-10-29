@@ -289,6 +289,8 @@ function connect() {
       appendRuntimeLog(data);
     } else if (kind === "runtime_log_clear") {
       clearRuntimeLogsUi();
+    } else if (kind === "runtime_preview") {
+      updateRuntimePreview(data);
     } else if (kind === "task") {
       state.tasks[data.id] = data;
       if (replay) { if (page === "settings") renderPage(); return; }
@@ -352,10 +354,50 @@ function clearRuntimeLogsUi() {
   if (list) list.innerHTML = "";
 }
 
+function updateRuntimePreview(meta) {
+  state.previewMeta = meta;
+  const img = document.getElementById("rt-preview-img");
+  const timeEl = document.getElementById("rt-shot-time");
+  const sizeEl = document.getElementById("rt-shot-size");
+  const srcEl = document.getElementById("rt-shot-source");
+  const badge = document.getElementById("rt-shot-badge");
+  const dot = document.getElementById("rt-dot");
+  const empty = document.getElementById("rt-preview-empty");
+
+  if (img) {
+    img.src = `/api/screenshot?token=${encodeURIComponent(TOKEN)}&_t=${encodeURIComponent(meta.t || Date.now())}`;
+    if (empty) empty.hidden = true;
+  }
+  if (timeEl && meta.time_str) timeEl.textContent = meta.time_str;
+  if (sizeEl && meta.w && meta.h) sizeEl.textContent = `${meta.w}×${meta.h}`;
+  if (srcEl && meta.source) srcEl.textContent = meta.source === "live" ? "采矿识屏" : meta.source === "manual" ? "手动截图" : meta.source;
+  if (badge && meta.source) badge.textContent = meta.source.toUpperCase();
+  if (dot) dot.classList.remove("idle");
+}
+
 function initRuntimeMonitor() {
+  const snapBtn = document.getElementById("rt-snap-btn");
   const clearBtn = document.getElementById("rt-clear-btn");
   const toggleBtn = document.getElementById("rt-toggle-btn");
+  const previewBox = document.getElementById("rt-preview-box");
+  const modal = document.getElementById("rt-modal");
+  const modalImg = document.getElementById("rt-modal-img");
+  const modalClose = document.getElementById("rt-modal-close");
+  const modalBackdrop = document.getElementById("rt-modal-backdrop");
   const monitor = document.getElementById("rt-monitor");
+
+  snapBtn?.addEventListener("click", async () => {
+    snapBtn.disabled = true;
+    try {
+      const res = await api("runtime_capture_now");
+      if (res && res.t) updateRuntimePreview(res);
+      toast("已截取当前画面");
+    } catch (e) {
+      toast("截屏失败：" + (e.message || e));
+    } finally {
+      snapBtn.disabled = false;
+    }
+  });
 
   clearBtn?.addEventListener("click", async () => {
     try {
@@ -379,6 +421,19 @@ function initRuntimeMonitor() {
       toggleBtn?.setAttribute("aria-expanded", "false");
     }
   } catch (_) {}
+
+  previewBox?.addEventListener("click", () => {
+    if (!modal || !modalImg) return;
+    modalImg.src = `/api/screenshot?full=1&token=${encodeURIComponent(TOKEN)}&_t=${Date.now()}`;
+    modal.hidden = false;
+  });
+
+  const closeModal = () => { if (modal) modal.hidden = true; };
+  modalClose?.addEventListener("click", closeModal);
+  modalBackdrop?.addEventListener("click", closeModal);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && modal && !modal.hidden) closeModal();
+  });
 }
 
 // 外观：深色 / 浅色（2026-10-25 AT 品牌配色）。先用本机记住的，避免打开时闪一下；设置以后台为准

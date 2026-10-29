@@ -151,21 +151,23 @@ kbd {
 .hud-sec .t { font-weight: 600; font-size: 15px; line-height: 1.45; margin: 2px 0 3px; word-break: break-word; }
 .hud-sec .b { color: var(--muted); font-size: 13px; white-space: pre-line; word-break: break-word; }
 
-/* ---------------------------------------------------------------- UI 右下角运行日志监控 */
+/* ---------------------------------------------------------------- UI 右下角运行监控 (截图 + 日志) */
 .rt-monitor {
-  flex: 0 0 220px;
+  flex: 1 1 55%;
+  min-height: 240px;
   display: flex;
   flex-direction: column;
   background: color-mix(in srgb, var(--ink) 45%, transparent);
   border: 1px solid var(--line);
   border-radius: var(--r-md);
-  padding: 8px 10px;
+  padding: 10px 12px;
   margin-top: 8px;
   overflow: hidden;
   transition: all 0.2s ease;
 }
 .rt-monitor.collapsed {
   flex: 0 0 auto;
+  min-height: auto;
 }
 .rt-monitor.collapsed .rt-body {
   display: none;
@@ -179,7 +181,7 @@ kbd {
   align-items: center;
   justify-content: space-between;
   flex: none;
-  padding-bottom: 5px;
+  padding-bottom: 6px;
 }
 .rt-title {
   display: flex;
@@ -205,21 +207,7 @@ kbd {
 .rt-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
-}
-.rt-autoscroll {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 10.5px;
-  color: var(--faint);
-  cursor: pointer;
-  user-select: none;
-}
-.rt-autoscroll input {
-  cursor: pointer;
-  accent-color: var(--primary);
-  margin: 0;
+  gap: 4px;
 }
 .rt-btn {
   background: var(--raised);
@@ -252,10 +240,103 @@ kbd {
   flex-direction: column;
   flex: 1 1 auto;
   overflow: hidden;
-  margin-top: 2px;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* 实时截图预览卡片 */
+.rt-preview-wrap {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+}
+.rt-preview-box {
+  position: relative;
+  width: 100%;
+  height: 115px;
+  background: #080f1d;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rt-preview-box:hover {
+  border-color: var(--primary);
+}
+#rt-preview-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.rt-preview-overlay {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  pointer-events: none;
+}
+#rt-shot-badge {
+  background: rgba(10, 18, 35, 0.78);
+  backdrop-filter: blur(4px);
+  color: var(--good);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+.rt-preview-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--faint);
+}
+.rt-preview-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10.5px;
+  color: var(--faint);
+  margin-top: 3px;
+  padding: 0 2px;
+  font-family: var(--num);
 }
 
 /* 运行日志终端 */
+.rt-logs-wrap {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 80px;
+  overflow: hidden;
+}
+.rt-log-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 4px;
+  flex: none;
+}
+.rt-autoscroll {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  color: var(--faint);
+  cursor: pointer;
+}
+.rt-autoscroll input {
+  cursor: pointer;
+  accent-color: var(--primary);
+  margin: 0;
+}
 .rt-log-box {
   flex: 1 1 auto;
   background: #080d19;
@@ -303,6 +384,72 @@ kbd {
 }
 .rt-log-item.WARN .rt-log-text { color: var(--warn); }
 .rt-log-item.ERROR .rt-log-text { color: var(--bad); }
+
+/* 全图弹层 */
+.rt-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rt-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(3, 7, 15, 0.82);
+  backdrop-filter: blur(8px);
+}
+.rt-modal-content {
+  position: relative;
+  z-index: 1;
+  max-width: 92vw;
+  max-height: 90vh;
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-md);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.rt-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+  font-weight: 600;
+  background: var(--raised);
+}
+.rt-modal-close {
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0 6px;
+  border-radius: var(--r-sm);
+  line-height: 1;
+}
+.rt-modal-close:hover {
+  background: var(--hover);
+}
+.rt-modal-body {
+  padding: 12px;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#rt-modal-img {
+  max-width: 88vw;
+  max-height: 80vh;
+  object-fit: contain;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+}
 
 /* ---------------------------------------------------------------- 页面通用 */
 .page h1 { margin: 0 0 6px; font-size: 28px; font-weight: 600; letter-spacing: 2px; }

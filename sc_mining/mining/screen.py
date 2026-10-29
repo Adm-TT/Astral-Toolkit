@@ -410,7 +410,13 @@ def clusters(items):
 def grab():
     """整屏截图；悬浮窗盖住的那块涂黑，不会读到悬浮窗自己的字"""
     from ..core.perf import grab_screen
-    return grab_screen()
+    img = grab_screen()
+    try:
+        from ..app import bus
+        bus.update_preview(img, source="live")
+    except Exception:
+        pass
+    return img
 
 
 def find_panels(img):

@@ -54,32 +54,68 @@
       <div class="feed-empty" id="hud-empty">开启采矿助手、导航，或在游戏中鼠标停在物品上按 <kbd id="hk">F8</kbd>，结果显示在此处</div>
     </div>
 
-    <!-- UI 右下角：运行时日志监控面板 -->
-    <section class="rt-monitor" id="rt-monitor" aria-label="运行日志">
+    <!-- UI 右下角：运行时实时截图与运行日志监控面板 -->
+    <section class="rt-monitor" id="rt-monitor" aria-label="运行监控">
       <div class="rt-header">
         <div class="rt-title">
           <span class="rt-dot" id="rt-dot"></span>
-          <span>运行日志</span>
+          <span>运行监控</span>
         </div>
         <div class="rt-actions">
-          <label class="rt-autoscroll" title="有新日志时自动滚到底部">
-            <input type="checkbox" id="rt-autoscroll" checked> 滚动
-          </label>
+          <button type="button" class="rt-btn" id="rt-snap-btn" title="立即截取最新游戏画面">截屏</button>
           <button type="button" class="rt-btn" id="rt-clear-btn" title="清空运行日志">清空</button>
-          <button type="button" class="rt-btn rt-btn-icon" id="rt-toggle-btn" title="收起/展开日志" aria-expanded="true">
+          <button type="button" class="rt-btn rt-btn-icon" id="rt-toggle-btn" title="收起/展开监控" aria-expanded="true">
             <span class="rt-arrow" id="rt-arrow">▼</span>
           </button>
         </div>
       </div>
 
       <div class="rt-body" id="rt-body">
-        <div class="rt-log-box" id="rt-log-box" role="log">
-          <div class="rt-log-list" id="rt-log-list"></div>
+        <!-- 实时截图预览卡片 -->
+        <div class="rt-preview-wrap">
+          <div class="rt-preview-box" id="rt-preview-box" title="点击查看大图">
+            <img id="rt-preview-img" src="/api/screenshot" alt="实时画面截图" loading="lazy">
+            <div class="rt-preview-overlay" id="rt-preview-overlay">
+              <span id="rt-shot-badge">待机</span>
+            </div>
+            <div class="rt-preview-empty" id="rt-preview-empty" hidden>暂无截图</div>
+          </div>
+          <div class="rt-preview-info">
+            <span id="rt-shot-time">--:--:--</span>
+            <span id="rt-shot-size">--×--</span>
+            <span id="rt-shot-source">待机</span>
+          </div>
+        </div>
+
+        <!-- 运行时日志终端窗口 -->
+        <div class="rt-logs-wrap">
+          <div class="rt-log-head">
+            <span>运行日志</span>
+            <label class="rt-autoscroll" title="有新日志时自动滚到底部">
+              <input type="checkbox" id="rt-autoscroll" checked> 自动滚动
+            </label>
+          </div>
+          <div class="rt-log-box" id="rt-log-box" role="log">
+            <div class="rt-log-list" id="rt-log-list"></div>
+          </div>
         </div>
       </div>
     </section>
   </aside>
 </div>
+
+<!-- 截图放大弹出层 -->
+<div class="rt-modal" id="rt-modal" hidden>
+  <div class="rt-modal-backdrop" id="rt-modal-backdrop"></div>
+  <div class="rt-modal-content">
+    <div class="rt-modal-header">
+      <span id="rt-modal-title">实时画面全图</span>
+      <button type="button" class="rt-modal-close" id="rt-modal-close" aria-label="关闭">×</button>
+    </div>
+    <div class="rt-modal-body">
+      <img id="rt-modal-img" src="" alt="全尺寸截图">
+    </div>
+  </div>
 <div class="toast" id="toast" role="status" hidden></div>
 <!-- 阿塔暂时去掉（2026-10-26 用户定），文件在 tools/ata_备份/，恢复时把这两行加回来 -->
 <script src="app.js"></script>

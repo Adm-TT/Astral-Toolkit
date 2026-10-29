@@ -61,6 +61,10 @@ class Handler(BaseHTTPRequestHandler):
             if not self._allowed():
                 return self._send(403, "{}")
             return self._events()
+        if path == "/api/screenshot":
+            if not self._allowed():
+                return self._send(403, "{}")
+            return self._screenshot()
         if path == "/":
             path = "/index.html"
         f = (WEB / path.lstrip("/")).resolve()
@@ -140,6 +144,33 @@ class Handler(BaseHTTPRequestHandler):
             import traceback
             traceback.print_exc()
             self._send(200, json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False))
+
+    def _screenshot(self):
+        from urllib.parse import urlparse, parse_qs
+        qs = parse_qs(urlparse(self.path).query)
+        full = qs.get("full", ["0"])[0] == "1"
+        data, meta = bus.get_preview_bytes(full=full)
+        if not data:
+            try:
+                from ..core.perf import grab_screen
+                img = grab_screen()
+                bus.update_preview(img, source="screen", force=True)
+                data, meta = bus.get_preview_bytes(full=full)
+            except Exception as e:
+                return self._send(500, json.dumps({"error": str(e)}))
+        if data:
+            self.send_response(200)
+            self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+            if meta:
+                self.send_header("X-Screenshot-Time", str(meta.get("t", 0)))
+                self.send_header("X-Screenshot-Width", str(meta.get("w", 0)))
+                self.send_header("X-Screenshot-Height", str(meta.get("h", 0)))
+            self.end_headers()
+            self.wfile.write(data)
+        else:
+            self._send(404, "{}")
 
     def _events(self):
         self.send_response(200)
