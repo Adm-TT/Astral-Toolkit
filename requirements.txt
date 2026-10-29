@@ -2,3 +2,4 @@ mss
 pillow
 numpy
 rapidocr_onnxruntime
+onnxruntime-directml; sys_platform == "win32"

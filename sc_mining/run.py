@@ -84,6 +84,10 @@ def install():
     ok = _pip("mss", "pillow", "numpy")
     print("\n安装中文识别组件…")
     ocr = _pip("rapidocr_onnxruntime") or _pip("rapidocr", "onnxruntime")
+    if sys.platform == "win32":
+        print("配置 DirectML 显卡加速…")
+        subprocess.call([sys.executable, "-m", "pip", "uninstall", "-y", "onnxruntime"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        _pip("onnxruntime-directml")
     print()
     exe = None
     try:
