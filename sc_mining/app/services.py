@@ -227,7 +227,7 @@ _TASK_OWNERSHIP = [
         "MOD_GROUPS", "STAT_ZH"
     }),
     (_t_hover, {
-        "HOVER_REGION", "_read_tooltip", "tooltip_quality", "_AMOUNT", "tooltip_row",
+        "HOVER_REGION", "HOVER_REGIONS", "get_hover_regions", "_read_tooltip", "tooltip_quality", "_AMOUNT", "tooltip_row",
         "parse_qlabel", "parse_count", "cell_labels", "_is_mineral", "qty_text",
         "hover_once", "_tier", "_hover_more", "_hover_lines", "_short_buy", "_last_hover"
     }),
