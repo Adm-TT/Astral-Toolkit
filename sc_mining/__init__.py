@@ -16,7 +16,6 @@ _LEGACY_MODULES = {
     "acquire": "sc_mining.crafting.acquire",
     "build_crafting": "sc_mining.crafting.build_crafting",
     "cockpit": "sc_mining.system.cockpit",
-    "crafting": "sc_mining.crafting.crafting",
     "data": "sc_mining.mining.data",
     "data_pack": "sc_mining.update.data_pack",
     "displayinfo": "sc_mining.navigation.displayinfo",
@@ -67,19 +66,25 @@ _LEGACY_MODULES = {
 }
 
 
-class _LegacyFinder(_importlib_abc.MetaPathFinder):
-    _in_find = False
+class _AliasLoader:
+    def __init__(self, target):
+        self.target = target
 
+    def create_module(self, spec):
+        mod = _importlib.import_module(self.target)
+        _sys.modules[spec.name] = mod
+        return mod
+
+    def exec_module(self, module):
+        pass
+
+
+class _LegacyFinder(_importlib_abc.MetaPathFinder):
     def find_spec(self, fullname, path, target=None):
-        if self._in_find:
-            return None
         parts = fullname.split(".")
         if len(parts) == 2 and parts[0] == "sc_mining" and parts[1] in _LEGACY_MODULES:
-            self._in_find = True
-            try:
-                return _importlib_util.find_spec(_LEGACY_MODULES[parts[1]])
-            finally:
-                self._in_find = False
+            target_mod = _LEGACY_MODULES[parts[1]]
+            return _importlib_util.spec_from_loader(fullname, _AliasLoader(target_mod))
         return None
 
 

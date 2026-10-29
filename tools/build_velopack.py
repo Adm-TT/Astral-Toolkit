@@ -30,7 +30,7 @@ TITLE = "AT 星际公民助手"
 
 
 def version():
-    return re.search(r'VERSION = "([^"]+)"', (ROOT / "sc_mining" / "version.py").read_text(encoding="utf-8")).group(1)
+    return re.search(r'VERSION = "([^"]+)"', (ROOT / "sc_mining" / "core" / "version.py").read_text(encoding="utf-8")).group(1)
 
 
 def _ver(s):

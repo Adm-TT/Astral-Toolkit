@@ -29,7 +29,7 @@ TOP_FILES = ("Dubhe.exe", "首次安装.bat", "免责声明.txt", "使用说明.
 SKIP_DATA = {"scmdb", "loc", "unpack"}        # 原始大文件，更新数据时会重新下载
 SKIP_DATA_FILES = {"loot_details.zip"}   # 掉落明细整包（约 25 MB，数据包里下载；升级不动它，备份也不带）
 PROGRAM_EXT = (".py", ".js", ".css", ".html")   # 这些算程序文件：装完必须和安装包一字不差（老大审查 2026-10-28 第 3 条）
-REQUIRED = ("sc_mining/__init__.py", "sc_mining/version.py", "sc_mining/run.py",
+REQUIRED = ("sc_mining/__init__.py", "sc_mining/run.py",
             "sc_mining/app/server.py", "sc_mining/app/services.py")   # 少一个 AT 就起不来：装包前后都要有
 
 
@@ -132,15 +132,18 @@ def check(path):
         for n in names:
             if n.startswith("/") or ".." in n.split("/") or ":" in n:
                 raise ValueError("压缩包含可疑的文件路径，已停止安装")
+        ver_candidates = (f"{top}/sc_mining/core/version.py", f"{top}/sc_mining/version.py")
+        ver_file = next((f for f in ver_candidates if f in names), None)
+        if not ver_file:
+            raise ValueError("压缩包中缺少版本文件（sc_mining/core/version.py），不是完整的 AT 安装包")
         miss = [r for r in REQUIRED if f"{top}/{r}" not in names]
         if miss:
             raise ValueError(f"压缩包中缺少 AT 程序文件（{'、'.join(miss)}），不是完整的 AT 安装包")
         if z.testzip() is not None:
             raise ValueError("压缩包已损坏（可能未下载完成），需重新下载")
         v = (0, 0, 0)
-        if f"{top}/sc_mining/version.py" in names:
-            m = re.search(r'VERSION\s*=\s*"([^"]+)"', z.read(f"{top}/sc_mining/version.py").decode("utf-8", "replace"))
-            v = ver(m.group(1)) if m else v
+        m = re.search(r'VERSION\s*=\s*"([^"]+)"', z.read(ver_file).decode("utf-8", "replace"))
+        v = ver(m.group(1)) if m else v
         if v == (0, 0, 0):
             v = ver(NAME.match(path.name).group(0)[6:] if NAME.match(path.name) else "")
         return top, v

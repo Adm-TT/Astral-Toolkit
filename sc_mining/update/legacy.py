@@ -38,15 +38,19 @@ def _roots():
 
 
 def _is_old(d):
-    return (d / "Dubhe.exe").is_file() and (d / "sc_mining" / "version.py").is_file() and (d / "userdata" / "settings.json").is_file()
+    has_ver = (d / "sc_mining" / "core" / "version.py").is_file() or (d / "sc_mining" / "version.py").is_file()
+    return (d / "Dubhe.exe").is_file() and has_ver and (d / "userdata" / "settings.json").is_file()
 
 
 def _version(d):
-    try:
-        m = re.search(r'VERSION\s*=\s*"([^"]+)"', (d / "sc_mining" / "version.py").read_text(encoding="utf-8"))
-        return m.group(1) if m else ""
-    except OSError:
-        return ""
+    for f in (d / "sc_mining" / "core" / "version.py", d / "sc_mining" / "version.py"):
+        if f.is_file():
+            try:
+                m = re.search(r'VERSION\s*=\s*"([^"]+)"', f.read_text(encoding="utf-8"))
+                return m.group(1) if m else ""
+            except OSError:
+                return ""
+    return ""
 
 
 def _count(p):

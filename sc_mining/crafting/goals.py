@@ -254,8 +254,12 @@ def _avg_quality(used):
 def plan(trade=None, goals=None):
     """按优先级把库存分给每个目标，算出每样还差多少"""
     if trade is None:
-        from ..app.services import trade as _t
-        trade = _t()
+        try:
+            from ..tasks.trade import trade as _t
+            trade = _t()
+        except Exception:
+            from ..trade.console import Trade
+            trade = Trade()
     goals = load() if goals is None else goals
     pool = stock_lots(trade)
     ids = {}

@@ -136,11 +136,11 @@ def clear_caches():
     paths.clear_json_cache()
     _clear("trade.names", "table", "_index")
     _clear("crafting", "data", "_keys")
-    _clear("wikelo", "load")
-    _clear("stockplaces", "places", "_index")
-    _clear("laser", "head_blueprint", "craft_slots")
-    _clear("itemstats", "data")
-    _clear("shipsig", "ships")
+    _clear("crafting.wikelo", "load")
+    _clear("crafting.stockplaces", "places", "_index")
+    _clear("mining.laser", "head_blueprint", "craft_slots")
+    _clear("crafting.itemstats", "data")
+    _clear("mining.shipsig", "ships")
     try:
         from ..crafting import loot
         loot._index = None                        # 掉落索引
@@ -153,7 +153,7 @@ def clear_caches():
         uex.apply_live(data)                      # 矿价 / 精炼站加成（prices.json）→ 内置表（2026-10-28 整体审查：以前窗口从没读过它）
     except Exception:
         pass
-    _clear("goals", "where_to_get")
+    _clear("crafting.goals", "where_to_get")
     try:
         from ..crafting import shops
         shops._data = None                        # 商店表（shops.load 只在 _data 为 None 时读文件）

@@ -163,7 +163,7 @@ def _is_unpack(fn):
     import json as _j
     from .core import paths
     mod = getattr(fn, "__module__", "") or ""
-    if mod == "sc_mining.build_crafting":
+    if mod in ("sc_mining.crafting.build_crafting", "sc_mining.build_crafting"):
         from .crafting import build_crafting
         if build_crafting.unpacked() is not None:          # 本机有解包原文件：交给它自己按解包版重编（不会去 scmdb），游戏更新后新蓝图才进得来（二十一审）
             return False

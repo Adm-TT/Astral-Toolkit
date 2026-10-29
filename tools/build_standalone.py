@@ -140,7 +140,7 @@ def build_shell():
 
 def installer():
     """Inno Setup 编安装程序。Gitee 发行版单个附件上限 100 MB，超了直接报错"""
-    version = re.search(r'VERSION = "([^"]+)"', (ROOT / "sc_mining" / "version.py").read_text(encoding="utf-8")).group(1)
+    version = re.search(r'VERSION = "([^"]+)"', (ROOT / "sc_mining" / "core" / "version.py").read_text(encoding="utf-8")).group(1)
     out_dir = ROOT / "dist"
     out_dir.mkdir(exist_ok=True)
     if not ISCC.exists():

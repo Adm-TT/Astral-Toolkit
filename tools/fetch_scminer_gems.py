@@ -12,7 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-OUT = ROOT / "sc_mining" / "gems.py"
+OUT = ROOT / "sc_mining" / "mining" / "gems.py"
 URL = "https://scminer.rocks/data/mineral-directory/{}"
 NAMES = ["Janalite", "Hadanite", "Feynmaline", "Aphorite", "Glacosite", "Dolivine", "Beradom",
          "Jaclium", "Sadaryx", "Saldynium"]
@@ -75,7 +75,7 @@ def write(gems, day):
 
 def main():
     import time
-    from sc_mining.gems import GEMS
+    from sc_mining.mining.gems import GEMS
     out, bad = dict(GEMS), []
     for en in NAMES:
         try:

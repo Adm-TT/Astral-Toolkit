@@ -24,7 +24,7 @@ def main(argv):
     oc = (Path(os.environ.get("AT_UNPACK_DIR", r"E:\Game3\unpack")) / "oc_x").exists()
     if "--no-update" not in argv:
         # 有解包目录才去 starmap.space 下星图（下面 unpack_starmap 会重新合并，只取自转相位和玩家补充的点）；没有就别拿网站版盖掉解包版
-        r = run.update(direct=True, web_ok=("sc_mining.navigate",) if oc else ())
+        r = run.update(direct=True, web_ok=("sc_mining.navigation.navigate", "sc_mining.navigate") if oc else ())
         bad = [x["title"] for x in r["results"] if not x["ok"]]
         if bad:
             print(f"⚠️ 这几项没更新成功，数据包里是旧数据：{'、'.join(bad)}")

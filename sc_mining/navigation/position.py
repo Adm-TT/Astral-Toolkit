@@ -151,7 +151,7 @@ def ini_name(key):
     if "ini" not in _ini_cache:
         table = {}
         try:                            # 随安装包带的地点代号表（新装还没下汉化包时也有中文名）
-            from ..update.localization import DATA
+            from ..core.paths import DATA
             table.update(json.loads((DATA / "place_codes_zh.json").read_text(encoding="utf-8")))
         except Exception:
             pass

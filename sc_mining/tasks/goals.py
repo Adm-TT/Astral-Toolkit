@@ -95,14 +95,22 @@ def _services():
 
 
 def trade():
-    return _services().trade()
+    try:
+        from .trade import trade as _t
+        return _t()
+    except Exception:
+        return _services().trade()
 
 
 def _place_for(location, bin=None):
     try:
-        return _services()._place_for(location, bin=bin)
+        from .stock import _place_for as _pf
+        return _pf(location, bin)
     except Exception:
-        return location
+        try:
+            return _services()._place_for(location, bin=bin)
+        except Exception:
+            return location
 
 
 # ---------------------------------------------------------------- 内部状态与缓存
