@@ -92,6 +92,8 @@ class _Live:
 
     def _set_paused(self, ev, on, log, gap=0.0):
         """暂停 / 继续：记一行日志，告诉窗口（采矿助手页和左边的小灯）"""
+        msg = "游戏不在最前面，暂停识别" if on else f"回到游戏，继续识别（暂停了 {gap:.0f} 秒）"
+        bus.runtime_log(msg, tag="LIVE", level="WARN" if on else "INFO")
         try:
             log.write(f"{time.strftime('%F %T')} " + ("PAUSE 游戏不在最前面，暂停识别" if on else
                                                      f"RESUME 回到游戏，继续识别（暂停了 {gap:.0f} 秒）") + "\n")
@@ -108,6 +110,7 @@ class _Live:
         if self.running():
             return
         self.paused = False
+        bus.runtime_log("采矿助手实时识别引擎已启动", tag="LIVE", level="INFO")
         # 每次开始都是一个新的会话（自己的停止开关）：快速停了又开，旧线程哪怕还没退出也只认自己的开关，
         # 不会和新线程一起往悬浮窗写东西
         self.stop_ev = ev = threading.Event()
@@ -200,6 +203,7 @@ class _Live:
             self.paused = False
             for k in ("信号", "扫描", "矿袋"):
                 _S()._hud().clear(k)
+        bus.runtime_log("采矿助手实时识别引擎已停止", tag="LIVE", level="INFO")
         bus.publish("scan_hint", {"why": "", "text": ""})
         bus.publish("live", {"running": False})
 
@@ -346,6 +350,7 @@ class _Live:
                                 "信号", "\n".join(x.split("｜精炼后")[0].replace("信号 ", "") for x in lines[:4])))):
                             sig_shown, sig_live, last_sig_msg = shown_key, True, msg
                             _S()._FB_LAST["sig"] = {**msg, "values": sorted(sigs)}
+                            bus.runtime_log(f"雷达信号: {sorted(sigs)} 产区: {(area or {}).get('zh') or '未知'}", tag="SIGNAL", level="INFO")
                             log.write(f"{time.strftime('%F %T')} SIG {sorted(sigs)} 产矿区={(area or {}).get('zh') or '未知'}\n")
                             log.flush()
                     sig_prev = sigs
@@ -382,6 +387,7 @@ class _Live:
 
                             def publish():
                                 bus.publish("scan", view)
+                                bus.runtime_log(f"扫描岩石: {best.rock or '岩石'} (质量 {round(best.mass)} | 矿量 {best.total_scu:.1f} SCU)", tag="SCAN", level="INFO")
                                 _S()._hud().set("扫描", view["hud"], view.get("hud_rich"))
                                 if view["bag_text"]:
                                     _S()._hud().set("矿袋", view["bag_text"])
