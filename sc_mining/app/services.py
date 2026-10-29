@@ -1,9 +1,9 @@
-"""窗口调用的功能接口与聚合网关（Gateway Facade，对齐 MAA 架构）
+"""窗口调用的功能接口与聚合网关（Gateway Facade）
 
 本模块是前端 Web RPC 与后台任务调度层的统一门面：
 1. 维护 API 路由分发字典 (API)，统一对外暴露接口；
 2. 聚合管理后台守护引擎实例（_live, _nav, _pos, _hover, _count 等）；
-3. 纯业务逻辑已全部分解至 sc_mining.tasks 独立任务层（对齐 MAA Task 架构）：
+3. 纯业务逻辑已全部分解至 sc_mining.tasks 独立任务层：
    - tasks.system: 系统信息、在线更新、日志导出、问题反馈
    - tasks.trade: 物品查询、交易市场、矿物精炼
    - tasks.stock: 仓库库存、货架库位、出入库台账
