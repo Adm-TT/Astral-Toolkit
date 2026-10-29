@@ -75,7 +75,7 @@ def _invalidate_short():
 
 def _read_tooltip(img, cursor):
     try:
-        from .hover import _read_tooltip as _rt
+        from ..trade.inspector import _read_tooltip as _rt
         return _rt(img, cursor)
     except Exception:
         return _services()._read_tooltip(img, cursor)
@@ -83,7 +83,7 @@ def _read_tooltip(img, cursor):
 
 def tooltip_row(tokens):
     try:
-        from .hover import tooltip_row as _tr
+        from ..trade.inspector import tooltip_row as _tr
         return _tr(tokens)
     except Exception:
         return _services().tooltip_row(tokens)
@@ -91,7 +91,7 @@ def tooltip_row(tokens):
 
 def tooltip_quality(tokens):
     try:
-        from .hover import tooltip_quality as _tq
+        from ..trade.inspector import tooltip_quality as _tq
         return _tq(tokens)
     except Exception:
         return _services().tooltip_quality(tokens)
@@ -99,7 +99,7 @@ def tooltip_quality(tokens):
 
 def cell_labels(img, cursor):
     try:
-        from .hover import cell_labels as _cl
+        from ..trade.inspector import cell_labels as _cl
         return _cl(img, cursor)
     except Exception:
         return _services().cell_labels(img, cursor)
@@ -107,7 +107,7 @@ def cell_labels(img, cursor):
 
 def _is_mineral(zh, en):
     try:
-        from .hover import _is_mineral as _im
+        from ..trade.inspector import _is_mineral as _im
         return _im(zh, en)
     except Exception:
         try:
@@ -146,38 +146,9 @@ _count = _CountProxy()
 
 # ================================================================ 盘点（F6）核心识别与对账
 def _read_item(img, cursor):
-    """鼠标指着的物品：{zh, en, quality, qty, unit, sure}；认不出返回 None（和 F8 用同一套识别）"""
-    from ..trade.names import canonical
-    tokens, name, _where = _read_tooltip(img, cursor)
-    if not name:
-        return None
-    zh, en = name
-    canon = canonical(zh, en)
-    if canon:
-        zh, en = canon
-    row_q, row_amt = tooltip_row(tokens)
-    if row_q is None:
-        row_q = tooltip_quality(tokens)
-    try:
-        cell_q, cell_n = cell_labels(img, cursor)
-    except Exception:
-        cell_q, cell_n = None, None
-    mineral = _is_mineral(zh, en)
-    quality = row_q if row_q is not None else cell_q if cell_q is not None else (None if mineral else 0)
-    qty, unit = (row_amt, "SCU") if mineral else ((cell_n or 1), "个")
-    craft = None
-    if not mineral:                  # 1.6.67：制造出来的东西没有品质数，只有加成行 → 按蓝图倒推各材料槽的品质，记平均
-        try:
-            from ..crafting.crafting import parse_mods, solve_slots, for_item
-            mods = parse_mods(tokens)
-            res = solve_slots(for_item(en, zh), mods) if mods else None
-            if res and res["exact"]:                       # 加成对不上蓝图：不当品质（Codex 2026-10-27）
-                quality, craft = res["avg"], res["slots"]
-            elif res and row_q is None and cell_q is None:  # 没直接读到品质、倒推又对不上：品质未知，不记成 0
-                quality = None
-        except Exception:
-            craft = None
-    return {"zh": zh, "en": en, "quality": quality, "qty": qty, "unit": unit, "sure": bool(canon), "craft": craft}
+    """鼠标指着的物品：{zh, en, quality, qty, unit, sure, craft}；认不出返回 None（调用通用 inspector 组件）"""
+    from ..trade.inspector import inspect_item
+    return inspect_item(img, cursor)
 
 
 def _kl(k):
