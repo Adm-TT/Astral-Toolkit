@@ -13,13 +13,32 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+import re as _re
 
 from .catalog import Catalog
 from .history import History
+from .inspector import (
+    _ANCHOR,
+    _VOLUME,
+    _is_anchor,
+    _SENTENCE,
+    _LETTERS,
+    _STAT,
+    _NOT_ITEM,
+    _ink,
+    _bright_only,
+    tooltip_name,
+    plausible_name,
+    tooltip_pick,
+    _anchor_name,
+    _cursor_on_image,
+    _hover_log,
+    inspect_item,
+)
 from .inventory import Inventory
 from .market_service import MarketService
 from .models import ImportRow, Item, StockKey, StockLine
-from .names import has_chinese, to_english
+from .names import has_chinese, to_english, _fold_en as _fold
 from .parser import parse_inventory
 from .providers.scm import ScmProvider
 from .providers.uex import UexProvider
@@ -614,185 +633,7 @@ def manual_import(t):
     _commit(t, [StockLine(StockKey(i.id, q, loc), n) for i, n, q in lines])
 
 
-# ---------------------------------------------------------------- 悬停识别（库存界面推荐用法）
-
-import re as _re
-# 行首可能多认出一个字母（「A附件：瞄具…」，2026-10-20 日志里没认出的那次）
-_ANCHOR = _re.compile(r"^[A-Za-z0-9]?(体积|Volume|制造商|Manufacturer|物品类型|Item Type|类别|尺寸|附件|伤害|弹匣)")
-_VOLUME = _re.compile(r"[:：]\s*[\d,.]+\s*[uμ]?S[CG]U\b", _re.I)     # 「体积：13000 uSCU」：OCR 漏了「积」也认得出
-
-
-def _is_anchor(text):
-    """说明框里名字下面那几行（体积、制造商、物品类型…）。「容量：1.00SCU」「剩余容量：100%」在说明框最底下，
-    不算（2026-10-27 勋章：按它往上找，把说明文字最后一行「越。」当成了名字）"""
-    t = text.replace(" ", "")
-    if t.startswith(("容量", "剩余容量", "Capacity")):
-        return False
-    return bool(_ANCHOR.match(t) or _VOLUME.search(t))
-_SENTENCE = _re.compile(r"[，。；！？、,.;!?]\s*\S")
-_LETTERS = _re.compile(r"[A-Za-z]{3,}")
-_STAT = _re.compile(r"[:：]\s*[-+]?\d|\d\s*%")              # 「属性：数值」行（NDR:20、剩余容量：100%）
-# 不是物品名的屏幕文字：聊天（[全局]某人：…、[本地]…）、调试信息（Zone: … Pos:）、「名字：」结尾的发言人
-_NOT_ITEM = _re.compile(r"^\s*\d{1,2}\s*[:：、]\s*\S|^\s*\d{1,2}\.\s+\S|^\s*[\[【(（]\s*(全局|本地|队伍|小队|组织|私聊|好友|系统|派对|Global|Local|Party|Org|Private|Whisper)|"
-                        r"Zone\s*[:：]|Pos\s*[:：]|[:：]\s*$", _re.I)
-
-
-def _ink(img, box):
-    """一行字有多亮：框里亮的像素（字）比一般像素（底）亮多少。两个说明框叠在一起时，
-    正在淡出的旧框、后面那层的框字是暗的（老大 2026-10-27：叠在一起只认高亮的那个）"""
-    if img is None:
-        return None
-    x, y, w, h = box
-    try:
-        hist = img.crop((max(0, x), max(0, y), x + max(w, 1), y + max(h, 1))).convert("L").histogram()
-    except Exception:
-        return None
-    n = sum(hist)
-    if not n:
-        return None
-
-    def pct(p):
-        c = 0
-        for v, k in enumerate(hist):
-            c += k
-            if c >= n * p:
-                return v
-        return 255
-    return pct(0.92) - pct(0.5)
-
-
-def _bright_only(items, img, box_of, keep=0.6):
-    """去掉字明显暗的候选（比最亮的暗 40% 以上）；量不出亮度就原样返回"""
-    if img is None or len(items) < 2:
-        return items
-    inks = [_ink(img, box_of(it)) for it in items]
-    if any(v is None for v in inks):
-        return items
-    top = max(inks)
-    if top <= 0:
-        return items
-    return [it for it, v in zip(items, inks) if v >= top * keep]
-
-
-def tooltip_name(tokens, cursor=None):
-    """从物品悬停说明框里取名字。说明框第一行是中文名、紧接着一行英文名（游戏汉化包的固定格式），
-    找这样的「中文行 + 英文行」，有多处时取离鼠标最近的；找不到再退回按「体积/制造商」那行往上找。
-    返回 (中文名, 英文名)，认不出返回 None"""
-    return tooltip_pick(tokens, cursor)[0]
-
-
-def plausible_name(zh, en):
-    """没把握的名字（下面没认到「体积」这类行）像不像物品名：中文至少 3 个字、英文至少两个词、
-    不是全大写（地点标记 OUTPOST、BAYAR…）、不带冒号。样本里的真物品都过，聊天 / 系统界面的碎字都不过"""
-    cjk = len(_re.findall(r"[\u4e00-\u9fff]", zh or ""))
-    words = _re.findall(r"[A-Za-z][A-Za-z0-9'\-]*", en or "")
-    letters = "".join(words)
-    return (3 <= cjk and len(zh) <= 20 and len(words) >= 2 and ":" not in (en or "") and "：" not in (zh or "")
-            and not letters.isupper())
-
-
-def tooltip_pick(tokens, cursor=None, img=None):
-    """同 tooltip_name，另外返回「有没有把握」：名字下面紧跟着「体积/物品类型…」这种说明框才有的行，就是有把握。
-    img：截图（和 tokens 同一坐标）；给了就只认字亮的那个说明框（两个框叠在一起时）"""
-    toks = sorted(tokens, key=lambda k: (k.box[1], k.box[0]))
-    pairs = []
-    for e in toks:
-        if has_chinese(e.text) or not _LETTERS.search(e.text):
-            continue
-        h = max(e.box[3], 12)
-        above = [z for z in toks if has_chinese(z.text) and 0.4 * h < e.box[1] - z.box[1] < 2.6 * h
-                 and abs(z.box[0] - e.box[0]) < 2.5 * h]
-        if not above:
-            continue
-        z = max(above, key=lambda k: k.box[1])
-        names = [z]
-        while True:                                   # 中文名太长会折成两行
-            more = [k for k in toks if has_chinese(k.text) and 0.4 * h < names[0].box[1] - k.box[1] < 1.8 * h
-                    and abs(k.box[0] - z.box[0]) < 2.5 * h and not _ANCHOR.match(k.text.replace(" ", ""))]
-            if not more or len(names) >= 2:
-                break
-            names.insert(0, max(more, key=lambda k: k.box[1]))
-        zh = "".join(k.text for k in names).strip()
-        en = e.text.strip()
-        # 名字不是句子：描述文字带逗号句号、而且很长；也不是「属性：数值」（剩余容量：100%、NDR:20）
-        if _ANCHOR.match(zh.replace(" ", "")) or _SENTENCE.search(zh) or len(zh) > 30 or len(en) > 60 \
-                or _SENTENCE.search(en.rstrip(".")) or _STAT.search(zh) or _STAT.search(en) \
-                or _NOT_ITEM.search(zh) or _NOT_ITEM.search(en):
-            continue
-        cx, cy = cursor if cursor else (e.box[0], e.box[1])
-        dist = ((e.box[0] - cx) ** 2 + (e.box[1] - cy) ** 2) ** 0.5
-        # 英文名下面紧跟「体积/物品类型/附件…」的，几乎肯定是说明框标题
-        below = [k for k in toks if 0.4 * h < k.box[1] - e.box[1] < 2.6 * h and abs(k.box[0] - e.box[0]) < 2.5 * h]
-        anch_boxes = tuple(tuple(k.box) for k in below if _is_anchor(k.text))
-        anchored = bool(anch_boxes)
-        if anchored:
-            dist -= 10000
-        pairs.append((dist, zh, en, anchored, tuple(e.box), anch_boxes))
-    anch = [p for p in pairs if p[3]]
-    if anch:                                          # 有说明框标题：只在说明框之间比亮度（彩色标题别被白色 HUD 字比下去，二审）
-        pairs = _bright_only(anch, img, lambda p: p[4]) + [p for p in pairs if not p[3]]
-    else:
-        pairs = _bright_only(pairs, img, lambda p: p[4])
-    best = min(pairs) if pairs else None
-    if best and best[3]:
-        _, zh, en, anchored, _box, ab = best
-        if img is not None:
-            # 这个说明框的「体积」行比别的说明框的暗：它是后面那层，亮的那个只认出了中文名（二审 2026-10-27）
-            bright = {tuple(k.box) for k in _bright_only([k for k in toks if _is_anchor(k.text)], img, lambda k: k.box)}
-            if ab and not any(b in bright for b in ab):
-                hit = _anchor_name(toks, cursor, img)
-                # 还要确认找到的名字那行确实比这个标题亮：只有一个说明框、别处（库存表头）有更亮的「类别」行时不换（复审 2026-10-27）
-                tok = next((k for k in toks if hit and k.text.strip() and k.text.strip() in (hit[0] or "")), None)
-                mine, theirs = _ink(img, _box), (_ink(img, tok.box) if tok is not None else None)
-                if hit and hit[0] != zh and mine is not None and theirs and mine < theirs * 0.6:
-                    return hit, True
-        return (zh, en), anchored
-    # 没有「名字下面紧跟体积」的中英对：说明框可能只有中文名（矿石、食物…），先按「体积」那行往上找；
-    # 找不到再用没把握的中英对（以前直接用中英对：杰金矿石的说明框下面列着「1: 焦焰 RYT…/Pyro RYT…」被当成名字，2026-10-24）
-    hit = _anchor_name(toks, cursor, img)
-    if hit:
-        return hit, True
-    if best:
-        _, zh, en, anchored, _box, _ab = best
-        return (zh, en), anchored
-    return None, False
-
-
-def _anchor_name(toks, cursor=None, img=None):
-    """按「体积 / 制造商…」那行往上找名字：取最上面一行、不带「：数值」的。返回 (中文名, 英文名) 或 None"""
-    anchors = _bright_only([k for k in toks if _is_anchor(k.text)], img, lambda k: k.box)
-    if not anchors:
-        return None
-    # 没有英文名的说明框（食物、饮料等只有中文名）：按「体积」那行往上找，取最上面一行、不带「：数值」的
-    if cursor:
-        cx, cy = cursor
-        anchors.sort(key=lambda k: ((k.box[0] - cx) ** 2 + (k.box[1] - cy) ** 2))
-    a = anchors[0] if cursor else min(anchors, key=lambda k: k.box[1])
-    h = max(a.box[3], 12)
-    above = [k for k in toks if a.box[1] - h * 6 < k.box[1] < a.box[1] - h * 0.4 and abs(k.box[0] - a.box[0]) < h * 3
-             and not _STAT.search(k.text) and not _SENTENCE.search(k.text)
-             and not _is_anchor(k.text) and not _re.search(r"[:：]", k.text)     # 「制造商：灰猫工业」不是名字
-             and not _re.search(r"[。！？，,；]\s*$", k.text)]                  # 「越。」：说明文字的最后一截
-    if not above:
-        return None
-    top = min(k.box[1] for k in above)
-    first = [k for k in above if k.box[1] - top < h * 0.6]          # 最上面那一行就是名字
-    zh = "".join(k.text for k in first if has_chinese(k.text)).strip()
-    nxt = [k for k in above if h * 0.6 <= k.box[1] - top < h * 2.2 and not has_chinese(k.text) and _LETTERS.search(k.text)]
-    en = nxt[0].text.strip() if nxt else " ".join(k.text for k in first if not has_chinese(k.text)).strip()
-    return (zh, en) if (zh or en) else None
-
-
-def _fold(text):
-    """比较名字用：忽略大小写、空格、引号；OCR 常把 II 认成 ll，统一成 i"""
-    return _re.sub(r"[^a-z0-9]", "", (text or "").lower().replace("l", "i"))
-
-
-def _cursor_on_image(img):
-    """鼠标位置换算成截图像素坐标（截图是游戏画面，见 perf.game_area，1.6.46）"""
-    from ..core.perf import cursor_on_image
-    return cursor_on_image(img)
-
+# ---------------------------------------------------------------- 悬停识别与说明框查价
 
 def _similar(a, b):
     import difflib
@@ -855,16 +696,14 @@ def hover_flow(t, ov=None):
     from ..mining.screen import grab
     img = grab()
     cx, cy = _cursor_on_image(img) if sys.platform == "win32" else (img.width // 2, img.height // 2)
-    box = (0, 0, img.width, img.height)       # 说明框可能在鼠标任意一侧、而且很高，整屏识别
-    from .ocr import recognize
-    crop = img.crop(box)
-    tokens = recognize(crop)
-    name = tooltip_name(tokens, (cx - box[0], cy - box[1]))
-    _hover_log(crop, tokens, name)
-    if not name:
+    res = inspect_item(img, (cx, cy))
+    if not res:
         print("没找到物品说明框：把鼠标停在物品上，等说明框出来再按。也可以输入「截图」手动框选")
+        _hover_log(img, [], None)
         return
-    zh, en = name
+    zh, en = res["zh"], res["en"]
+    tokens = res["tokens"]
+    _hover_log(img, tokens, (zh, en))
     print(f"认出：{zh} {en}".strip())
     try:
         info = extra_info(zh, en)
@@ -911,21 +750,6 @@ def hover_flow(t, ov=None):
     loc = _location(t)
     if loc:
         _commit(t, [StockLine(StockKey(item.id, q, loc), int(qty))])
-
-
-def _hover_log(crop, tokens, name, note=""):
-    """每次 F8 的截图和识别结果存一份（只留最近 20 张），方便排查认错的情况。note：各步骤耗时"""
-    try:
-        from ..core import paths
-        d = paths.shots("hover")
-        stamp = time.strftime("%H%M%S")
-        crop.convert("RGB").resize((crop.width // 2, crop.height // 2)).save(d / f"{stamp}.jpg", quality=80)
-        with open(paths.log("trade_log.txt"), "a", encoding="utf-8") as f:
-            f.write(f"{time.strftime('%F %T')} 名字={name} {note} 文字={[k.text for k in tokens][:40]}\n")
-        for old in sorted(d.glob("*.*"))[:-20]:
-            old.unlink()
-    except Exception:
-        pass
 
 
 def capture_flow(t, ov=None):

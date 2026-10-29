@@ -114,6 +114,56 @@ class TestItemInspector(unittest.TestCase):
         self.assertEqual(res["quality"], 500)
         self.assertEqual(res["qty"], 2)
 
+    def test_tooltip_title_and_anchor(self):
+        from sc_mining.trade.inspector import (
+            tooltip_pick,
+            tooltip_name,
+            plausible_name,
+            _is_anchor,
+        )
+        from sc_mining.trade.console import tooltip_pick as console_tooltip_pick
+
+        # 确保向后兼容重导出一致
+        self.assertIs(tooltip_pick, console_tooltip_pick)
+
+        # 测试锚点行识别
+        self.assertTrue(_is_anchor("体积：13000 uSCU"))
+        self.assertTrue(_is_anchor("Manufacturer: Aegis"))
+        self.assertTrue(_is_anchor("物品类型：武器"))
+        self.assertFalse(_is_anchor("容量：1.00SCU"))
+        self.assertFalse(_is_anchor("剩余容量：100%"))
+
+        # 测试名称合法性校验
+        self.assertTrue(plausible_name("能量突击步枪", "P4-AR Rifle"))
+        self.assertFalse(plausible_name("OUTPOST", "OUTPOST"))  # 地点大写
+        self.assertFalse(plausible_name("短", "A"))  # 字数不足
+        self.assertFalse(plausible_name("聊天：你好", "Hello: World"))  # 含冒号
+
+        # 测试说明框标题与中英对提取
+        T = lambda text, x, y: OcrToken(text=text, confidence=0.9, box=(x, y, max(20, len(text) * 9), 18))
+        toks = [
+            T("实准枪口补偿器2", 900, 300),
+            T("VeraCompensator2", 900, 324),
+            T("体积：20uSCU", 900, 348),
+        ]
+        name, sure = tooltip_pick(toks, (960, 540))
+        self.assertEqual(name, ("实准枪口补偿器2", "VeraCompensator2"))
+        self.assertTrue(sure)
+        self.assertEqual(tooltip_name(toks, (960, 540)), ("实准枪口补偿器2", "VeraCompensator2"))
+
+        # 聊天和非说明框杂字应被排除
+        chat = [
+            T("[全局]RevtheWanderer:", 40, 700),
+            T("thewayifigureditoutwasgoingoutsie", 40, 724),
+        ]
+        self.assertIsNone(tooltip_pick(chat, (960, 540))[0])
+
+    def test_fold_deduplication(self):
+        from sc_mining.trade.console import _fold as console_fold
+        from sc_mining.trade.names import _fold_en
+        self.assertEqual(console_fold("P4-AR Rifle (Custom)"), _fold_en("P4-AR Rifle (Custom)"))
+        self.assertEqual(console_fold("Omnisky II"), "omniskyii")
+
 
 if __name__ == "__main__":
     unittest.main()
