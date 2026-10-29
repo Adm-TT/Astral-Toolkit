@@ -29,18 +29,38 @@ def gpu_available():
         return False
 
 
+_last_error = ""
+
+
+def last_ocr_error():
+    return _last_error
+
+
+def is_gpu_preferred():
+    if os.environ.get("DUBHE_OCR_CPU") == "1":
+        return False
+    try:
+        from . import settings
+        cfg = settings.load()
+        dev = cfg.get("ocr_device")
+        if dev is not None:
+            return str(dev).lower() == "gpu"
+        return bool(cfg.get("always_use_gpu", True))
+    except Exception:
+        return True
+
+
 def ocr_device():
-    """识别现在实际在哪算：「显卡」/「CPU」。主程序：显卡 OCR 小进程开着就是显卡（2026-10-27）"""
-    from ..system import gpu_ocr
-    if not gpu_ocr.is_worker():
-        return gpu_ocr.device()
+    """识别现在实际在哪算：「显卡」/「CPU」"""
     try:
         eng = rapidocr().eng
         sess = eng.text_det.infer.session if hasattr(eng.text_det, "infer") else eng.text_det.session
         return "显卡" if "DmlExecutionProvider" in sess.get_providers() else "CPU"
     except Exception:
         return "CPU"
-_lock = threading.Lock()
+
+
+_lock = threading.RLock()
 
 
 def lower_priority():
@@ -114,14 +134,6 @@ class _Locked:
         native = kw.pop("_native", False)
         td = getattr(self.eng, "text_det", None)
         t0 = time.perf_counter()
-        if a and kw.get("use_det", True) is not False:   # 要找字：显卡 OCR 小进程开着就交给它（采矿助手开着时）
-            from ..system import gpu_ocr
-            if not gpu_ocr.is_worker():
-                gpu_ocr.revive()
-            if not gpu_ocr.is_worker() and gpu_ocr.active():
-                r = gpu_ocr.run(a[0], dict(kw, _native=native), urgent)
-                if r is not None:
-                    return r
         try:
             if not native or td is None or not hasattr(td, "limit_side_len") or not a:
                 return self.eng(*a, **kw)
@@ -143,29 +155,41 @@ class _Locked:
 
 
 def rapidocr():
-    """全程序共用的一个 RapidOCR 实例（第一次调用时加载）"""
-    global _engine
+    """全程序共用的一个 RapidOCR 实例（按用户设置在主进程直接加载 DirectML 或 CPU）"""
+    global _engine, _last_error
     with _lock:
         if _engine is None:
             try:
                 from rapidocr_onnxruntime import RapidOCR
             except ImportError:
                 from rapidocr import RapidOCR
-            # 游戏里的字都是正的：关掉「文字是不是倒过来」的判断（每行文字少算一次）
             opts = {"intra_op_num_threads": OCR_THREADS, "inter_op_num_threads": 1, "use_cls": False}
-            from ..system.gpu_ocr import is_worker
-            # 显卡（DirectML）只在显卡 OCR 小进程里用：主程序一载入显卡驱动就多占 300 多 MB、关了也不还（2026-10-27）
-            if USE_GPU and is_worker() and gpu_available():
+            want_gpu = USE_GPU and is_gpu_preferred() and gpu_available()
+            if want_gpu:
                 opts.update({f"{part}_use_dml": True for part in GPU_PARTS})
             try:
                 eng = RapidOCR(**opts)
-            except Exception:
+            except Exception as e:
+                _last_error = str(e)
                 try:
-                    eng = RapidOCR(intra_op_num_threads=OCR_THREADS, inter_op_num_threads=1)
+                    eng = RapidOCR(intra_op_num_threads=OCR_THREADS, inter_op_num_threads=1, use_cls=False)
                 except Exception:
                     eng = RapidOCR()
             _engine = _Locked(eng)
     return _engine
+
+
+def set_ocr_device(target):
+    """切换 OCR 识别模式：'gpu' 或 'cpu'"""
+    global _engine, _last_error
+    with _lock:
+        target = (target or "gpu").lower()
+        from . import settings
+        settings.update(ocr_device=target, always_use_gpu=(target == "gpu"))
+        _engine = None
+        _last_error = ""
+        rapidocr()
+        return ocr_device()
 
 
 def overlay_rect():

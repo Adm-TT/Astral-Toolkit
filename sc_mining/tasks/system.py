@@ -129,17 +129,17 @@ def status():
            "frozen": __import__("sc_mining.core.paths", fromlist=["FROZEN"]).FROZEN,
            "vpk": __import__("sc_mining.core.paths", fromlist=["VELOPACK"]).VELOPACK}
     try:
-        from ..system import gpu_ocr
-        from ..core.perf import gpu_available
-        out["ocr_device"] = gpu_ocr.device()
+        from ..core.perf import ocr_device, gpu_available, last_ocr_error
+        cur_dev = ocr_device()
+        out["ocr_device"] = cur_dev
         out["gpu_available"] = gpu_available()
-        out["gpu_active"] = gpu_ocr.active()
-        out["gpu_error"] = gpu_ocr.info().get("last_error", "")
+        out["ocr_mode"] = cfg.get("ocr_device", "gpu")
+        out["ocr_error"] = last_ocr_error()
     except Exception:
         out["ocr_device"] = "CPU"
         out["gpu_available"] = False
-        out["gpu_active"] = False
-        out["gpu_error"] = ""
+        out["ocr_mode"] = "cpu"
+        out["ocr_error"] = ""
     if WIN:
         from ..core.perf import game_size
         out["game_size"] = game_size()                          # 游戏画面多大：低于 1080 高时页面上提醒识别会不准
@@ -836,6 +836,9 @@ def set_settings(**kw):
         if k in kw:
             kw[k] = bool(kw[k])
         allowed.add(k)
+    if "ocr_device" in kw:
+        allowed.add("ocr_device")
+        kw["ocr_device"] = str(kw["ocr_device"]).lower()
     clear_train = kw.get("train_upload") is False          # 关掉「帮助改进识别」：先存「关」，再删本地攒着没发的
     if "hud_scale" in kw:
         kw["hud_scale"] = min(1.0, max(0.5, float(kw["hud_scale"])))
@@ -874,15 +877,16 @@ def set_settings(**kw):
             pass
     if any(k in kw for k in ("anti_afk", "afk_seconds", "autorun", "autorun_sprint", "admin")):
         helpers.start()                                   # 只有辅助相关的项变了才重启辅助进程
-    if "always_use_gpu" in kw:
-        try:
-            from ..system import gpu_ocr
-            if kw["always_use_gpu"]:
-                gpu_ocr.ensure_active(blocking=True)
-            else:
-                gpu_ocr.release_permanent()
-        except Exception:
-            pass
+    if "ocr_device" in kw or "always_use_gpu" in kw:
+        target = kw.get("ocr_device")
+        if target is None and "always_use_gpu" in kw:
+            target = "gpu" if kw["always_use_gpu"] else "cpu"
+        if target:
+            try:
+                from ..core.perf import set_ocr_device
+                set_ocr_device(target)
+            except Exception:
+                pass
     bus.publish("status", status())
     return cfg
 

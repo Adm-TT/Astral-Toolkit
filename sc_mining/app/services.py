@@ -266,9 +266,8 @@ def start_background():
     if settings.load().get("live_on"):
         _live.start()
     try:
-        from ..system import gpu_ocr
-        if gpu_ocr.is_permanent() and gpu_ocr.wanted():
-            gpu_ocr.ensure_active(blocking=False)
+        from ..core import perf
+        threading.Thread(target=perf.rapidocr, daemon=True, name="ocr-warmup").start()
     except Exception:
         pass
     try:

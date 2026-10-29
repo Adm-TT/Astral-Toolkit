@@ -2748,13 +2748,13 @@ PAGES.settings = () => {
     <div class="set"><div>帮助改进识别
       <p>F8 识别物品时，将名字那一行文字的小截图和正确名字发给作者（认错的都发，认对的抽一部分），用于改进识别。不含整屏截图。</p></div>
       <button class="switch ${c.train_upload !== false ? "on" : ""}" id="train-sw" aria-label="帮助改进识别"></button></div>
-    <div class="set"><div>显卡（GPU）加速识别
-      <p>利用 DirectML 驱动显卡加速文字识别（F8 物品识别、全屏扫描均走显卡，速度提升 2~4 倍）。<br>
-      当前状态：<b style="color:${s.gpu_active ? 'var(--ok,#2e7d32)' : (s.gpu_available ? 'var(--warn,#d9822b)' : 'var(--err,#d32f2f)')}">${esc(s.gpu_active ? '显卡 (DirectML)' : (s.gpu_available ? '未启动 (当前 CPU)' : '不可用 (环境未检测到 DirectML)'))}</b>
-      ${!s.gpu_available ? `<br><span class="muted" style="font-size:12px;color:var(--warn,#d9822b)">环境缺少 DirectML 支持。请在命令行运行：<code>.venv\\Scripts\\pip install onnxruntime-directml</code> 并重启天枢</span>` : ''}
-      ${s.gpu_error ? `<br><span class="muted" style="font-size:12px;color:var(--err,#d32f2f)">错误详情：${esc(s.gpu_error)}</span>` : ''}
+    <div class="set"><div>文字识别硬件 (OCR)
+      <p>选择文字识别（F8 物品识别、全屏扫描）使用的硬件设备。<br>
+      当前实际运行：<b style="color:${s.ocr_device === '显卡' ? 'var(--ok,#2e7d32)' : 'inherit'}">${esc(s.ocr_device || 'CPU')}</b>
+      ${!s.gpu_available && (c.ocr_device || 'gpu') === 'gpu' ? `<br><span class="muted" style="font-size:12px;color:var(--warn,#d9822b)">⚠️ 当前 Python 环境未检测到 DirectML 支持，已自动切换为 CPU 运行。<br>如需显卡加速，请在终端执行：<code>.venv\\Scripts\\pip install onnxruntime-directml</code></span>` : ''}
+      ${s.ocr_error ? `<br><span class="muted" style="font-size:12px;color:var(--err,#d32f2f)">错误详情：${esc(s.ocr_error)}</span>` : ''}
       </p></div>
-      <button class="switch ${c.always_use_gpu !== false ? "on" : ""}" data-set="always_use_gpu" aria-label="显卡加速识别"></button></div>
+      ${segH("ocr-device", [["gpu", "显卡 (GPU)"], ["cpu", "处理器 (CPU)"]], (c.ocr_device || (c.always_use_gpu !== false ? "gpu" : "cpu")), "文字识别硬件")}</div>
     <div class="set" style="border:0;padding:0"><div>导出日志
       <p>将运行日志、设置和系统信息打包到桌面，发给作者用于排查问题。不含聊天记录、浏览数据等个人信息。识别类问题（扫描、F8、导航）建议附上出现问题时的游戏截图。</p></div>
       <button class="btn" id="export-logs">导出日志</button></div></div>
@@ -2826,6 +2826,19 @@ PAGES.settings = () => {
   $("#ov-theme").onchange = async (e) => {
     try { state.status.settings = await api("set_settings", { hud_theme: e.target.value }); toast("已保存"); } catch (err) { toast(err.message); }
   };
+  const ocrDev = $("#ocr-device");
+  if (ocrDev) {
+    ocrDev.onchange = async (e) => {
+      try {
+        state.status.settings = await api("set_settings", { ocr_device: e.target.value });
+        state.status = await api("status");
+        renderPage();
+        toast(`已切换为${e.target.value === "gpu" ? "显卡 (GPU)" : "处理器 (CPU)"}`);
+      } catch (err) {
+        toast(err.message);
+      }
+    };
+  }
   $("#ov-move").onclick = async () => {
     state.overlayMove = !state.overlayMove;
     await api("overlay_move", { on: state.overlayMove });

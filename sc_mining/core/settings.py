@@ -33,7 +33,8 @@ DEFAULTS = {
     "theme": "dark",            # 窗口外观：dark 深色 / light 浅色（2026-10-25 AT 品牌配色）
     "ata": True,                # 窗口里显示阿塔（助手）
     "update_online": True,      # 启动时到网上检查新版本（只读一个小文件；下载要玩家点）
-    "always_use_gpu": True,     # 强制常驻使用显卡（GPU/DirectML）加速文字识别，小进程常驻后台
+    "ocr_device": "gpu",        # 文字识别设备：gpu (显卡 DirectML 加速) / cpu (处理器)
+    "always_use_gpu": True,     # 兼容旧配置项
     "train_upload": True,       # 帮助改进识别：认字的错题（一行字的小截图 + 正确答案）发给作者训练（2026-10-27 老大定）
     "feedback_upload": True,    # 问题反馈存好后自动发给作者（2026-10-27 老大定，设置页能关）
     "legacy_checked": False,    # 安装版第一次打开时找过旧版天枢、问过要不要导入（1.0.1）
