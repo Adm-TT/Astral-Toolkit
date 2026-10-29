@@ -21,7 +21,7 @@ RETRY_AFTER = 60                       # 起不来 / 坏了：这么多秒内不
 
 _lock = threading.Lock()               # 管理小进程（启动、结束）
 _io = threading.Lock()                 # 一次只送一张图
-_st = {"proc": None, "conn": None, "users": 0, "bad_at": 0.0, "device": "", "permanent": None}
+_st = {"proc": None, "conn": None, "users": 0, "bad_at": 0.0, "device": "", "permanent": None, "last_error": ""}
 
 
 def is_worker():
@@ -90,6 +90,7 @@ def _start():
             pass
         t.join(2)
         lst.close()
+        _st["last_error"] = f"小进程管道未连接（退出码：{proc.poll()}）"
         _kill(proc)
         return False
     lst.close()
@@ -97,16 +98,27 @@ def _start():
     try:
         while not conn.poll(0.2):                          # 等它载好模型；中途死了马上放弃
             if proc.poll() is not None or time.time() > end:
-                raise TimeoutError
+                raise TimeoutError("小进程未就绪超时或意外退出")
         tag, dev = conn.recv()
-    except Exception:                                      # 没起来 / 中途崩了（管道断了 poll 也会报错）：收尾、退回 CPU（复审 2026-10-27）
-        tag, dev = "", ""
+    except Exception as e:                                      # 没起来 / 中途崩了（管道断了 poll 也会报错）：收尾、退回 CPU（复审 2026-10-27）
+        tag, dev = "fail", str(e)
     if tag != "ready" or dev != "显卡":                 # 小进程里显卡没用上：留着也没意义
+        _st["last_error"] = f"小进程启动失败：tag={tag}, dev={dev}"
         conn.close()
         _kill(proc)
         return False
-    _st.update(proc=proc, conn=conn, device=dev)
+    _st.update(proc=proc, conn=conn, device=dev, last_error="")
     return True
+
+
+def info():
+    return {
+        "active": active(),
+        "device": device(),
+        "wanted": wanted(),
+        "permanent": is_permanent(),
+        "last_error": _st.get("last_error", "")
+    }
 
 
 _job = {"h": None}

@@ -130,9 +130,16 @@ def status():
            "vpk": __import__("sc_mining.core.paths", fromlist=["VELOPACK"]).VELOPACK}
     try:
         from ..system import gpu_ocr
+        from ..core.perf import gpu_available
         out["ocr_device"] = gpu_ocr.device()
+        out["gpu_available"] = gpu_available()
+        out["gpu_active"] = gpu_ocr.active()
+        out["gpu_error"] = gpu_ocr.info().get("last_error", "")
     except Exception:
         out["ocr_device"] = "CPU"
+        out["gpu_available"] = False
+        out["gpu_active"] = False
+        out["gpu_error"] = ""
     if WIN:
         from ..core.perf import game_size
         out["game_size"] = game_size()                          # 游戏画面多大：低于 1080 高时页面上提醒识别会不准
@@ -871,7 +878,7 @@ def set_settings(**kw):
         try:
             from ..system import gpu_ocr
             if kw["always_use_gpu"]:
-                gpu_ocr.ensure_active(blocking=False)
+                gpu_ocr.ensure_active(blocking=True)
             else:
                 gpu_ocr.release_permanent()
         except Exception:

@@ -80,7 +80,7 @@ class TestGpuOcrPermanent(unittest.TestCase):
              patch.object(settings, "load", return_value=dict(settings.DEFAULTS)):
             
             set_settings(always_use_gpu=True)
-            mock_ensure.assert_called_with(blocking=False)
+            mock_ensure.assert_called_with(blocking=True)
 
             set_settings(always_use_gpu=False)
             mock_release.assert_called_once()
