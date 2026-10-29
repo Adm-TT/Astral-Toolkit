@@ -128,6 +128,11 @@ def status():
            "game_events": game_events_dict,
            "frozen": __import__("sc_mining.core.paths", fromlist=["FROZEN"]).FROZEN,
            "vpk": __import__("sc_mining.core.paths", fromlist=["VELOPACK"]).VELOPACK}
+    try:
+        from ..system import gpu_ocr
+        out["ocr_device"] = gpu_ocr.device()
+    except Exception:
+        out["ocr_device"] = "CPU"
     if WIN:
         from ..core.perf import game_size
         out["game_size"] = game_size()                          # 游戏画面多大：低于 1080 高时页面上提醒识别会不准
@@ -820,7 +825,7 @@ def set_settings(**kw):
     if "theme" in kw and kw["theme"] not in ("dark", "light"):
         kw.pop("theme")
     allowed.add("theme")
-    for k in ("ata", "update_online", "feedback_upload", "train_upload"):
+    for k in ("ata", "update_online", "feedback_upload", "train_upload", "always_use_gpu"):
         if k in kw:
             kw[k] = bool(kw[k])
         allowed.add(k)
@@ -862,6 +867,15 @@ def set_settings(**kw):
             pass
     if any(k in kw for k in ("anti_afk", "afk_seconds", "autorun", "autorun_sprint", "admin")):
         helpers.start()                                   # 只有辅助相关的项变了才重启辅助进程
+    if "always_use_gpu" in kw:
+        try:
+            from ..system import gpu_ocr
+            if kw["always_use_gpu"]:
+                gpu_ocr.ensure_active(blocking=False)
+            else:
+                gpu_ocr.release_permanent()
+        except Exception:
+            pass
     bus.publish("status", status())
     return cfg
 

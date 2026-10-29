@@ -474,6 +474,8 @@ def main(open_ui=True, port=0, restart=False):
         try:
             services._live.stop_ev.set()
             services._nav.stop_ev.set()
+            from ..system import gpu_ocr
+            gpu_ocr.shutdown()
         except Exception:
             pass
         server.shutdown()

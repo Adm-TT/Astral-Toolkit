@@ -2739,6 +2739,9 @@ PAGES.settings = () => {
     <div class="set"><div>帮助改进识别
       <p>F8 识别物品时，将名字那一行文字的小截图和正确名字发给作者（认错的都发，认对的抽一部分），用于改进识别。不含整屏截图。</p></div>
       <button class="switch ${c.train_upload !== false ? "on" : ""}" id="train-sw" aria-label="帮助改进识别"></button></div>
+    <div class="set"><div>显卡（GPU）加速识别
+      <p>利用 DirectML 驱动显卡加速文字识别（F8 物品识别、全屏扫描均走显卡，识别速度提升 2~4 倍）。当前引擎：<b>${esc(s.ocr_device || (c.always_use_gpu !== false ? "显卡" : "CPU"))}</b></p></div>
+      <button class="switch ${c.always_use_gpu !== false ? "on" : ""}" data-set="always_use_gpu" aria-label="显卡加速识别"></button></div>
     <div class="set" style="border:0;padding:0"><div>导出日志
       <p>将运行日志、设置和系统信息打包到桌面，发给作者用于排查问题。不含聊天记录、浏览数据等个人信息。识别类问题（扫描、F8、导航）建议附上出现问题时的游戏截图。</p></div>
       <button class="btn" id="export-logs">导出日志</button></div></div>

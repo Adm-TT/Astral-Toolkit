@@ -21,7 +21,7 @@ RETRY_AFTER = 60                       # 起不来 / 坏了：这么多秒内不
 
 _lock = threading.Lock()               # 管理小进程（启动、结束）
 _io = threading.Lock()                 # 一次只送一张图
-_st = {"proc": None, "conn": None, "users": 0, "bad_at": 0.0, "device": ""}
+_st = {"proc": None, "conn": None, "users": 0, "bad_at": 0.0, "device": "", "permanent": None}
 
 
 def is_worker():
@@ -174,6 +174,53 @@ def _stop():
             _kill(proc)
 
 
+def is_permanent():
+    """是否开启常驻显卡 OCR（默认由 settings.json 的 always_use_gpu 决定）"""
+    if _st.get("permanent") is None:
+        try:
+            from ..core import settings
+            _st["permanent"] = bool(settings.load().get("always_use_gpu", True))
+        except Exception:
+            _st["permanent"] = True
+    return bool(_st.get("permanent"))
+
+
+def ensure_active(blocking=True):
+    """常驻启用显卡 OCR：小进程启动并在后台常驻，不随采矿助手退出而关闭。
+    blocking=False 时在后台异步启动，不卡顿主流程。"""
+    with _lock:
+        _st["permanent"] = True
+    if active() or not wanted() or time.time() - _st["bad_at"] < RETRY_AFTER:
+        return active()
+    if not blocking:
+        revive()
+        return active()
+    with _lock:
+        if active():
+            return True
+        if not _start():
+            _st["bad_at"] = time.time()
+        return active()
+
+
+def release_permanent():
+    """取消常驻显卡 OCR：如果当前采矿助手也没在用，则停止小进程归还系统内存"""
+    with _lock:
+        _st["permanent"] = False
+        if _st["users"] <= 0:
+            with _io:
+                _stop()
+
+
+def shutdown():
+    """主程序退出时彻底关闭小进程并清空状态"""
+    with _lock:
+        _st["permanent"] = None
+        _st["users"] = 0
+        with _io:
+            _stop()
+
+
 def acquire():
     """采矿助手开始：要用显卡（引用计数）。起不来不报错，照常用 CPU。返回现在是不是显卡"""
     with _lock:
@@ -186,15 +233,16 @@ def acquire():
 
 
 def revive():
-    """采矿助手还开着、小进程坏了：过了 RETRY_AFTER 秒在后台重新拉起（不挡识别，二审 2026-10-27）"""
-    if _st["users"] <= 0 or active() or time.time() - _st["bad_at"] < RETRY_AFTER or not wanted():
+    """采矿助手还开着或设置了常驻、小进程坏了：过了 RETRY_AFTER 秒在后台重新拉起（不挡识别，二审 2026-10-27）"""
+    need = _st["users"] > 0 or is_permanent()
+    if not need or active() or time.time() - _st["bad_at"] < RETRY_AFTER or not wanted():
         return
     if not _lock.acquire(blocking=False):
         return
 
     def go():
         try:
-            if _st["users"] > 0 and not active() and not _start():
+            if (_st["users"] > 0 or is_permanent()) and not active() and not _start():
                 _st["bad_at"] = time.time()
         finally:
             _lock.release()
@@ -203,10 +251,10 @@ def revive():
 
 
 def release():
-    """采矿助手结束：没人用了就结束小进程（内存还给系统）"""
+    """采矿助手结束：没人用了就结束小进程（内存还给系统，若常驻开启则保留）"""
     with _lock:
         _st["users"] = max(0, _st["users"] - 1)
-        if _st["users"] == 0:
+        if _st["users"] == 0 and not is_permanent():
             with _io:
                 _stop()
 
