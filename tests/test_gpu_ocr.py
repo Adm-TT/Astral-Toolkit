@@ -71,6 +71,38 @@ class TestOcrDeviceSwitch(unittest.TestCase):
             self.assertIn("ocr_device", st)
             self.assertIn("ocr_mode", st)
 
+    def test_cell_labels_tokens_reuse(self):
+        from unittest.mock import MagicMock
+        from sc_mining.tasks.hover import cell_labels
+        from sc_mining.trade.models import OcrToken
+
+        mock_img = MagicMock()
+        mock_img.size = (1920, 1080)
+        # 模拟鼠标在 (500, 500)，上方有品质标签 575Q 和数量 200x
+        # 盒子定义为 (x, y, w, h)，在鼠标上方 cw=124, ch=118 范围内
+        tokens = [
+            OcrToken("575Q", 99.0, (460, 430, 40, 20)),
+            OcrToken("200x", 99.0, (520, 430, 40, 20)),
+        ]
+        q, n = cell_labels(mock_img, (500, 500), tokens=tokens)
+        self.assertEqual(q, 575)
+        self.assertEqual(n, 200)
+
+    def test_cell_labels_native_param(self):
+        from unittest.mock import MagicMock, patch
+        from sc_mining.tasks.hover import cell_labels
+
+        mock_img = MagicMock()
+        mock_img.size = (1920, 1080)
+        mock_img.crop.return_value = mock_img
+
+        with patch("sc_mining.trade.ocr.recognize", return_value=[]) as mock_rec:
+            cell_labels(mock_img, (500, 500), tokens=None)
+            self.assertTrue(mock_rec.called)
+            # 确认调用了 native=True
+            _, kwargs = mock_rec.call_args
+            self.assertTrue(kwargs.get("native"))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -168,7 +168,8 @@ def cell_labels(img, cursor, tokens=None, size=None):
     if tokens is None:
         from ..trade.ocr import recognize
         box = (max(0, cx - cw), max(0, cy - ch), min(W, cx + cw), min(H, cy + ch // 6))
-        tokens = recognize(img.crop(box), urgent=True, offset=box[:2])
+        # native=True 避免小裁剪图被 RapidOCR 强行放大至 736px，提速 2~3 倍
+        tokens = recognize(img.crop(box), urgent=True, offset=box[:2], native=True)
     best_q = best_n = None
     for t in tokens:
         x, y, w, h = t.box
@@ -322,8 +323,11 @@ def hover_once(img=None):
     _last_hover.clear()
     _last_hover["at"] = "识别中"                          # 上一次 F8 后台还没查完的价格，不再往悬浮窗上写
     bus.runtime_log("触发 F8 物品悬停识别，截取画面...", tag="HOVER", level="INFO")
+    t_grab_0 = time.time()
     img = img or grab()
-    bus.update_preview(img, source="hover", force=True)
+    t_grab = time.time()
+    # 异步更新右下角截图预览，避免在关键路径上阻塞 50~150ms 的双重 JPEG 压缩与缩放
+    threading.Thread(target=bus.update_preview, args=(img,), kwargs={"source": "hover", "force": True}, daemon=True).start()
     t1 = time.time()
     bus.publish("hover", {"state": "working"})
     _item_hud("识别中…", 30)                          # 按下就有反应
@@ -332,7 +336,13 @@ def hover_once(img=None):
     t2 = time.time()
     if not name:
         msg = "未找到物品说明框。鼠标停在物品上，等说明框出现后再按"
-        bus.runtime_log(f"F8 未找到物品说明框 (耗时 {(t2 - t1) * 1000:.0f}ms)。请在说明框弹出后再次按下 F8", tag="HOVER", level="WARN")
+        ms_grab = (t_grab - t_grab_0) * 1000
+        ms_ocr = (t2 - t1) * 1000
+        bus.runtime_log(
+            f"F8 未找到物品说明框 (总耗时 {(t2 - t0) * 1000:.0f}ms: 截图 {ms_grab:.0f}ms, 识别[{where}] {ms_ocr:.0f}ms)。请在说明框弹出后再次按下 F8",
+            tag="HOVER",
+            level="WARN",
+        )
         bus.publish("hover", {"state": "miss", "msg": msg})
         _item_hud("未识别到物品\n鼠标停在物品上，等说明框出现后再按", 10)
         threading.Thread(target=C._hover_log, args=(img, tokens, None, f"识别({where}) {(t2 - t1) * 1000:.0f}ms"),
@@ -345,16 +355,28 @@ def hover_once(img=None):
         zh, en = canon
     at = time.strftime("%H:%M:%S")
     info = item_info(en, zh, loot=False)                   # 只用本机数据，很快
+    mineral = _is_mineral(zh, en)
     # 品质：说明框内容行（矿：925｜0.495 SCU）> 格子左上角 575Q > 没写就是 0（矿没读到就空着，让玩家自己填）
     # 数量：矿按说明框里的 SCU，其他按格子右上角的 200x，没有就是 1 个
     row_q, row_amt = tooltip_row(tokens)
     if row_q is None:
         row_q = tooltip_quality(tokens)                    # 「品质：650」这种写了字的
-    try:
-        cell_q, cell_n = cell_labels(img, (cx, cy))
-    except Exception:
-        cell_q, cell_n = None, None
-    mineral = _is_mineral(zh, en)
+    cell_q, cell_n = None, None
+    # 矿物直接由说明框提取数量和品质，跳过格子 OCR；非矿物优先复用 tokens，避免二次整图/局域推理
+    if not mineral:
+        can_reuse = False
+        if where == "整屏":
+            can_reuse = True
+        else:
+            cw, ch = int(img.width * 0.065), int(img.height * 0.11)
+            l, t, r, b = HOVER_REGION
+            box_hover = (int(img.width * l), int(img.height * t), int(img.width * r), int(img.height * b))
+            if cx - cw >= box_hover[0] and cy - ch >= box_hover[1] and cx + cw <= box_hover[2] and cy + ch // 6 <= box_hover[3]:
+                can_reuse = True
+        try:
+            cell_q, cell_n = cell_labels(img, (cx, cy), tokens=tokens if can_reuse else None)
+        except Exception:
+            cell_q, cell_n = None, None
     quality = row_q if row_q is not None else cell_q if cell_q is not None else (None if mineral else 0)
     if mineral:
         qty, unit = row_amt, "SCU"
@@ -380,7 +402,18 @@ def hover_once(img=None):
     _last_hover.update(at=at, id=None, lines=lines)
     _item_hud("\n".join(lines))                  # 没数据的行不显示；市场价查到了再补上
     t3 = time.time()
-    bus.runtime_log(f"F8 成功识别: {zh or en}" + (f" | 品质 {quality}" if quality is not None else "") + (f" | {qty_text(qty, unit)}" if qty else "") + f" (耗时 {(t3 - t0) * 1000:.0f}ms)", tag="HOVER", level="INFO")
+    ms_total = (t3 - t0) * 1000
+    ms_grab = (t_grab - t_grab_0) * 1000
+    ms_ocr = (t2 - t1) * 1000
+    ms_local = (t3 - t2) * 1000
+    bus.runtime_log(
+        f"F8 成功识别: {zh or en}"
+        + (f" | 品质 {quality}" if quality is not None else "")
+        + (f" | {qty_text(qty, unit)}" if qty else "")
+        + f" (总耗时 {ms_total:.0f}ms: 截图 {ms_grab:.0f}ms, 识别[{where}] {ms_ocr:.0f}ms, 解析 {ms_local:.0f}ms)",
+        tag="HOVER",
+        level="INFO",
+    )
     bus.publish("hover", {"state": "ok", "zh": zh, "en": en, "info": info, "market": None, "candidates": [],
                           "pending": True, "at": at, "quality": quality, "qty": qty, "unit": unit,
                           "tier": _tier(quality), "craft": craft})
