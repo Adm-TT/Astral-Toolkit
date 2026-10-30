@@ -165,5 +165,55 @@ class TestItemInspector(unittest.TestCase):
         self.assertEqual(console_fold("Omnisky II"), "omniskyii")
 
 
+def test_inspect_item_raw_and_canon(monkeypatch):
+    """返回里带纠正前的名字 raw 和汉化包标准名 canon；没对上时 canon 为 None"""
+    from sc_mining.trade import inspector, names
+    toks = [OcrToken("医疗芼", 90, (100, 50, 80, 20))]
+    monkeypatch.setattr(inspector, "_read_tooltip", lambda img, cur: (toks, ("医疗芼", "MedPenn"), "30-50%"))
+    monkeypatch.setattr(inspector, "cell_labels", lambda *a, **k: (None, 1))
+    monkeypatch.setattr(names, "canonical", lambda zh, en: ("医疗笔", "MedPen"))
+    res = inspector.inspect_item(MockImage(), (200, 500))
+    assert res["raw"] == ("医疗芼", "MedPenn") and res["canon"] == ("医疗笔", "MedPen") and res["sure"]
+    assert (res["zh"], res["en"]) == ("医疗笔", "MedPen")
+    monkeypatch.setattr(names, "canonical", lambda zh, en: None)
+    res = inspector.inspect_item(MockImage(), (200, 500))
+    assert res["raw"] == ("医疗芼", "MedPenn") and res["canon"] is None and not res["sure"]
+
+
+def test_hover_sends_raw_and_canon_to_train_data(monkeypatch):
+    """F8 收错题：传给 train_data.from_tooltip 的是「认成了什么」和「应该是什么」两组名字"""
+    import types
+    from sc_mining.tasks import hover as Hv
+    from sc_mining.system import train_data
+    toks = [OcrToken("医疗芼", 90, (100, 50, 80, 20))]
+    res = {"zh": "医疗笔", "en": "MedPen", "quality": 0, "qty": 1, "unit": "个", "sure": True, "craft": None,
+           "tokens": toks, "where": "30-50%", "raw": ("医疗芼", "MedPenn"), "canon": ("医疗笔", "MedPen")}
+    started = []
+
+    class FakeThread:
+        def __init__(self, target=None, args=(), kwargs=None, **_):
+            self.target, self.args = target, args
+
+        def start(self):
+            started.append((self.target, self.args))
+    monkeypatch.setattr(Hv, "WIN", False)
+    monkeypatch.setattr(Hv, "_off", lambda k: None)
+    monkeypatch.setattr(Hv, "inspect_item", lambda img, cur: dict(res))
+    monkeypatch.setattr(Hv, "item_info", lambda *a, **k: {})
+    monkeypatch.setattr(Hv, "_item_hud", lambda *a, **k: None)
+    monkeypatch.setattr(Hv, "_hover_lines", lambda *a, **k: [])
+    monkeypatch.setattr(Hv, "bus", types.SimpleNamespace(publish=lambda *a, **k: None, runtime_log=lambda *a, **k: None,
+                                                         update_preview=lambda *a, **k: None))
+    monkeypatch.setattr(Hv.threading, "Thread", FakeThread)
+    img = MockImage()
+    assert Hv.hover_once(img)["ok"]
+    sent = [a for t, a in started if t is train_data.from_tooltip]
+    assert sent == [(img, toks, ("医疗芼", "MedPenn"), ("医疗笔", "MedPen"))]
+    res.update(canon=None, sure=False)                    # 汉化包里没对上：不收
+    started.clear()
+    Hv.hover_once(img)
+    assert not [a for t, a in started if t is train_data.from_tooltip]
+
+
 if __name__ == "__main__":
     unittest.main()

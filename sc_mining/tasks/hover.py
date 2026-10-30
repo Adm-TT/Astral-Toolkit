@@ -223,7 +223,7 @@ def hover_once(img=None):
     craft = res["craft"]
     tokens = res["tokens"]
     where = res["where"]
-    name = (zh, en)
+    name = res.get("raw") or (zh, en)                      # 记日志、收错题用纠正前照字认出的名字
     at = time.strftime("%H:%M:%S")
     info = item_info(en, zh, loot=False)                   # 只用本机数据，很快
     head = (zh or en) + (f"｜品质 {quality}" if quality is not None else "") + (f"｜{qty_text(qty, unit)}" if qty else "")
@@ -258,7 +258,7 @@ def hover_once(img=None):
             + ("" if canon else "｜汉化包里没对上"))
     threading.Thread(target=_hover_more, args=(at, zh, en, info, quality, bool(canon)), daemon=True, name="hover-more").start()
     threading.Thread(target=C._hover_log, args=(img, tokens, name, note), daemon=True).start()
-    if canon:                                              # 帮助改进识别：名字那几行 + 汉化包里的正确名字（后台存，不拖慢 F8）
+    if res.get("canon"):                                   # 帮助改进识别：名字那几行 + 汉化包里的正确名字（后台存，不拖慢 F8）
         from ..system import train_data
-        threading.Thread(target=train_data.from_tooltip, args=(img, tokens, name, canon), daemon=True).start()
+        threading.Thread(target=train_data.from_tooltip, args=(img, tokens, name, res["canon"]), daemon=True).start()
     return {"ok": True, "ms": int((t3 - t0) * 1000)}

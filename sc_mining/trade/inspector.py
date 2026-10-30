@@ -415,6 +415,8 @@ def inspect_item(img, cursor: Tuple[int, int], tokens=None, where=None) -> Optio
         "qty": 数量 (float | int),
         "unit": 单位 ("SCU" | "个"),
         "sure": bool (是否通过标准对照表纠正),
+        "raw": (中文, 英文) 纠正前照字认出的名字,
+        "canon": (中文, 英文) 汉化包里对上的标准名，没对上为 None,
         "craft": list | None (蓝图材料槽反推详情),
         "tokens": tokens,
         "where": 识别区域标签 ("30-50%" / "50-70%" / "整屏" 等)
@@ -433,6 +435,7 @@ def inspect_item(img, cursor: Tuple[int, int], tokens=None, where=None) -> Optio
         return None
 
     zh, en = name
+    raw = (zh, en)
     canon = canonical(zh, en)
     if canon:
         zh, en = canon
@@ -482,6 +485,8 @@ def inspect_item(img, cursor: Tuple[int, int], tokens=None, where=None) -> Optio
         "qty": qty,
         "unit": unit,
         "sure": bool(canon),
+        "raw": raw,                     # 错题收集要「认成了什么 → 应该是什么」
+        "canon": tuple(canon) if canon else None,
         "craft": craft,
         "tokens": tokens,
         "where": where,
