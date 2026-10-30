@@ -454,7 +454,7 @@ def main(open_ui=True, port=0, restart=False):
         pass
     tray = None
     from . import window
-    use_wv = open_ui and window.available()         # 2026-10-30 阶段 0：有 pywebview 就用自己的窗口，没有走原来的 ATShell → Edge
+    use_wv = open_ui and shell_exe() is None and window.available()   # 窗口顺序 ATShell → PyWebview → Edge（2026-10-30 实测：关窗后 ATShell 整个退出，私有内存 113 MB；PyWebview 藏托盘仍占 420 MB）
     if open_ui:
         from .tray import Tray
         # on_open 还是 show_window：PyWebview 窗口在的时候它直接调 window.show()；PyWebview 打不开退回 Edge 时照旧
