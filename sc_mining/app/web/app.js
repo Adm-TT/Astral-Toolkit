@@ -224,7 +224,8 @@ function connect() {
       renderHud();
     } else if (kind === "status") {
       state.status = data; renderTop();
-      if (page === "settings") renderPage();
+      const ocrEl = page === "settings" && $("#ocr-state");       // 设置页只改显卡状态那一小段，不整页重画（每秒一次会打断下拉框、输入框）
+      if (ocrEl) ocrEl.innerHTML = ocrStateHtml(data, data.settings || {});
     } else if (kind === "scan") {
       if (!state.scan || state.scan.at !== data.at) state.scans = [data, ...state.scans].slice(0, 12);
       state.scan = data;
@@ -2708,6 +2709,13 @@ function goalsDraw() {
 }
 
 // ================================================================ 设置与更新
+// 设置页「文字识别硬件」里的当前状态（实际在哪算、为什么没用上显卡）：status 每秒推一次，只更新这一段
+function ocrStateHtml(s, c) {
+  return `当前实际运行：<b style="color:${s.ocr_device === '显卡' ? 'var(--ok,#2e7d32)' : 'inherit'}">${esc(s.ocr_device || 'CPU')}</b>
+      ${!s.gpu_available && (c.ocr_device || 'gpu') === 'gpu' ? `<br><span class="muted" style="font-size:12px;color:var(--warn,#d9822b)">⚠️ 当前 Python 环境未检测到 DirectML 支持，已自动切换为 CPU 运行。<br>如需显卡加速，请在终端执行：<code>.venv\\Scripts\\pip install onnxruntime-directml</code></span>` : ''}
+      ${s.ocr_error ? `<br><span class="muted" style="font-size:12px;color:var(--err,#d32f2f)">错误详情：${esc(s.ocr_error)}</span>` : ''}`;
+}
+
 PAGES.settings = () => {
   const s = state.status || {};
   const c = s.settings || {};
@@ -2767,9 +2775,7 @@ PAGES.settings = () => {
       <button class="switch ${c.train_upload !== false ? "on" : ""}" id="train-sw" aria-label="帮助改进识别"></button></div>
     <div class="set"><div>文字识别硬件 (OCR)
       <p>选择文字识别（F8 物品识别、全屏扫描）使用的硬件设备。<br>
-      当前实际运行：<b style="color:${s.ocr_device === '显卡' ? 'var(--ok,#2e7d32)' : 'inherit'}">${esc(s.ocr_device || 'CPU')}</b>
-      ${!s.gpu_available && (c.ocr_device || 'gpu') === 'gpu' ? `<br><span class="muted" style="font-size:12px;color:var(--warn,#d9822b)">⚠️ 当前 Python 环境未检测到 DirectML 支持，已自动切换为 CPU 运行。<br>如需显卡加速，请在终端执行：<code>.venv\\Scripts\\pip install onnxruntime-directml</code></span>` : ''}
-      ${s.ocr_error ? `<br><span class="muted" style="font-size:12px;color:var(--err,#d32f2f)">错误详情：${esc(s.ocr_error)}</span>` : ''}
+      <span id="ocr-state">${ocrStateHtml(s, c)}</span>
       </p></div>
       ${segH("ocr-device", [["gpu", "显卡 (GPU)"], ["cpu", "处理器 (CPU)"]], (c.ocr_device || (c.always_use_gpu !== false ? "gpu" : "cpu")), "文字识别硬件")}</div>
     <div class="set" style="border:0;padding:0"><div>导出日志
