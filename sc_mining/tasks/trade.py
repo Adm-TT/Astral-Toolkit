@@ -10,105 +10,45 @@ import re
 import threading
 
 
-# ---------------------------------------------------------------- 依赖转发辅助
-def _services():
-    from ..app import services
-    return services
-
-
-def api(fn):
-    """API 路由注册装饰器（兼容主服务路由表）"""
-    try:
-        from ..app.services import api as _reg
-        return _reg(fn)
-    except Exception:
-        try:
-            from ..app.services import API
-            API[fn.__name__] = fn
-        except Exception:
-            pass
-    return fn
+# ---------------------------------------------------------------- 依赖：别的任务、悬浮窗
+# 2026-10-30 重构阶段 1：直接调别的任务模块和 app.hud_state，不再经 services 转发、出错也不再回头找 services 兜底。
+# 别的任务在函数里 import（任务之间互相引用，顶层 import 会循环），取模块属性，测试换掉的名字能打中。
+from ..app.hud_state import _item_hud
 
 
 def _nav_search(q=""):
-    try:
-        return _services().nav_search(q=q)
-    except Exception:
-        try:
-            from .navigation import nav_search as ns
-            return ns(q=q)
-        except Exception:
-            return {"rows": [], "total": 0}
+    from . import navigation
+    return navigation.nav_search(q=q)
 
 
 def _craft_search(q=""):
-    try:
-        return _services().craft_search(q=q)
-    except Exception:
-        try:
-            from .goals import craft_search as cs
-            return cs(q=q)
-        except Exception:
-            return []
+    from . import goals
+    return goals.craft_search(q=q)
 
 
 def _wikelo_search(q=""):
-    try:
-        return _services().wikelo_search(q=q)
-    except Exception:
-        try:
-            from .goals import wikelo_search as ws
-            return ws(q=q)
-        except Exception:
-            return []
+    from . import goals
+    return goals.wikelo_search(q=q)
 
 
 def _goal_for(*names):
-    try:
-        return _services()._goal_for(*names)
-    except Exception:
-        try:
-            from .goals import _goal_for as gf
-            return gf(*names)
-        except Exception:
-            return None
+    from . import goals
+    return goals._goal_for(*names)
 
 
 def _goal_text(g, q=None, lots=None):
-    try:
-        return _services()._goal_text(g, q, lots)
-    except Exception:
-        try:
-            from .goals import _goal_text as gt
-            return gt(g, q, lots)
-        except Exception:
-            return ""
+    from . import goals
+    return goals._goal_text(g, q, lots)
 
 
 def _nav_objects():
-    try:
-        from . import navigation as n_mod
-        return n_mod._place_row, n_mod._places, n_mod._nav
-    except Exception:
-        s = _services()
-        return getattr(s, "_place_row", None), getattr(s, "_places", {}), getattr(s, "_nav", None)
+    from . import navigation as n_mod
+    return n_mod._place_row, n_mod._places, n_mod._nav
 
 
 def _get_last_hover():
-    try:
-        from .hover import _last_hover
-        return _last_hover
-    except Exception:
-        return getattr(_services(), "_last_hover", {})
-
-
-def _item_hud(text):
-    hud_fn = getattr(_services(), "_item_hud", None)
-    if hud_fn:
-        try:
-            hud_fn(text)
-        except Exception:
-            pass
+    from . import hover
+    return hover._last_hover
 
 
 nav_search = _nav_search
@@ -118,7 +58,6 @@ wikelo_search = _wikelo_search
 
 # ================================================================ 全局搜索
 
-@api
 def search(q=""):
     """一个输入框搜所有东西：物品、地点、矿、蓝图、维科洛兑换"""
     q = (q or "").strip()
@@ -150,7 +89,6 @@ def search(q=""):
 
 # ================================================================ 物品：在哪买 / 同款 / 掉落 / 维科洛
 
-@api
 def item_search(q=""):
     """物品查询搜索（1.6.41 起商店、掉落、汉化包一起搜，见 itemsearch.py）。
     src：shop 商店有数据 / loot 只在掉落数据里 / loc 商店和掉落数据里都没有（只有汉化包里有名字）"""
@@ -190,7 +128,6 @@ def _zh_of(en):
         return ""
 
 
-@api
 def item_info(name="", zh="", id=None, loot=True, exact=False):
     """exact=True：从物品查询 / 顶上搜索框的结果点进来的（名字是准的）。
     掉落明细本机没有时不上网等（loot 里给 pending），窗口再调 item_loot 后台取（2026-10-28 用户反馈卡 10 秒）"""
@@ -205,7 +142,6 @@ def item_info(name="", zh="", id=None, loot=True, exact=False):
     return d
 
 
-@api
 def item_loot(name="", zh=""):
     """物品查询里掉落那一块：明细本机没有时窗口在后面单独调这个（会上网，最多等 15 秒，不挡别的）"""
     try:
@@ -215,7 +151,6 @@ def item_loot(name="", zh=""):
         return {"loot": {"error": f"掉落数据出错：{e}"}}
 
 
-@api
 def nav_shop(shop="", place=""):
     """物品查询里点一处商店 → 导航过去（2026-10-28 用户定）。先找主城 / 空间站里这家店的点（城里导航），
     没有就导航到这个地点本身（星图）"""
@@ -267,7 +202,6 @@ def trade():
     return _trade
 
 
-@api
 def market_lookup(q=""):
     t = trade()
     items, err = t.lookup(q)
@@ -275,7 +209,6 @@ def market_lookup(q=""):
                                          "src": i.id.split(":")[0].upper() if ":" in i.id else "UEX"} for i in items[:15]]}
 
 
-@api
 def market_prices(id="", quality="q0", op="sell"):
     out, results = _market_rows(id, quality, op)
     if results is not None:
@@ -313,7 +246,6 @@ def _market_rows(id, quality="q0", op="sell"):
 
 # ================================================================ 找矿点 / 制造
 
-@api
 def mineral_search(q=""):
     from ..mining.data import SIGNATURES
     from ..mining.gems import GEMS
@@ -353,7 +285,6 @@ def _mine_nav(loc, mineral):
     return {"kind": "hint", "hint": f"在星图中量子跳跃到 {zh_name(loc)}"}
 
 
-@api
 def mineral_info(name=""):
     from ..mining.data import best_price, REFINERIES, RARITY
     from ..core.i18n import mineral_zh, station_zh

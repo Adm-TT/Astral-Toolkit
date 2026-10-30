@@ -9,49 +9,15 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime
 from decimal import Decimal
 
-# ---------------------------------------------------------------- 依赖转发辅助
-def _services():
-    from ..app import services
-    return services
-
-
-def api(fn):
-    """API 路由注册装饰器（兼容主服务路由表）"""
-    try:
-        from ..app.services import api as _reg
-        return _reg(fn)
-    except Exception:
-        try:
-            from ..app.services import API
-            API[fn.__name__] = fn
-        except Exception:
-            pass
-    return fn
-
-
-def trade():
-    return _services().trade()
-
-
-def mineral_search(q=""):
-    try:
-        return _services().mineral_search(q=q)
-    except Exception:
-        return []
-
-
-def item_search(q=""):
-    try:
-        return _services().item_search(q=q)
-    except Exception:
-        return []
+# ---------------------------------------------------------------- 依赖：交易库、别的任务
+# 2026-10-30 重构阶段 1：交易库和物品/矿物搜索直接用 tasks.trade 的（以前经 services 转发），出错不再吞掉。
+from .trade import trade, item_search, mineral_search
 
 
 def _invalidate_short():
-    try:
-        _services()._SHORT["t"] = 0.0
-    except Exception:
-        pass
+    """库存变了：目标缺口缓存作废（缓存在 tasks.goals）"""
+    from . import goals
+    goals._SHORT["t"] = 0.0
 
 
 def _is_mineral(zh, en):
@@ -194,7 +160,6 @@ def _row_value(prices, item_id, qkey, ukey, raw):
 
 # ---------------------------------------------------------------- 库存展示与操作
 
-@api
 def stock():
     """库存页：每一行（地点、仓位、类别、最后变动、目标占用、不给目标用、估值）、左边的地点树（带仓位）、当前位置、最近记录"""
     from ..crafting import stockplaces as SP
@@ -337,7 +302,6 @@ def _raw_amount(qty, ukey, allow_zero=False):
     return n
 
 
-@api
 def stock_add(id="", qty=1, quality="", location=""):
     _invalidate_short()
     from ..trade.console import _quality
@@ -359,14 +323,12 @@ def stock_add(id="", qty=1, quality="", location=""):
     return stock()
 
 
-@api
 def craft_slots_for(en="", zh=""):
     """入库时：制造出来的东西有哪些材料槽要填品质（1.6.67）；不是能制造的返回 []"""
     from ..crafting.crafting import for_item, craft_slots
     return craft_slots(for_item(en, zh)) if (en or zh) else []
 
 
-@api
 def stock_add_named(name="", qty=0, unit="", quality="", location="", en="", zh="", kind="", id="", note="", source="", bin=None, craft=None):
     """库存页手动入库：名字（中文或英文；矿物、材料、物品都行）、数量、单位（个 / SCU / uSCU）、品质、位置、备注。
     从联想里点选的会带上 en / zh / kind，直接用，不再猜；矿物默认按 SCU，其他默认按个；交易库里没有的自动建成本地物品。
@@ -410,7 +372,6 @@ def stock_add_named(name="", qty=0, unit="", quality="", location="", en="", zh=
     return out
 
 
-@api
 def stock_suggest(q=""):
     """手动入库的名字联想：矿物、交易库里的物品、汉化包里的物品名，中文 / 英文 / 名字的一部分 / 错一两个字都行。
     返回 [{zh, en, kind: 矿物 / 物品, unit}]，最多 12 个"""
@@ -439,7 +400,6 @@ def stock_suggest(q=""):
     return out[:12]
 
 
-@api
 def stock_set_quality(id="", qkey="", location="", ukey="", quality="", note=""):
     """改一行库存的品质（比如「未知」改成 650；空着 = 未知）：同一批数量从旧品质挪到新品质，一次记录、能撤销"""
     _invalidate_short()
@@ -460,7 +420,6 @@ def stock_set_quality(id="", qkey="", location="", ukey="", quality="", note="")
     return stock()
 
 
-@api
 def stock_undo(batch=""):
     _invalidate_short()
     try:
@@ -480,7 +439,6 @@ def _row_key(id, qkey, location, ukey):
     return StockKey(id, qkey, location, ukey)
 
 
-@api
 def stock_out(id="", qkey="", location="", ukey="", qty="", reason="", note=""):
     """出库：卖了、用掉、交了维科洛……（qty 按这一行显示的单位：SCU 或 个）"""
     _invalidate_short()
@@ -491,7 +449,6 @@ def stock_out(id="", qkey="", location="", ukey="", qty="", reason="", note=""):
     return stock()
 
 
-@api
 def stock_set_qty(id="", qkey="", location="", ukey="", qty="", note=""):
     """改数量：在游戏里数完直接改成实际数（可以改成 0）"""
     _invalidate_short()
@@ -503,7 +460,6 @@ def stock_set_qty(id="", qkey="", location="", ukey="", qty="", note=""):
     return stock()
 
 
-@api
 def stock_move(id="", qkey="", location="", ukey="", qty="", to="", note="", bin=None):
     """移库：搬到别的地点（qty 空着 = 整行都搬）"""
     _invalidate_short()
@@ -522,7 +478,6 @@ def stock_move(id="", qkey="", location="", ukey="", qty="", to="", note="", bin
     return out
 
 
-@api
 def stock_relocate(location="", to="", bin=None):
     """「未归类」里的一个位置（以前手打的，对不上地点列表）：整个归到选好的地点"""
     _invalidate_short()
@@ -536,7 +491,6 @@ def stock_relocate(location="", to="", bin=None):
     return out
 
 
-@api
 def stock_keep_custom(location=""):
     """「未归类」里的位置其实没错（比如船名）：留下来当自己的地点"""
     from ..crafting import stockplaces as SP
@@ -553,7 +507,6 @@ def stock_keep_custom(location=""):
     return stock()
 
 
-@api
 def stock_places():
     """选地点用：游戏里所有能存东西的地方（按星系、星球排好）、自己的地点、当前位置"""
     from ..crafting import stockplaces as SP
@@ -562,7 +515,6 @@ def stock_places():
             "here": SP.current_place(), "last": t.db.get("last_location", ""), "bins": _bins(t)}
 
 
-@api
 def stock_place_add(name=""):
     """选地点时自己写的名字：能对上列表的就用列表里的；对不上的检查一下（不能只有数字）记成自己的地点"""
     from ..crafting import stockplaces as SP
@@ -576,7 +528,6 @@ def stock_place_add(name=""):
     return {"label": label, "zh": label, "en": "", "sys_zh": "", "path": label, "kind": "其他", "custom": True}
 
 
-@api
 def stock_bin_save(place="", name="", desc="", default=False, old=""):
     """新建仓位 / 改仓位（名字、描述、是不是默认）。改名时这个仓位里的东西一起换过去（一笔移库，能撤销）"""
     from ..crafting import stockplaces as SP
@@ -615,7 +566,6 @@ def stock_bin_save(place="", name="", desc="", default=False, old=""):
     return out
 
 
-@api
 def stock_bin_delete(place="", name=""):
     """删仓位：里面的东西放回这个地点的总仓（一笔移库，能撤销）"""
     from ..crafting import stockplaces as SP
@@ -639,7 +589,6 @@ def stock_bin_delete(place="", name=""):
     return out
 
 
-@api
 def stock_reserve(id="", qkey="", location="", ukey="", on=True):
     """这一行「不给目标用」（比如留着卖的）：目标不算它；再点一次取消"""
     from ..crafting import goals as G
@@ -655,7 +604,6 @@ def stock_reserve(id="", qkey="", location="", ukey="", on=True):
     return stock()
 
 
-@api
 def stock_ledger(start="", end="", type="", place="", q="", page=1, size=20):
     """仓储流水：按日期（本地日期，含两头）、类型、地点、物品名筛选，分页。新的在前"""
     t = trade()
@@ -690,7 +638,6 @@ def stock_ledger(start="", end="", type="", place="", q="", page=1, size=20):
     return {"rows": rows, "total": len(out), "page": page, "pages": pages, "size": size, "types": list(LEDGER_TYPES), "places": places}
 
 
-@api
 def stock_prices():
     """库存里有品质的东西去玩家市场（UEX / SCM）查一遍价（同时查，结果缓存 1 小时），查完重算估值"""
     from ..trade.providers.http import quality_group
