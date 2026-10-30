@@ -66,6 +66,8 @@ def star_ids():
     """星图里各个点的编号（data/starmap.json 的 points[].i）"""
     if not hasattr(star_ids, "v"):
         sm = json.loads((ROOT / "data" / "starmap.json").read_text(encoding="utf-8"))
+        if sm.get("source") != "unpack":      # 网站版星图没有站的编号：派罗站的 point_id 会悄悄丢掉（审查 2026-10-30）
+            print("⚠ data/starmap.json 不是解包版（source≠unpack），派罗拉格朗日点站的 point_id 加不上；先跑 tools/unpack_starmap.py --write")
         star_ids.v = {q["i"] for q in sm.get("points") or [] if q.get("i")}
     return star_ids.v
 
