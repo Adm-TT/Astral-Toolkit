@@ -8,13 +8,9 @@ FILE = USER / "settings.json"
 
 DEFAULTS = {
     "admin": None,              # True = 每次都用管理员身份打开；False = 不用；None = 还没问过
-    "anti_afk": False,          # 防挂机（2026-10-27 老大：比较敏感，默认关、放到设置页最下面；已经开着的保持原样）
-    "afk_seconds": 200,         # 多少秒没操作游戏就动一下（再加 1~30 秒随机，最晚约 3.8 分钟）。1.6.70 用户定默认 200
-                                # 实测（2026-10-21 游戏日志）：没操作约 5 分钟就会被踢，留一半余量
-    "afk_v3": False,            # 已经把旧版太长的防挂机时间改过一次
-    "afk_v4": False,            # 已经把旧默认 120 秒改成新默认 200 秒（只改一次）
+                                # 防挂机（anti_afk / afk_seconds / afk_v3 / afk_v4）2026-10-30 老大定删掉；老设置文件里的这几项读取时自动忽略
     "keys_v5": False,           # 已经把老玩家的「记录路标」「一键定位」热键清掉（只清一次，2026-10-27 用户定）
-    "autorun": False,           # 双击 W 自动跑（同上，默认关）
+    "autorun": False,           # 双击 W 自动跑（2026-10-27 老大：比较敏感，默认关）
     "autorun_sprint": True,     # 自动跑时同时按住 Shift（冲刺）
     "double_tap_ms": 250,       # 两次按 W 间隔多短算双击
     "game_log": None,           # 游戏日志 Game.log 的位置（自动找到后记下）
@@ -48,9 +44,6 @@ DEFAULTS = {
 }
 
 
-AFK_MAX = 240                   # 防挂机间隔上限（秒）：游戏约 5 分钟踢人，加上随机的 30 秒也要留余量
-
-
 def load():
     with _LOCK:                                   # 迁移时的读-改-写也要连着（老大审查 2026-10-28：和 update 交错会把新设置写回旧的）
         return _load()
@@ -73,24 +66,9 @@ def _load():
     if not isinstance(data, dict):
         data = {}
     cfg = {**DEFAULTS, **{k: v for k, v in data.items() if k in DEFAULTS}}
-    try:
-        cfg["afk_seconds"] = int(cfg["afk_seconds"])
-    except (TypeError, ValueError):               # 手改坏了的设置文件：别每次启动都崩（细查 2026-10-28）
-        cfg["afk_seconds"] = DEFAULTS["afk_seconds"]
-    if data and not cfg["afk_v3"]:
-        # 以前以为 15 分钟才踢（默认 690 秒），实际约 5 分钟：超过 4 分钟的一律改回新默认（只改一次）
-        if cfg["afk_seconds"] > AFK_MAX:
-            cfg["afk_seconds"] = DEFAULTS["afk_seconds"]
-        cfg["afk_v3"] = True
-        changed = True
-    else:
-        changed = False
-    if data and not cfg["afk_v4"]:
-        # 1.6.70：默认从 120 改成 200 秒。还停在旧默认 120 的改成 200（自己改过别的数的不动）
-        if cfg["afk_seconds"] == 120:
-            cfg["afk_seconds"] = DEFAULTS["afk_seconds"]
-        cfg["afk_v4"] = True
-        changed = True
+    changed = False
+    if any(k in data for k in ("anti_afk", "afk_seconds", "afk_v3", "afk_v4")):
+        changed = True       # 防挂机删了：把老键清出文件，免得回滚 1.1.0 时又自动开（2026-10-30 双智能体审查）
     if data and not cfg["keys_v5"]:
         # 1.0.5：/showlocation 只在必要时用，F7、F9 空出来给玩家（老玩家存着的也清掉；想用的自己去设置里绑回）
         cfg["mark_key"] = cfg["fix_key"] = ""

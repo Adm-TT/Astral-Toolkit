@@ -1,16 +1,13 @@
 """游戏辅助（后台进程，主菜单打开时自动启动，菜单关掉它也退出）
 
-1. 防挂机：一段时间（默认 150 秒 + 1~30 秒随机）没有对游戏做任何操作，就按两下 F12
-   （聊天框开/关），游戏不会因为挂机把你踢下线。你在别的窗口时，会先切到游戏、按完再切回来。
-2. 双击 W 自动跑：在游戏里快速按两下 W，程序替你按住 W（和 Shift 冲刺）；再按一下 W 或 S 停下，
+双击 W 自动跑：在游戏里快速按两下 W，程序替你按住 W（和 Shift 冲刺）；再按一下 W 或 S 停下，
    切出游戏也会自动松开。只在步行时生效：读游戏日志 Game.log，在飞船/载具上（含在大船里走动）
    双击 W 不会触发，免得开船时被按住 W + Shift 加力撞船。
 
-替代原来的 AntiLogoff 和 AutorunToggle 两个小工具，逻辑相同。
+替代原来的 AutorunToggle 小工具，逻辑相同。2026-10-30 老大定：删掉防挂机（自动化挂机风险最高）。
 游戏是管理员权限运行时，助手也要管理员身份，按键才送得进游戏。
 用法（主菜单会自动启动）：python -m sc_mining.helpers <主程序进程号>
 """
-import random
 import sys
 import threading
 import time
@@ -25,7 +22,7 @@ MUTEX = "Local\\sc_assistant_helpers"
 FLAG = USER / ".autorun_on"          # 自动跑中（导航和悬浮窗会看这个文件）
 
 VK_W, VK_S = 0x57, 0x53
-SC_W, SC_SHIFT, SC_F12 = 0x11, 0x2A, 0x58
+SC_W, SC_SHIFT = 0x11, 0x2A
 
 _log_lock = threading.Lock()
 
@@ -52,8 +49,6 @@ if S.WIN:
         _fields_ = [("vkCode", wintypes.DWORD), ("scanCode", wintypes.DWORD), ("flags", wintypes.DWORD),
                     ("time", wintypes.DWORD), ("dwExtraInfo", ctypes.c_size_t)]
 
-    class LASTINPUTINFO(ctypes.Structure):
-        _fields_ = [("cbSize", wintypes.UINT), ("dwTime", wintypes.DWORD)]
 
     u32.SetWindowsHookExW.argtypes = [ctypes.c_int, HOOKPROC, wintypes.HINSTANCE, wintypes.DWORD]
     u32.SetWindowsHookExW.restype = wintypes.HHOOK
@@ -71,12 +66,6 @@ def _scan(code, up=False):
     S._send(0, code, 0x0008 | (0x0002 if up else 0))
 
 
-def last_input_tick():
-    info = LASTINPUTINFO(ctypes.sizeof(LASTINPUTINFO), 0)
-    u32.GetLastInputInfo(ctypes.byref(info))
-    return info.dwTime
-
-
 def parent_alive(pid):
     h = k32.OpenProcess(0x1000, False, pid)
     if not h:
@@ -87,97 +76,6 @@ def parent_alive(pid):
         return code.value == 259            # STILL_ACTIVE
     finally:
         k32.CloseHandle(h)
-
-
-def focus(hwnd):
-    """把窗口切到最前面（后台程序直接切会被 Windows 拦，借用前台窗口的输入线程）"""
-    fg = u32.GetForegroundWindow()
-    if fg == hwnd:
-        return True
-    if u32.IsIconic(hwnd):
-        u32.ShowWindow(hwnd, 9)                 # SW_RESTORE
-    me = k32.GetCurrentThreadId()
-    other = u32.GetWindowThreadProcessId(fg, None) if fg else 0
-    if other and other != me:
-        u32.AttachThreadInput(me, other, True)
-    try:
-        u32.BringWindowToTop(hwnd)
-        u32.SetForegroundWindow(hwnd)
-    finally:
-        if other and other != me:
-            u32.AttachThreadInput(me, other, False)
-    time.sleep(0.4)
-    return u32.GetForegroundWindow() == hwnd
-
-
-# ---------------------------------------------------------------- 防挂机
-
-class AntiAfk(threading.Thread):
-    def __init__(self, cfg, stop, run=None):
-        super().__init__(daemon=True)
-        self.cfg, self.stop, self.run_ = cfg, stop, run
-
-    def _idle(self):
-        """手上没按键（自动跑替你按着的 W/Shift 不算；连续按着超过 15 秒的也不算——
-        多半是卡住的键或摇杆软件模拟的键，以前会让防挂机永远等下去）"""
-        ours = {0x57, 0x10, 0xA0} if self.run_ and self.run_.engaged else set()
-        now = time.time()
-        held = set(S.held_keys()) - ours
-        self.since = {vk: self.since.get(vk, now) for vk in held}
-        fresh = [vk for vk, t in self.since.items() if now - t < 15]
-        return not fresh
-
-    def _deadline(self):
-        return min(self.cfg["afk_seconds"], settings.AFK_MAX) + random.randint(1, 30)
-
-    def run(self):
-        self.since = {}
-        log(f"防挂机：游戏里 {min(self.cfg['afk_seconds'], settings.AFK_MAX)} 秒（再加 1~30 秒随机）没操作就按两下 F12")
-        last_tick = last_input_tick()
-        last_active = time.time()
-        wait = self._deadline()
-        waiting_keys = False
-        while not self.stop.is_set():
-            time.sleep(1)
-            try:
-                tick = last_input_tick()
-                game = S.find_game_window()
-                if not game:
-                    last_active = time.time()
-                    continue
-                if tick != last_tick:
-                    last_tick = tick
-                    if S.game_foreground():
-                        last_active = time.time()
-                if time.time() - last_active < wait:
-                    continue
-                # 等你手上没按键再动，免得切窗口时打断你
-                if not self._idle():
-                    if not waiting_keys:
-                        waiting_keys = True
-                        log(f"防挂机：到时间了，但有键按着（{[hex(k) for k in self.since]}），等松开")
-                    continue
-                waiting_keys = False
-                prev = u32.GetForegroundWindow()
-                if not focus(game):
-                    log("防挂机：切不到游戏窗口，下次再试")
-                    last_active = time.time() - wait + 30
-                    continue
-                time.sleep(0.3 + random.random() * 0.1)
-                for _ in range(2):                     # 聊天框开、关
-                    _scan(SC_F12)
-                    time.sleep(0.1)
-                    _scan(SC_F12, up=True)
-                    time.sleep(0.4 + random.random() * 0.05)
-                if prev and prev != game:
-                    focus(prev)
-                log(f"防挂机：{wait} 秒没操作游戏，按了两下 F12" + ("，已切回原窗口" if prev and prev != game else ""))
-                last_tick = last_input_tick()
-                last_active = time.time()
-                wait = self._deadline()
-            except Exception as e:                     # 出错也别让防挂机停掉：记下来，下一秒接着看
-                log(f"防挂机出错：{e!r}")
-                time.sleep(5)
 
 
 # ---------------------------------------------------------------- 双击 W 自动跑
@@ -304,7 +202,7 @@ def main(parent_pid):
     if _restart_requested():
         return
     cfg = settings.load()
-    if not (cfg["anti_afk"] or cfg["autorun"]):
+    if not cfg["autorun"]:
         return
     from ..core.perf import lower_priority
     lower_priority()
@@ -320,7 +218,7 @@ def main(parent_pid):
         return
     LOG.write_text("", encoding="utf-8")
     _flag(False)
-    log(f"辅助已启动：防挂机 {'开' if cfg['anti_afk'] else '关'}，双击W自动跑 {'开' if cfg['autorun'] else '关'}，"
+    log(f"辅助已启动：双击W自动跑 {'开' if cfg['autorun'] else '关'}，"
         f"管理员身份 {'是' if S.is_admin() else '否'}")
     if S.game_elevated() and not S.is_admin():
         log("注意：游戏是管理员权限运行，助手不是，按键会被 Windows 挡掉。请用管理员身份打开助手")
@@ -338,8 +236,6 @@ def main(parent_pid):
             log("没找到游戏日志 Game.log：判断不了是不是在开船，开着游戏时会再找")
     run = AutoRun(cfg, game) if cfg["autorun"] else None
     # 双击 W 时看飞行 HUD：问主程序（它有识别引擎）；辅助进程自己不再预加载引擎（2026-10-26，省约 100 MB 内存）
-    if cfg["anti_afk"]:
-        AntiAfk(cfg, stop, run).start()
 
     hook_tid = k32.GetCurrentThreadId()
 
@@ -403,7 +299,7 @@ def start():
     cfg = settings.load()
     if not cfg.get("agreed"):              # 第一次打开还没确认免费声明：先不启动
         return False
-    if not (cfg["anti_afk"] or cfg["autorun"]):
+    if not cfg["autorun"]:
         return False
     _proc = subprocess.Popen(self_cmd("helpers", os.getpid()),
                              cwd=str(ROOT), creationflags=0x08000000)        # CREATE_NO_WINDOW
@@ -429,7 +325,7 @@ def stop_helpers():
 
 def status_line():
     cfg = settings.load()
-    parts = [f"防挂机 {'开' if cfg['anti_afk'] else '关'}", f"双击W自动跑 {'开' if cfg['autorun'] else '关'}"]
+    parts = [f"双击W自动跑 {'开' if cfg['autorun'] else '关'}"]
     line = "辅助：" + "｜".join(parts)
     if S.WIN and not S.is_admin() and S.game_elevated():
         line += "｜游戏是管理员权限，助手不是，自动按键会失效"
@@ -437,30 +333,22 @@ def status_line():
 
 
 def menu():
-    """主菜单第 8 项：开关设置"""
+    """主菜单第 7 项：开关设置"""
     while True:
         cfg = settings.load()
         print(status_line())
-        print(f"  1. 防挂机：{'开' if cfg['anti_afk'] else '关'}（{cfg['afk_seconds']} 秒没操作游戏就按两下 F12）")
-        print(f"  2. 双击W自动跑：{'开' if cfg['autorun'] else '关'}（{'带冲刺' if cfg['autorun_sprint'] else '不冲刺'}）")
-        print(f"  3. 自动跑时冲刺（按住 Shift）：{'开' if cfg['autorun_sprint'] else '关'}")
-        print("  4. 改防挂机间隔")
-        print(f"  5. 管理员身份：{ {True: '每次都用', False: '不用', None: '没设置'}[cfg['admin']] }")
+        print(f"  1. 双击W自动跑：{'开' if cfg['autorun'] else '关'}（{'带冲刺' if cfg['autorun_sprint'] else '不冲刺'}）")
+        print(f"  2. 自动跑时冲刺（按住 Shift）：{'开' if cfg['autorun_sprint'] else '关'}")
+        print(f"  3. 管理员身份：{ {True: '每次都用', False: '不用', None: '没设置'}[cfg['admin']] }")
         print("  回车返回")
         c = input("> ").strip()
         if not c:
             return
         if c == "1":
-            settings.update(anti_afk=not cfg["anti_afk"])
-        elif c == "2":
             settings.update(autorun=not cfg["autorun"])
-        elif c == "3":
+        elif c == "2":
             settings.update(autorun_sprint=not cfg["autorun_sprint"])
-        elif c == "4":
-            v = input("多少秒（60~900）> ").strip()
-            if v.isdigit() and 60 <= int(v) <= 900:
-                settings.update(afk_seconds=int(v))
-        elif c == "5":
+        elif c == "3":
             settings.update(admin={None: True, True: False, False: True}[cfg["admin"]])
             print("下次打开助手生效")
         else:

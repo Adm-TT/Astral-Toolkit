@@ -348,18 +348,19 @@ def upgrade_check(online=False):
         _found.update(at=time.time(), rows=[])
         from ..update.upgrade import ver, current
         if online:
+            src, fail = "", False
             try:
-                _, pv = vpk.check(rollback=True)
+                _, pv, src = vpk.check(rollback=True)
             except Exception:
                 pv = ""
             try:
-                _, nv = vpk.check()
-            except Exception:
-                nv = ""
-            _online.update(prev=pv, vpk_new=nv)
+                _, nv, src = vpk.check()
+            except Exception:                         # 香港和国内镜像都连不上：不能说「已是最新」（审查 2026-10-29）
+                nv, fail = "", True
+            _online.update(prev=pv, vpk_new=nv, vpk_src=src, vpk_fail=fail)
         pv = _online.get("prev") or ""
-        older = [{"version": pv, "where": "AT 服务器", "at": "", "path": VPK_PREV, "action": "回滚到", "stable": False}] \
-            if pv and ver(pv) < current() else []
+        older = [{"version": pv, "where": _online.get("vpk_src") or "AT 服务器", "at": "", "path": VPK_PREV, "action": "回滚到",
+                  "stable": False}] if pv and ver(pv) < current() else []
     else:
         _found.update(at=time.time(), rows=find_packages())
         try:
@@ -372,13 +373,20 @@ def upgrade_check(online=False):
     if vpk.installed():                       # 有没有新版本以 Velopack 更新源为准；大小不显示（增量下载，实际很小）
         from ..update.upgrade import ver, current
         nv = _online.get("vpk_new") or ""
+        hint = ""
         if nv and ver(nv) > current():
             same = pub and pub["version"] == nv
             pub = {"version": nv, "date": pub["date"] if same else "", "notes": pub["notes"] if same else [],
-                   "size": None, "source": "AT 服务器"}
+                   "size": None, "source": _online.get("vpk_src") or "AT 服务器"}
             err = ""
         else:
+            if _online.get("vpk_fail"):
+                err = "无法连接更新服务器"
+                if pub and ver(pub["version"]) > current():
+                    hint = f"无法连接更新服务器。网上已有 AT {pub['version']}，可在下载页手动下载"
             pub = None
+        return {"current": _version(), "found": _found["rows"], "older": older, "online": pub,
+                "online_enabled": update_check.enabled(), "online_error": err, "online_hint": hint}
     return {"current": _version(), "found": _found["rows"], "older": older, "online": pub,
             "online_enabled": update_check.enabled(), "online_error": err}
 
@@ -825,7 +833,7 @@ def overlay_move(on=False):
 def set_settings(**kw):
     from ..core import settings
     from ..system import helpers
-    allowed = {"anti_afk", "afk_seconds", "autorun", "autorun_sprint", "admin", "hud_scale", "hud_plate", "hud_theme"} | {k for k, _, _ in HOTKEYS}
+    allowed = {"autorun", "autorun_sprint", "admin", "hud_scale", "hud_plate", "hud_theme"} | {k for k, _, _ in HOTKEYS}
     if "stock_mode" in kw and kw["stock_mode"] not in ("simple", "pro"):
         kw.pop("stock_mode")
     allowed.add("stock_mode")
@@ -875,7 +883,7 @@ def set_settings(**kw):
                 h.restyle()
         except Exception:
             pass
-    if any(k in kw for k in ("anti_afk", "afk_seconds", "autorun", "autorun_sprint", "admin")):
+    if any(k in kw for k in ("autorun", "autorun_sprint", "admin")):
         helpers.start()                                   # 只有辅助相关的项变了才重启辅助进程
     if "ocr_device" in kw or "always_use_gpu" in kw:
         target = kw.get("ocr_device")

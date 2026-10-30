@@ -261,7 +261,7 @@ MENU = [
     ("4", "手动输入扫描数据", demo),
     ("5", "更新数据（汉化 + 矿价 + 制造 + 星图 + 商店 + 掉落）", update),
     ("6", "导航：去没有量子信标的地点（洞穴、残骸、自定义路标）", nav),
-    ("7", "游戏辅助：防挂机 / 双击W自动跑（开关设置）", assist),
+    ("7", "游戏辅助：双击W自动跑（开关设置）", assist),
     ("8", "交易：查价 / 哪里买 / 维科洛兑换 / 库存（游戏里 F8 识别物品）", trade),
     ("0", "退出", None),
 ]
@@ -280,10 +280,10 @@ def menu(console=False, restart=False):
     if not _single_instance(restart):
         return
     if showloc.WIN and not showloc.is_admin() and settings.load()["admin"] is not False:
-        # 你的游戏是管理员权限运行：热键（F8）、双击 W、防挂机都要求助手也是管理员身份，
+        # 你的游戏是管理员权限运行：热键（F8）、双击 W 都要求助手也是管理员身份，
         # 否则 Windows 既不让读游戏里的按键，也不让往游戏里发键。默认直接用管理员身份重开。
         print("正在用管理员身份重新打开助手（Windows 会弹确认框，点「是」）…")
-        print("（不想这样的话：菜单 7 → 5 把「管理员身份」改成「不用」）")
+        print("（不想这样的话：菜单 7 → 3 把「管理员身份」改成「不用」）")
         release_instance()                          # 让管理员身份的新天枢拿到「只开一个」的锁
         if showloc.relaunch_as_admin("menu"):
             settings.update(admin=True)

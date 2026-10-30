@@ -47,7 +47,7 @@ def test_falls_back_to_github_and_ignores_older(monkeypatch, tmp_path):
     C, calls = _setup(monkeypatch, tmp_path, {"https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(m).encode()})
     info = C.check(force=True)
     assert info and info["version"] == "9.0.0" and info["source"] == "GitHub"
-    assert {c.split("/")[2] for c in calls} == {"dl.astral-trade.com", "gitee.com", "raw.githubusercontent.com"}   # 三处一起问
+    assert {c.split("/")[2] for c in calls} == {"dl.astral-trade.com", "at-dl-1323647399.cos.ap-guangzhou.myqcloud.com", "gitee.com", "raw.githubusercontent.com"}   # 四处一起问
     old = dict(m, version="0.0.1")
     C, _ = _setup(monkeypatch, tmp_path, {"https://gitee.com/at/at/raw/master/latest.json": json.dumps(old).encode()})
     assert C.check(force=True) is None                             # 比现在旧：不提示
@@ -94,6 +94,7 @@ def test_disabled_without_repo(monkeypatch):
     monkeypatch.setattr(C, "GITEE", "")
     monkeypatch.setattr(C, "GITHUB", "")
     monkeypatch.setattr(C, "OWN", "")
+    monkeypatch.setattr(C, "COS", "")
     assert not C.enabled() and C.check(force=True) is None
 
 
@@ -121,9 +122,12 @@ def test_make_manifest_with_installer(monkeypatch, tmp_path):
     C, _ = _setup(monkeypatch, tmp_path, {})
     m = C.make_manifest(z, ["x"], installer=exe)
     assert m["installer"]["file"] == exe.name and m["installer"]["size"] == 8
-    assert m["installer"]["urls"][:2] == ["https://dl.astral-trade.com/releases/v9.0.0/AT_Setup_9.0.0.exe",
+    assert m["installer"]["urls"][:3] == ["https://dl.astral-trade.com/releases/v9.0.0/AT_Setup_9.0.0.exe",
+                                          "https://at-dl-1323647399.cos.ap-guangzhou.myqcloud.com/releases/v9.0.0/AT_Setup_9.0.0.exe",
                                           "https://gitee.com/at/at/releases/download/v9.0.0/AT_Setup_9.0.0.exe"]
     assert C.where(m["installer"]["urls"][0]) == "AT 服务器" and C.where("https://evil.com/dl.astral-trade.com/x") == "网上"
+    assert C.where(m["installer"]["urls"][1]) == "国内镜像"
+    assert [n for n, _ in C.manifest_urls()][:2] == ["AT 服务器", "国内镜像"]
     assert C.parse(json.dumps(m), frozen=True)["version"] == "9.0.0"
     wrong = tmp_path / "AT_Setup_8.0.0.exe"
     wrong.write_bytes(b"MZ")
@@ -264,6 +268,77 @@ def test_publish_hk_checks_manifest(tmp_path):
         except (SystemExit, ValueError):
             continue
         raise AssertionError(m)
+
+
+def test_vpk_falls_back_to_cos(monkeypatch):
+    """Velopack：香港连不上（出错 / 超时）就用国内镜像查版本、下载（2026-10-29）；用假的 velopack，不联网"""
+    import sys
+    import types
+    from sc_mining import vpk, upgrade
+    calls = []
+
+    class Mgr:
+        def __init__(self, src, opts):
+            self.src = src
+
+        def check_for_updates(self):
+            calls.append(("check", self.src))
+            if "dl.astral-trade.com" in self.src:
+                raise OSError("timed out")
+            return types.SimpleNamespace(TargetFullRelease=types.SimpleNamespace(Version="99.0.0"))
+
+        def download_updates(self, info, cb=None):
+            calls.append(("download", self.src))
+
+        def wait_exit_then_apply_updates(self, *a):
+            calls.append(("apply", self.src))
+    fake = types.SimpleNamespace(UpdateOptions=lambda *a: a, HttpOptions=lambda *a: a, HttpSource=lambda feed, o: feed,
+                                 UpdateManager=Mgr)
+    old = sys.modules.get("velopack")
+    sys.modules["velopack"] = fake
+    monkeypatch.setattr(vpk, "FEEDS", [("https://dl.astral-trade.com/velopack", "AT 服务器"),
+                                       ("https://at-dl-1323647399.cos.ap-guangzhou.myqcloud.com/velopack", "国内镜像")])
+    monkeypatch.setattr(upgrade, "current", lambda: (1, 0, 0))
+    try:
+        vpk._last["feed"] = None
+        assert vpk.check()[1:] == ("99.0.0", "国内镜像")
+        n_hk = sum(1 for k, s in calls if k == "check" and "astral-trade" in s)
+        vpk.check()                                                    # 下次先问上次答上来的国内镜像，不再等香港
+        assert sum(1 for k, s in calls if k == "check" and "astral-trade" in s) == n_hk
+        msgs = []
+        assert vpk.install(progress=msgs.append) == "99.0.0"
+        vpk._last["feed"] = None
+        Mgr.check_for_updates = lambda self: (_ for _ in ()).throw(OSError("timed out"))    # 两个都连不上：中文报错
+        try:
+            vpk.check()
+            raise AssertionError("应该报错")
+        except RuntimeError as e:
+            assert "AT 服务器和国内镜像都无法连接" in str(e)
+    finally:
+        vpk._last["feed"] = None
+        if old is None:
+            sys.modules.pop("velopack", None)
+        else:
+            sys.modules["velopack"] = old
+    assert all("myqcloud" in s for k, s in calls if k in ("download", "apply")) and any("国内镜像" in x for x in msgs)
+
+
+def test_vpk_check_fail_not_up_to_date(monkeypatch):
+    """Velopack 版：香港和国内镜像都连不上时「检查更新」不说「已是最新」；latest.json 有新版本就提示手动下载（审查 2026-10-29）"""
+    from sc_mining import vpk
+    from sc_mining.app import services as S
+
+    def boom(rollback=False):
+        raise RuntimeError("AT 服务器和国内镜像都无法连接：timed out")
+    monkeypatch.setattr(vpk, "installed", lambda: True)
+    monkeypatch.setattr(vpk, "check", boom)
+    monkeypatch.setattr(S, "_online_info", lambda force=False: {"version": "99.0.0", "date": "", "notes": [], "size": 1, "source": "Gitee"})
+    r = S.upgrade_check(online=True)
+    assert r["online"] is None and r["online_error"] == "无法连接更新服务器" and "AT 99.0.0" in r["online_hint"]
+    monkeypatch.setattr(vpk, "check", lambda rollback=False: (None, "", "国内镜像"))       # 连得上、没有新版本：照常
+    r = S.upgrade_check(online=True)
+    assert r["online"] is None and r["online_error"] == "" and r["online_hint"] == ""
+    S._online.pop("vpk_fail", None)
 
 
 def test_killswitch_old_mirror_cannot_undo(monkeypatch, tmp_path):

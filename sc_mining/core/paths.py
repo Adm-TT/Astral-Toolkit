@@ -132,7 +132,7 @@ _CRASH = []
 def crash_log(name="crash_log.txt"):
     """底层组件（显卡认字、识别、悬浮窗）直接崩溃时 Python 来不及写日志：faulthandler 把各线程最后在跑的代码写进 crash_log.txt。
     怎么看：fatal 段后面同一进程号有「正常退出」行的，是程序自己接住的异常，不是真崩；
-    辅助进程（防挂机）每次关 AT 都是被直接结束的，本来就没有「正常退出」行；显卡认字小进程写 crash_log_ocr.txt。
+    辅助进程（自动跑）每次关 AT 都是被直接结束的，本来就没有「正常退出」行；显卡认字小进程写 crash_log_ocr.txt。
     每个进程只认第一次调用时的文件名"""
     if _CRASH:
         return
