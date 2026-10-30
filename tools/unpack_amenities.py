@@ -25,6 +25,11 @@ LAG = {"arc": "ARC", "cru": "CRU", "hur": "HUR", "mic": "MIC"}
 JUMP = {"stantonpyro": "Stanton-Pyro Jump Point", "stantonterra": "Jumppoint Terra", "stantonmagnus": "Jumppoint Magnus",
         "pyrostanton": "Pyro-Stanton Jump Point", "pyronyx": "Pyro - Nyx Jump Point", "nyxpyro": "Jumppoint_Nyx_Pyro",
         "nyxcastra": "Nyx - Castra Jump Point"}
+# 星门站本身在星图里的编号（站离跳跃点 40–52 km，按跳跃点导航「最近医院」会差这么多，2026-10-30）。
+# 星门站的名字各星系重名（两个 Nyx Gateway……），只能按编号找；老版本 AT 不认编号，照旧用 point
+GATEWAY = {"stantonpyro": "LOC_rs_ext_stan-pyro_jp1", "stantonterra": "LOC_rs_ext_stan-terra_jp1",
+           "stantonmagnus": "LOC_rs_ext_stan-magnus_jp1", "pyrostanton": "rs_ext_pyro-stan_jp1",
+           "pyronyx": "rs_ext_pyro-nyx_jp", "nyxpyro": "rs_ext_nyx-pyro_jp1", "nyxcastra": "rs_ext_nyx-castra_jp1"}
 ORBIT = {"hur": "Hurston", "arc": "ArcCorp", "cru": "Crusader", "mic": "Microtech",
          "p1": "Pyro1", "p2": "Monox", "p3": "Bloom", "p4": "Pyro4", "p5": "Pyro5", "p6": "Terminus"}
 LEO_PLANET = {"hur": "stanton1", "cru": "stanton2", "arc": "stanton3", "mic": "stanton4"}   # 星球的物件容器
@@ -69,7 +74,7 @@ def ref_of(rec, name):
         return {"point": f"PYR{m[1]} L{m[2]}"}
     m = re.fullmatch(r"rr_jp_(\w+)", r)
     if m and m[1] in JUMP:
-        return {"point": JUMP[m[1]]}
+        return {"point": JUMP[m[1]], "point_id": GATEWAY[m[1]]}
     m = re.fullmatch(r"rr_(hur|arc|cru|mic|p\d)_leo", r)
     if m:
         # rr_*_leo（绕星球轨道的站）：先按名字找星图地点；Everus Harbor 星图地点表里没有，用星球容器里的位置。

@@ -1328,6 +1328,7 @@ def amenity_targets(kind, data=None):
     for q in data["pois"]:
         pois.setdefault(_norm(q["n"]), q)
     pts = {q["n"]: q for q in data.get("points") or []}
+    pts_id = {q["i"]: q for q in data.get("points") or [] if q.get("i")}     # 星门站重名，按编号找（2026-10-30）
     inside = {q.get("city") for q in city_places()}
     out = []
     for r in rows:
@@ -1346,7 +1347,8 @@ def amenity_targets(kind, data=None):
                 x, y, z = ref["local"]                    # 星图地点表里没有的轨道站（Everus Harbor）：相对星球的位置
                 out.append(dict(b=ref["body"], n=en, zh=zh, t="Orbital Station", qt=1, x=x, y=y, z=z))
             continue
-        src = pts.get(ref.get("point")) if ref.get("point") else data["bodies"].get(ref.get("body") or "")
+        src = (pts_id.get(ref.get("point_id")) or pts.get(ref.get("point")) if ref.get("point")
+               else data["bodies"].get(ref.get("body") or ""))
         if src and src.get("sys"):
             out.append(dict(b="@" + src["sys"], sys=src["sys"], space=True, n=en, zh=zh, t="Orbital Station", qt=1,
                             x=src["x"] / 1000, y=src["y"] / 1000, z=src["z"] / 1000))
