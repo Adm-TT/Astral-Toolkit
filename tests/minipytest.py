@@ -127,6 +127,23 @@ def run_module(modname):
                 traceback.print_exc()
             finally:
                 mp.restore()
+    # unittest.TestCase 写的测试（这个模块里定义的类）：用 unittest 自己跑，计入同一份结果
+    import unittest
+    for cname, cls in list(vars(m).items()):
+        if not (isinstance(cls, type) and issubclass(cls, unittest.TestCase) and cls.__module__ == m.__name__):
+            continue
+        for tname in unittest.defaultTestLoader.getTestCaseNames(cls):
+            res = unittest.TestResult()
+            cls(tname).run(res)
+            if res.skipped:
+                skips += 1
+            elif res.failures or res.errors or res.unexpectedSuccesses:
+                fails += 1
+                print('FAIL', modname, f'{cname}.{tname}')
+                for _, tb in res.failures + res.errors:
+                    print(tb)
+            else:
+                passed += 1
     return passed, fails, skips
 
 

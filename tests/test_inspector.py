@@ -92,7 +92,8 @@ class TestItemInspector(unittest.TestCase):
         res = inspect_item(MockImage(), (500, 500))
         self.assertIsNotNone(res)
         self.assertEqual(res["zh"], "医疗笔")
-        self.assertEqual(res["en"], "MedPen")
+        # 汉化包里这件商品写作「医疗笔MedPens」（items_commodities_medPens），纠正后英文名是 MedPens
+        self.assertEqual(res["en"], "MedPens")
         self.assertEqual(res["quality"], 0)  # 普通物品无品质默认为 0
         self.assertEqual(res["qty"], 5)
         self.assertEqual(res["unit"], "个")

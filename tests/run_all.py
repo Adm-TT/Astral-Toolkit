@@ -24,7 +24,8 @@ _helpers.LOG = _paths.LOGS / "helpers_log.txt"
 
 from tests.minipytest import run_all
 
-MODULES = ["tests.test_mining", "tests.test_trade", "tests.test_tools", "tests.test_goals", "tests.test_loadout_sweep", "tests.test_upgrade", "tests.test_update", "tests.test_data_pack", "tests.test_gridtext", "tests.test_station_lifts", "tests.test_stage0", "tests.test_stage3", "tests.test_stage4"]
+MODULES = ["tests.test_mining", "tests.test_trade", "tests.test_tools", "tests.test_goals", "tests.test_loadout_sweep", "tests.test_upgrade", "tests.test_update", "tests.test_data_pack", "tests.test_gridtext", "tests.test_station_lifts", "tests.test_stage0", "tests.test_stage3", "tests.test_stage4",
+           "tests.test_gpu_ocr", "tests.test_hover", "tests.test_inspector"]
 
 if __name__ == "__main__":
     sys.exit(1 if run_all(MODULES) else 0)

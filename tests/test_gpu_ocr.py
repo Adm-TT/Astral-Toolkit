@@ -20,11 +20,13 @@ class TestOcrDeviceSwitch(unittest.TestCase):
         self.assertEqual(settings.DEFAULTS["ocr_device"], "gpu")
 
     def test_is_gpu_preferred(self):
-        with patch.object(settings, "load", return_value={"ocr_device": "gpu"}):
-            self.assertTrue(perf.is_gpu_preferred())
+        # 环境变量 DUBHE_OCR_CPU=1 会强制 CPU：前两条先把它设成别的值，在哪台电脑上跑都一样
+        with patch.dict(os.environ, {"DUBHE_OCR_CPU": "0"}):
+            with patch.object(settings, "load", return_value={"ocr_device": "gpu"}):
+                self.assertTrue(perf.is_gpu_preferred())
 
-        with patch.object(settings, "load", return_value={"ocr_device": "cpu"}):
-            self.assertFalse(perf.is_gpu_preferred())
+            with patch.object(settings, "load", return_value={"ocr_device": "cpu"}):
+                self.assertFalse(perf.is_gpu_preferred())
 
         with patch.dict(os.environ, {"DUBHE_OCR_CPU": "1"}):
             self.assertFalse(perf.is_gpu_preferred())
@@ -49,15 +51,22 @@ class TestOcrDeviceSwitch(unittest.TestCase):
         mock_mod = MagicMock()
         mock_mod.RapidOCR.return_value = mock_eng
 
+        # 不受环境变量 DUBHE_OCR_CPU 和本机设置影响
         with patch.dict(sys.modules, {"rapidocr_onnxruntime": mock_mod}), \
+             patch.dict(os.environ, {"DUBHE_OCR_CPU": "0"}), \
+             patch.object(perf, "USE_GPU", True), \
              patch.object(perf, "gpu_available", return_value=True), \
+             patch.object(settings, "load", return_value={"ocr_device": "gpu"}), \
              patch.object(settings, "update") as mock_update:
             dev = perf.set_ocr_device("gpu")
             self.assertEqual(dev, "显卡")
             mock_update.assert_called_with(ocr_device="gpu", always_use_gpu=True)
 
     def test_set_settings_integration(self):
+        # status() 会问识别在哪算：换成假的，测试里不真去加载识别引擎（显卡）
         with patch.object(perf, "set_ocr_device", return_value="显卡") as mock_set, \
+             patch.object(perf, "ocr_device", return_value="显卡"), \
+             patch.object(perf, "gpu_available", return_value=True), \
              patch.object(settings, "update", side_effect=lambda **kw: {**settings.DEFAULTS, **kw}), \
              patch.object(settings, "load", return_value=dict(settings.DEFAULTS)):
             
