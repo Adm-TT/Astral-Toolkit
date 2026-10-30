@@ -1,4 +1,5 @@
 """交易界面、物品在哪买 / 限定版同款 / 最近买点 / 掉落 / 维科洛兑换"""
+from tests import patch_services
 from datetime import datetime, timezone
 from decimal import Decimal as D
 from sc_mining.trade import console as C
@@ -442,7 +443,7 @@ def test_first_run_agreement(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
     started = []
     monkeypatch.setattr(helpers, "start", lambda: started.append("helpers"))
-    monkeypatch.setattr(services, "start_background", lambda: started.append("bg"))
+    patch_services(monkeypatch, "start_background", lambda: started.append("bg"))
     assert settings.load()["agreed"] is False
     assert "error" in services.agree("本软件是免费的")                    # 差一个字都不行
     assert settings.load()["agreed"] is False and not started
@@ -475,7 +476,7 @@ def test_live_scan_updates_when_read_gets_more_complete(monkeypatch, tmp_path):
     monkeypatch.setattr(screen, "analyse", analyse)
     monkeypatch.setattr(screen, "INTERVAL", 0.01)
     monkeypatch.setattr(signals, "find_signatures", lambda im: [])
-    monkeypatch.setattr(services, "_game_front", lambda: None)            # 不看真电脑上哪个窗口在最前面
+    patch_services(monkeypatch, "_game_front", lambda: None)            # 不看真电脑上哪个窗口在最前面
     q = bus.subscribe()
     live = services._Live()
     try:
@@ -659,7 +660,7 @@ def test_hover_overlay_updates_before_network(monkeypatch):
     class Hud:
         def set(self, sec, text):
             shown.append((time.time(), text))
-    monkeypatch.setattr(S, "_hud", lambda: Hud())
+    patch_services(monkeypatch, "_hud", lambda: Hud())
     t0 = time.time()
     r = S.hover_once(Image.new("RGB", (2560, 1440)))
     assert r["ok"] and shown[-1][1].startswith(("CQ7步枪", "CQ7 步枪"))      # 名字按汉化包纠正成标准写法（1.6.37）
@@ -951,7 +952,7 @@ def test_space_waypoint(monkeypatch, tmp_path):
     # 窗口里点「用当前位置新建」：只认 /showlocation 的坐标——等剪贴板出现新坐标，不在星球上 → 太空路标
     clip = {"t": "随便什么"}
     monkeypatch.setattr(n, "read_clipboard", lambda: clip["t"])
-    monkeypatch.setattr(S, "_hud", lambda: type("H", (), {"set": lambda *a: None, "clear": lambda *a: None})())
+    patch_services(monkeypatch, "_hud", lambda: type("H", (), {"set": lambda *a: None, "clear": lambda *a: None})())
     monkeypatch.setattr(__import__("sc_mining.paths", fromlist=["log"]), "log", lambda name: tmp_path / name)   # 真的写记录（写到临时目录），以前把记录函数换掉，没发现它和导航记录重名、一调用就报错
     r = S.waypoint_add(name="气体云矿点", here=True)
     assert r["pending"] and "/showlocation" in r["message"]
@@ -1026,7 +1027,7 @@ def test_mark_here_hotkey(monkeypatch, tmp_path):
     class H:
         def set(self, k, v, *rich): shown[k] = v
         def clear(self, k): shown.pop(k, None)
-    monkeypatch.setattr(S, "_hud", lambda: H())
+    patch_services(monkeypatch, "_hud", lambda: H())
     monkeypatch.setattr(S.threading, "Timer", lambda *a, **k: type("T", (), {"start": lambda self: None})())
     out = S.mark_here()
     assert "error" not in out and "斯坦顿星系" in out["where"] and "已保存" in shown["路标"]
@@ -1072,8 +1073,8 @@ def test_export_logs(monkeypatch, tmp_path):
     (user / "window" / "Cookies").write_text("隐私", encoding="utf-8")
     monkeypatch.setattr(paths, "USER", user)
     monkeypatch.setattr(paths, "LOGS", user / "logs")
-    monkeypatch.setattr(S, "WIN", False)
-    monkeypatch.setattr(S, "_desktop", lambda: tmp_path)
+    patch_services(monkeypatch, "WIN", False)
+    patch_services(monkeypatch, "_desktop", lambda: tmp_path)
     r = S.export_logs()
     names = zipfile.ZipFile(r["path"]).namelist()
     assert {"logs/app_log.txt", "logs/nav_log.txt", "settings.json", "系统信息.txt"} <= set(names)
@@ -1093,7 +1094,7 @@ def test_live_scan_resumes_after_restart(monkeypatch, tmp_path):
     monkeypatch.setattr(S._live, "stop", lambda: None)
     for name in ("_hover", "_pos", "_logwatch"):
         monkeypatch.setattr(getattr(S, name), "start", lambda: None)
-    monkeypatch.setattr(S, "_online_loop", lambda: None)          # 测试里不联网检查更新
+    patch_services(monkeypatch, "_online_loop", lambda: None)          # 测试里不联网检查更新
     S.live_start()
     assert settings.load()["live_on"]
     started.clear()
@@ -1111,14 +1112,14 @@ def test_where_now_ground_or_space(monkeypatch):
     import time
     from sc_mining.app import services as sv
     from sc_mining import navigate
-    monkeypatch.setattr(sv, "_WHERE", {"t": 0.0, "v": None, "tried": 0.0})
+    patch_services(monkeypatch, "_WHERE", {"t": 0.0, "v": None, "tried": 0.0})
     monkeypatch.setattr(sv._pos, "latest", (time.time(), (1.0, 2.0, 3.0), {"location": "AsteroidCluster MiningBase Stanton2"}))
     assert sv._where_now() == "space"
-    monkeypatch.setattr(sv, "_WHERE", {"t": 0.0, "v": None, "tried": 0.0})
+    patch_services(monkeypatch, "_WHERE", {"t": 0.0, "v": None, "tried": 0.0})
     monkeypatch.setattr(sv._pos, "latest", (time.time(), (1.0, 2.0, 3.0), {"location": "Planet Clio"}))
     monkeypatch.setattr(navigate, "locate", lambda *a, **k: {"inside": True, "height_m": 2700})
     assert sv._where_now() == "ground"
-    monkeypatch.setattr(sv, "_WHERE", {"t": 0.0, "v": None, "tried": 0.0})
+    patch_services(monkeypatch, "_WHERE", {"t": 0.0, "v": None, "tried": 0.0})
     monkeypatch.setattr(navigate, "locate", lambda *a, **k: {"inside": True, "height_m": 400_000})
     assert sv._where_now() == "space"
 
@@ -1216,13 +1217,13 @@ def _live_run(monkeypatch, tmp_path, frames, seconds=0.8, stale=None, static=Fal
         n["i"] += 1
         return (s or Scan(), ({}, None, None))
     hud = []
-    monkeypatch.setattr(services, "_hud", lambda: type("H", (), {"set": lambda self, k, v, *rich: hud.append(("set", k)),
+    patch_services(monkeypatch, "_hud", lambda: type("H", (), {"set": lambda self, k, v, *rich: hud.append(("set", k)),
                                                                    "clear": lambda self, k: hud.append(("clear", k))})())
     monkeypatch.setattr(screen, "grab", grab)
     monkeypatch.setattr(screen, "analyse", analyse)
     monkeypatch.setattr(screen, "INTERVAL", 0.01)
     monkeypatch.setattr(signals, "find_signatures", sig or (lambda im: []))
-    monkeypatch.setattr(services, "_game_front", front or (lambda: None))
+    patch_services(monkeypatch, "_game_front", front or (lambda: None))
     live = services._Live()
     if stale is not None:
         monkeypatch.setattr(live, "STALE_SECONDS", stale)
@@ -1319,7 +1320,7 @@ def test_live_stop_during_compute_publishes_nothing(monkeypatch, tmp_path):
     def slow_view(scan, bag):
         ev.set()                                      # 模拟：算到一半用户点了停止
         return real(scan, bag)
-    monkeypatch.setattr(services, "scan_view", slow_view)
+    patch_services(monkeypatch, "scan_view", slow_view)
     a = _rock(10000, 20, 5.0, 10.0, [("Copper", 40.0, 500), ("Inert Materials", 60.0, 0)])
     msgs, hud = _live_run(monkeypatch, tmp_path, [a] * 50, seconds=0.5, ev=ev)
     assert not [m for m in msgs if m["kind"] == "scan"] and ("set", "扫描") not in hud
@@ -1471,7 +1472,7 @@ def test_space_fix_navigation(monkeypatch, tmp_path):
     clip = {"t": "旧东西"}
     monkeypatch.setattr(n, "read_clipboard", lambda: clip["t"])
     hud = {}
-    monkeypatch.setattr(S, "_hud", lambda: type("H", (), {"set": lambda self, k, v, *rich: hud.__setitem__(k, v),
+    patch_services(monkeypatch, "_hud", lambda: type("H", (), {"set": lambda self, k, v, *rich: hud.__setitem__(k, v),
                                                           "clear": lambda self, k: hud.pop(k, None)})())
     q = bus.subscribe()
     try:
@@ -1502,7 +1503,7 @@ def test_space_fix_dedupe_and_session(monkeypatch, tmp_path):
     monkeypatch.setattr(paths, "log", lambda name: tmp_path / name)
     monkeypatch.setattr(settings, "load", lambda: {**settings.DEFAULTS, "nav_mode": "space"})     # 手动定位
     monkeypatch.setattr(n, "read_clipboard", lambda: "")
-    monkeypatch.setattr(S, "_hud", lambda: type("H", (), {"set": lambda *a: None, "clear": lambda *a: None})())
+    patch_services(monkeypatch, "_hud", lambda: type("H", (), {"set": lambda *a: None, "clear": lambda *a: None})())
     lp = next(p for p in data["points"] if p["sys"] == "Stanton" and p["t"] == "Lagrange Point")
     target = {"n": "太空矿点", "b": "@Stanton", "t": "Waypoint", "sys": "Stanton", "space": True, "qt": 0,
               "x": lp["x"] / 1000 + 50, "y": lp["y"] / 1000, "z": lp["z"] / 1000}
@@ -1578,7 +1579,7 @@ def test_nav_mode_switch(monkeypatch, tmp_path):
     store = {}
     monkeypatch.setattr(settings, "load", lambda: {**settings.DEFAULTS, **store} if hasattr(settings, "DEFAULTS") else dict(store))
     monkeypatch.setattr(settings, "update", lambda **kw: store.update(kw))
-    monkeypatch.setattr(S, "_hud", lambda: type("H", (), {"set": lambda *a: None, "clear": lambda *a: None})())
+    patch_services(monkeypatch, "_hud", lambda: type("H", (), {"set": lambda *a: None, "clear": lambda *a: None})())
     ground = {"n": "地面点", "b": "Daymar", "t": "Waypoint", "sys": "Stanton", "qt": 0, "x": 100.0, "y": 50.0, "z": 0.0}
     space = {"n": "太空点", "b": "@Stanton", "t": "Waypoint", "sys": "Stanton", "space": True, "qt": 0, "x": 1.0, "y": 2.0, "z": 3.0}
     try:
@@ -1656,7 +1657,7 @@ def test_halo_services(monkeypatch, tmp_path):
     clip = {"t": "Coordinates: x:20300000000 y:0 z:0"}             # 挂上之前就在剪贴板里的旧坐标：不算
     monkeypatch.setattr(n, "read_clipboard", lambda: clip["t"])
     hud = {}
-    monkeypatch.setattr(S, "_hud", lambda: type("H", (), {"set": lambda self, k, v, *rich: hud.__setitem__(k, v),
+    patch_services(monkeypatch, "_hud", lambda: type("H", (), {"set": lambda self, k, v, *rich: hud.__setitem__(k, v),
                                                           "clear": lambda self, k: hud.pop(k, None)})())
     o = S.halo_options()
     assert len(o["bands"]) == 10 and o["bands"][4]["ores"][0] == "量子矿物" and o["qd"] == "Atlas (S1)"
@@ -1848,7 +1849,7 @@ def test_craft_filter_by_mineral_and_item_hud_expires(monkeypatch):
     assert "mat" not in S.craft_browse()
     # 物品悬浮窗定时收起；中途又写了新内容就按新内容重新计时
     hud = {}
-    monkeypatch.setattr(S, "_hud", lambda: type("H", (), {"set": lambda self, k, v, *rich: hud.__setitem__(k, v),
+    patch_services(monkeypatch, "_hud", lambda: type("H", (), {"set": lambda self, k, v, *rich: hud.__setitem__(k, v),
                                                           "clear": lambda self, k: hud.pop(k, None)})())
     S._item_hud("A", 0.2)
     _t.sleep(0.4)
@@ -1913,8 +1914,8 @@ def test_live_signals_pause_while_scan_panel_open(monkeypatch, tmp_path):
         calls.append(1)
         return [(13586, False, "13,586", (0, 0, 10, 10))]
     from sc_mining.app import services as S
-    monkeypatch.setattr(S, "_where_now", lambda: None)           # 不去读真屏幕右上角（Windows 上会很慢）
-    monkeypatch.setattr(S, "goal_short", lambda force=False: {})   # 不读真的目标 / 库存
+    patch_services(monkeypatch, "_where_now", lambda: None)           # 不去读真屏幕右上角（Windows 上会很慢）
+    patch_services(monkeypatch, "goal_short", lambda force=False: {})   # 不读真的目标 / 库存
     frames = [None] * 6 + [a] * 60
     msgs, hud = _live_run(monkeypatch, tmp_path, frames, seconds=1.0, sig=sig)
     assert len(calls) <= 6                                  # 面板出现后不再调用信号识别
@@ -1931,7 +1932,7 @@ def test_goal_shortage_marked_everywhere(monkeypatch):
     tung = {"en": "Tungsten", "zh": "钨", "short": 0.5, "unit": "SCU", "minq": 1, "goals": ["某蓝图"], "item": None}
     monkeypatch.setattr(G, "load", lambda: [{"id": "x"}])
     monkeypatch.setattr(G, "plan", lambda t=None, goals=None: {"goals": [], "shortfall": [gold, tung]})
-    monkeypatch.setattr(S, "trade", lambda: None)
+    patch_services(monkeypatch, "trade", lambda: None)
     S._SHORT["t"] = 0.0
     assert S._gkey("Gold (Ore)") == S._gkey("gold") and S._gkey("钨矿石") == S._gkey("钨")
     assert S._goal_for("钨矿石")["en"] == "Tungsten" and S._goal_for("Iron") is None
@@ -1995,8 +1996,8 @@ def test_waypoint_from_pasted_showlocation(monkeypatch, tmp_path):
     saved = []
     monkeypatch.setattr(n, "add_waypoint", lambda name, body, local: saved.append(("ground", name, body)))
     monkeypatch.setattr(n, "add_space_waypoint", lambda name, system, g: saved.append(("space", name, system)))
-    monkeypatch.setattr(S, "waypoints", lambda: [])
-    monkeypatch.setattr(S, "_hud", lambda: type("H", (), {"set": lambda *a: None, "clear": lambda *a: None})())
+    patch_services(monkeypatch, "waypoints", lambda: [])
+    patch_services(monkeypatch, "_hud", lambda: type("H", (), {"set": lambda *a: None, "clear": lambda *a: None})())
     b = data["bodies"]["Daymar"]
     g = n.target_global({"b": "Daymar", "x": 10.0, "y": 20.0, "z": 0.5, "t": "Waypoint"}, data, 1_800_000_000.0) if hasattr(n, "target_global") else None
     assert "error" in S.waypoint_preview(text="随便一句话")
@@ -2030,10 +2031,10 @@ def test_feedback_report_bundle(monkeypatch, tmp_path):
     (tmp_path / "shots" / "live").mkdir(parents=True)
     for i in range(7):
         Image.new("RGB", (8, 8)).save(tmp_path / "shots" / "live" / f"{i}.png")
-    monkeypatch.setattr(S, "_desktop", lambda: tmp_path / "desk")
+    patch_services(monkeypatch, "_desktop", lambda: tmp_path / "desk")
     (tmp_path / "desk").mkdir()
-    monkeypatch.setattr(S, "_hud", lambda: type("H", (), {"sections": {"信号": "x"}, "set": lambda *a: None, "clear": lambda *a: None})())
-    monkeypatch.setattr(S, "WIN", False)
+    patch_services(monkeypatch, "_hud", lambda: type("H", (), {"sections": {"信号": "x"}, "set": lambda *a: None, "clear": lambda *a: None})())
+    patch_services(monkeypatch, "WIN", False)
     screen.LAST_RAW.update(t=1.0, scan=["扫描结果", "质量： 123"], bag=[])
     S._FB_LAST["sig"] = {"values": [44336]}
     r = S.feedback_report(kind="signal", note="屏幕是 33,000", img=Image.new("RGB", (64, 32)))
@@ -2070,7 +2071,7 @@ def test_scan_view_lots_by_quality(monkeypatch):
     tung = {"en": "Tungsten", "zh": "钨", "short": 0.5, "unit": "SCU", "minq": 600, "goals": ["某蓝图"], "item": None}
     monkeypatch.setattr(G, "load", lambda: [{"id": "x"}])
     monkeypatch.setattr(G, "plan", lambda t=None, goals=None: {"goals": [], "shortfall": [tung]})
-    monkeypatch.setattr(S, "trade", lambda: None)
+    patch_services(monkeypatch, "trade", lambda: None)
     S._SHORT["t"] = 0.0
     s = parse_scan(["扫描结果", "钨矿石", "质量： 44336", "抗性： 4% ", "不稳定性： 17.32", "组成 23.68 SCU",
                     "6.55% 兰石原矿 510", "12.95% 钨矿石 662", "49.41% 钨矿石 363", "31.07% 情性物质 。"])
@@ -2205,8 +2206,8 @@ def test_ore_log_record_and_hotkeys(monkeypatch, tmp_path):
     from sc_mining.app import services as S
     monkeypatch.setattr(ore_log, "FILE", tmp_path / "ore_log.json")
     monkeypatch.setattr(S.bus, "publish", lambda *a, **k: None)
-    monkeypatch.setattr(S, "_note_hud", lambda *a, **k: None)
-    monkeypatch.setattr(S, "_ORE_LAST", {"view": None})
+    patch_services(monkeypatch, "_note_hud", lambda *a, **k: None)
+    patch_services(monkeypatch, "_ORE_LAST", {"view": None})
     assert "error" in S.ore_record()
     S._ORE_LAST["view"] = {"rock": "塔兰导电石", "mass": 38775, "resistance": 55, "instability": 323.46, "total_scu": 36.9, "at": "16:02:06",
                            "lots": [{"zh": "塔兰导电石", "en": "Taranite", "pct": 11.55, "q": 718, "scu": 4.26, "inert": False},

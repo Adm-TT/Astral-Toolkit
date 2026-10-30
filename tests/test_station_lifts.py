@@ -1,4 +1,5 @@
 """空间站站内导航（2026-10-28）：右上角最里层 Zone 名、按区域坐电梯分段。用假数据，不读 data\\ 里的大文件"""
+from tests import patch_services
 import json
 
 
@@ -218,14 +219,14 @@ def test_nav_engine_station_branch(monkeypatch, tmp_path):
 
         def clear(self, k):
             pass
-    monkeypatch.setattr(services, "_hud", lambda: Hud())
-    monkeypatch.setattr(services, "_marker_tick", lambda *a, **k: None)
+    patch_services(monkeypatch, "_hud", lambda: Hud())
+    patch_services(monkeypatch, "_marker_tick", lambda *a, **k: None)
     monkeypatch.setattr(bus, "publish", lambda topic, data: pubs.append((topic, data)))
     now = time.time()
     g = (600.0, 0.5, 0.0)
     fake = types.SimpleNamespace(current=(now, g, {"inner_zone": "Hangar SmallFront RestStop 1", "t": now}),
                                  latest=(0.0, None, None), read_at=now, reader=types.SimpleNamespace(active=True))
-    monkeypatch.setattr(services, "_pos", fake)
+    patch_services(monkeypatch, "_pos", fake)
     nv = nav_mod._Nav()
     nv.target, nv.session = tgt, 1
     ev = threading.Event()

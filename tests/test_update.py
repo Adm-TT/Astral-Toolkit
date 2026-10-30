@@ -1,4 +1,5 @@
 """在线更新：读版本说明、核对下载的安装包（不联网：换掉 _open）"""
+from tests import patch_services
 import hashlib
 import io
 import json
@@ -332,7 +333,7 @@ def test_vpk_check_fail_not_up_to_date(monkeypatch):
         raise RuntimeError("AT 服务器和国内镜像都无法连接：timed out")
     monkeypatch.setattr(vpk, "installed", lambda: True)
     monkeypatch.setattr(vpk, "check", boom)
-    monkeypatch.setattr(S, "_online_info", lambda force=False: {"version": "99.0.0", "date": "", "notes": [], "size": 1, "source": "Gitee"})
+    patch_services(monkeypatch, "_online_info", lambda force=False: {"version": "99.0.0", "date": "", "notes": [], "size": 1, "source": "Gitee"})
     r = S.upgrade_check(online=True)
     assert r["online"] is None and r["online_error"] == "无法连接更新服务器" and "AT 99.0.0" in r["online_hint"]
     monkeypatch.setattr(vpk, "check", lambda rollback=False: (None, "", "国内镜像"))       # 连得上、没有新版本：照常

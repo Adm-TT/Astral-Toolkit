@@ -1,4 +1,5 @@
 """目标：库存联动维科洛兑换 / 制造，算还差多少"""
+from tests import patch_services
 from sc_mining.trade.console import Trade
 from sc_mining.trade.models import Item, StockKey, StockLine
 
@@ -114,7 +115,7 @@ def test_goal_quality_effect_and_stock_quality(monkeypatch, tmp_path):
     from sc_mining.app import services as S
     G = _setup(monkeypatch, tmp_path)
     t = Trade(tmp_path / "db", providers=[])
-    monkeypatch.setattr(S, "trade", lambda: t)
+    patch_services(monkeypatch, "trade", lambda: t)
     bp = next(b for b in CR.blueprints() if any(m for _s, _o, m in b["slots"]) and any(k == "r" for _s, o, _m in b["slots"] for k, *_ in o))
     idx = next(i for i, (_s, o, m) in enumerate(bp["slots"]) if m and any(k == "r" for k, *_ in o))
     mineral = next(n for k, n, *_ in bp["slots"][idx][1] if k == "r")
@@ -158,7 +159,7 @@ def test_units_uscu_and_migration(monkeypatch, tmp_path):
     from sc_mining.app import services as S
     G = _setup(monkeypatch, tmp_path)
     t = Trade(tmp_path / "db", providers=[])
-    monkeypatch.setattr(S, "trade", lambda: t)
+    patch_services(monkeypatch, "trade", lambda: t)
     G.add_stock(t, "Taranite", "塔兰导电石", "0.495", "SCU", "925", "新巴贝奇")
     G.add_stock(t, "Taranite", "塔兰导电石", "5000", "uSCU", "925", "新巴贝奇")
     G.add_stock(t, "CryoPod", "冷冻舱", 35, "个", "0", "新巴贝奇")
@@ -194,7 +195,7 @@ def test_stock_suggest_and_named_add(monkeypatch, tmp_path):
     from sc_mining.trade import names
     _setup(monkeypatch, tmp_path)
     t = Trade(tmp_path / "db", providers=[])
-    monkeypatch.setattr(S, "trade", lambda: t)
+    patch_services(monkeypatch, "trade", lambda: t)
     monkeypatch.setattr(names, "table", lambda: {"冷冻舱（剜度）": "CryoPod (Vanduul)", "冷冻舱": "CryoPod", "钛": "Titanium"})
     names._index.cache_clear()
     try:
@@ -241,7 +242,7 @@ def test_stock_out_set_move_and_places(monkeypatch, tmp_path):
     from sc_mining.trade.storage import EXPECTED_SCHEMA
     _setup(monkeypatch, tmp_path)
     t = Trade(tmp_path / "db", providers=[])
-    monkeypatch.setattr(S, "trade", lambda: t)
+    patch_services(monkeypatch, "trade", lambda: t)
     monkeypatch.setattr("sc_mining.stockplaces.current_place", lambda: None)
     # 以前手打的位置（直接写进库存，不经过地点列表）
     t.catalog.upsert([Item("ber", "Beryl"), Item("crp", "CryoPod")])
@@ -249,7 +250,7 @@ def test_stock_out_set_move_and_places(monkeypatch, tmp_path):
            StockLine(StockKey("crp", "exact:0", "MOLE 货舱", "unit"), 2)]
     t.inventory.commit(t.inventory.prepare(old, "add"), allow_duplicate=True)
     t = Trade(tmp_path / "db", providers=[])                                       # 升级后第一次打开：能对上的自动归位
-    monkeypatch.setattr(S, "trade", lambda: t)
+    patch_services(monkeypatch, "trade", lambda: t)
     assert list((tmp_path / "db").glob("inventory_地点归位前备份_*.db"))
     d = S.stock()
     assert [(g["sys"], [p["label"] for p in g["places"]]) for g in d["tree"]] == [("斯坦顿", ["18区"])]
@@ -382,7 +383,7 @@ def test_stock_bins_reserve_ledger_and_values(monkeypatch, tmp_path):
     from sc_mining.app import services as S
     G = _setup(monkeypatch, tmp_path)
     t = Trade(tmp_path / "db", providers=[])
-    monkeypatch.setattr(S, "trade", lambda: t)
+    patch_services(monkeypatch, "trade", lambda: t)
     monkeypatch.setattr("sc_mining.stockplaces.current_place", lambda: None)
     add = lambda **k: S.stock_add_named(**{"name": "钛", "en": "Titanium", "zh": "钛", "kind": "矿物", "unit": "SCU", "quality": "950", **k})
     # 仓位：建在 New Babbage → 记在新巴贝奇下面；不能重名、不能叫总仓
@@ -434,7 +435,7 @@ def test_stock_bins_reserve_ledger_and_values(monkeypatch, tmp_path):
     # 估值：按缓存里最便宜的出售挂牌（品质档、单位对得上才算），品质未知的不算
     from decimal import Decimal
     tit = next(x for x in S.stock()["rows"] if x["place"] == "新巴贝奇")
-    monkeypatch.setattr(S, "_price_index", lambda _t: {(tit["id"], "q7", "SCU"): (Decimal(1000), "uex")})
+    patch_services(monkeypatch, "_price_index", lambda _t: {(tit["id"], "q7", "SCU"): (Decimal(1000), "uex")})
     d = S.stock()
     tit = next(x for x in d["rows"] if x["place"] == "新巴贝奇")
     assert tit["value"] == 3000 and d["value_total"] >= 3000 and d["priced"] >= 1
@@ -450,7 +451,7 @@ def test_goal_finish_deducts_stock(monkeypatch, tmp_path):
     from sc_mining import crafting as CR
     G = _setup(monkeypatch, tmp_path)
     t = Trade(tmp_path / "db", providers=[])
-    monkeypatch.setattr(S, "trade", lambda: t)
+    patch_services(monkeypatch, "trade", lambda: t)
     bp = next(b for b in CR.blueprints() if (G.requirements({"kind": "craft", "ref": b["n"], "times": 1}) or [None])
               and all(r["alts"][0]["unit"] == "SCU" for r in G.requirements({"kind": "craft", "ref": b["n"], "times": 1})))
     reqs = G.requirements({"kind": "craft", "ref": bp["n"], "times": 1})
@@ -497,7 +498,7 @@ def test_crafted_item_qualities_from_bonus(monkeypatch, tmp_path):
     assert [x["q"] for x in r["slots"]] == [858, 916, 959] and r["avg"] == 911 and r["exact"]
     G = _setup(monkeypatch, tmp_path)
     t = Trade(tmp_path / "db", providers=[])
-    monkeypatch.setattr(S, "trade", lambda: t)
+    patch_services(monkeypatch, "trade", lambda: t)
     out = S.stock_add_named(name="视差 “血红” 能量突击步枪", en='Parallax "Sanguine" Energy Assault Rifle', zh="视差 “血红” 能量突击步枪",
                             qty=1, unit="个", location="新巴贝奇", craft=[dict(x) for x in r["slots"]])
     row = next(x for x in out["rows"] if x["en"].startswith("Parallax"))

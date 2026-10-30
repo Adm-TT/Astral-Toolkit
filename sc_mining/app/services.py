@@ -243,22 +243,6 @@ for _mod, _symbols in _TASK_OWNERSHIP:
             globals()[_name] = getattr(_mod, _name)
 
 
-class _Facade(type(sys)):
-    """给 services 设值（测试 monkeypatch、运行时改开关）同步到真正用它的任务模块，
-    不然只改了这里的副本，任务模块照旧用老的（2026-10-30 合并 NGU 重构：6 个测试因此失败，
-    其中反馈导出直接写到了真桌面）"""
-    def __setattr__(self, name, value):
-        old = self.__dict__.get(name, _MISSING)
-        super().__setattr__(name, value)
-        for mod, symbols in _TASK_OWNERSHIP:
-            if name in symbols or (old is not _MISSING and getattr(mod, name, _MISSING) is old):
-                setattr(mod, name, value)
-
-
-_MISSING = object()
-sys.modules[__name__].__class__ = _Facade
-
-
 # ================================================================ 运行时后台服务与诊断
 def start_background():
     """打开天枢主窗口时启动后台服务：热键监听、定时查更新、搜索索引预热、未发送反馈补发、原矿扫描续跑"""
