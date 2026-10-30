@@ -272,7 +272,8 @@ def waypoint_preview(text=""):
     if here.get("inside") and here.get("height_m", 0) < _surface_limit(here):
         return {"ok": True, "space": False, "body": here["body"], "body_zh": n.body_label(here["body"]),
                 "lat": round(here["lat"], 4), "lon": round(here["lon"], 4), "alt": round(here["height_m"]),
-                "desc": f"{n.body_label(here['body'])}，纬度 {here['lat']:.3f}°，经度 {here['lon']:.3f}°，海拔 {here['height_m']:,.0f} m"}
+                "desc": f"{n.body_label(here['body'])}，纬度 {here['lat']:.3f}°，经度 {here['lon']:.3f}°"
+                        + (f"，海拔 {here['height_m']:,.0f} m" if n.height_ok(here) else "")}
     system = n.system_of(g, data, **_pos.hints())
     return {"ok": True, "space": True, "body": "@" + system, "body_zh": n.body_label("@" + system),
             "desc": f"太空：{n.body_label('@' + system)} 星系坐标 {tuple(round(v / 1000, 1) for v in g)} km"}
@@ -436,7 +437,7 @@ def _save_here(name, g, info=None):
     here = n.locate(g, data=data, use_offset=False)
     if here.get("inside") and here.get("height_m", 0) < _surface_limit(here):
         n.add_waypoint(name, here["body"], n.pos(here))
-        desc = f"{n.body_label(here['body'])}，海拔 {here['height_m']:,.0f} m"
+        desc = n.body_label(here["body"]) + (f"，海拔 {here['height_m']:,.0f} m" if n.height_ok(here) else "")
     else:
         system = n.system_of(g, data, **_pos.hints())
         n.add_space_waypoint(name, system, g)
@@ -511,7 +512,7 @@ def _coord_desc(g):
     data = n.load()
     here = n.locate(g, data=data, use_offset=False)
     if here.get("inside") and here.get("height_m", 0) < _surface_limit(here):
-        return f"{n.body_label(here['body'])}，海拔 {here['height_m']:,.0f} m"
+        return n.body_label(here["body"]) + (f"，海拔 {here['height_m']:,.0f} m" if n.height_ok(here) else "")
     return n.body_label("@" + n.system_of(g, data, **_pos.hints()))
 
 

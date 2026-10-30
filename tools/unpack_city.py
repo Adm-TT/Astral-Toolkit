@@ -34,7 +34,7 @@ CONTAINERS = [
     (r"^lorville_hosp_int$", "医院", "Maria Pure of Heart Hospital"),
     (r"^a18_hospital_int$", "医院", "Area18 Hospital"),
     (r"^orison_hospital_int$", "医院", "Orison General Hospital"),
-    (r"^levski_hosp_lobby$", "医院", "Mercy Hospital"),
+    (r"^levski_hosp(?:_lobby)?$", "医院", "Mercy Hospital"),     # 新版列夫斯基叫 levski_hosp（星图记录 Delemar_Levski_Hospital = 仁慈医院）
     (r"^(mpoh_pharmacy|area_18_pharmacy|pharmacy_orison|levski_pharmacy)$", "医院", "Pharmacy"),
     (r"^health_insurance_mpoh$", "医院", "Health Insurance"),
     (r"^astroarmada_area18_int$", "买船", "Astro Armada"),
@@ -203,6 +203,7 @@ def parent_q(idx, stem):
 
 
 BODIES = {}                   # 星图里的天体（build 时读）
+CITY_UP = {}                  # 不自转天体上的城 → 城自己的「上」（单位向量）
 PARENTS = {}                  # 容器名 → 外面那层容器名（找区域用：店在哪个大区里）
 
 
@@ -323,12 +324,18 @@ def build(dirs, only=None):
         P = tuple(float(v) for v in m.group(1).split(","))
         Q = tuple(float(v) for v in m.group(2).split(","))
         qp = parent_q(idx, planet_stem)
+        bd = BODIES.get(body)
+        if bd is None:                     # 查不到星球就别猜它转不转（猜错整城的点都会错，审查 2026-10-30）
+            print(f"⚠ 星图里没有 {body}，{city} 跳过")
+            continue
         if qp is None:
             print(f"⚠ {planet_stem} 没被任何星系根容器引用（可能是旧版容器），{city} 的坐标可能不对")
-        elif not BODIES.get(body, {}).get("rot"):
+        elif bd.get("rot") == 0:
             # 不自转的天体（Delamar）：星图里的局部坐标不转，城里的点要先乘上星球容器自己的朝向
             # （区段绕 z 转了约 49°，不乘差 6.6 km；会自转的星球朝向已经算进相位，不能再乘）
             P, Q = rot(qp, P), qmul(qp, Q)
+            # 城自己的「上」：列夫斯基的竖直方向和离小行星原点的方向差 11°，按半径分上下楼会报错（审查 2026-10-30）
+            CITY_UP[city] = [round(v, 6) for v in rot(Q, (0, 0, 1))]
         nodes = [(top, top, P, Q, ())] + walk(idx, top, P, Q)
         seen = {}
         for stem, ent, gp, gq, anc in nodes:
@@ -360,6 +367,9 @@ def build(dirs, only=None):
                             places.append({"city": city, "body": body, "cat": cat, "en": label, "src": f"{stem}/{base}", "m": g,
                                            "_anc": anc})
                         break
+    for p in places:
+        if p["city"] in CITY_UP:
+            p["up"] = CITY_UP[p["city"]]
     out = []
     for p in places:
         if p["cat"] in SKIP_CATS:

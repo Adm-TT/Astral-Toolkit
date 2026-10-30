@@ -1068,8 +1068,9 @@ def nav_text(here, target, data=None):
     d3 = direct_km(a, t)
     tgt_h = latlon(t)[2] * 1000 - here["radius_km"] * 1000
     dh = tgt_h - here["height_m"]
-    line = (f"→ 朝 {deg_text(brg)}°（{compass(brg)}）飞 {ds:,.1f} km（直线 {d3:,.1f} km）"
-            f"｜当前高度 {here['height_m']:,.0f} m，目标 {tgt_h:,.0f} m（{'需上升' if dh > 0 else '需下降'} {abs(dh):,.0f} m）")
+    line = f"→ 朝 {deg_text(brg)}°（{compass(brg)}）飞 {ds:,.1f} km（直线 {d3:,.1f} km）"
+    if height_ok(here):
+        line += f"｜当前高度 {here['height_m']:,.0f} m，目标 {tgt_h:,.0f} m（{'需上升' if dh > 0 else '需下降'} {abs(dh):,.0f} m）"
     if ds < 1:
         line += "\n  ✅ 已经到了（1 km 内），找找周围"
     else:
@@ -1110,8 +1111,13 @@ def here_text(here, data=None):
     if not here["inside"]:
         return f"深空中，最近的星球是 {body_label(here['body'])}"
     near = near_text(here, data)
-    return (f"当前在 {body_label(here['body'])}：纬度 {here['lat']:.3f}°，经度 {here['lon']:.3f}°，"
-            f"高度 {here['height_m']:,.0f} m" + (f"｜{near}" if near else ""))
+    return (f"当前在 {body_label(here['body'])}：纬度 {here['lat']:.3f}°，经度 {here['lon']:.3f}°"
+            + (f"，高度 {here['height_m']:,.0f} m" if height_ok(here) else "") + (f"｜{near}" if near else ""))
+
+
+def height_ok(here):
+    """高度能不能显示：比星图表面低 1 km 以上不可能是真地面（列夫斯基在德拉玛的钻孔里，星图半径不是这块的），不显示（审查 2026-10-30）"""
+    return here.get("height_m") is not None and here["height_m"] >= -1000
 
 
 # ---------------------------------------------------------------- 挖矿点（2026-10-27 解包：能量子过去、而且刷船挖矿的太空地点）
