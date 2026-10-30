@@ -696,3 +696,50 @@ def test_tooltip_double_picks_bright():
     img = Image.open(d / "hover_double.jpg").convert("RGB")
     _toks, name, _where = _read_tooltip(img, (1950, 820))
     assert canonical(*name)[1] == "Pyro RYT Multi-Tool", name
+
+
+
+# ---------------------------------------------------------------- 2026-10-30 重构阶段 1：交易、库存的接口走自己的 Controller
+_TRADE_API = ["search", "item_search", "item_info", "item_loot", "nav_shop", "trade", "market_lookup",
+              "market_prices", "mineral_search", "mineral_info"]
+_STOCK_API = ["stock", "stock_add", "craft_slots_for", "stock_add_named", "stock_suggest", "stock_set_quality",
+              "stock_undo", "stock_out", "stock_set_qty", "stock_move", "stock_relocate", "stock_keep_custom",
+              "stock_places", "stock_place_add", "stock_bin_save", "stock_bin_delete", "stock_reserve",
+              "stock_ledger", "stock_prices"]
+
+
+def test_trade_stock_controller_routes():
+    """交易、库存的每个接口名都由 app/api/trade.py、app/api/stock.py 接，名单和 Controller 的 ROUTES 一个不多一个不少"""
+    from sc_mining.app.api import router, trade as CT, stock as CS
+    router.reset()
+    r = router.routes()
+    for name in _TRADE_API:
+        assert r[name].__module__ == "sc_mining.app.api.trade", name
+    for name in _STOCK_API:
+        assert r[name].__module__ == "sc_mining.app.api.stock", name
+    assert sorted(CT.ROUTES) == sorted(_TRADE_API) and sorted(CS.ROUTES) == sorted(_STOCK_API)
+
+
+def test_trade_stock_tasks_no_services():
+    """tasks/trade.py、tasks/stock.py 不再反过来引用 app.services"""
+    root = Path(__file__).resolve().parent.parent / "sc_mining" / "tasks"
+    for f in ("trade.py", "stock.py"):
+        text = (root / f).read_text(encoding="utf-8")
+        for bad in ("app import services", "_services()", "@api"):
+            assert bad not in text, (f, bad)
+
+
+def test_trade_stock_bridge_roundtrip(monkeypatch, tmp_path):
+    """只读接口 stock_places：走 BackendBridge 和直接调 tasks 结果一样"""
+    from sc_mining.app.api.bridge import BackendBridge
+    from sc_mining.app.api import router
+    from sc_mining.tasks import trade as TT, stock as TS
+    from sc_mining.trade.console import Trade
+    t = Trade(tmp_path / "db", providers=[])
+    monkeypatch.setattr(TT, "trade", lambda: t)
+    monkeypatch.setattr(TS, "trade", lambda: t)
+    router.reset()
+    got = BackendBridge().call("stock_places", {})
+    assert got["ok"], got
+    want = json.loads(json.dumps(TS.stock_places(), ensure_ascii=False, default=str))
+    assert got["data"] == want
