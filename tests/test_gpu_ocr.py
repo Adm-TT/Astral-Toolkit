@@ -173,5 +173,36 @@ def test_cpu_error_not_retried(monkeypatch):
     assert len(made) == 1 and not perf._cpu_fallback
 
 
+def test_switch_device_reaches_every_caller(monkeypatch):
+    """切显卡 / CPU 后，交易识别（trade.ocr）、采矿读屏（screen._ocr / _recognize）用的都是新引擎：
+    它们缓存的是同一个共享对象，切换只换里面的引擎"""
+    import numpy as np
+    from PIL import Image
+    from sc_mining.trade import ocr as T
+    from sc_mining.mining import screen as S
+    made = _fake_engines(monkeypatch)
+    monkeypatch.setattr(T, "_engine", None)
+    monkeypatch.setattr(S, "_engine", None)
+    monkeypatch.setattr(S, "_rec", None)
+    img, arr = Image.new("RGB", (16, 16)), np.zeros((16, 16, 3), dtype=np.uint8)
+
+    def use_all():
+        T.recognize(img)
+        T.recognize(img, urgent=True)
+        T.read_line(img)
+        S._ocr()(arr)
+        S._recognize()(arr)
+
+    use_all()                                             # 各处先各自缓存一次
+    assert len(made) == 1 and made[0].gpu and made[0].calls == 5
+    shared = perf.rapidocr()
+    assert T._engine is shared
+    monkeypatch.setattr(perf, "is_gpu_preferred", lambda: False)
+    assert perf.set_ocr_device("cpu") == "CPU"
+    assert perf.rapidocr() is shared and len(made) == 2 and not made[1].gpu
+    use_all()
+    assert made[0].calls == 5 and made[1].calls == 5      # 切换后旧引擎一次都没再用
+
+
 if __name__ == "__main__":
     unittest.main()

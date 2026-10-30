@@ -144,6 +144,12 @@ class _Locked:
                 self.waiting -= 1
                 self.cv.notify_all()
 
+    def swap(self, eng, gpu=False):
+        """换内层引擎（切显卡 / CPU）：等正在跑的那次识别跑完再换。
+        外面各处拿到的都是这同一个对象，换完以后所有识别自动用新的"""
+        with self.lock:
+            self.eng, self.kind, self.gpu = eng, type(eng).__module__, gpu
+
     def _infer(self, a, kw, native):
         td = getattr(self.eng, "text_det", None)
         if not native or td is None or not hasattr(td, "limit_side_len") or not a:
@@ -204,7 +210,8 @@ def _new_engine(gpu):
 
 
 def rapidocr():
-    """全程序共用的一个 RapidOCR 实例（按用户设置在主进程直接加载 DirectML 或 CPU）"""
+    """全程序共用的一个 RapidOCR 实例（按用户设置在主进程直接加载 DirectML 或 CPU）。
+    切显卡 / CPU 只换它里面的引擎，这个对象本身不换：各处缓存的引用一直有效"""
     global _engine, _last_error
     with _lock:
         if _engine is None:
@@ -216,16 +223,23 @@ def rapidocr():
 
 
 def set_ocr_device(target):
-    """切换 OCR 识别模式：'gpu' 或 'cpu'"""
+    """切换 OCR 识别模式：'gpu' 或 'cpu'。在同一个共享对象里换内层引擎（以前是整个换掉，
+    采矿读屏、交易识别各自缓存了旧对象，切了不生效）"""
     global _engine, _last_error, _cpu_fallback
     with _lock:
         target = (target or "gpu").lower()
         from . import settings
         settings.update(ocr_device=target, always_use_gpu=(target == "gpu"))
-        _engine = None
         _last_error = ""
-        _cpu_fallback = False                     # 玩家自己切过：以前显卡出错改用 CPU 的那次不算了
-        rapidocr()
+        if _engine is None:
+            _cpu_fallback = False
+            rapidocr()
+        else:
+            eng, gpu, err = _new_engine(USE_GPU and is_gpu_preferred() and gpu_available())
+            if err:
+                _last_error = err
+            _engine.swap(eng, gpu)
+            _cpu_fallback = False                 # 玩家自己切过：以前显卡出错改用 CPU 的那次不算了
         return ocr_device()
 
 
