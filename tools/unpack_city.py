@@ -20,7 +20,8 @@ CITIES = {   # 城市 → (挂在哪个星球的容器里, 城市总容器, 星�
     "Lorville": ("stanton1", "lorville", "Hurston", "罗威尔"),          # 2026-10-27 老大：四个主城都做
     "Area18": ("stanton3", "a18_city", "ArcCorp", "18区"),
     "Orison": ("stanton2", "orison_all", "Crusader", "奥里森"),
-    "Levski": ("delamar", "levski", "Delamar", "列夫斯基"),
+    # 现在的列夫斯基挂在冰川环带的区段上；以前用的 delamar/levski 是旧版，星系里已经不引用了，坐标差 70 多 km（玩家反馈 2026-10-30）
+    "Levski": ("glaciemring_segment_levski", "levski_all", "Delamar", "列夫斯基"),
 }
 
 # 容器 → (类别, 英文名)。类别：空港 / 交易 / 商店 / 医院 / 地铁 / 公寓 / 其他
@@ -190,6 +191,18 @@ def index(dirs):
     return idx
 
 
+def parent_q(idx, stem):
+    """星球容器在星系根容器（xxxsystem.xml）里的朝向；找不到 = 这个容器没被星系引用（多半是旧版，用了会算错）"""
+    pat = re.compile(r'<Child [^>]*?name="[^"]*/' + re.escape(stem) + r'\.socpak"[^>]*?rot="([^"]+)"', re.I)
+    for k, f in idx.items():
+        if k.endswith("system"):
+            m = pat.search(f.read_text(encoding="utf-8", errors="ignore"))
+            if m:
+                return tuple(float(v) for v in m.group(1).split(","))
+    return None
+
+
+BODIES = {}                   # 星图里的天体（build 时读）
 PARENTS = {}                  # 容器名 → 外面那层容器名（找区域用：店在哪个大区里）
 
 
@@ -293,6 +306,8 @@ def snap(idx, stem, gp, gq):
 
 def build(dirs, only=None):
     idx = index(dirs)
+    global BODIES
+    BODIES = json.loads((ROOT / "data" / "starmap.json").read_text(encoding="utf-8"))["bodies"]
     places = []
     for city, (planet_stem, top, body, city_zh) in CITIES.items():
         if only and city != only:
@@ -307,6 +322,13 @@ def build(dirs, only=None):
             continue
         P = tuple(float(v) for v in m.group(1).split(","))
         Q = tuple(float(v) for v in m.group(2).split(","))
+        qp = parent_q(idx, planet_stem)
+        if qp is None:
+            print(f"⚠ {planet_stem} 没被任何星系根容器引用（可能是旧版容器），{city} 的坐标可能不对")
+        elif not BODIES.get(body, {}).get("rot"):
+            # 不自转的天体（Delamar）：星图里的局部坐标不转，城里的点要先乘上星球容器自己的朝向
+            # （区段绕 z 转了约 49°，不乘差 6.6 km；会自转的星球朝向已经算进相位，不能再乘）
+            P, Q = rot(qp, P), qmul(qp, Q)
         nodes = [(top, top, P, Q, ())] + walk(idx, top, P, Q)
         seen = {}
         for stem, ent, gp, gq, anc in nodes:
