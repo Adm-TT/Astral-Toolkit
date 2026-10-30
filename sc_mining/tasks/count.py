@@ -52,7 +52,7 @@ _count = EngineManager.get_instance().count
 def _read_item(img, cursor):
     """鼠标指着的物品：{zh, en, quality, qty, unit, sure, craft}；认不出返回 None（调用通用 inspector 组件）"""
     from ..trade.inspector import inspect_item
-    return inspect_item(img, cursor)
+    return inspect_item(img, cursor, craft_override=True)     # 盘点：制造品按蓝图倒推的品质为准，带上各槽品质
 
 
 def _kl(k):

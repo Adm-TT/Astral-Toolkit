@@ -215,5 +215,34 @@ def test_hover_sends_raw_and_canon_to_train_data(monkeypatch):
     assert not [a for t, a in started if t is train_data.from_tooltip]
 
 
+def test_craft_override_for_count(monkeypatch):
+    """F6 盘点（craft_override=True）：加成和蓝图完全对上就用倒推的品质和各槽品质；F8 默认格子上读到品质就不倒推"""
+    from sc_mining.trade import inspector
+    from sc_mining.crafting import crafting
+    toks = [OcrToken("能量突击步枪", 90, (100, 50, 80, 20))]
+    slots = [{"slot": "Frame", "q": 700}]
+    monkeypatch.setattr(inspector, "_read_tooltip", lambda img, cur: (toks, ("能量突击步枪", "P4-AR Rifle"), "30-50%"))
+    monkeypatch.setattr(inspector, "cell_labels", lambda *a, **k: (500, 1))
+    monkeypatch.setattr(crafting, "parse_mods", lambda t: ["mod"])
+    monkeypatch.setattr(crafting, "for_item", lambda en, zh: "bp")
+    monkeypatch.setattr(crafting, "solve_slots", lambda bp, mods: {"exact": True, "avg": 700, "slots": slots})
+    f8 = inspector.inspect_item(MockImage(), (200, 500))
+    assert f8["quality"] == 500 and f8["craft"] is None
+    f6 = inspector.inspect_item(MockImage(), (200, 500), craft_override=True)
+    assert f6["quality"] == 700 and f6["craft"] == slots
+    monkeypatch.setattr(crafting, "solve_slots", lambda bp, mods: {"exact": False, "avg": 600, "slots": slots})
+    f6 = inspector.inspect_item(MockImage(), (200, 500), craft_override=True)
+    assert f6["quality"] == 500 and f6["craft"] is None      # 对不上蓝图：格子上的品质照用
+
+
+def test_count_read_item_uses_craft_override(monkeypatch):
+    from sc_mining.trade import inspector
+    from sc_mining.tasks.count import _read_item
+    seen = {}
+    monkeypatch.setattr(inspector, "inspect_item", lambda img, cur, **kw: seen.update(kw) or {"zh": "x"})
+    _read_item(MockImage(), (1, 1))
+    assert seen == {"craft_override": True}
+
+
 if __name__ == "__main__":
     unittest.main()

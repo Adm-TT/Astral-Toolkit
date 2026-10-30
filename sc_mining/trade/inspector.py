@@ -406,8 +406,10 @@ def _is_mineral(zh, en):
         return False
 
 
-def inspect_item(img, cursor: Tuple[int, int], tokens=None, where=None) -> Optional[Dict[str, Any]]:
-    """识别鼠标悬停的物品格与说明框，返回结构化字典或 None：
+def inspect_item(img, cursor: Tuple[int, int], tokens=None, where=None, craft_override=False) -> Optional[Dict[str, Any]]:
+    """识别鼠标悬停的物品格与说明框，返回结构化字典或 None。
+    craft_override=True（F6 盘点用）：制造品的加成和蓝图完全对上时，用倒推出的品质和各槽品质，
+    读到的品质数字也让位（和 1.1.1 盘点一样）；F8 默认只在没读到品质数字时才倒推：
     {
         "zh": 中文名,
         "en": 英文名,
@@ -465,15 +467,15 @@ def inspect_item(img, cursor: Tuple[int, int], tokens=None, where=None) -> Optio
     qty, unit = (row_amt, "SCU") if mineral else ((cell_n or 1), "个")
 
     craft = None
-    if not mineral and row_q is None and cell_q is None:
+    if not mineral and (craft_override or (row_q is None and cell_q is None)):
         # 制造出来的装备无显式品质数字，根据蓝图修饰词倒推各材料槽品质
         try:
             from ..crafting.crafting import parse_mods, solve_slots, for_item
             mods = parse_mods(tokens)
             res = solve_slots(for_item(en, zh), mods) if mods else None
-            if res and res["exact"]:
+            if res and res["exact"]:                       # 加成对不上蓝图：不当品质
                 quality, craft = res["avg"], res["slots"]
-            elif res:
+            elif res and row_q is None and cell_q is None:  # 没直接读到品质、倒推又对不上：品质未知，不记成 0
                 quality = None
         except Exception:
             craft = None
