@@ -22,8 +22,13 @@ function api(name, args = {}) {
   const p = (async () => {
     let r, j;
     try {
-      r = await fetch(`/api/${name}`, { method: "POST", headers: { "Content-Type": "application/json", "X-Token": TOKEN }, body: JSON.stringify(args) });
-      j = await r.json();
+      // 2026-10-30 阶段 0：在 AT 自己的窗口（PyWebview）里直接调 Python，不走本机 HTTP；返回格式一样。
+      // pywebview.api 是页面加载完才注入的，注入前的调用照旧走 fetch
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.call) j = await window.pywebview.api.call(name, args);
+      else {
+        r = await fetch(`/api/${name}`, { method: "POST", headers: { "Content-Type": "application/json", "X-Token": TOKEN }, body: JSON.stringify(args) });
+        j = await r.json();
+      }
     } catch (e) { throw new Error("连不上 AT 后台（可能正在重启），稍后再试"); }
     if (!j.ok) throw new Error(j.error || "操作失败");
     if (j.data && j.data.error) throw new Error(j.data.error);
@@ -432,10 +437,14 @@ function applyTheme(t) {
   shellSync();
 }
 // AT 窗口外壳（2026-10-27）：顶条左段和侧边栏同宽同色、跟着主题变；不在外壳里（Edge 窗口、浏览器）时什么也不做
+const IN_PYWEBVIEW = (() => { try { return new URLSearchParams(location.search).has("pywebview"); } catch (e) { return false; } })();
 function shellSync() {
   try {
     const wv = window.chrome && window.chrome.webview;
-    if (!wv) return;
+    // PyWebview 窗口也是 WebView2，但没有 ATShell 那条顶条：品牌行别藏（2026-10-30）。
+    // window.pywebview 要等页面加载完才注入，刚打开时先调的这里还看不到，所以 window.py 在网址上加了 ?pywebview=1
+    const atshell = wv && !window.pywebview && !IN_PYWEBVIEW;
+    if (!atshell) return;
     document.documentElement.classList.add("in-shell");     // 外壳的顶条里已经画了「AT 星际公民助手」，网页里的品牌行收起（2026-10-28）
     const rail = document.querySelector(".rail");
     wv.postMessage({ type: "chrome", light: document.documentElement.dataset.theme === "light", rail: rail ? rail.getBoundingClientRect().width : 0 });

@@ -75,6 +75,17 @@ def lower_priority():
         pass
 
 
+def trim_process_memory():
+    """窗口最小化、藏到托盘时调：把本进程暂时用不着的内存还给系统，让给游戏（NGU 设计 4.3 节，2026-10-30 阶段 0）。
+    SetProcessWorkingSetSize(-1, -1)：只是把工作集换出，要用时系统再换回来；非 Windows 什么都不做，出错不管"""
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            ctypes.windll.kernel32.SetProcessWorkingSetSize(ctypes.c_void_p(-1), ctypes.c_size_t(-1), ctypes.c_size_t(-1))
+        except Exception:
+            pass
+
+
 _boost = {"n": 0, "lock": threading.Lock()}
 
 

@@ -133,17 +133,14 @@ class Handler(BaseHTTPRequestHandler):
         raw = self.rfile.read(n) if n else b""          # 先把请求体读完，拒绝时也不能留在连接里
         if not self._allowed():
             return self._send(403, json.dumps({"ok": False, "error": "拒绝访问"}))
-        fn = services.API.get(name)
-        if not fn:
-            return self._send(404, json.dumps({"error": f"没有 {name}"}))
+        from .api import router                         # 2026-10-30 阶段 0：HTTP 和 PyWebview 走同一个 router
+        if name not in router.routes():
+            return self._send(404, json.dumps({"ok": False, "error": f"没有 {name}"}, ensure_ascii=False))
         try:
             args = json.loads(raw or b"{}")
-            result = fn(**args)
-            self._send(200, json.dumps({"ok": True, "data": result}, ensure_ascii=False, default=str))
         except Exception as e:
-            import traceback
-            traceback.print_exc()
-            self._send(200, json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False))
+            return self._send(200, json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False))
+        self._send(200, json.dumps(router.call(name, args), ensure_ascii=False))
 
     def _screenshot(self):
         from urllib.parse import urlparse, parse_qs
@@ -378,6 +375,10 @@ def _single_instance(restart=False):
 
 def show_window():
     """打开 AT 窗口：已经开着就拉到最前面，没开才新开一个（以前每次都新开，会叠出好几个窗口）"""
+    from . import window
+    if window.active():                             # 2026-10-30 阶段 0：PyWebview 窗口藏在托盘时 focus_window 找不到（只找看得见的窗口）
+        window.show()
+        return
     try:
         from .winid import focus_window
         if focus_window():
@@ -421,6 +422,14 @@ def _relaunch():
     QUIT.set()
 
 
+def _told_tray(tray):
+    """第一次关窗口：托盘气泡告诉你 AT 还在右下角（只说一次）"""
+    if STATE["told_tray"] or tray is None:
+        return
+    STATE["told_tray"] = True
+    tray.notify("AT 还在后台运行", "F8 识别、自动跑、悬浮窗照常可用。双击右下角图标重新打开，右键可以退出。")
+
+
 def main(open_ui=True, port=0, restart=False):
     if open_ui and not _single_instance(restart):
         return
@@ -441,15 +450,35 @@ def main(open_ui=True, port=0, restart=False):
     except Exception:
         pass
     tray = None
+    from . import window
+    use_wv = open_ui and window.available()         # 2026-10-30 阶段 0：有 pywebview 就用自己的窗口，没有走原来的 ATShell → Edge
     if open_ui:
         from .tray import Tray
+        # on_open 还是 show_window：PyWebview 窗口在的时候它直接调 window.show()；PyWebview 打不开退回 Edge 时照旧
         tray = Tray(Path(__file__).resolve().parent / "icon.ico", on_open=show_window, on_restart=_relaunch,
                     on_quit=QUIT.set)
         tray.start()
         STATE["tray"] = tray
-        STATE["edge"] = open_window(url)
+        if not use_wv:
+            STATE["edge"] = open_window(url)
     started = time.time()
     try:
+        if use_wv:
+            # 主线程跑窗口，一直到窗口销毁（托盘退出 → QUIT → window 里的线程 destroy；没托盘时点关闭就真关）。
+            # 原来下面那个等 QUIT 的循环在 PyWebview 模式下不用跑：窗口藏起来时网页的实时推送连接不断，
+            # 「没连接就提示托盘 / 退出」那两条本来就不会触发；托盘提示改由窗口的 closing 发
+            try:
+                from .api.bridge import BackendBridge
+                window.run(url, BackendBridge(), on_hide_first=lambda: _told_tray(tray), quit_ev=QUIT,
+                           keep_running=lambda: bool(tray and tray.ok))
+            except Exception:
+                import traceback
+                traceback.print_exc()
+                if not QUIT.is_set():
+                    STATE["edge"] = open_window(url)            # PyWebview 打不开：照旧用 ATShell / Edge
+                    use_wv = False
+            if use_wv:
+                QUIT.set()                                      # 窗口真关了（没托盘时）或被 destroy：退出
         while not QUIT.is_set():
             time.sleep(0.5)
             if bus.clients():
@@ -461,8 +490,7 @@ def main(open_ui=True, port=0, restart=False):
                 if not _last_client["ever"] and time.time() - started > 90:
                     break
             elif _last_client["ever"] and not STATE["told_tray"] and time.time() - _last_client["t"] > 3:
-                STATE["told_tray"] = True               # 第一次关窗口：告诉你天枢还在右下角
-                tray.notify("AT 还在后台运行", "F8 识别、自动跑、悬浮窗照常可用。双击右下角图标重新打开，右键可以退出。")
+                _told_tray(tray)                        # 第一次关窗口：告诉你天枢还在右下角
     except KeyboardInterrupt:
         pass
     finally:
@@ -471,11 +499,6 @@ def main(open_ui=True, port=0, restart=False):
         _close_edge()
         if tray:
             tray.remove()
-        try:
-            services._live.stop_ev.set()
-            services._nav.stop_ev.set()
-            from ..system import gpu_ocr
-            gpu_ocr.shutdown()
-        except Exception:
-            pass
+        from .engines.manager import EngineManager
+        EngineManager.get_instance().stop_all()
         server.shutdown()
