@@ -94,14 +94,21 @@ def _open(url, timeout):
     return urllib.request.urlopen(req, timeout=timeout)
 
 
+class NoPackage(ValueError):
+    """这份版本说明里没有这种版本能用的包（压缩包版停止维护后只发安装版）：当作没有新版本，不算出错"""
+
+
 def parse(raw, frozen=None):
-    """读版本说明；格式不对抛 ValueError。frozen：独立安装版（默认看现在是不是），只认 installer 那一项"""
+    """读版本说明；格式不对抛 ValueError。frozen：独立安装版（默认看现在是不是），只认 installer 那一项。
+    源码版读到只有安装程序、顶层没有 file 的版本说明：抛 NoPackage（没有新版本，不报错）"""
     from .upgrade import ver
     frozen = paths.FROZEN if frozen is None else frozen
     d = json.loads(raw)
     v = str(d.get("version") or "")
     if ver(v) == (0, 0, 0):
         raise ValueError("版本号格式错误")
+    if not frozen and "file" not in d and isinstance(d.get("installer"), dict):
+        raise NoPackage("这个版本只发安装版，源码版不再在线更新")
     pkg, pattern = (d.get("installer"), SETUP) if frozen else (d, NAME)
     if not isinstance(pkg, dict):
         raise ValueError("这个版本没有独立安装程序")
@@ -229,7 +236,7 @@ def fetch(timeout=TIMEOUT):
     返回 (info, 哪里读到的)；都读不到返回 (None, 原因)。
     顺便更新远程关功能的列表：取 kill_rev 最大（同样大取版本新）的那份清单里的 disabled"""
     from .upgrade import ver
-    errs, best, kill = [], None, None
+    errs, best, kill, nopkg = [], None, None, False
     for where, raw in _fetch_all(manifest_urls(), timeout):
         if isinstance(raw, Exception):
             errs.append(f"{where}：{raw}")
@@ -248,6 +255,8 @@ def fetch(timeout=TIMEOUT):
             info["source"] = where
             if best is None or ver(info["version"]) > ver(best["version"]):
                 best = info
+        except NoPackage:
+            nopkg = True
         except Exception as e:
             errs.append(f"{where}：{e}")
     if kill is not None:
@@ -255,6 +264,8 @@ def fetch(timeout=TIMEOUT):
         _kill["at"] = time.time()
     if best:
         return best, best["source"]
+    if nopkg:                                # 读到了，只是没有这种版本的包：没有新版本，不是连不上
+        return None, ""
     return None, "；".join(errs) or "未设置更新地址"
 
 
@@ -367,14 +378,25 @@ def _entry(p, tag):
 
 def make_manifest(zip_path, notes=(), date="", installer=None, keep=None):
     """发版本时用：按安装包生成 latest.json 的内容（tools/make_manifest.py 调这个）。
-    installer：同一版本的独立安装程序 AT_Setup_x.y.z.exe（可选，独立安装版在线升级用）。
+    zip_path：Dubhe_x.y.z.zip；压缩包版停止维护后可以给 None，只发安装程序：这时顶层不写 file / size / sha256 / urls，
+    版本号取安装程序文件名，源码版读到会当作没有新版本（不会出现版本是新号、file 却指向旧压缩包）。
+    installer：同一版本的独立安装程序 AT_Setup_x.y.z.exe（有压缩包时可选，没压缩包时必须给）。
     keep：网上现在的 latest.json——远程关功能的 kill_rev 和 disabled 原样带上（Codex 2026-10-27：发新版不能把旧版的禁用清掉）"""
-    from .upgrade import check as check_pkg
-    p = Path(zip_path)
-    _, v = check_pkg(p)
+    from .upgrade import check as check_pkg, ver
+    if zip_path:
+        p = Path(zip_path)
+        _, v = check_pkg(p)
+    elif installer:
+        mt = re.match(r"^AT_Setup_(\d+\.\d+\.\d+)\.exe$", Path(installer).name, re.I)
+        if not mt:
+            raise ValueError("安装程序文件名应为 AT_Setup_x.y.z.exe")
+        v = ver(mt.group(1))
+    else:
+        raise ValueError("压缩包和安装程序至少要给一个")
     ver_s = ".".join(map(str, v))
     tag = f"v{ver_s}"
-    m = {"version": ver_s, "date": date or time.strftime("%Y-%m-%d"), "notes": list(notes), **_entry(p, tag)}
+    m = {"version": ver_s, "date": date or time.strftime("%Y-%m-%d"), "notes": list(notes),
+         **(_entry(p, tag) if zip_path else {})}
     if isinstance(keep, dict):
         if "disabled" in keep and not isinstance(keep["disabled"], list):
             raise ValueError("网上 latest.json 的 disabled 不是列表（写成 [ {...} ]），先改好再生成")

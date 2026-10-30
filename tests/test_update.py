@@ -138,6 +138,53 @@ def test_make_manifest_with_installer(monkeypatch, tmp_path):
         pass
 
 
+def test_manifest_installer_only(monkeypatch, tmp_path):
+    """压缩包版停止维护：只给安装程序也能生成 latest.json；顶层不写 file（不会出现新版本号配旧压缩包），
+    源码版读到当作没有新版本、不报错，安装版照常认 installer"""
+    exe = tmp_path / "AT_Setup_9.0.0.exe"
+    exe.write_bytes(b"MZ setup")
+    C, _ = _setup(monkeypatch, tmp_path, {})
+    online = {"version": "1.1.1", "file": "Dubhe_1.1.1.zip", "sha256": "a" * 64, "size": 1,
+              "urls": ["https://gitee.com/at/at/releases/download/v1.1.1/Dubhe_1.1.1.zip"], "kill_rev": 5, "disabled": []}
+    m = C.make_manifest(None, ["x"], installer=exe, keep=online)
+    assert m["version"] == "9.0.0" and m["kill_rev"] == 5 and m["installer"]["file"] == exe.name
+    assert not {"file", "size", "sha256", "urls"} & set(m)
+    assert C.parse(json.dumps(m), frozen=True)["file"] == "AT_Setup_9.0.0.exe"
+    try:
+        C.parse(json.dumps(m), frozen=False)
+        assert False
+    except C.NoPackage:
+        pass
+    for bad in ((None, None), (None, tmp_path / "setup.exe")):
+        try:
+            C.make_manifest(bad[0], installer=bad[1])
+            assert False, bad
+        except ValueError:
+            pass
+    C, _ = _setup(monkeypatch, tmp_path, {"https://gitee.com/at/at/raw/master/latest.json": json.dumps(m).encode()})
+    monkeypatch.setattr(C.paths, "FROZEN", False)
+    assert C.check(force=True) is None and C.last_error() == ""          # 源码版：没有新版本，不是「连不上」
+    C, _ = _setup(monkeypatch, tmp_path, {"https://gitee.com/at/at/raw/master/latest.json": json.dumps(m).encode()})
+    monkeypatch.setattr(C.paths, "FROZEN", True)
+    assert C.check(force=True)["file"] == "AT_Setup_9.0.0.exe"           # 安装版照常提示
+
+
+def test_make_manifest_tool_installer_only(monkeypatch, tmp_path):
+    """tools/make_manifest.py 只给 --installer：latest.json 生成在安装程序旁边"""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
+    import make_manifest as T
+    exe = tmp_path / "AT_Setup_9.0.0.exe"
+    exe.write_bytes(b"MZ setup")
+    C, _ = _setup(monkeypatch, tmp_path, {})
+    monkeypatch.setattr("builtins.print", lambda *a, **k: None)
+    assert T.main(["--installer", str(exe), "--fresh", "新功能"]) == 0
+    m = json.loads((tmp_path / "latest.json").read_text(encoding="utf-8"))
+    assert m["version"] == "9.0.0" and "file" not in m and m["notes"] == ["新功能"]
+    assert T.main(["--fresh", "只有说明"]) == 1
+
+
 def _old_install(d, version="1.6.72", settings=None, waypoints=None):
     (d / "sc_mining").mkdir(parents=True)
     (d / "userdata").mkdir()
