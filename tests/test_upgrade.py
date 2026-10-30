@@ -94,8 +94,44 @@ def test_apply_installs_new_dependencies(monkeypatch, tmp_path):
     calls = []
     import sc_mining.run as run
     monkeypatch.setattr(run, "_pip", lambda *a: calls.append(a) or True)
+    monkeypatch.setattr(run, "_has_directml", lambda: False)          # 别按本机装没装显卡版走不同的路
+    monkeypatch.setattr(run, "_pip_uninstall", lambda *a: calls.append(("uninstall",) + a) or True)
     p = _pkg(tmp_path / "Dubhe_1.6.0.zip", "1.6.0", {"requirements.txt": "mss\nnewlib\n"})
     assert U.apply(p, progress=lambda *a: None)["deps"] and calls and calls[0][0] == "-r"
+    assert len(calls) == 1                                            # 原来没装显卡版：不动识别组件
+
+
+def _fake_pip(monkeypatch, ok=True):
+    """假 pip：记下装 / 卸的顺序，不真去装"""
+    import sc_mining.run as run
+    calls = []
+    monkeypatch.setattr(run, "_pip", lambda *a: calls.append(("install",) + a) or (ok if "onnxruntime-directml" in a else True))
+    monkeypatch.setattr(run, "_pip_uninstall", lambda *a: calls.append(("uninstall",) + a) or True)
+    return run, calls
+
+
+def test_use_directml_installs_before_uninstalling_cpu(monkeypatch):
+    run, calls = _fake_pip(monkeypatch)
+    assert run.use_directml()
+    assert calls == [("install", "onnxruntime-directml"), ("uninstall", "onnxruntime"),
+                     ("install", "--force-reinstall", "--no-deps", "onnxruntime-directml")]
+
+
+def test_use_directml_keeps_cpu_when_install_fails(monkeypatch):
+    run, calls = _fake_pip(monkeypatch, ok=False)
+    assert run.use_directml() is False
+    assert calls == [("install", "onnxruntime-directml")]             # 显卡版没装上：CPU 版不卸
+
+
+def test_apply_reinstalls_directml_after_requirements(monkeypatch, tmp_path):
+    U, root = _setup(monkeypatch, tmp_path)
+    run, calls = _fake_pip(monkeypatch)
+    monkeypatch.setattr(run, "_has_directml", lambda: True)
+    p = _pkg(tmp_path / "Dubhe_1.6.0.zip", "1.6.0", {"requirements.txt": "mss\nnewlib\n"})
+    assert U.apply(p, progress=lambda *a: None)["deps"]
+    assert calls[0] == ("install", "-r", str(root / "requirements.txt"))
+    assert calls[1:] == [("install", "onnxruntime-directml"), ("uninstall", "onnxruntime"),
+                         ("install", "--force-reinstall", "--no-deps", "onnxruntime-directml")]
 
 
 

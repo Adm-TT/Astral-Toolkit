@@ -246,9 +246,12 @@ def _install(path, top, v, progress, restoring=False):
     deps = (ROOT / "requirements.txt").exists() and (ROOT / "requirements.txt").read_text(encoding="utf-8") != old_req
     if deps and not restoring:                    # 装回备份时不跑 pip：旧环境本来就能跑（十一审 2026-10-28）
         progress("新版本需要新的组件，正在安装（会自动选最快的下载源）…")
-        from ..run import _pip
+        from ..run import _pip, _has_directml, use_directml
+        had_dml = _has_directml()                 # 原来装的是显卡版识别组件：-r 装依赖时可能把 CPU 版 onnxruntime 装回来盖掉它
         if _pip("-r", str(ROOT / "requirements.txt")) is False:
             raise RuntimeError("新版本需要的组件没装上，升级未完成")
+        if had_dml:
+            use_directml()                        # 装不上显卡版也不算升级失败：留着 CPU 版照样能识别
     if not restoring:                             # 装回备份不算「已升级」，别让窗口弹「已升级到 x」
         try:
             import json

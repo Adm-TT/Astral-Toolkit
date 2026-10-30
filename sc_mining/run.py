@@ -78,6 +78,35 @@ def _pip(*pkgs):
                             "--retries", "5", *pkgs]) == 0
 
 
+def _pip_uninstall(*pkgs):
+    return subprocess.call([sys.executable, "-m", "pip", "uninstall", "-y", *pkgs],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0
+
+
+def _has_directml():
+    """现在装着显卡版识别组件 onnxruntime-directml"""
+    try:
+        from importlib import metadata
+        metadata.version("onnxruntime-directml")
+        return True
+    except Exception:
+        return False
+
+
+def use_directml():
+    """识别组件换成显卡版（onnxruntime-directml）：先装显卡版，装上了再卸 CPU 版 onnxruntime，
+    再强制重装一遍显卡版（两个包装在同一个 onnxruntime 目录里，卸 CPU 版会把显卡版的文件一起删掉）。
+    显卡版装不上就留着 CPU 版、不卸（以前先卸再装，装失败就两个都没有，识别用不了）"""
+    from .core.paths import FROZEN
+    if FROZEN:                              # 独立打包版自带全部组件
+        return True
+    if not _pip("onnxruntime-directml"):
+        print("显卡加速组件没装上，继续用 CPU 识别")
+        return False
+    _pip_uninstall("onnxruntime")
+    return _pip("--force-reinstall", "--no-deps", "onnxruntime-directml")
+
+
 def install():
     print(f"Python {sys.version.split()[0]}")
     _pip("--upgrade", "pip", "-q")
@@ -86,8 +115,7 @@ def install():
     ocr = _pip("rapidocr_onnxruntime") or _pip("rapidocr", "onnxruntime")
     if sys.platform == "win32":
         print("配置 DirectML 显卡加速…")
-        subprocess.call([sys.executable, "-m", "pip", "uninstall", "-y", "onnxruntime"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        _pip("onnxruntime-directml")
+        use_directml()
     print()
     exe = None
     try:
