@@ -912,7 +912,7 @@ def test_bearing_text_and_deadband():
 
 
 def test_anti_afk_removed(monkeypatch, tmp_path):
-    """2026-10-30 老大定删掉防挂机：老设置文件里开着防挂机，读出来也没有这几项；只开防挂机不再启动辅助进程"""
+    """2026-10-30 删掉防挂机：老设置文件里开着防挂机，读出来也没有这几项；只开防挂机不再启动辅助进程"""
     import json
     from sc_mining import settings, helpers
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")

@@ -8,7 +8,7 @@ FILE = USER / "settings.json"
 
 DEFAULTS = {
     "admin": None,              # True = 每次都用管理员身份打开；False = 不用；None = 还没问过
-                                # 防挂机（anti_afk / afk_seconds / afk_v3 / afk_v4）2026-10-30 老大定删掉；老设置文件里的这几项读取时自动忽略
+                                # 防挂机（anti_afk / afk_seconds / afk_v3 / afk_v4）2026-10-30 删掉；老设置文件里的这几项读取时自动忽略
     "keys_v5": False,           # 已经把老玩家的「记录路标」「一键定位」热键清掉（只清一次，2026-10-27 用户定）
     "autorun": False,           # 双击 W 自动跑（2026-10-27 老大：比较敏感，默认关）
     "autorun_sprint": True,     # 自动跑时同时按住 Shift（冲刺）
@@ -68,7 +68,7 @@ def _load():
     cfg = {**DEFAULTS, **{k: v for k, v in data.items() if k in DEFAULTS}}
     changed = False
     if any(k in data for k in ("anti_afk", "afk_seconds", "afk_v3", "afk_v4")):
-        changed = True       # 防挂机删了：把老键清出文件，免得回滚 1.1.0 时又自动开（2026-10-30 双智能体审查）
+        changed = True       # 防挂机删了：把老键清出文件，免得回滚 1.1.0 时又自动开（2026-10-30）
     if data and not cfg["keys_v5"]:
         # 1.0.5：/showlocation 只在必要时用，F7、F9 空出来给玩家（老玩家存着的也清掉；想用的自己去设置里绑回）
         cfg["mark_key"] = cfg["fix_key"] = ""

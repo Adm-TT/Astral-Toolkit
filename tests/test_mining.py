@@ -417,7 +417,7 @@ def test_settings_roundtrip():
     old = settings.FILE
     settings.FILE = Path(tempfile.mkdtemp()) / "settings.json"
     try:
-        c = settings.load()                        # 自动跑默认关（2026-10-27 老大定）；防挂机 2026-10-30 删掉
+        c = settings.load()                        # 自动跑默认关（2026-10-27 定）；防挂机 2026-10-30 删掉
         assert c["autorun"] is False and c["admin"] is None and "anti_afk" not in c
         settings.update(autorun=True)
         c = settings.load()
