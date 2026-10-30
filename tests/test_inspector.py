@@ -159,10 +159,14 @@ class TestItemInspector(unittest.TestCase):
         self.assertIsNone(tooltip_pick(chat, (960, 540))[0])
 
     def test_fold_deduplication(self):
+        # console._fold 在 names._fold_en 的基础上再把 l 统一成 i：OCR 常把罗马数字 II 认成 ll，
+        # 比较 OCR 认出的名字和市场名字时要当成一样（1.1.1 的行为）；所以和 _fold_en 不再完全相同
         from sc_mining.trade.console import _fold as console_fold
         from sc_mining.trade.names import _fold_en
-        self.assertEqual(console_fold("P4-AR Rifle (Custom)"), _fold_en("P4-AR Rifle (Custom)"))
+        self.assertEqual(console_fold("P4-AR Rifle (Custom)"), _fold_en("P4-AR Rifle (Custom)").replace("l", "i"))
         self.assertEqual(console_fold("Omnisky II"), "omniskyii")
+        self.assertEqual(console_fold("Omnisky ll"), console_fold("Omnisky II"))
+        self.assertEqual(_fold_en("Omnisky ll"), "omniskyll")          # names._fold_en 本身不变
 
 
 def test_inspect_item_raw_and_canon(monkeypatch):
