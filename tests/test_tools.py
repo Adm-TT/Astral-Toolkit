@@ -436,6 +436,49 @@ def test_displayinfo_real_ocr_lines():
     assert d["local"] == (520.9152, 419.2893, 744.0843) and "NewBabbage" in d["location"]
 
 
+
+def test_displayinfo_1080p_root_line_noise():
+    """1080p 玩家反馈（2026-10-30，F10 五次）：Root 那行字小常被认岔——Pos 认成 P0s、数字间多个点或减号。
+    以前纠错会把 P0s 也当数字改成 P05，两行对不上就当没读到，导航一直提示「读不到位置」"""
+    from sc_mining.displayinfo import parse, _fix_numbers
+    sysl = "Zone:SolarSystem 876187763260 Pos:-18930550.7051km -2610477.0938km 22.9634km"
+    d = parse([sysl, "Zone:Ro0t P0s:-18930550.7051km -2610477.0938km 22.9634km"], need_both=True)
+    assert d["global"] == (-18930550705.1, -2610477093.8, 22963.4) or \
+        max(abs(a - b) for a, b in zip(d["global"], (-18930550705.1, -2610477093.8, 22963.4))) < 1
+    sysl = "Zone: SolarSystem 876187763260 Pos: -18930516.9195km -2610457.4010km 21.7491km"
+    d = parse([sysl, "Zone:Ro0t Pos: -18930516.9195km -2610457.4010km.21.7491km"], need_both=True)
+    assert d["global"] and abs(d["global"][2] - 21749.1) < 0.5
+    sysl = "Zone: SolarSystem_876187763260 Pos: -18930529.1194km -2610454.7742km -23.2650km"
+    d = parse([sysl, "Zone:Ro0tP0s:-18930529.1194km-2610454.7742km--23.2650km"], need_both=True)
+    assert d["global"] and abs(d["global"][2] + 23265.0) < 0.5
+    d = parse([sysl, "Zone:Ro0tP0s:-18930529.1194km-2610454.7742km.--23.2650km"], need_both=True)   # 点号和双减号一起
+    assert d["global"] and abs(d["global"][2] + 23265.0) < 0.5
+    assert _fix_numbers("Zone:Ro0t P0s:-1.5km 2.0km 3.0km").startswith("Zone:Ro0t P0s:")      # 区域名和 Pos 不当数字改
+    # 认错的那行和另一行对不上，照旧不收（保险不放松）
+    d = parse(["Zone:SolarSystem 1 Pos:-18930550.7051km -2610477.0938km 22.9634km",
+               "Zone:Ro0t P0s:-18930550.7051km -2610477.0938km 23.9634km"], need_both=True)
+    assert d["global"] is None
+
+
+def test_reader_backoff_capped_while_navigating(monkeypatch):
+    """导航开着时读不到，最多隔 max_gap 秒再试（以前最长一分钟，玩家看到的位置隔 40–90 秒才动一下）"""
+    from sc_mining import displayinfo as D
+    monkeypatch.setattr(D, "read", lambda allow_yield=True: {**D.parse([]), "fast": False})
+    from sc_mining.system import showloc
+    monkeypatch.setattr(showloc, "game_foreground", lambda: True)
+    r = D.Reader(every=1.0)
+    r.max_gap = 5.0
+    for _ in range(30):
+        r.next_at = 0
+        r.poll(force=True)
+    import time
+    assert r.next_at - time.time() <= 5.0 + 0.5
+    r2 = D.Reader(every=1.0)
+    for _ in range(30):
+        r2.next_at = 0
+        r2.poll(force=True)
+    assert r2.next_at - time.time() > 20          # 不导航时照旧慢慢退
+
 def test_first_run_agreement(monkeypatch, tmp_path):
     from sc_mining import settings, helpers
     from sc_mining.tasks import system as t_sys

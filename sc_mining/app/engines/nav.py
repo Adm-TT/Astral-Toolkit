@@ -318,7 +318,14 @@ class _Nav:
                 fresh = True
             if ev.is_set():
                 return
-            on = _E().pos.reader.active
+            rd = _E().pos.reader
+            on = rd.active
+            # 「读不到位置」提示：读到过的话，30 秒内偶尔认岔不提示（玩家反馈 2026-10-30：调试信息开着还一直挂着这句）
+            last_ok = getattr(rd, "ok_at", 0.0)
+            recent = bool(last_ok and time.time() - last_ok < 30)
+            # 没读到新位置时不能让旧方向冒充实时的：先标「暂停更新」，超过 30 秒再教怎么开调试信息（Codex 审查 2026-10-30）
+            tip = "" if on else ("\n位置暂停更新，以上是上次结果" if recent else
+                                 "\n读不到位置：控制台输入 r_DisplayInfo 2，或聊天框输入 /showlocation")
             stat_text = "右上角调试信息：实时识别位置" if on else _T("navigation").DI_HELP + "（或在聊天框输入 /showlocation）"
             pub = None
             if fresh or state["status"] != stat_text:
@@ -327,7 +334,7 @@ class _Nav:
                 pub = state
             # 算的时候被停掉 / 换了目标：_commit 在锁里核对 session，不对就什么都不发、记号不画（老大审查 2026-10-28）
             ok, mk_seen = self._commit(sess, here=here if fresh else None, ref=ref if fresh else None, state=pub,
-                                       hud=f"{head}\n{shown or '等待位置信息…'}" + ("" if on else "\n读不到位置：控制台输入 r_DisplayInfo 2，或聊天框输入 /showlocation"),
+                                       hud=f"{head}\n{shown or '等待位置信息…'}" + tip,
                                        marker=(prev_goal or target, data, state, mk_seen))
             if not ok:
                 return

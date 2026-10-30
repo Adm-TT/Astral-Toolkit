@@ -15,7 +15,7 @@ REGION = (0.66, 0.0, 1.0, 0.22)          # 右上角：左、上、右、下（�
 UPSCALE = 2
 
 _NUM = r"(-?\d[\d,]*\.?\d*)"
-POS = re.compile(rf"Zone:\s*(?P<zone>.+?)\s*Pos:\s*{_NUM}\s*(?P<u1>km|m)\s*{_NUM}\s*(?P<u2>km|m)\s*{_NUM}\s*(?P<u3>km|m)", re.I)
+POS = re.compile(rf"Zone:\s*(?P<zone>.+?)\s*P[o0]s:\s*{_NUM}\s*(?P<u1>km|m)\s*{_NUM}\s*(?P<u2>km|m)\s*{_NUM}\s*(?P<u3>km|m)", re.I)
 LOC = re.compile(r"Current\s*player\s*location\s*:?\s*(?P<loc>.+)$", re.I)
 CAMPOS = re.compile(rf"P\W*[lI1|]\W*an\W*[e3]t\W*Zone\s*:?\s*{_NUM}\s+{_NUM}\s+{_NUM}", re.I)   # CamPos Planet Zone（米）
 CAMDIR = re.compile(r"c[a@]m\s*d[il1]r\s*:?(?P<rest>.*)$", re.I)   # 镜头朝向：俯仰 横滚 偏航（度，星系坐标系）
@@ -28,10 +28,14 @@ _SWAP = str.maketrans({"s": "5", "S": "5", "o": "0", "O": "0", "l": "1", "I": "1
 def _fix_numbers(line):
     """数字部分（Pos: 后面、CamPos Planet Zone: 后面）OCR 常把 5 认成 s、0 认成 o、1 认成 l：
     只在挨着数字的地方换回来（km、m 这些单位不动）"""
-    m = re.search(r"(Pos\s*:|Zone\s*:|CamDir\s*:)(?!.*(?:Pos\s*:|Zone\s*:))", line, re.I)
+    # Pos 认成 P0s 也算表头（1080p 字小常见），不然会把「Ro0t P0s」当数字改成「R00t P05」，整行认不出（玩家反馈 2026-10-30）
+    m = re.search(r"(P[o0]s\s*:|Zone\s*:|CamDir\s*:)(?!.*(?:P[o0]s\s*:|Zone\s*:))", line, re.I)
     if not m:
         return line
     head, tail = line[:m.end()], line[m.end():]
+    # 数字之间多认出的点、重复的减号（「km.21.7491km」「km--23.2650km」）先清掉；认错了也不怕，两行坐标还要对得上
+    tail = re.sub(r"-{2,}(?=\d)", "-", tail)                 # 先并减号，再清点号（「km.--23」两样一起出现也认得，Codex 审查 2026-10-30）
+    tail = re.sub(r"(?<=[mM])[.,]+(?=-?\d)", " ", tail)
     tail = re.sub(r"(?<=[\d.])[sSoOlI|]|[sSoOlI|](?=[\d.])|(?<=[-+\s])[lIO|](?=[\d.lIO|])", lambda x: x.group(0).translate(_SWAP), tail)
     return head + tail
 
@@ -491,6 +495,7 @@ class Reader:
         self.every = every
         self.next_at = 0.0
         self.misses = 0
+        self.max_gap = 60.0             # 读不到时最多隔多久再试；导航开着时位置线程改成几秒（玩家反馈 2026-10-30）
         self.ok_at = 0.0
         self.yielded_at = 0.0           # 最后一次给采矿助手让路（没读）的时间
         self.last = None
@@ -542,5 +547,5 @@ class Reader:
                     return g
                 return None
             self.misses += 1
-            self.next_at = done + (gap if self.misses < 3 else max(gap, min(60.0, self.every * self.misses)))
+            self.next_at = done + (gap if self.misses < 3 else max(gap, min(self.max_gap, self.every * self.misses)))
             return None

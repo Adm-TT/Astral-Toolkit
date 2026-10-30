@@ -89,6 +89,7 @@ class _Pos:
             if not fg:
                 time.sleep(0.5)
                 continue
+            self.reader.max_gap = 5.0 if navigating else 60.0    # 导航时读不到最多隔 5 秒再试（玩家反馈 2026-10-30：以前最长一分钟）
             if ready:
                 self.reader.every = self.FAST_EVERY
             elif navigating:
