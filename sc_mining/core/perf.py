@@ -51,6 +51,9 @@ def is_gpu_preferred():
         return True
 
 
+_cpu_fallback = False     # 显卡版认字出过错、已换成 CPU 版：之后一直用 CPU，直到玩家在设置里再切一次
+
+
 def ocr_device():
     """识别现在实际在哪算：「显卡」/「CPU」"""
     try:
@@ -115,9 +118,10 @@ class _Locked:
     """多个功能（扫描、F8、读位置）可能同时要识别：排队用同一个识别引擎，互不干扰。
     F8 用 urgent()：插到后台识别前面（后台正在跑的那一次跑完就轮到它）"""
 
-    def __init__(self, eng):
+    def __init__(self, eng, gpu=False):
         self.eng = eng
         self.kind = type(eng).__module__
+        self.gpu = gpu                        # 这个引擎是不是按显卡（DirectML）建的
         self.lock = threading.Lock()
         self.cv = threading.Condition()
         self.waiting = 0                      # 正在排队的 F8 识别个数
@@ -140,21 +144,35 @@ class _Locked:
                 self.waiting -= 1
                 self.cv.notify_all()
 
+    def _infer(self, a, kw, native):
+        td = getattr(self.eng, "text_det", None)
+        if not native or td is None or not hasattr(td, "limit_side_len") or not a:
+            return self.eng(*a, **kw)
+        old = (td.limit_side_len, td.limit_type)
+        try:
+            td.limit_type, td.limit_side_len = "max", max(a[0].shape[:2])
+            return self.eng(*a, **kw)
+        finally:
+            td.limit_side_len, td.limit_type = old
+
     def _run(self, a, kw, urgent=False):
         """_native=True：找字的那一步按原尺寸做。默认会把窄于 736 像素的小图先放大再找，
-        小块截图（驾驶位 HUD、右上角调试信息）白白多算 2~3 倍"""
+        小块截图（驾驶位 HUD、右上角调试信息）白白多算 2~3 倍。
+        显卡版出错（驱动出问题、显存不够…）：换成 CPU 版重试一次，之后一直用 CPU，直到玩家在设置里再切"""
+        global _cpu_fallback, _last_error
         native = kw.pop("_native", False)
-        td = getattr(self.eng, "text_det", None)
         t0 = time.perf_counter()
         try:
-            if not native or td is None or not hasattr(td, "limit_side_len") or not a:
-                return self.eng(*a, **kw)
-            old = (td.limit_side_len, td.limit_type)
             try:
-                td.limit_type, td.limit_side_len = "max", max(a[0].shape[:2])
-                return self.eng(*a, **kw)
-            finally:
-                td.limit_side_len, td.limit_type = old
+                return self._infer(a, kw, native)
+            except Exception as e:
+                if not self.gpu:
+                    raise
+                _cpu_fallback = True
+                _last_error = f"显卡识别出错，已改用 CPU：{e}"
+                eng, _gpu, _err = _new_engine(False)
+                self.eng, self.kind, self.gpu = eng, type(eng).__module__, False     # 调用方已拿着 self.lock，直接换
+                return self._infer(a, kw, native)
         finally:
             try:                              # 记一笔：性能记录里看各功能识别花了多少时间
                 from .perfmon import note_ocr
@@ -166,40 +184,47 @@ class _Locked:
         return getattr(self.eng, name)
 
 
+def _new_engine(gpu):
+    """新建一个 RapidOCR 引擎；gpu=True 时 GPU_PARTS 那几步放显卡（DirectML）。
+    返回 (引擎, 是否显卡版, 出错原因)；显卡版建不起来就退回 CPU 版"""
+    try:
+        from rapidocr_onnxruntime import RapidOCR
+    except ImportError:
+        from rapidocr import RapidOCR
+    opts = {"intra_op_num_threads": OCR_THREADS, "inter_op_num_threads": 1, "use_cls": False}
+    if gpu:
+        opts.update({f"{part}_use_dml": True for part in GPU_PARTS})
+    try:
+        return RapidOCR(**opts), bool(gpu), ""
+    except Exception as e:
+        try:
+            return RapidOCR(intra_op_num_threads=OCR_THREADS, inter_op_num_threads=1, use_cls=False), False, str(e)
+        except Exception:
+            return RapidOCR(), False, str(e)
+
+
 def rapidocr():
     """全程序共用的一个 RapidOCR 实例（按用户设置在主进程直接加载 DirectML 或 CPU）"""
     global _engine, _last_error
     with _lock:
         if _engine is None:
-            try:
-                from rapidocr_onnxruntime import RapidOCR
-            except ImportError:
-                from rapidocr import RapidOCR
-            opts = {"intra_op_num_threads": OCR_THREADS, "inter_op_num_threads": 1, "use_cls": False}
-            want_gpu = USE_GPU and is_gpu_preferred() and gpu_available()
-            if want_gpu:
-                opts.update({f"{part}_use_dml": True for part in GPU_PARTS})
-            try:
-                eng = RapidOCR(**opts)
-            except Exception as e:
-                _last_error = str(e)
-                try:
-                    eng = RapidOCR(intra_op_num_threads=OCR_THREADS, inter_op_num_threads=1, use_cls=False)
-                except Exception:
-                    eng = RapidOCR()
-            _engine = _Locked(eng)
+            eng, gpu, err = _new_engine(USE_GPU and not _cpu_fallback and is_gpu_preferred() and gpu_available())
+            if err:
+                _last_error = err
+            _engine = _Locked(eng, gpu)
     return _engine
 
 
 def set_ocr_device(target):
     """切换 OCR 识别模式：'gpu' 或 'cpu'"""
-    global _engine, _last_error
+    global _engine, _last_error, _cpu_fallback
     with _lock:
         target = (target or "gpu").lower()
         from . import settings
         settings.update(ocr_device=target, always_use_gpu=(target == "gpu"))
         _engine = None
         _last_error = ""
+        _cpu_fallback = False                     # 玩家自己切过：以前显卡出错改用 CPU 的那次不算了
         rapidocr()
         return ocr_device()
 

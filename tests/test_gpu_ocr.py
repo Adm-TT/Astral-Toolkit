@@ -104,5 +104,74 @@ class TestOcrDeviceSwitch(unittest.TestCase):
             self.assertTrue(kwargs.get("native"))
 
 
+# ---------------------------------------------------------------- 显卡出错退回 CPU（假引擎，不加载真识别）
+class _FakeResult:
+    def __init__(self):
+        import numpy as np
+        self.boxes, self.txts, self.scores = np.zeros((0, 4, 2)), [], []
+
+
+class _FakeEng:
+    """假识别引擎：记被调了几次；fail=True 时一调用就报错（模拟显卡驱动出问题）"""
+    def __init__(self, gpu=False, fail=False):
+        self.gpu, self.fail, self.calls = gpu, fail, 0
+
+    def __call__(self, *a, **kw):
+        self.calls += 1
+        if self.fail:
+            raise RuntimeError("DML 设备丢失")
+        return _FakeResult()
+
+
+def _fake_engines(monkeypatch, gpu_fails=False):
+    """换掉建引擎的那一步：记下每次新建的引擎；默认环境、默认设置都当成「想用显卡、显卡可用」"""
+    made = []
+
+    def new(gpu):
+        e = _FakeEng(gpu, fail=bool(gpu and gpu_fails))
+        made.append(e)
+        return e, bool(gpu), ""
+    monkeypatch.setattr(perf, "_new_engine", new)
+    monkeypatch.setattr(perf, "USE_GPU", True)
+    monkeypatch.setattr(perf, "is_gpu_preferred", lambda: True)
+    monkeypatch.setattr(perf, "gpu_available", lambda: True)
+    monkeypatch.setattr(perf, "_engine", None)
+    monkeypatch.setattr(perf, "_cpu_fallback", False)
+    monkeypatch.setattr(perf, "_last_error", "")
+    monkeypatch.setattr(settings, "update", lambda **kw: dict(kw))
+    return made
+
+
+def test_gpu_error_falls_back_to_cpu(monkeypatch):
+    import numpy as np
+    made = _fake_engines(monkeypatch, gpu_fails=True)
+    eng = perf.rapidocr()
+    assert eng.gpu and len(made) == 1
+    eng(np.zeros((8, 8, 3)))                              # 显卡版报错 → 换 CPU 版重试一次，照样出结果
+    assert len(made) == 2 and made[0].calls == 1 and made[1].calls == 1 and not made[1].gpu
+    assert not eng.gpu and perf._cpu_fallback
+    assert "显卡识别出错" in perf.last_ocr_error() and "DML" in perf.last_ocr_error()
+    eng.urgent(np.zeros((8, 8, 3)))                       # 之后一直用 CPU，不再重建
+    assert len(made) == 2 and made[1].calls == 2
+    monkeypatch.setattr(perf, "_engine", None)
+    assert not perf.rapidocr().gpu                        # 重新加载也还是 CPU，直到玩家再切
+    perf.set_ocr_device("gpu")                            # 玩家在设置里切回显卡：再试显卡
+    assert not perf._cpu_fallback and perf.rapidocr().gpu
+
+
+def test_cpu_error_not_retried(monkeypatch):
+    import numpy as np
+    made = _fake_engines(monkeypatch)
+    monkeypatch.setattr(perf, "is_gpu_preferred", lambda: False)
+    eng = perf.rapidocr()
+    made[0].fail = True
+    try:
+        eng(np.zeros((8, 8, 3)))
+        raise AssertionError("CPU 版出错应该照常报出来")
+    except RuntimeError:
+        pass
+    assert len(made) == 1 and not perf._cpu_fallback
+
+
 if __name__ == "__main__":
     unittest.main()
