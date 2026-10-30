@@ -53,86 +53,16 @@ DI_HELP = "未检测到右上角位置信息：在游戏中按 ~ 打开控制台
 
 
 # ---------------------------------------------------------------- 依赖与辅助
-def _services():
-    from ..app import services
-    return services
+# 2026-10-30 重构阶段 2：悬浮窗从 app.hud_state 拿，引擎从 EngineManager 拿，原矿结果从 tasks.system 拿，
+# 不再经 services 转发、出错也不再回头找 services 兜底。接口由 app/api/navigation.py 的 ROUTES 注册，不再用 api 装饰器。
+from ..app.hud_state import _hud, _note_hud, _off
+from ..app.engines.manager import EngineManager
+from .system import _ORE_LAST
 
-
-def api(fn):
-    """API 装饰器：在独立任务模块中保留标记，若 services.API 存在可协助注册"""
-    try:
-        from ..app import services
-        if hasattr(services, "API"):
-            services.API[fn.__name__] = fn
-    except Exception:
-        pass
-    return fn
-
-
-def _hud():
-    try:
-        return _services()._hud()
-    except Exception:
-        class _DummyHud:
-            def set(self, *a, **k): pass
-            def clear(self, *a, **k): pass
-            def marker(self, *a, **k): pass
-        return _DummyHud()
-
-
-def _note_hud(section, text, secs=6):
-    try:
-        _services()._note_hud(section, text, secs)
-    except Exception:
-        pass
-
-
-def _off(feature):
-    try:
-        return _services()._off(feature)
-    except Exception:
-        return False
-
-
-class _PosProxy:
-    def __getattr__(self, name):
-        return getattr(_services()._pos, name)
-
-
-_pos = _PosProxy()
-
-
-class _NavProxy:
-    def __getattr__(self, name):
-        return getattr(_services()._nav, name)
-
-
-_nav = _NavProxy()
-
-
-class _GameEventsProxy:
-    def __getattr__(self, name):
-        return getattr(_services()._game_events, name)
-
-
-_game_events = _GameEventsProxy()
-
-
-class _OreLastProxy(dict):
-    def __getitem__(self, item):
-        try:
-            return _services()._ORE_LAST[item]
-        except Exception:
-            return None
-
-    def get(self, item, default=None):
-        try:
-            return _services()._ORE_LAST.get(item, default)
-        except Exception:
-            return default
-
-
-_ORE_LAST = _OreLastProxy()
+_M = EngineManager.get_instance()
+_pos = _M.pos
+_nav = _M.nav
+_game_events = _M.game_events
 
 
 # ---------------------------------------------------------------- 导航与地点搜索
@@ -146,14 +76,12 @@ def _place_row(p):
             "space": bool(p.get("space")), "city": p["t"] == "City"}
 
 
-@api
 def nav_search(q=""):
     from ..navigation.navigate import search as s
     hits, total = s(q, limit=30)
     return {"rows": [_place_row(p) for p in hits], "total": total}
 
 
-@api
 def nav_near(kind=""):
     """导航页「医院 / 空港 / 买船」：知道当前位置就直接导航到最近的那个，列表按远近排；
     位置不知道就只列出来让玩家自己挑（2026-10-27 老大定）"""
@@ -197,7 +125,6 @@ def nav_near(kind=""):
     return {"rows": rows, "total": len(rows), "started": None}
 
 
-@api
 def nav_site():
     """现在在哪个主城 / 空间站里、这里有哪些分类（导航页那排按钮，2026-10-27）；不在就 site=None"""
     from ..navigation import navigate as n
@@ -219,7 +146,6 @@ def nav_site():
     return {"site": s["site"], "name": name, "kinds": s["kinds"], "all": list(n.SITE_KINDS)}
 
 
-@api
 def nav_plan(key=""):
     from ..navigation.navigate import load, latlon, pos, approaches, label, compass
     p = _places.get(key)
@@ -243,7 +169,6 @@ def nav_plan(key=""):
     return {**_place_row(p), "lat": lat, "lon": lon, "alt": r * 1000 - b["r"], "routes": routes}
 
 
-@api
 def nav_start(key=""):
     p = _places.get(key)
     if not p:
@@ -252,7 +177,6 @@ def nav_start(key=""):
     return {"ok": True}
 
 
-@api
 def nav_mode(mode="auto"):
     """导航页的开关：实时定位（ground / auto）/ 手动定位（space，只用 /showlocation）；正在导航就按新方式重新开始"""
     from ..core import settings
@@ -265,7 +189,6 @@ def nav_mode(mode="auto"):
     return {"mode": mode, "space": _nav.space_mode if t else None}
 
 
-@api
 def sig_name(value=0, name=""):
     """给雷达信号起名记下（下次认到这个数直接显示）；名字空 = 删掉"""
     from ..mining.signals import set_my_signature
@@ -278,26 +201,22 @@ def sig_name(value=0, name=""):
     return {"mine": set_my_signature(v, name)}
 
 
-@api
 def sig_names():
     from ..mining.signals import my_signatures
     return {"mine": my_signatures()}
 
 
-@api
 def nav_stop():
     _nav.stop()
     return {"ok": True}
 
 
-@api
 def nav_refresh():
     _nav.refresh()
     return {"ok": True}
 
 
 # ---------------------------------------------------------------- 路标管理
-@api
 def waypoints():
     from ..navigation import navigate as n
     data = n.load()
@@ -315,7 +234,6 @@ def waypoints():
     return out
 
 
-@api
 def waypoint_add(name="", body="", lat=None, lon=None, alt=0.0, here=False):
     from ..navigation import navigate as n
     data = n.load()
@@ -343,7 +261,6 @@ def waypoint_add(name="", body="", lat=None, lon=None, alt=0.0, here=False):
     return waypoints()
 
 
-@api
 def waypoint_preview(text=""):
     """粘贴框里的 /showlocation 结果 → 认出在哪个星球、经纬度、高度（还没保存）；不是坐标返回 error"""
     from ..navigation import navigate as n
@@ -361,7 +278,6 @@ def waypoint_preview(text=""):
             "desc": f"太空：{n.body_label('@' + system)} 星系坐标 {tuple(round(v / 1000, 1) for v in g)} km"}
 
 
-@api
 def waypoint_from_text(name="", text=""):
     """粘贴 /showlocation 的输出新建路标（星球自动认，名字自己起）"""
     from ..navigation import navigate as n
@@ -376,7 +292,6 @@ def waypoint_from_text(name="", text=""):
     return {"rows": waypoints(), "desc": desc}
 
 
-@api
 def waypoint_delete(name=""):
     from ..navigation.navigate import delete_waypoint
     delete_waypoint(name)
@@ -600,7 +515,6 @@ def _coord_desc(g):
     return n.body_label("@" + n.system_of(g, data, **_pos.hints()))
 
 
-@api
 def ore_record(here=False):
     """记下最近这块矿。here=True（游戏里按热键）：顺便替玩家输 /showlocation，把坐标一起记下；窗口里点的不记坐标"""
     from ..mining import ore_log
@@ -634,14 +548,12 @@ def ore_record(here=False):
     return rec
 
 
-@api
 def ore_list():
     from ..mining import ore_log
     rows = list(reversed(ore_log.load()))
     return {"rows": rows, "rocks": sorted({r.get("rock") or "?" for r in rows})}
 
 
-@api
 def ore_delete(id=""):
     from ..mining import ore_log
     rec = ore_log.delete(id)
@@ -651,7 +563,6 @@ def ore_delete(id=""):
     return rec
 
 
-@api
 def ore_restore(rec=None):
     from ..mining import ore_log
     rec = ore_log.restore(rec)
@@ -659,7 +570,6 @@ def ore_restore(rec=None):
     return rec
 
 
-@api
 def ore_go(id=""):
     """「去这里」：把这条记录的坐标记成路标（同一条只记一次），然后开始导航"""
     from ..mining import ore_log
@@ -686,7 +596,6 @@ def ore_go(id=""):
 
 
 # ---------------------------------------------------------------- 小行星带（Aaron Halo）导航与一键定位
-@api
 def halo_options():
     """小行星带页要的选项：10 条带、出发点、量子引擎、上次选的引擎、悬浮窗上正挂着的方案"""
     from ..navigation import halo
@@ -696,7 +605,6 @@ def halo_options():
             "qd": settings_key("halo_qd", "Atlas (S1)"), "plan": _HALO["plan"]}
 
 
-@api
 def halo_routes(frm="ARC-L1", band=5, qd=""):
     """从 frm 出发、能在第 band 带断开的所有目标"""
     from ..navigation import halo
@@ -714,7 +622,6 @@ def halo_routes(frm="ARC-L1", band=5, qd=""):
     return {"from": frm, "band": halo.band_row(row), "speed": speed, "rows": halo.routes(frm, band, speed, pts)}
 
 
-@api
 def halo_pin(frm="", to="", band=5, qd=""):
     """把这条路线挂到悬浮窗：游戏里看着 HUD 剩余距离断开；断开后按一键定位键（或自己输 /showlocation）核对在不在带里"""
     from ..navigation import halo
@@ -742,7 +649,6 @@ def halo_pin(frm="", to="", band=5, qd=""):
     return r
 
 
-@api
 def halo_unpin():
     with _HALO["lock"]:
         _HALO["ev"].set()
