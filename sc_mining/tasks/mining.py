@@ -13,58 +13,13 @@ import time
 from collections import defaultdict
 from itertools import combinations
 
-# ---------------------------------------------------------------- 依赖转发辅助
-def _services():
-    from ..app import services
-    return services
+# ---------------------------------------------------------------- 依赖（2026-10-30 重构阶段 3：不再经 services 转发）
+from ..app.engines.manager import EngineManager
+from ..app.hud_state import _hud, _off
+from . import goals as _t_goals
 
-
-def api(fn):
-    """API 装饰器：在独立任务模块中保留标记，若 services.API 存在可协助注册"""
-    try:
-        from ..app import services
-        if hasattr(services, "API"):
-            services.API[fn.__name__] = fn
-    except Exception:
-        pass
-    return fn
-
-
-def _hud():
-    try:
-        return _services()._hud()
-    except Exception:
-        class _DummyHud:
-            def marker(self, *a, **k): pass
-            def set(self, *a, **k): pass
-            def clear(self, *a, **k): pass
-        return _DummyHud()
-
-
-def _off(feature):
-    try:
-        return _services()._off(feature)
-    except Exception:
-        return False
-
-
-class _PosProxy:
-    def __getattr__(self, name):
-        return getattr(_services()._pos, name)
-
-
-_pos = _PosProxy()
-
-
-class _LiveProxy:
-    def __getattr__(self, name):
-        return getattr(_services()._live, name)
-
-    def __setattr__(self, name, value):
-        setattr(_services()._live, name, value)
-
-
-_live = _LiveProxy()
+_pos = EngineManager.get_instance().pos
+_live = EngineManager.get_instance().live
 
 
 def settings_key(k, default=None):
@@ -76,25 +31,11 @@ def settings_key(k, default=None):
 
 
 def _goal_for(*args, **kwargs):
-    try:
-        from .goals import _goal_for as _gf
-        return _gf(*args, **kwargs)
-    except Exception:
-        try:
-            return _services()._goal_for(*args, **kwargs)
-        except Exception:
-            return None
+    return _t_goals._goal_for(*args, **kwargs)
 
 
 def _goal_text(*args, **kwargs):
-    try:
-        from .goals import _goal_text as _gt
-        return _gt(*args, **kwargs)
-    except Exception:
-        try:
-            return _services()._goal_text(*args, **kwargs)
-        except Exception:
-            return ""
+    return _t_goals._goal_text(*args, **kwargs)
 
 
 # ---------------------------------------------------------------- 导航记号与 3D HUD 投射
@@ -434,7 +375,6 @@ def scan_view(scan, bag, cut=False):
     return out
 
 
-@api
 def live_start():
     from ..core import settings
     _live.start()
@@ -442,7 +382,6 @@ def live_start():
     return {"running": True}
 
 
-@api
 def live_stop():
     from ..core import settings
     _live.stop()
@@ -525,12 +464,10 @@ def _gear(ship=None):
             "groups": list(dict.fromkeys(g for _, g in MOD_GROUPS))}
 
 
-@api
 def mining_gear():
     return _gear()
 
 
-@api
 def set_mining_gear(ship="mole", loadout=None, reset=False):
     """选船 / 保存这条船的配置（reset=True 恢复出厂配置）"""
     from ..core import settings
@@ -548,7 +485,6 @@ def set_mining_gear(ship="mole", loadout=None, reset=False):
     return _gear()
 
 
-@api
 def manual_scan(mass=0, resistance=0, instability=0):
     """手动输入扫描数据：只算破碎方案"""
     from ..mining.laser import recommend

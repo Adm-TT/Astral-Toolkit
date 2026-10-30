@@ -14,134 +14,38 @@ from ..app import bus
 API = {}
 
 
-def api(fn):
-    """标记为暴露给前端的 API 函数（名字就是接口路径 /api/<fn_name>）"""
-    API[fn.__name__] = fn
-    return fn
-
-
-# ---------------------------------------------------------------- 依赖转发与辅助
-def _services():
-    from ..app import services
-    return services
+# ---------------------------------------------------------------- 依赖（2026-10-30 重构阶段 3：不再经 services 转发）
+from ..app.engines.manager import EngineManager
+from ..trade.inspector import _read_tooltip, tooltip_row, tooltip_quality, cell_labels, _is_mineral  # noqa: F401（原来的转发名保留）
+from . import stock as _t_stock
+from . import trade as _t_trade
 
 
 def trade():
-    return _services().trade()
+    return _t_trade.trade()
 
 
 def stock():
-    try:
-        from .stock import stock as _st
-        return _st()
-    except Exception:
-        return _services().stock()
+    return _t_stock.stock()
 
 
 def _place_of(location):
-    try:
-        from .stock import _place_of as _po
-        return _po(location)
-    except Exception:
-        return _services()._place_of(location)
+    return _t_stock._place_of(location)
 
 
 def _place_for(location, bin=None):
-    try:
-        from .stock import _place_for as _pf
-        return _pf(location, bin)
-    except Exception:
-        return _services()._place_for(location, bin)
+    return _t_stock._place_for(location, bin)
 
 
 def scu_amount(qty, unit):
-    try:
-        from .stock import scu_amount as _sa
-        return _sa(qty, unit)
-    except Exception:
-        return _services().scu_amount(qty, unit)
+    return _t_stock.scu_amount(qty, unit)
 
 
 def _invalidate_short():
-    try:
-        from .stock import _invalidate_short as _inv
-        _inv()
-    except Exception:
-        try:
-            _services()._SHORT["t"] = 0.0
-        except Exception:
-            pass
+    _t_stock._invalidate_short()
 
 
-def _read_tooltip(img, cursor):
-    try:
-        from ..trade.inspector import _read_tooltip as _rt
-        return _rt(img, cursor)
-    except Exception:
-        return _services()._read_tooltip(img, cursor)
-
-
-def tooltip_row(tokens):
-    try:
-        from ..trade.inspector import tooltip_row as _tr
-        return _tr(tokens)
-    except Exception:
-        return _services().tooltip_row(tokens)
-
-
-def tooltip_quality(tokens):
-    try:
-        from ..trade.inspector import tooltip_quality as _tq
-        return _tq(tokens)
-    except Exception:
-        return _services().tooltip_quality(tokens)
-
-
-def cell_labels(img, cursor):
-    try:
-        from ..trade.inspector import cell_labels as _cl
-        return _cl(img, cursor)
-    except Exception:
-        return _services().cell_labels(img, cursor)
-
-
-def _is_mineral(zh, en):
-    try:
-        from ..trade.inspector import _is_mineral as _im
-        return _im(zh, en)
-    except Exception:
-        try:
-            return _services()._is_mineral(zh, en)
-        except Exception:
-            return False
-
-
-# ---------------------------------------------------------------- 盘点引擎单例代理
-_local_count = None
-
-
-class _CountProxy:
-    def _target(self):
-        global _local_count
-        try:
-            s = _services()
-            if hasattr(s, "_count"):
-                return s._count
-        except Exception:
-            pass
-        if _local_count is None:
-            from ..app.engines.count import _Count
-            _local_count = _Count()
-        return _local_count
-
-    def __getattr__(self, name):
-        return getattr(self._target(), name)
-
-    def __setattr__(self, name, value):
-        setattr(self._target(), name, value)
-
-
-_count = _CountProxy()
+_count = EngineManager.get_instance().count
 
 
 # ================================================================ 盘点（F6）核心识别与对账
@@ -200,18 +104,15 @@ def _count_review(place, items):
 
 
 # ================================================================ 盘点控制与对账 API
-@api
 def count_toggle():
     """盘点开关（窗口按钮；游戏里是 F6）"""
     return _count.stop() if _count.running() else _count.start()
 
 
-@api
 def count_state():
     return {"running": _count.running(), "place": _count.place, "review": _count.review}
 
 
-@api
 def count_apply(zero=None):
     """确认对账：看到的按游戏里的数改；zero：账上有、这轮没看到、要清零的行（[[物品, 品质, 位置, 单位], …]）"""
     from ..crafting import goals as G
@@ -280,7 +181,6 @@ def count_apply(zero=None):
     return stock()
 
 
-@api
 def count_cancel():
     _count.review = None
     bus.publish("count", {"running": _count.running(), "review": None})
@@ -293,6 +193,7 @@ API_FUNCTIONS = [
     count_apply,
     count_cancel,
 ]
+API.update({f.__name__: f for f in API_FUNCTIONS})   # 原来由 api 装饰器填，名字照旧（接口改由 app/api/vision.py 注册）
 
 __all__ = [
     "_read_item",
