@@ -137,7 +137,7 @@ def clear_caches():
     from ..core import paths
     paths.clear_json_cache()
     _clear("trade.names", "table", "_index")
-    _clear("crafting", "data", "_keys")
+    _clear("crafting.crafting", "data", "_keys")       # crafting 成了包，_keys 在 crafting.crafting 里，包上清不到（同名配方编号会乱）
     _clear("crafting.wikelo", "load")
     _clear("crafting.stockplaces", "places", "_index")
     _clear("mining.laser", "head_blueprint", "craft_slots")
