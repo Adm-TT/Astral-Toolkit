@@ -59,6 +59,21 @@ def make_closing(win, on_hide_first, quit_ev, keep_running=lambda: True):
     return closing
 
 
+def _hook_shutdown(win, quit_ev):
+    """Windows 关机、注销时 pywebview 照样走 closing：我们藏起来并取消，会弹「AT 正在阻止关机」。
+    在 WinForms 窗体上再挂一个 FormClosing（排在 pywebview 的后面执行），按 CloseReason 放行并退出 AT（2026-10-30 审查）"""
+    try:
+        from System.Windows.Forms import CloseReason
+
+        def on_form_closing(sender, args):
+            if args.CloseReason in (CloseReason.WindowsShutDown, CloseReason.TaskManagerClosing):
+                quit_ev.set()
+                args.Cancel = False
+        win.native.FormClosing += on_form_closing
+    except Exception:
+        pass
+
+
 def run(url, bridge, on_hide_first, quit_ev, keep_running=lambda: True):
     """在主线程里开窗口，一直阻塞到窗口销毁。打不开（没装、没有 WebView2 运行库）就抛异常"""
     import webview
@@ -75,6 +90,7 @@ def run(url, bridge, on_hide_first, quit_ev, keep_running=lambda: True):
                                 background_color=BACKGROUND, text_select=True)
     win.events.closing += make_closing(win, on_hide_first, quit_ev, keep_running)
     win.events.minimized += _trim
+    win.events.shown += lambda: _hook_shutdown(win, quit_ev)
     _STATE["win"] = win
 
     def wait_quit():

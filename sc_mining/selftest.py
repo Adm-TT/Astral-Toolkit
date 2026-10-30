@@ -15,7 +15,7 @@ MODULES = (
     "crafting.itemsearch", "crafting.shops", "crafting.loot", "update.localization", "update.data_pack",
     "update.update_check", "update.upgrade", "update.legacy", "navigation.displayinfo",
     "navigation.position", "system.cockpit", "app.tray", "core.i18n",
-    "app.server", "app.api.router", "app.bus", "trade.console", "trade.ocr", "trade.inventory",
+    "app.server", "app.api.router", "app.window", "app.bus", "trade.console", "trade.ocr", "trade.inventory",
     "tasks.mining", "tasks.hover", "tasks.count", "tasks.stock", "tasks.system", "tasks.navigation", "tasks.trade", "tasks.goals",
 )
 
@@ -49,7 +49,10 @@ def main():
         import importlib
         for m in MODULES:
             importlib.import_module(f"sc_mining.{m}")
-        return f"{len(MODULES)} 个模块"
+        from .app.api import router                     # 打包后接口表靠 pkgutil 收集，收不到所有接口都会 404（2026-10-30 审查）
+        n = len(router.routes())
+        assert n >= 100 and "set_settings" in router.routes(), f"接口只收集到 {n} 个"
+        return f"{len(MODULES)} 个模块，{n} 个接口"
 
     def data_files():
         out = []
