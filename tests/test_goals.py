@@ -508,3 +508,51 @@ def test_crafted_item_qualities_from_bonus(monkeypatch, tmp_path):
     with sqlite3.connect(tmp_path / "db" / "dubhe_inventory.db") as c:
         c.execute("DROP TABLE craft_details")
     Trade(tmp_path / "db", providers=[])                       # 1.6.58–1.6.66 建的文件：缺表补上，不报「表结构不符」
+
+
+# ---------------------------------------------------------------- 2026-10-30 重构阶段 2：导航、目标的接口走自己的 Controller
+_NAV_API = ["nav_search", "nav_near", "nav_site", "nav_plan", "nav_start", "nav_mode", "sig_name", "sig_names",
+            "nav_stop", "nav_refresh", "waypoints", "waypoint_add", "waypoint_preview", "waypoint_from_text",
+            "waypoint_delete", "ore_record", "ore_list", "ore_delete", "ore_restore", "ore_go", "halo_options",
+            "halo_routes", "halo_pin", "halo_unpin"]
+_GOALS_API = ["goal_finish_preview", "goal_finish", "wikelo_search", "wikelo_detail", "goals", "goal_add",
+              "goal_update", "goal_stock_add", "craft_effect", "goal_prices", "craft_search", "craft_browse",
+              "craft_detail", "craft_stats", "craft_mix"]
+
+
+def test_nav_goals_controller_routes():
+    """导航、目标的每个接口名都由 app/api/navigation.py、app/api/goals.py 接，名单和 Controller 的 ROUTES 一个不多一个不少"""
+    from sc_mining.app.api import router, navigation as CN, goals as CG
+    router.reset()
+    r = router.routes()
+    for name in _NAV_API:
+        assert r[name].__module__ == "sc_mining.app.api.navigation", name
+    for name in _GOALS_API:
+        assert r[name].__module__ == "sc_mining.app.api.goals", name
+    assert sorted(CN.ROUTES) == sorted(_NAV_API) and sorted(CG.ROUTES) == sorted(_GOALS_API)
+
+
+def test_nav_goals_tasks_no_services():
+    """tasks/navigation.py、tasks/goals.py 不再反过来引用 app.services"""
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent / "sc_mining" / "tasks"
+    for f in ("navigation.py", "goals.py"):
+        text = (root / f).read_text(encoding="utf-8")
+        for bad in ("app import services", "_services()", "@api"):
+            assert bad not in text, (f, bad)
+
+
+def test_nav_goals_bridge_roundtrip(monkeypatch, tmp_path):
+    """只读接口 waypoints：走 BackendBridge 和直接调 tasks 结果一样（路标文件用临时的）"""
+    import json
+    from sc_mining.app.api.bridge import BackendBridge
+    from sc_mining.app.api import router
+    from sc_mining.navigation import navigate as n
+    from sc_mining.tasks import navigation as TN
+    monkeypatch.setattr(n, "WAYPOINTS", tmp_path / "wp.json")
+    n.add_space_waypoint("测试点", "Stanton", (1.0e9, 2.0e9, 3.0e9))
+    router.reset()
+    got = BackendBridge().call("waypoints", {})
+    assert got["ok"], got
+    want = json.loads(json.dumps(TN.waypoints(), ensure_ascii=False, default=str))
+    assert got["data"] == want and any(w["name"] == "测试点" for w in want)

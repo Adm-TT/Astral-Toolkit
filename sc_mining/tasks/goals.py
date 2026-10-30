@@ -88,29 +88,14 @@ from ..mining.locations import where, zh_name
 from ..trade.console import material_source, SOURCE_ZH
 
 
-# ---------------------------------------------------------------- 依赖转发辅助
-def _services():
-    from ..app import services
-    return services
-
-
-def trade():
-    try:
-        from .trade import trade as _t
-        return _t()
-    except Exception:
-        return _services().trade()
+# ---------------------------------------------------------------- 依赖：交易库、库存地点
+# 2026-10-30 重构阶段 2：直接用 tasks 里的交易库和库存地点，不再经 services 转发、出错也不再回头找 services 兜底。
+from .trade import trade
 
 
 def _place_for(location, bin=None):
-    try:
-        from .stock import _place_for as _pf
-        return _pf(location, bin)
-    except Exception:
-        try:
-            return _services()._place_for(location, bin=bin)
-        except Exception:
-            return location
+    from . import stock               # 在函数里 import：stock 也在函数里引用 goals，取模块属性，测试换掉的名字能打中
+    return stock._place_for(location, bin)
 
 
 # ---------------------------------------------------------------- 内部状态与缓存
