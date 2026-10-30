@@ -378,3 +378,40 @@ def test_review_102_reader_poll_is_serialized(monkeypatch):
     [t.join() for t in ts]
     assert calls["max"] == 1 and calls["n"] == 4
     assert r.snapshot()[1]["global"][0] == 4e7
+
+
+def test_lost_minus_sign_rejected(monkeypatch, tmp_path):
+    """字模把负号当空格丢掉（1080p 实拍见过），两行一起丢时两行照样一致：Pos 后双空格接数字就作废这一帧（2026-10-30）"""
+    from sc_mining import displayinfo as D
+    sol = "Zone: SolarSystem_862685702877 Pos: -4634409.3882km -47775658.1227km -42.6401km"
+    root = "Zone: Root Pos: -4634409.3882km -47775658.1227km -42.6401km"
+    assert D.parse([D.grid_text(sol), D.grid_text(root)], need_both=True)["global"] is not None
+    gone = [s.replace(" -", "  ") for s in (sol, root)]
+    assert D.parse([D.grid_text(s) for s in gone], need_both=True)["global"] is None
+    assert D.grid_text("Zone:?Root Pos: 1.0km") == "Zone: Root Pos: 1.0km"
+    # 图像层：把样本两行坐标里的负号抹掉，字模读出来也不能给出（正号的）坐标
+    G = _fresh(monkeypatch, tmp_path)
+    clean = _sample("displayinfo_tr_1600.png")
+    G._state.update(tried_load=True)
+    assert G.read_rows(clean, 1600)
+    gl = G._state["glyphs"]
+    gr = gl.g
+    tm = G.textness(clean)
+    arr = clean.copy()
+    for top in (50, 65):
+        text, _, sc = gl.read_row(tm, top)
+        adv, off = gr.adv[sc]
+        strip = tm[top:top + gr.lh]
+        colsum = strip.sum(0, dtype=np.int32)
+        xs = np.nonzero((strip > G.INK).any(0))[0]
+        off = min(np.arange(off - 1.0, off + 1.01, 0.25), key=lambda o: G._row_score(colsum, gr.xr, adv, o))
+        right = gr.xr + off
+        n = int(np.ceil((right - xs.min()) / adv))
+        lefts = np.round(right - np.arange(n, 0, -1) * adv).astype(int)
+        assert len(lefts) == len(text)
+        p = text.index("Pos:")
+        for i, ch in enumerate(text):
+            if ch == "-" and i > p:
+                arr[top:top + gr.lh, lefts[i] + 1:lefts[i] + int(adv)] = 0
+    texts = [D.grid_text(t) for _, t, _, _ in G.read_rows(arr, 1600)]
+    assert D.parse(texts, need_both=True)["global"] is None

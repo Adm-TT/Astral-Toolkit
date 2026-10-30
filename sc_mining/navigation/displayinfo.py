@@ -272,10 +272,16 @@ NEED_ROW = re.compile(r"Zone|CamDir|player|locat|Planet", re.I)
 _NUM_Q = re.compile(r"\?(?=[\d.,])|(?<=[\d.,\-])\?")
 
 
+_LOST_SIGN = re.compile(r"(?<=[:m]) {2,}(?=\d)")   # 坐标固定一个空格隔开：Pos: / km / m 后面两个以上空格才接数字 = 中间那格是没认出的负号
+
+
 def grid_text(t):
     """字模认出的一行 → 给 parse 的文字：数字旁边认不出的格子（?）写成 #，让这个坐标解析失败（以前当空格删掉，
-    「?2462326.4853km」会变成少一位的坐标，Codex 2026-10-27 补审）；别处的 ? 多半是邻格漏进来的墨，当空格"""
-    return _NUM_Q.sub("#", t).replace("?", " ")
+    「?2462326.4853km」会变成少一位的坐标，Codex 2026-10-27 补审）；别处的 ? 多半是邻格漏进来的墨，当空格。
+    负号只有一小横，字模有时把它当空格丢掉，两行会一起丢、照样「一致」：Pos: 后面出现双空格接数字就作废这一帧（2026-10-30）"""
+    t = _NUM_Q.sub("#", t).replace("?", " ")
+    i = t.find("Pos:")
+    return t if i < 0 else t[:i] + _LOST_SIGN.sub(" #", t[i:])
 
 
 def _grid_read(piece, screen_h):
