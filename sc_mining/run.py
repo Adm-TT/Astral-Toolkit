@@ -104,7 +104,17 @@ def use_directml():
         print("显卡加速组件没装上，继续用 CPU 识别")
         return False
     _pip_uninstall("onnxruntime")
-    return _pip("--force-reinstall", "--no-deps", "onnxruntime-directml")
+    if _pip("--force-reinstall", "--no-deps", "onnxruntime-directml"):
+        return True
+    print("显卡加速组件没装好，装回 CPU 版识别组件…")        # CPU 版已经卸了：不装回来就一个都没有
+    _pip("onnxruntime")
+    return False
+
+
+def _onnx_ok():
+    """识别组件真的能用：另开一个 Python 试 import onnxruntime（包装上了、文件却缺了也算不能用）"""
+    return subprocess.call([sys.executable, "-c", "import onnxruntime"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0
 
 
 def install():
@@ -123,6 +133,9 @@ def install():
         exe = build()
     except Exception as e:
         print(f"（生成 Dubhe.exe 没成功：{e}，可以用 .venv\\Scripts\\python.exe -m sc_mining.run console）")
+    if ocr and not _onnx_ok():
+        ocr = False
+        print("❌ 文字识别组件（onnxruntime）装了但加载不了")
     if ok and ocr:
         print("✅ 安装完成，以后双击「Dubhe.exe」就能用" if exe else "✅ 安装完成")
     else:
