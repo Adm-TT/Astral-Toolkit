@@ -271,7 +271,9 @@ def adopt_old(old, points, bodies):
     op = [(p, (p["x"], p["y"], p["z"])) for p in old.get("points") or []]
     renamed = Counter()
     for p in points:
-        hit = next((o for o, xyz in op if o["sys"] == p["sys"] and math.dist(xyz, (p["x"], p["y"], p["z"])) < 1000), None)
+        near = [o for o, xyz in op if o["sys"] == p["sys"] and math.dist(xyz, (p["x"], p["y"], p["z"])) < 1000]
+        # 同一位置有好几个点（恒星和亚伦环（Aaron Halo）都在原点）：先认记录编号一样的（2026-10-30）
+        hit = next((o for o in near if p.get("i") and o.get("i") == p.get("i")), near[0] if near else None)
         if hit:
             if hit["n"] != p["n"]:
                 renamed[(p["n"], hit["n"])] += 1

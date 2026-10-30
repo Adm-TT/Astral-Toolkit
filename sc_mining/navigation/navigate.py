@@ -1329,7 +1329,7 @@ def amenity_targets(kind, data=None):
         pois.setdefault(_norm(q["n"]), q)
     pts = {q["n"]: q for q in data.get("points") or []}
     pts_id = {q["i"]: q for q in data.get("points") or [] if q.get("i")}     # 星门站重名，按编号找（2026-10-30）
-    inside = {q.get("city") for q in city_places()}
+    inside = {q.get("city") for q in city_targets(kind)}     # 站里有这一类的点才用站里的（派罗死局等站没解出取船终端，审查 2026-10-30）
     out = []
     for r in rows:
         if not isinstance(r, dict) or kind not in (r.get("kinds") or []):

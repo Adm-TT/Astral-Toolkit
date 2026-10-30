@@ -2750,7 +2750,12 @@ def test_nav_nearest(monkeypatch, tmp_path):
              "src": "nb/pharm", "x": 520.950, "y": 419.250, "z": 744.000},
             {"city": "Lorville", "body": "Hurston", "cat": "医院", "en": "Hospital Check-In", "zh": "登记处",
              "src": "lv/checkin", "x": -328.989, "y": -752.435, "z": 572.12}]
-    amen = [{"en": "ARC-L1 Wide Forest Station", "zh": "弧 L1 广袤森林站", "kinds": ["医院", "空港"], "ref": {"point": "ARC L1"}},
+    arc0 = next(p for p in data["points"] if p["n"] == "ARC L1")
+    city.append({"city": "rr_arc_l1", "sys": "Stanton", "space": True, "cat": "交易", "kinds": ["交易"], "en": "Commodity Terminal",
+                 "src": "arc/commodity", "x": arc0["x"] / 1000 + 50, "y": arc0["y"] / 1000, "z": arc0["z"] / 1000})
+    # 站里只解出交易终端：设施表里这个站的医院 / 空港照样要列（审查 2026-10-30，派罗死局等站没解出取船终端）
+    amen = [{"en": "ARC-L1 Wide Forest Station", "zh": "弧 L1 广袤森林站", "kinds": ["医院", "空港"], "ref": {"point": "ARC L1"},
+             "rec": "rr_arc_l1"},
             {"en": "Nowhere", "kinds": ["医院"], "ref": {"point": "不存在的点"}}, "坏行"]
     (tmp_path / "city_places.json").write_text(json.dumps(city, ensure_ascii=False), encoding="utf-8")
     (tmp_path / "place_amenities.json").write_text(json.dumps(amen, ensure_ascii=False), encoding="utf-8")

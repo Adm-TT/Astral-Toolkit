@@ -481,7 +481,8 @@ def main():
         import unpack_stations as S
         sys.path.insert(0, str(ROOT))
         from sc_mining import navigate as N
-        st = S.build(index(dirs), N.load()["bodies"], bk, S.station_names())
+        data = N.load()
+        st = S.build(index(dirs), data["bodies"], bk, S.station_names(), data.get("points") or ())
         for p in st:
             p["kinds"] = [k for k in KIND_ORDER if k in p["kinds"]]
         print(f"空间站里的点 {len(st)} 个")

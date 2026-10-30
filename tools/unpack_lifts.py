@@ -100,8 +100,8 @@ def hangar_local(cls, idx, records, cache={}):
     return out
 
 
-def build_station(top, idx, rev, body_of, bodies, records, places, hl):
-    r = S.resolve(top, rev, body_of)
+def build_station(top, idx, rev, body_of, bodies, records, places, hl, frames=None):
+    r = S.frame_of(top, rev, body_of, bodies, frames or {})
     if not r:
         return None
     frame, where, P, Q = r
@@ -273,11 +273,12 @@ def main():
     from sc_mining import navigate as N
     bodies = N.load()["bodies"]
     body_of = S.bodies_of(rev, bodies)
+    frames = S.system_frames(idx)                       # 派罗、尼克斯的站按星系文件一层层算（2026-10-30）
     # 站里的点用导航读进来的样子（同一个店容器在两个区域各摆一个时 src 一样，id 后面加 +）：点 → 区域按 id 存
     places = N._city_rows(json.loads((ROOT / "data" / "city_places.json").read_text(encoding="utf-8")))
     hl, stations = {}, {}
     for top in sorted(k for k in idx if S.TOP.match(k)):
-        r = build_station(top, idx, rev, body_of, bodies, RECORDS, places, hl)
+        r = build_station(top, idx, rev, body_of, bodies, RECORDS, places, hl, frames)
         if not r:
             continue
         rec, st = r
