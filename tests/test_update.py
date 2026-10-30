@@ -223,6 +223,18 @@ def test_own_server_stale_does_not_hide_newer(monkeypatch, tmp_path):
     assert C.disabled("scan") and not C.disabled("radar")
 
 
+def test_beta_sees_same_number_live(monkeypatch, tmp_path):
+    """本机是 beta（1.1.2-beta.1）时，同号的 live（1.1.2）也提示更新；live 装的不提示同号（2026-10-30）"""
+    from sc_mining import upgrade
+    z = _pkg(tmp_path / "Dubhe_9.0.0.zip", "9.0.0", {})
+    C, calls = _setup(monkeypatch, tmp_path, {"https://gitee.com/at/at/raw/master/latest.json": json.dumps(_manifest(z)).encode()})
+    monkeypatch.setattr(upgrade, "current", lambda: (9, 0, 0))
+    monkeypatch.setattr(C, "_is_beta", lambda: True)
+    assert C.check(force=True)["version"] == "9.0.0"
+    monkeypatch.setattr(C, "_is_beta", lambda: False)
+    assert C.check(force=True) is None
+
+
 def test_data_pack_takes_newest_source(monkeypatch, tmp_path):
     import io
     from sc_mining import data_pack as P

@@ -269,7 +269,16 @@ def check(force=False):
             info, err = fetch()
             st.update(at=time.time(), info=info, error="" if info else err)
         info = st["info"]
-    return info if info and ver(info["version"]) > current() else None
+    if not info:
+        return None
+    new, cur = ver(info["version"]), current()
+    # 本机装的是 beta（如 1.1.2-beta.1）：同号的 live（1.1.2）也算新版本（2026-10-30 版本分 beta / live）
+    return info if new > cur or (new == cur and _is_beta()) else None
+
+
+def _is_beta():
+    from ..core.version import VERSION
+    return "-" in VERSION
 
 
 def last_error():
