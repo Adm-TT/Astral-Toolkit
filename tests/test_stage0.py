@@ -38,7 +38,7 @@ def test_router_collects_controller_routes(monkeypatch, tmp_path):
         router.reset()
         assert router.routes()["x_test"]() == 1
         assert router.call("x_test") == {"ok": True, "data": 1}
-        assert "about_info" in router.routes()                  # services.API 兜底的照样在
+        assert "about_info" in router.routes()                  # 原有的 Controller 照样在（阶段 4 起没有 services.API 兜底）
     finally:
         sys.modules.pop("sc_mining.app.api.x_stage0_ctl", None)
         monkeypatch.restore()
@@ -77,12 +77,11 @@ ENGINES = ("game_events", "nav", "live", "pos", "count", "hover", "cam_filter", 
 
 
 def test_engine_manager_singleton():
-    from sc_mining.app import services
     from sc_mining.app.engines.manager import EngineManager
     m = EngineManager.get_instance()
     assert m is EngineManager.get_instance()
-    for n in ENGINES:
-        assert getattr(services, "_" + n) is getattr(m, n), n
+    for n in ENGINES:                                    # 阶段 4：services.py 删了，不再对 services._xxx 是同一个
+        assert getattr(m, n) is not None, n
 
 
 def test_start_all_needs_agreed(monkeypatch):
@@ -109,16 +108,10 @@ def test_stop_all_sets_events(monkeypatch):
     assert m.live.stop_ev.is_set() and m.nav.stop_ev.is_set()
 
 
-def test_hud_state_names_kept():
-    from sc_mining.app import services, hud_state
-    for n in ("_hud", "_note_hud", "_item_hud", "_off", "_cursor", "_key_down", "item_key_pressed",
-              "_ITEM_MODE", "_ITEM_SEQ", "_OFF_TOLD"):
-        assert getattr(services, n) is getattr(hud_state, n), n
-
-
 def test_window_fallback(monkeypatch, tmp_path):
     """没有 pywebview：server.main 照旧用 open_window（ATShell → Edge），不碰 window.run"""
-    from sc_mining.app import server, window, bus, overlay, services, tray
+    from sc_mining.app import server, window, bus, overlay, tray
+    from sc_mining.tasks import system as t_sys
     from sc_mining.app.engines.manager import EngineManager
     from sc_mining.core import paths, perf
     calls = []
@@ -162,7 +155,7 @@ def test_window_fallback(monkeypatch, tmp_path):
     monkeypatch.setattr(bus, "install_router", lambda: None)
     monkeypatch.setattr(perf, "lower_priority", lambda: None)
     monkeypatch.setattr(overlay, "hud", lambda: None)
-    monkeypatch.setattr(services, "start_background", lambda: None)
+    monkeypatch.setattr(t_sys, "start_background", lambda: None)            # server.main 调的是 tasks.system 的（阶段 4）
     monkeypatch.setattr(tray, "Tray", FakeTray)
     monkeypatch.setattr(paths, "USER", tmp_path)
     monkeypatch.setattr(server, "STATE", {"url": "", "tray": None, "told_tray": False})    # 别留下假托盘给后面的测试

@@ -41,7 +41,7 @@ def _save(rows):
 
 
 def from_view(view):
-    """采矿助手的结果（services.scan_view）→ 一条记录（不含坐标）"""
+    """采矿助手的结果（tasks.mining.scan_view）→ 一条记录（不含坐标）"""
     ref = (view.get("refine") or [{}])[0] if view.get("refine") else {}
     lots = [{"zh": r.get("zh"), "en": r.get("en"), "pct": r.get("pct"), "q": r.get("q"), "scu": r.get("scu"),
              "inert": bool(r.get("inert"))} for r in view.get("lots") or []]

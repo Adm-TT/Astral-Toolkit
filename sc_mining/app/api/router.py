@@ -1,7 +1,7 @@
 """接口路由（2026-10-30 重构阶段 0）
 
-routes()：先放 services.API（过渡期兜底），再收集 sc_mining/app/api/ 下每个 Controller 模块的 ROUTES，
-后收集的覆盖先放的。HTTP（server.do_POST）和 PyWebview（bridge）都走 call()，返回格式一样。
+routes()：收集 sc_mining/app/api/ 下每个 Controller 模块的 ROUTES（阶段 4 起不再拿 services.API 兜底，services.py 已删）。
+HTTP（server.do_POST）和 PyWebview（bridge）都走 call()，返回格式一样。
 
 Controller 写法（阶段 1–3）：sc_mining/app/api/<领域>.py 里写接口函数，文件末尾
     ROUTES = {"接口名": 函数, …}
@@ -25,9 +25,8 @@ def routes():
         return _cache
     with _lock:
         if _cache is None:
-            from .. import services                 # 在函数里 import：services 也会 import 这一层，顶层 import 会循环引用
             from .. import api as _pkg
-            table = dict(services.API)
+            table = {}
             for m in sorted(pkgutil.iter_modules(_pkg.__path__), key=lambda m: m.name):
                 if m.name in _SKIP:
                     continue

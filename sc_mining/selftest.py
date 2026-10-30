@@ -15,7 +15,7 @@ MODULES = (
     "crafting.itemsearch", "crafting.shops", "crafting.loot", "update.localization", "update.data_pack",
     "update.update_check", "update.upgrade", "update.legacy", "navigation.displayinfo",
     "navigation.position", "system.cockpit", "app.tray", "core.i18n",
-    "app.server", "app.services", "app.bus", "trade.console", "trade.ocr", "trade.inventory",
+    "app.server", "app.api.router", "app.bus", "trade.console", "trade.ocr", "trade.inventory",
     "tasks.mining", "tasks.hover", "tasks.count", "tasks.stock", "tasks.system", "tasks.navigation", "tasks.trade", "tasks.goals",
 )
 

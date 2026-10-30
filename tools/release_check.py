@@ -30,11 +30,10 @@ if not PY.exists():
 LAUNCH = r"""
 import sys, threading, subprocess
 from pathlib import Path
-from sc_mining.app import server, services, bus
+from sc_mining.app import server, bus
 desk = Path(sys.argv[1])
-services._desktop = lambda: desk                    # 导出日志放临时「桌面」，不碰真实桌面
 import sc_mining.tasks.system as _ts
-_ts._desktop = services._desktop                   # 导出其实在 tasks/system 里做（NGU 重构后），那边也要换
+_ts._desktop = lambda: desk                         # 导出日志放临时「桌面」，不碰真实桌面（导出在 tasks/system 里做）
 _popen = subprocess.Popen
 subprocess.Popen = lambda a, *k, **kw: None if a and str(a[0]).lower() == "explorer" else _popen(a, *k, **kw)
 bus.install_router()                                # 和正式启动一样：后台任务的输出进窗口日志

@@ -30,7 +30,7 @@ def _ms(fn, n=N):
 
 def main():
     from sc_mining import perf
-    from sc_mining.app import services as S
+    from sc_mining.tasks import hover as S
     from sc_mining.trade.ocr import recognize
     from sc_mining import screen, displayinfo
     out = [f"## {time.strftime('%F %T')} 版本 {__import__('sc_mining.version', fromlist=['VERSION']).VERSION}"]

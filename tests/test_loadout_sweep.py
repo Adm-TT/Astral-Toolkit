@@ -8,7 +8,7 @@ import time
 def test_every_loadout(monkeypatch, tmp_path):
     from sc_mining import settings, laser
     from sc_mining.data import SHIPS, HEADS, MODULES, GADGETS
-    from sc_mining.app import services
+    from sc_mining.tasks import mining as t_mining
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
 
     def mult(*ps):
@@ -17,7 +17,7 @@ def test_every_loadout(monkeypatch, tmp_path):
             out *= 1 + (p or 0) / 100
         return out
 
-    from sc_mining.app import services
+    from sc_mining.tasks import mining as t_mining
 
     def mult(*ps):
         out = 1.0
@@ -95,7 +95,7 @@ def test_every_loadout(monkeypatch, tmp_path):
             for _ in range(spec["heads"]):
                 k = random.choice(pool); heads.append([k, random.choices(mods, k=random.randint(0, HEADS[k]["slots"]))])
             lo = {"heads": heads, "crew": random.randint(1, spec["crew_max"])}
-            g = services.set_mining_gear(ship=ship, loadout=lo); n_loadouts += 1
+            g = t_mining.set_mining_gear(ship=ship, loadout=lo); n_loadouts += 1
             got = next(s for s in g["ships"] if s["key"] == ship)["loadout"]
             if got != lo or g["ship"] != ship or not g["chosen"]:
                 problems.append(("保存读回不一致", ship, lo, got))

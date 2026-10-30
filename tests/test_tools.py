@@ -1,5 +1,4 @@
 """交易界面、物品在哪买 / 限定版同款 / 最近买点 / 掉落 / 维科洛兑换"""
-from tests import patch_services
 from datetime import datetime, timezone
 from decimal import Decimal as D
 from sc_mining.trade import console as C
@@ -274,10 +273,10 @@ def test_nearest_distinct_places_and_loot_grouping(monkeypatch, tmp_path):
 
 def test_app_scan_view_and_manual():
     from sc_mining.parse import parse_scan
-    from sc_mining.app import services
+    from sc_mining.tasks import mining as t_mining
     s = parse_scan(["扫描结果", "钨矿石", "质量： 44336", "抗性： 4% ", "不稳定性： 17.32", "组成 23.68 SCU",
                     "6.55% 兰石原矿 510", "12.95% 钨矿石 662", "49.41% 钨矿石 363", "31.07% 情性物质 。"])
-    v = services.scan_view(s, ({"Inert Materials": 0.3}, 0.3, 96.0))
+    v = t_mining.scan_view(s, ({"Inert Materials": 0.3}, 0.3, 96.0))
     assert v["rock"] and v["plans"] and v["refine"] and v["bag"]["cap"] == 96.0
     assert "kg" in v["hud"] and v["plans"][0]["heads"]
     mats = {m["en"]: m for m in v["craft_mats"]}                       # 「可制造 N 份蓝图」按钮的数据
@@ -285,7 +284,7 @@ def test_app_scan_view_and_manual():
         assert mats["Tungsten"]["q"] == 662 and mats["Tungsten"]["count"] > 0      # 同种矿取最高品质
         assert all(m["count"] > 0 and m["ok"] is not None for m in mats.values())
         assert [m["en"] for m in v["minerals"]] and all("en" in m for m in v["minerals"])
-    assert services.manual_scan(mass=20000, resistance=10, instability=5)
+    assert t_mining.manual_scan(mass=20000, resistance=10, instability=5)
 
 
 def test_app_task_log_routing():
@@ -439,15 +438,15 @@ def test_displayinfo_real_ocr_lines():
 
 def test_first_run_agreement(monkeypatch, tmp_path):
     from sc_mining import settings, helpers
-    from sc_mining.app import services
+    from sc_mining.tasks import system as t_sys
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
     started = []
     monkeypatch.setattr(helpers, "start", lambda: started.append("helpers"))
-    patch_services(monkeypatch, "start_background", lambda: started.append("bg"))
+    monkeypatch.setattr(t_sys, "start_background", lambda: started.append("bg"))
     assert settings.load()["agreed"] is False
-    assert "error" in services.agree("本软件是免费的")                    # 差一个字都不行
+    assert "error" in t_sys.agree("本软件是免费的")                    # 差一个字都不行
     assert settings.load()["agreed"] is False and not started
-    services.agree(" 本软件是免费软件 ")
+    t_sys.agree(" 本软件是免费软件 ")
     assert settings.load()["agreed"] is True and started == ["helpers", "bg"]
 
 
@@ -459,7 +458,9 @@ def test_live_scan_updates_when_read_gets_more_complete(monkeypatch, tmp_path):
     monkeypatch.setattr(paths, "log", lambda name: tmp_path / name)        # 别往电脑上真实的扫描记录里写
     monkeypatch.setattr(paths, "shots", lambda name: tmp_path)
     from sc_mining.parse import Scan
-    from sc_mining.app import services, bus
+    from sc_mining.tasks import mining as t_mining
+    import sc_mining.app.engines.live as live_mod
+    from sc_mining.app import bus
     img = Image.new("RGB", (320, 180), (20, 20, 20))
     part = Scan(rock="Tungsten", mass=44336, resistance=4, instability=17.32, total_scu=23.68,
                 composition=[("Tungsten", 12.95, 662), ("Tungsten", 49.41, 363), ("Inert Materials", 37.64, 0)])
@@ -476,9 +477,9 @@ def test_live_scan_updates_when_read_gets_more_complete(monkeypatch, tmp_path):
     monkeypatch.setattr(screen, "analyse", analyse)
     monkeypatch.setattr(screen, "INTERVAL", 0.01)
     monkeypatch.setattr(signals, "find_signatures", lambda im: [])
-    patch_services(monkeypatch, "_game_front", lambda: None)            # 不看真电脑上哪个窗口在最前面
+    monkeypatch.setattr(t_mining, "_game_front", lambda: None)            # 不看真电脑上哪个窗口在最前面
     q = bus.subscribe()
-    live = services._Live()
+    live = live_mod._Live()
     try:
         live.stop_ev = threading.Event()
         th = threading.Thread(target=live._run, daemon=True)
@@ -522,24 +523,26 @@ def test_status_keeps_displayinfo_place_when_reader_goes_stale():
     """切屏后右上角暂时读不到，位置还显示死局空间站，不跳回别的；游戏日志里有更新的地点才换。
     2026-10-26 起不导航也一直读右上角（实时位置）：右上角读到的比日志新就用右上角的"""
     import time
-    from sc_mining.app import services as S
+    from sc_mining.tasks import system as t_sys
+    from sc_mining.app.engines.manager import EngineManager
+    em = EngineManager.get_instance()
     import sc_mining.position as P
-    old = P.current, P.from_log, S._pos.label, S._nav.target
+    old = P.current, P.from_log, em.pos.label, em.nav.target
     try:
-        S._nav.target = {"n": "测试目标"}
-        S._pos.reader.ok_at = 0                       # 读取器已经不算「开着」
-        S._pos.label = (time.time() - 20, "死局空间站")
+        em.nav.target = {"n": "测试目标"}
+        em.pos.reader.ok_at = 0                       # 读取器已经不算「开着」
+        em.pos.label = (time.time() - 20, "死局空间站")
         P.current = lambda *a, **k: {"label": "玛格达 附近", "age": 1.0, "sys": "Pyro"}
         P.from_log = lambda *a, **k: (time.time() - 3600, "死局空间站", {})
-        assert S.status()["position"]["label"] == "死局空间站"
+        assert t_sys.status()["position"]["label"] == "死局空间站"
         P.current = lambda *a, **k: {"label": "鼠巢空间站", "age": 2.0, "sys": "Pyro"}   # 后来在别处开了库存
         P.from_log = lambda *a, **k: (time.time() - 2, "鼠巢空间站", {})
-        assert S.status()["position"]["label"] == "鼠巢空间站"
-        S._nav.target = None                          # 不导航也一样：右上角刚读到的比日志新，用右上角的
-        S._pos.label = (time.time(), "死局空间站")
-        assert S.status()["position"]["label"] == "死局空间站"
+        assert t_sys.status()["position"]["label"] == "鼠巢空间站"
+        em.nav.target = None                          # 不导航也一样：右上角刚读到的比日志新，用右上角的
+        em.pos.label = (time.time(), "死局空间站")
+        assert t_sys.status()["position"]["label"] == "死局空间站"
     finally:
-        P.current, P.from_log, S._pos.label, S._nav.target = old
+        P.current, P.from_log, em.pos.label, em.nav.target = old
 
 
 def test_single_instance_lock_file(monkeypatch, tmp_path):
@@ -644,7 +647,8 @@ def test_hover_overlay_updates_before_network(monkeypatch):
     """F8：名字和本机数据先上悬浮窗，联网的（市场匹配、查价、掉落）在后台；后台慢也不耽误悬浮窗"""
     import threading, time
     from PIL import Image
-    from sc_mining.app import services as S
+    from sc_mining.tasks import hover as t_hover, mining as t_mining, navigation as t_nav, system as t_sys
+    from sc_mining.app import hud_state
     from sc_mining.trade import console as C
     from sc_mining.trade.ocr import OcrToken
     T = lambda text, x, y: OcrToken(text, 90, (x, y, max(20, len(text) * 9), 18))
@@ -660,9 +664,11 @@ def test_hover_overlay_updates_before_network(monkeypatch):
     class Hud:
         def set(self, sec, text):
             shown.append((time.time(), text))
-    patch_services(monkeypatch, "_hud", lambda: Hud())
+    _v = lambda: Hud()
+    for _m in (t_mining, t_nav, t_sys, hud_state):
+        monkeypatch.setattr(_m, "_hud", _v)
     t0 = time.time()
-    r = S.hover_once(Image.new("RGB", (2560, 1440)))
+    r = t_hover.hover_once(Image.new("RGB", (2560, 1440)))
     assert r["ok"] and shown[-1][1].startswith(("CQ7步枪", "CQ7 步枪"))      # 名字按汉化包纠正成标准写法（1.6.37）
     assert shown[-1][0] - t0 < 2.0                           # 没等联网
     assert calls[0] == ((512, 1440), True)                  # 鼠标在 50%：先认左边 30%~50% 整高一条，插队识别（NGU 2026-10-30 改的分区）
@@ -816,7 +822,8 @@ def test_displayinfo_local_cross_checked_with_campos():
 def test_nav_bearing_is_steady_when_standing_still():
     """站着不动：右上角那行有时认不出，位置也不在「游戏给的」和「推算的」之间来回跳，显示的方位不变"""
     from sc_mining import navigate as n
-    from sc_mining.app import services as S
+    from sc_mining.tasks import mining as t_mining
+    import sc_mining.app.engines.nav as nav_mod
     if not n.CACHE.exists():
         import pytest
         pytest.skip("没有星图数据")
@@ -827,12 +834,12 @@ def test_nav_bearing_is_steady_when_standing_still():
         ref = n.locate(g, when=1792500000.0)
         game = (ref["x"] + 0.8, ref["y"] - 0.6, ref["z"])                  # 推算和游戏差将近 1 km
         target = {"b": ref["body"], "x": game[0] + 2.0, "y": game[1] + 1.2, "z": game[2], "n": "目标"}
-        steady = S._Steady()
+        steady = nav_mod._Steady()
         shown = set()
         for i in range(12):
             local = None if i % 3 == 2 else game                           # 每 3 次有 1 次没认出那一行
             h = n.locate(g, when=1792500000.0, local=local, zone="OOC Stanton 4 Microtech", local_ok=True if local else None)
-            shown.add(n.deg_text(S._nav_view(h, target, n.load(), steady)["bearing"]))
+            shown.add(n.deg_text(t_mining._nav_view(h, target, n.load(), steady)["bearing"]))
         assert len(shown) == 1
     finally:
         n._remember = n._remember_orig
@@ -841,9 +848,9 @@ def test_nav_bearing_is_steady_when_standing_still():
 
 def test_bearing_text_and_deadband():
     from sc_mining import navigate as n
-    from sc_mining.app import services as S
+    import sc_mining.app.engines.nav as nav_mod
     assert n.deg_text(359.6) == "000" and n.deg_text(5.2) == "005"
-    st = S._Steady()
+    st = nav_mod._Steady()
     assert st(10.0) == 10.0 and st(11.5) == 10.0 and st(358.9) == 358.9 and st(0.5) == 358.9 and st(1.2) == 1.2
 
 
@@ -865,10 +872,11 @@ def test_anti_afk_removed(monkeypatch, tmp_path):
 def test_nav_uses_display_info_waypoints_use_showlocation():
     """导航实时方位只读右上角调试信息（不往游戏里打字）；自定义路标只用 /showlocation（2026-10-23 用户要求）"""
     import inspect
-    from sc_mining.app import services
-    run = inspect.getsource(services._Nav._run)
+    from sc_mining.tasks import navigation as t_nav
+    import sc_mining.app.engines.nav as nav_mod
+    run = inspect.getsource(nav_mod._Nav._run)
     assert "showlocation(" not in run and "showloc import" not in run        # 实时导航：读右上角，不往游戏里打字（读不到时只接玩家自己输的 /showlocation）
-    src = inspect.getsource(services.mark_here) + inspect.getsource(services._save_here)
+    src = inspect.getsource(t_nav.mark_here) + inspect.getsource(t_nav._save_here)
     assert "showlocation" in src and "_pos.reader" not in src and "use_offset=False" in src
 
 
@@ -940,7 +948,8 @@ def test_space_waypoint(monkeypatch, tmp_path):
     """太空里用当前位置新建路标：记星系坐标；导航给直线距离、先跳到哪、对准哪个标记"""
     import time, math
     from sc_mining import navigate as n
-    from sc_mining.app import services as S
+    from sc_mining.tasks import mining as t_mining, navigation as t_nav, system as t_sys
+    from sc_mining.app import hud_state
     data = n.load()
     if not data.get("points"):
         pytest.skip("没有星图数据")
@@ -952,9 +961,11 @@ def test_space_waypoint(monkeypatch, tmp_path):
     # 窗口里点「用当前位置新建」：只认 /showlocation 的坐标——等剪贴板出现新坐标，不在星球上 → 太空路标
     clip = {"t": "随便什么"}
     monkeypatch.setattr(n, "read_clipboard", lambda: clip["t"])
-    patch_services(monkeypatch, "_hud", lambda: type("H", (), {"set": lambda *a: None, "clear": lambda *a: None})())
+    _v = lambda: type("H", (), {"set": lambda *a: None, "clear": lambda *a: None})()
+    for _m in (t_mining, t_nav, t_sys, hud_state):
+        monkeypatch.setattr(_m, "_hud", _v)
     monkeypatch.setattr(__import__("sc_mining.paths", fromlist=["log"]), "log", lambda name: tmp_path / name)   # 真的写记录（写到临时目录），以前把记录函数换掉，没发现它和导航记录重名、一调用就报错
-    r = S.waypoint_add(name="气体云矿点", here=True)
+    r = t_nav.waypoint_add(name="气体云矿点", here=True)
     assert r["pending"] and "/showlocation" in r["message"]
     time.sleep(0.3)
     clip["t"] = f"Coordinates: x:{g[0]} y:{g[1]} z:{g[2]}"
@@ -962,14 +973,14 @@ def test_space_waypoint(monkeypatch, tmp_path):
         if any(w["n"] == "气体云矿点" for w in n.waypoints()):
             break
         time.sleep(0.1)
-    rows = S.waypoints()
+    rows = t_nav.waypoints()
     w = next(r for r in rows if r["name"] == "气体云矿点")
     assert w["space"] and w["system"] == "Nyx"
     # 搜得到，路线给最近的参照点
     hits, _ = n.search("气体云矿点")
     p = hits[0]
     assert n.is_space(p)
-    plan = S.nav_plan(S._place_row(p)["key"])
+    plan = t_nav.nav_plan(t_nav._place_row(p)["key"])
     assert plan["space"] and plan["routes"][0]["direct"] < 25
     # 就在原地：到了
     assert n.space_guide(g, p, data)["arrived"]
@@ -980,7 +991,7 @@ def test_space_waypoint(monkeypatch, tmp_path):
     # 在别的星系：提示先跳过去
     other = next(b for b in data["bodies"].values() if b["sys"] != "Nyx")
     assert not n.space_guide((other["x"], other["y"], other["z"]), p, data)["same_system"]
-    S._HERE["name"] = None
+    t_nav._HERE["name"] = None
 
 
 def test_camdir_steering():
@@ -1013,7 +1024,11 @@ def test_camdir_steering():
 def test_mark_here_hotkey(monkeypatch, tmp_path):
     """游戏里按 F7：替你打 /showlocation，用剪贴板里的坐标记路标（太空里记星系坐标）；不读右上角"""
     from sc_mining import navigate as n, showloc
-    from sc_mining.app import services as S
+    from sc_mining.tasks import mining as t_mining, navigation as t_nav, system as t_sys
+    from sc_mining.app.engines.manager import EngineManager
+    em = EngineManager.get_instance()
+    from sc_mining.app import hud_state
+    import threading
     data = n.load()
     if not data.get("points"):
         pytest.skip("没有星图数据")
@@ -1021,25 +1036,27 @@ def test_mark_here_hotkey(monkeypatch, tmp_path):
     lp = next(p for p in data["points"] if p["sys"] == "Stanton" and p["t"] == "Lagrange Point")
     g = (lp["x"] + 5_000, lp["y"], lp["z"])
     monkeypatch.setattr(showloc, "showlocation", lambda log=None: (g, "Coordinates: ..."))
-    monkeypatch.setattr(S._pos.reader, "poll", lambda force=False: (_ for _ in ()).throw(AssertionError("不该读右上角")))
+    monkeypatch.setattr(em.pos.reader, "poll", lambda force=False: (_ for _ in ()).throw(AssertionError("不该读右上角")))
     monkeypatch.setattr(__import__("sc_mining.paths", fromlist=["log"]), "log", lambda name: tmp_path / name)   # 真的写记录（写到临时目录），以前把记录函数换掉，没发现它和导航记录重名、一调用就报错
     shown = {}
     class H:
         def set(self, k, v, *rich): shown[k] = v
         def clear(self, k): shown.pop(k, None)
-    patch_services(monkeypatch, "_hud", lambda: H())
-    monkeypatch.setattr(S.threading, "Timer", lambda *a, **k: type("T", (), {"start": lambda self: None})())
-    out = S.mark_here()
+    _v = lambda: H()
+    for _m in (t_mining, t_nav, t_sys, hud_state):
+        monkeypatch.setattr(_m, "_hud", _v)
+    monkeypatch.setattr(threading, "Timer", lambda *a, **k: type("T", (), {"start": lambda self: None})())
+    out = t_nav.mark_here()
     assert "error" not in out and "斯坦顿星系" in out["where"] and "已保存" in shown["路标"]
     assert "已记下" in (tmp_path / "nav_log.txt").read_text(encoding="utf-8")       # 记录真的写进去了
     wp = n.waypoints()[-1]
     assert n.is_space(wp) and wp["n"] == out["name"]
     # 点过「用当前位置新建」再按 F7：用那里填的名字
-    S._HERE.update(name="我的矿点", until=__import__("time").time() + 30)
-    assert S.mark_here()["name"] == "我的矿点" and S._HERE["name"] is None
+    t_nav._HERE.update(name="我的矿点", until=__import__("time").time() + 30)
+    assert t_nav.mark_here()["name"] == "我的矿点" and t_nav._HERE["name"] is None
     # 没读到坐标：悬浮窗说原因，不记
     monkeypatch.setattr(showloc, "showlocation", lambda log=None: (None, "游戏窗口不在最前面"))
-    assert "error" in S.mark_here() and "不在最前面" in shown["路标"]
+    assert "error" in t_nav.mark_here() and "不在最前面" in shown["路标"]
 
 
 def test_parse_showlocation_clip():
@@ -1050,7 +1067,7 @@ def test_parse_showlocation_clip():
 
 def test_camdir_sign_filter():
     """CamDir 漏了负号（-142 认成 142）：这次不用；转过 ±180° 是真的转了，照用"""
-    from sc_mining.app.services import _CamFilter
+    from sc_mining.app.engines.nav import _CamFilter
     f = _CamFilter()
     assert f.check((23, 9, -142)) == (23, 9, -142)
     assert f.check((23, 9, 142)) is None
@@ -1063,7 +1080,7 @@ def test_export_logs(monkeypatch, tmp_path):
     """导出日志：日志 + 设置 + 系统说明打包到桌面；窗口文件夹（浏览器数据）不打进去"""
     import zipfile
     from sc_mining import paths
-    from sc_mining.app import services as S
+    from sc_mining.tasks import hover as t_hover, system as t_sys
     user = tmp_path / "userdata"
     (user / "logs").mkdir(parents=True)
     (user / "logs" / "app_log.txt").write_text("启动", encoding="utf-8")
@@ -1073,9 +1090,11 @@ def test_export_logs(monkeypatch, tmp_path):
     (user / "window" / "Cookies").write_text("隐私", encoding="utf-8")
     monkeypatch.setattr(paths, "USER", user)
     monkeypatch.setattr(paths, "LOGS", user / "logs")
-    patch_services(monkeypatch, "WIN", False)
-    patch_services(monkeypatch, "_desktop", lambda: tmp_path)
-    r = S.export_logs()
+    _v = False
+    for _m in (t_hover, t_sys):
+        monkeypatch.setattr(_m, "WIN", _v)
+    monkeypatch.setattr(t_sys, "_desktop", lambda: tmp_path)
+    r = t_sys.export_logs()
     names = zipfile.ZipFile(r["path"]).namelist()
     assert {"logs/app_log.txt", "logs/nav_log.txt", "settings.json", "系统信息.txt"} <= set(names)
     assert not any("window" in n or "Cookies" in n for n in names)
@@ -1086,23 +1105,25 @@ def test_export_logs(monkeypatch, tmp_path):
 def test_live_scan_resumes_after_restart(monkeypatch, tmp_path):
     """原矿扫描开着时天枢重启 / 升级：重启后自动接着扫（以前重启后就关了，信号识别也跟着没了）"""
     from sc_mining import settings
-    from sc_mining.app import services as S
+    from sc_mining.tasks import mining as t_mining, system as t_sys
+    from sc_mining.app.engines.manager import EngineManager
+    em = EngineManager.get_instance()
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
     settings.update(agreed=True)
     started = []
-    monkeypatch.setattr(S._live, "start", lambda: started.append(1))
-    monkeypatch.setattr(S._live, "stop", lambda: None)
-    for name in ("_hover", "_pos", "_logwatch"):
-        monkeypatch.setattr(getattr(S, name), "start", lambda: None)
-    patch_services(monkeypatch, "_online_loop", lambda: None)          # 测试里不联网检查更新
-    S.live_start()
+    monkeypatch.setattr(em.live, "start", lambda: started.append(1))
+    monkeypatch.setattr(em.live, "stop", lambda: None)
+    for name in ("hover", "pos", "logwatch"):
+        monkeypatch.setattr(getattr(em, name), "start", lambda: None)
+    monkeypatch.setattr(t_sys, "_online_loop", lambda: None)          # 测试里不联网检查更新
+    t_mining.live_start()
     assert settings.load()["live_on"]
     started.clear()
-    S.start_background()                     # 模拟重启
+    t_sys.start_background()                     # 模拟重启
     assert started == [1]
-    S.live_stop()
+    t_mining.live_stop()
     started.clear()
-    S.start_background()
+    t_sys.start_background()
     assert not started and not settings.load()["live_on"]
 
 
@@ -1110,18 +1131,20 @@ def test_live_scan_resumes_after_restart(monkeypatch, tmp_path):
 def test_where_now_ground_or_space(monkeypatch):
     """信号表外的值要知道玩家在地面还是太空：小行星带 → 太空；贴着星球 → 地面；高空 → 太空"""
     import time
-    from sc_mining.app import services as sv
+    from sc_mining.tasks import navigation as t_nav
+    from sc_mining.app.engines.manager import EngineManager
+    em = EngineManager.get_instance()
     from sc_mining import navigate
-    patch_services(monkeypatch, "_WHERE", {"t": 0.0, "v": None, "tried": 0.0})
-    monkeypatch.setattr(sv._pos, "latest", (time.time(), (1.0, 2.0, 3.0), {"location": "AsteroidCluster MiningBase Stanton2"}))
-    assert sv._where_now() == "space"
-    patch_services(monkeypatch, "_WHERE", {"t": 0.0, "v": None, "tried": 0.0})
-    monkeypatch.setattr(sv._pos, "latest", (time.time(), (1.0, 2.0, 3.0), {"location": "Planet Clio"}))
+    monkeypatch.setattr(t_nav, "_WHERE", {"t": 0.0, "v": None, "tried": 0.0})
+    monkeypatch.setattr(em.pos, "latest", (time.time(), (1.0, 2.0, 3.0), {"location": "AsteroidCluster MiningBase Stanton2"}))
+    assert t_nav._where_now() == "space"
+    monkeypatch.setattr(t_nav, "_WHERE", {"t": 0.0, "v": None, "tried": 0.0})
+    monkeypatch.setattr(em.pos, "latest", (time.time(), (1.0, 2.0, 3.0), {"location": "Planet Clio"}))
     monkeypatch.setattr(navigate, "locate", lambda *a, **k: {"inside": True, "height_m": 2700})
-    assert sv._where_now() == "ground"
-    patch_services(monkeypatch, "_WHERE", {"t": 0.0, "v": None, "tried": 0.0})
+    assert t_nav._where_now() == "ground"
+    monkeypatch.setattr(t_nav, "_WHERE", {"t": 0.0, "v": None, "tried": 0.0})
     monkeypatch.setattr(navigate, "locate", lambda *a, **k: {"inside": True, "height_m": 400_000})
-    assert sv._where_now() == "space"
+    assert t_nav._where_now() == "space"
 
 
 def test_wikelo_detail_sticky_and_names_clean():
@@ -1157,7 +1180,7 @@ def test_craft_blueprint_dictionary():
     from sc_mining import crafting
     if not crafting.blueprints():
         pytest.skip("没有制造数据")
-    from sc_mining.app.services import craft_browse, craft_detail
+    from sc_mining.tasks.goals import craft_browse, craft_detail
     r = craft_browse()
     assert r["total"] == len(crafting.blueprints()) and len(r["rows"]) == 60
     assert sum(c["count"] for c in r["cats"]) == r["total"] and any(c["label"] == "护甲" for c in r["cats"])
@@ -1179,7 +1202,7 @@ def test_craft_same_name_blueprints_distinct():
     import pytest
     from collections import Counter
     from sc_mining import crafting
-    from sc_mining.app.services import craft_browse, craft_detail
+    from sc_mining.tasks.goals import craft_browse, craft_detail
     dup = next((n for n, c in Counter(b["n"] for b in crafting.blueprints()).items() if c > 1), None)
     if not dup:
         pytest.skip("数据里没有同名蓝图")
@@ -1201,7 +1224,9 @@ def _live_run(monkeypatch, tmp_path, frames, seconds=0.8, stale=None, static=Fal
     from PIL import Image
     from sc_mining import screen, signals, paths
     from sc_mining.parse import Scan
-    from sc_mining.app import services, bus
+    from sc_mining.tasks import mining as t_mining
+    import sc_mining.app.engines.live as live_mod
+    from sc_mining.app import bus
     monkeypatch.setattr(paths, "log", lambda name: tmp_path / name)
     monkeypatch.setattr(paths, "shots", lambda name: tmp_path)
     n = {"i": 0}
@@ -1217,14 +1242,18 @@ def _live_run(monkeypatch, tmp_path, frames, seconds=0.8, stale=None, static=Fal
         n["i"] += 1
         return (s or Scan(), ({}, None, None))
     hud = []
-    patch_services(monkeypatch, "_hud", lambda: type("H", (), {"set": lambda self, k, v, *rich: hud.append(("set", k)),
-                                                                   "clear": lambda self, k: hud.append(("clear", k))})())
+    from sc_mining.tasks import navigation as t_nav, system as t_sys
+    from sc_mining.app import hud_state
+    _v = lambda: type("H", (), {"set": lambda self, k, v, *rich: hud.append(("set", k)),
+                                    "clear": lambda self, k: hud.append(("clear", k))})()
+    for _m in (t_mining, t_nav, t_sys, hud_state):
+        monkeypatch.setattr(_m, "_hud", _v)
     monkeypatch.setattr(screen, "grab", grab)
     monkeypatch.setattr(screen, "analyse", analyse)
     monkeypatch.setattr(screen, "INTERVAL", 0.01)
     monkeypatch.setattr(signals, "find_signatures", sig or (lambda im: []))
-    patch_services(monkeypatch, "_game_front", front or (lambda: None))
-    live = services._Live()
+    monkeypatch.setattr(t_mining, "_game_front", front or (lambda: None))
+    live = live_mod._Live()
     if stale is not None:
         monkeypatch.setattr(live, "STALE_SECONDS", stale)
     q = bus.subscribe()
@@ -1291,10 +1320,10 @@ def test_live_session_isolation(monkeypatch, tmp_path):
     """快速停了又开：旧会话的停止开关已经按下，就算线程还没退出也不会再干活（日志写到临时目录）"""
     import threading
     from sc_mining import paths
-    from sc_mining.app import services
+    import sc_mining.app.engines.live as live_mod
     monkeypatch.setattr(paths, "log", lambda name: tmp_path / name)
     monkeypatch.setattr(paths, "shots", lambda name: tmp_path)
-    live = services._Live()
+    live = live_mod._Live()
     old = threading.Event()
     old.set()
     live.stop_ev = threading.Event()                  # 新会话的开关（没按下）
@@ -1313,14 +1342,14 @@ def test_live_session_isolation(monkeypatch, tmp_path):
 def test_live_stop_during_compute_publishes_nothing(monkeypatch, tmp_path):
     """算破碎方案的时候用户按了停止：算完不能再把旧结果推到窗口和悬浮窗（Codex 复审 2026-10-23）"""
     import threading
-    from sc_mining.app import services
-    real = services.scan_view
+    from sc_mining.tasks import mining as t_mining
+    real = t_mining.scan_view
     ev = threading.Event()
 
     def slow_view(scan, bag):
         ev.set()                                      # 模拟：算到一半用户点了停止
         return real(scan, bag)
-    patch_services(monkeypatch, "scan_view", slow_view)
+    monkeypatch.setattr(t_mining, "scan_view", slow_view)
     a = _rock(10000, 20, 5.0, 10.0, [("Copper", 40.0, 500), ("Inert Materials", 60.0, 0)])
     msgs, hud = _live_run(monkeypatch, tmp_path, [a] * 50, seconds=0.5, ev=ev)
     assert not [m for m in msgs if m["kind"] == "scan"] and ("set", "扫描") not in hud
@@ -1449,7 +1478,10 @@ def test_space_fix_navigation(monkeypatch, tmp_path):
     """太空路标一键定位：两次 /showlocation 之间直线飞 → 距离、近了多少、偏离角、多久到；不读右上角（2026-10-23 用户定的方案）"""
     import time as _t
     from sc_mining import navigate as n, paths
-    from sc_mining.app import services as S, bus
+    from sc_mining.tasks import navigation as t_nav
+    from sc_mining.app.engines.manager import EngineManager
+    em = EngineManager.get_instance()
+    from sc_mining.app import bus
     data = n.load()
     if not data.get("points"):
         pytest.skip("没有星图数据")
@@ -1472,23 +1504,27 @@ def test_space_fix_navigation(monkeypatch, tmp_path):
     clip = {"t": "旧东西"}
     monkeypatch.setattr(n, "read_clipboard", lambda: clip["t"])
     hud = {}
-    patch_services(monkeypatch, "_hud", lambda: type("H", (), {"set": lambda self, k, v, *rich: hud.__setitem__(k, v),
-                                                          "clear": lambda self, k: hud.pop(k, None)})())
+    from sc_mining.tasks import mining as t_mining, system as t_sys
+    from sc_mining.app import hud_state
+    _v = lambda: type("H", (), {"set": lambda self, k, v, *rich: hud.__setitem__(k, v),
+                           "clear": lambda self, k: hud.pop(k, None)})()
+    for _m in (t_mining, t_nav, t_sys, hud_state):
+        monkeypatch.setattr(_m, "_hud", _v)
     q = bus.subscribe()
     try:
-        S._nav.start(target)
+        em.nav.start(target)
         _t.sleep(0.5)
         assert "F9" in hud.get("导航", "")
         clip["t"] = f"Coordinates: x:{g0[0]} y:{g0[1]} z:{g0[2]}"
         _t.sleep(0.8)
         clip["t"] = f"Coordinates: x:{g1[0]} y:{g1[1]} z:{g1[2]}"
         _t.sleep(0.8)
-        assert "偏离" in hud["导航"] and "近了" in hud["导航"] and len(S._nav.fixes) == 2
+        assert "偏离" in hud["导航"] and "近了" in hud["导航"] and len(em.nav.fixes) == 2
     finally:
-        S._nav.stop()
+        em.nav.stop()
         bus.unsubscribe(q)
     # 没在导航太空路标时按 F9：提示，不打字
-    assert "error" in S.fix_here()
+    assert "error" in t_nav.fix_here()
 
 
 
@@ -1496,14 +1532,20 @@ def test_space_fix_dedupe_and_session(monkeypatch, tmp_path):
     """Codex 审查 1.6.23：剪贴板监听和 F9 拿到同一份坐标只算一次；导航结束 / 换目标后，旧的定位结果不再发出来"""
     import time as _t
     from sc_mining import navigate as n, paths, settings
-    from sc_mining.app import services as S, bus
+    from sc_mining.tasks import mining as t_mining, navigation as t_nav, system as t_sys
+    from sc_mining.app.engines.manager import EngineManager
+    em = EngineManager.get_instance()
+    from sc_mining.app import hud_state
+    from sc_mining.app import bus
     data = n.load()
     if not data.get("points"):
         pytest.skip("没有星图数据")
     monkeypatch.setattr(paths, "log", lambda name: tmp_path / name)
     monkeypatch.setattr(settings, "load", lambda: {**settings.DEFAULTS, "nav_mode": "space"})     # 手动定位
     monkeypatch.setattr(n, "read_clipboard", lambda: "")
-    patch_services(monkeypatch, "_hud", lambda: type("H", (), {"set": lambda *a: None, "clear": lambda *a: None})())
+    _v = lambda: type("H", (), {"set": lambda *a: None, "clear": lambda *a: None})()
+    for _m in (t_mining, t_nav, t_sys, hud_state):
+        monkeypatch.setattr(_m, "_hud", _v)
     lp = next(p for p in data["points"] if p["sys"] == "Stanton" and p["t"] == "Lagrange Point")
     target = {"n": "太空矿点", "b": "@Stanton", "t": "Waypoint", "sys": "Stanton", "space": True, "qt": 0,
               "x": lp["x"] / 1000 + 50, "y": lp["y"] / 1000, "z": lp["z"] / 1000}
@@ -1513,26 +1555,26 @@ def test_space_fix_dedupe_and_session(monkeypatch, tmp_path):
     c1 = f"Coordinates: x:{g1[0]} y:{g1[1]} z:{g1[2]}"
     q = bus.subscribe()
     try:
-        S._nav.start(target)
-        sess = S._nav.session
-        S._nav.add_fix(g0, c0, session=sess)
+        em.nav.start(target)
+        sess = em.nav.session
+        em.nav.add_fix(g0, c0, session=sess)
         _t.sleep(0.05)                                        # 两次定位要隔开时间才算得出多久到（Windows 时钟粒度粗，连着调用可能同一时刻）
-        v = S._nav.add_fix(g1, c1, session=sess)              # 剪贴板监听先收到
+        v = em.nav.add_fix(g1, c1, session=sess)              # 剪贴板监听先收到
         assert v["deviation"] is not None and v["eta"]
-        again = S._nav.add_fix(g1, c1, session=sess)          # F9 返回同一份坐标
-        assert len(S._nav.fixes) == 2 and again["deviation"] == v["deviation"] and again["eta"] == v["eta"]
-        assert S._nav.add_fix(g1, None, session=sess)["delta"] == v["delta"]   # 坐标一样也不重复记
-        S._nav.start(target)                                  # 换导航：旧会话的结果作废
-        assert S._nav.add_fix(g0, "别的" + c0, session=sess) is None and S._nav.fixes == []
-        sess2 = S._nav.session
-        S._nav.stop()
+        again = em.nav.add_fix(g1, c1, session=sess)          # F9 返回同一份坐标
+        assert len(em.nav.fixes) == 2 and again["deviation"] == v["deviation"] and again["eta"] == v["eta"]
+        assert em.nav.add_fix(g1, None, session=sess)["delta"] == v["delta"]   # 坐标一样也不重复记
+        em.nav.start(target)                                  # 换导航：旧会话的结果作废
+        assert em.nav.add_fix(g0, "别的" + c0, session=sess) is None and em.nav.fixes == []
+        sess2 = em.nav.session
+        em.nav.stop()
         while True:                                           # 清掉之前的消息
             try:
                 q.get_nowait()
             except Exception:
                 break
-        assert S._nav.add_fix(g1, "再别的" + c1, session=sess2) is None
-        assert S._nav.add_fix(g1, "再别的" + c1) is None          # 没在导航
+        assert em.nav.add_fix(g1, "再别的" + c1, session=sess2) is None
+        assert em.nav.add_fix(g1, "再别的" + c1) is None          # 没在导航
         left = []
         while True:
             try:
@@ -1541,36 +1583,40 @@ def test_space_fix_dedupe_and_session(monkeypatch, tmp_path):
                 break
         assert not any(isinstance(m, dict) and (m.get("data") or {}).get("active") for m in left)
     finally:
-        S._nav.stop()
+        em.nav.stop()
         bus.unsubscribe(q)
 
 
 def test_hotkey_conflicts(monkeypatch):
     """物品识别热键不能设成记路标 / 一键定位的键；已有冲突要明确说哪个失效"""
     from sc_mining import settings
-    from sc_mining.app import services as S
+    from sc_mining.tasks import system as t_sys
+    from sc_mining.app import bus
     store = {**settings.DEFAULTS, "mark_key": "F7", "fix_key": "F9"}      # 1.0.5 起这两个默认不绑，这里是玩家自己绑了
     monkeypatch.setattr(settings, "load", lambda: dict(store))
     monkeypatch.setattr(settings, "update", lambda **kw: (store.update(kw), dict(store))[1])
-    monkeypatch.setattr(S.bus, "publish", lambda *a, **k: None)
+    monkeypatch.setattr(bus, "publish", lambda *a, **k: None)
     from sc_mining import helpers
     monkeypatch.setattr(helpers, "start", lambda: None)
-    assert "一键定位" in S.set_settings(trade_capture_key="F9")["error"]
-    assert "记录路标" in S.set_settings(trade_capture_key="f7")["error"]
+    assert "一键定位" in t_sys.set_settings(trade_capture_key="F9")["error"]
+    assert "记录路标" in t_sys.set_settings(trade_capture_key="f7")["error"]
     assert store["trade_capture_key"] == "F8"
-    assert S.set_settings(trade_capture_key="f11")["trade_capture_key"] == "F11"        # F5 采矿助手、F6 盘点也占着（1.6.57）
-    assert "盘点" in S.set_settings(trade_capture_key="F6")["error"]
-    assert S.hotkey_conflicts(store) == []
-    w = S.hotkey_conflicts({**store, "trade_capture_key": "F9"})
+    assert t_sys.set_settings(trade_capture_key="f11")["trade_capture_key"] == "F11"        # F5 采矿助手、F6 盘点也占着（1.6.57）
+    assert "盘点" in t_sys.set_settings(trade_capture_key="F6")["error"]
+    assert t_sys.hotkey_conflicts(store) == []
+    w = t_sys.hotkey_conflicts({**store, "trade_capture_key": "F9"})
     assert len(w) == 1 and "一键定位" in w[0] and "/showlocation" in w[0]
-    assert "记录路标" in S.hotkey_conflicts({**store, "trade_capture_key": "F7"})[0]
+    assert "记录路标" in t_sys.hotkey_conflicts({**store, "trade_capture_key": "F7"})[0]
 
 
 def test_nav_mode_switch(monkeypatch, tmp_path):
     """导航页的开关：星球上的路标可以切到太空导航（一键定位），太空路标只能用太空导航；正在导航就按新方式重新开始"""
     import json, time as _t
     from sc_mining import navigate as n, settings, paths
-    from sc_mining.app import services as S
+    from sc_mining.tasks import mining as t_mining, navigation as t_nav, system as t_sys
+    from sc_mining.app.engines.manager import EngineManager
+    em = EngineManager.get_instance()
+    from sc_mining.app import hud_state
     data = n.load()
     if not data.get("bodies"):
         pytest.skip("没有星图数据")
@@ -1579,23 +1625,25 @@ def test_nav_mode_switch(monkeypatch, tmp_path):
     store = {}
     monkeypatch.setattr(settings, "load", lambda: {**settings.DEFAULTS, **store} if hasattr(settings, "DEFAULTS") else dict(store))
     monkeypatch.setattr(settings, "update", lambda **kw: store.update(kw))
-    patch_services(monkeypatch, "_hud", lambda: type("H", (), {"set": lambda *a: None, "clear": lambda *a: None})())
+    _v = lambda: type("H", (), {"set": lambda *a: None, "clear": lambda *a: None})()
+    for _m in (t_mining, t_nav, t_sys, hud_state):
+        monkeypatch.setattr(_m, "_hud", _v)
     ground = {"n": "地面点", "b": "Daymar", "t": "Waypoint", "sys": "Stanton", "qt": 0, "x": 100.0, "y": 50.0, "z": 0.0}
     space = {"n": "太空点", "b": "@Stanton", "t": "Waypoint", "sys": "Stanton", "space": True, "qt": 0, "x": 1.0, "y": 2.0, "z": 3.0}
     try:
-        assert S._nav.use_space(ground) is False and S._nav.use_space(space) is False   # 2026-10-27：太空路标默认也实时读右上角
-        S._nav.start(ground)
-        assert S._nav.space_mode is False
-        r = S.nav_mode("space")
-        assert r["space"] is True and S._nav.space_mode and S._nav.target is ground
-        S.nav_mode("ground")
-        assert S._nav.space_mode is False
-        S._nav.start(space)
-        S.nav_mode("ground")
-        assert S._nav.space_mode is False                # 太空路标也能用实时定位
-        assert "error" in S.nav_mode("别的")
+        assert em.nav.use_space(ground) is False and em.nav.use_space(space) is False   # 2026-10-27：太空路标默认也实时读右上角
+        em.nav.start(ground)
+        assert em.nav.space_mode is False
+        r = t_nav.nav_mode("space")
+        assert r["space"] is True and em.nav.space_mode and em.nav.target is ground
+        t_nav.nav_mode("ground")
+        assert em.nav.space_mode is False
+        em.nav.start(space)
+        t_nav.nav_mode("ground")
+        assert em.nav.space_mode is False                # 太空路标也能用实时定位
+        assert "error" in t_nav.nav_mode("别的")
     finally:
-        S._nav.stop()
+        em.nav.stop()
     # 星球上的路标用一键定位：在星球自转坐标里算（目标跟着星球转，不能当成星系里的固定点）
     b = data["bodies"]["Daymar"]
     t0 = 1_800_000_000.0
@@ -1647,7 +1695,9 @@ def test_halo_services(monkeypatch, tmp_path):
     import time as _t
     from sc_mining import halo, paths, settings, showloc
     from sc_mining import navigate as n
-    from sc_mining.app import services as S
+    from sc_mining.tasks import navigation as t_nav
+    from sc_mining.app.engines.manager import EngineManager
+    em = EngineManager.get_instance()
     if "ARC-L1" not in halo.points():
         pytest.skip("没有星图数据")
     monkeypatch.setattr(paths, "log", lambda name: tmp_path / name)
@@ -1657,19 +1707,23 @@ def test_halo_services(monkeypatch, tmp_path):
     clip = {"t": "Coordinates: x:20300000000 y:0 z:0"}             # 挂上之前就在剪贴板里的旧坐标：不算
     monkeypatch.setattr(n, "read_clipboard", lambda: clip["t"])
     hud = {}
-    patch_services(monkeypatch, "_hud", lambda: type("H", (), {"set": lambda self, k, v, *rich: hud.__setitem__(k, v),
-                                                          "clear": lambda self, k: hud.pop(k, None)})())
-    o = S.halo_options()
+    from sc_mining.tasks import mining as t_mining, system as t_sys
+    from sc_mining.app import hud_state
+    _v = lambda: type("H", (), {"set": lambda self, k, v, *rich: hud.__setitem__(k, v),
+                           "clear": lambda self, k: hud.pop(k, None)})()
+    for _m in (t_mining, t_nav, t_sys, hud_state):
+        monkeypatch.setattr(_m, "_hud", _v)
+    o = t_nav.halo_options()
     assert len(o["bands"]) == 10 and o["bands"][4]["ores"][0] == "量子矿物" and o["qd"] == "Atlas (S1)"
     assert any(p["key"] == "ARC-L1" for p in o["points"])
-    r = S.halo_routes(frm="ARC-L1", band=5, qd="Odyssey (S3)")
+    r = t_nav.halo_routes(frm="ARC-L1", band=5, qd="Odyssey (S3)")
     assert store["halo_qd"] == "Odyssey (S3)" and r["speed"] == 74 and r["rows"]
-    assert "error" in S.halo_routes(frm="ARC-L1", band=0) and "error" in S.halo_routes(frm="没有", band=5)
-    assert "error" in S.halo_pin(frm="ARC-L1", to="ARC-L1", band=5)
-    S._nav.target = None
+    assert "error" in t_nav.halo_routes(frm="ARC-L1", band=0) and "error" in t_nav.halo_routes(frm="没有", band=5)
+    assert "error" in t_nav.halo_pin(frm="ARC-L1", to="ARC-L1", band=5)
+    em.nav.target = None
     try:
-        p = S.halo_pin(frm="ARC-L1", to="CRU-L4", band=5)
-        assert "14.3 Gm" in hud["小行星带"] and "自动核对" in hud["小行星带"] and S._HALO["plan"] is p
+        p = t_nav.halo_pin(frm="ARC-L1", to="CRU-L4", band=5)
+        assert "14.3 Gm" in hud["小行星带"] and "自动核对" in hud["小行星带"] and t_nav._HALO["plan"] is p
         _t.sleep(0.5)
         assert "✅" not in hud["小行星带"]                              # 旧坐标没被当成新定位
         # 自己在聊天框输 /showlocation：剪贴板出现新坐标就核对
@@ -1678,30 +1732,30 @@ def test_halo_services(monkeypatch, tmp_path):
         assert "第3带" in hud["小行星带"] and "往外" in hud["小行星带"]
         # F9：拿到的还是这一份坐标（监听已经处理过）→ 不重复算，结果一样
         monkeypatch.setattr(showloc, "showlocation", lambda log=None: ((20.0e9, 0.0, 0.0), clip["t"]))
-        assert S.fix_here()["band"] == 3
+        assert t_nav.fix_here()["band"] == 3
         monkeypatch.setattr(showloc, "showlocation", lambda log=None: ((20.3e9, 0.0, 0.0), "Coordinates: x:20300000001 y:0 z:0"))
-        assert S.fix_here()["band"] == 5 and "✅" in hud["小行星带"]
+        assert t_nav.fix_here()["band"] == 5 and "✅" in hud["小行星带"]
         monkeypatch.setattr(showloc, "showlocation", lambda log=None: (None, "游戏没在前台"))
-        assert "error" in S.fix_here() and "定位失败" in hud["小行星带"]
+        assert "error" in t_nav.fix_here() and "定位失败" in hud["小行星带"]
         # F9 等坐标期间方案被取下：结果作废，不报错
         def slow(log=None):
-            S.halo_unpin()
+            t_nav.halo_unpin()
             return None, "超时"
         monkeypatch.setattr(showloc, "showlocation", slow)
-        assert S.fix_here() == {"error": "超时"}
-        S.halo_pin(frm="ARC-L1", to="CRU-L4", band=5)
+        assert t_nav.fix_here() == {"error": "超时"}
+        t_nav.halo_pin(frm="ARC-L1", to="CRU-L4", band=5)
         def swap(log=None):
-            S.halo_pin(frm="ARC-L1", to="CRU-L3", band=5)
+            t_nav.halo_pin(frm="ARC-L1", to="CRU-L3", band=5)
             return (20.3e9, 0.0, 0.0), "Coordinates: x:20300000002 y:0 z:0"
         monkeypatch.setattr(showloc, "showlocation", swap)
-        assert "error" in S.fix_here()                                 # 换了方案：旧的这次不算
+        assert "error" in t_nav.fix_here()                                 # 换了方案：旧的这次不算
     finally:
-        S.halo_unpin()
-    assert "小行星带" not in hud and S._HALO["plan"] is None
+        t_nav.halo_unpin()
+    assert "小行星带" not in hud and t_nav._HALO["plan"] is None
     clip["t"] = "Coordinates: x:20100000000 y:0 z:0"
     _t.sleep(0.5)
     assert "小行星带" not in hud                                       # 取下后监听停了
-    assert "error" in S.fix_here()                                     # 什么都没挂：只提示，不打字
+    assert "error" in t_nav.fix_here()                                     # 什么都没挂：只提示，不打字
 
 
 def test_halo_where_edges():
@@ -1752,7 +1806,7 @@ def test_item_search_finds_everything():
     商店和掉落数据里都没有的也搜得到，点开写明「商店和掉落数据里都没有」，能造的带上蓝图"""
     from sc_mining import itemsearch as I, crafting
     from sc_mining.trade import names
-    from sc_mining.app import services as S
+    from sc_mining.tasks import trade as t_trade
     rows = I._build()["rows"]
     if len(rows) < 1000:
         pytest.skip("没有商店 / 掉落数据")
@@ -1761,12 +1815,12 @@ def test_item_search_finds_everything():
     assert not miss_en and not miss_zh, (len(miss_en), miss_en[:5], len(miss_zh), miss_zh[:5])
     assert "HD" not in names.table().values() and "S1" not in names.table().values()
     if I.lookup("Parallax Energy Assault Rifle"):
-        r = S.item_search("视差步枪")
+        r = t_trade.item_search("视差步枪")
         assert r[0]["name"] == "Parallax Energy Assault Rifle" and all('"' in x["name"] for x in r[1:6])   # 后面是涂装版
-        assert S.item_search("parallax rifle")[0]["name"] == "Parallax Energy Assault Rifle"
-        assert S.item_search("视差")[0]["name"] == "Parallax Energy Assault Rifle"
+        assert t_trade.item_search("parallax rifle")[0]["name"] == "Parallax Energy Assault Rifle"
+        assert t_trade.item_search("视差")[0]["name"] == "Parallax Energy Assault Rifle"
     if I.lookup("Steel"):                  # 只在掉落数据里、名字又很常见：以前商店搜到 5 个以上就不看掉落，搜不到
-        assert S.item_search("Steel")[0]["name"] == "Steel"
+        assert t_trade.item_search("Steel")[0]["name"] == "Steel"
     # 完全一样的排第一（同一个中文名有两三件东西的，排在最前面那几个里）
     for e in rows[:: max(1, len(rows) // 300)]:
         assert I.en_key(I.find(e["en"], 1)[0]["en"]) == e["ek"], e["en"]
@@ -1776,50 +1830,50 @@ def test_item_search_finds_everything():
     loc = [e for e in rows if not e["has_data"] and e["loc"]]            # 1.6.48 起另有只在 wiki 清单里的（没有中文名）
     assert loc and all(e["zh"] for e in loc)
     e = loc[len(loc) // 2]
-    hit = next(x for x in S.item_search(e["zh"]) if I.en_key(x["name"]) == e["ek"])
+    hit = next(x for x in t_trade.item_search(e["zh"]) if I.en_key(x["name"]) == e["ek"])
     assert hit["src"] == "loc" and hit["id"] is None
-    d = S.item_info(name=hit["name"], zh=hit["zh"], exact=True)
+    d = t_trade.item_info(name=hit["name"], zh=hit["zh"], exact=True)
     assert d["nowhere"] and d["loot"] is None and not d["buyable"] and d["name"] == hit["name"]
     made = next((x for x in loc if crafting.for_item(x["en"], x["zh"])), None)
     if made:
-        d = S.item_info(name=made["en"], zh=made["zh"], exact=True)
+        d = t_trade.item_info(name=made["en"], zh=made["zh"], exact=True)
         assert d["nowhere"] and d["craft"]["key"] and d["craft"]["name"]
     # 有数据的：不算「都没有」；顶上搜索框也是这一套
     shop = next(x for x in rows if x["shop"] is not None)
-    assert not S.item_info(name=shop["en"], exact=True, loot=False)["nowhere"]
-    assert S.search(q=shop["en"])["items"][0]["name"] == shop["en"]
+    assert not t_trade.item_info(name=shop["en"], exact=True, loot=False)["nowhere"]
+    assert t_trade.search(q=shop["en"])["items"][0]["name"] == shop["en"]
 
 
 def test_mineral_in_item_search_with_nav():
     """矿物并进物品页搜索：去哪挖的每个地点带导航方式——Aaron Halo 进小行星带导航（挑这种矿最多的带），
     星球 / 卫星去导航页搜它，拉格朗日点矿区和没有地点数据的小行星带只给提示（2026-10-23 用户要求拆掉找矿点页）"""
-    from sc_mining.app import services as S
+    from sc_mining.tasks import trade as t_trade
     from sc_mining.locations import where
     if not where("Taranite"):
         pytest.skip("没有矿点数据")
-    t = S.mineral_info(name="Taranite")
+    t = t_trade.mineral_info(name="Taranite")
     kinds = {r["name"]: r["nav"] for r in t["rows"]}
     assert len(t["rows"]) == min(30, t["total"])
     assert kinds["Clio"]["kind"] == "search" and kinds["Clio"]["q"] == "Clio"
     assert kinds["ARC-L1"]["kind"] == "hint" and "ARC-L1" in kinds["ARC-L1"]["hint"]
     if "Pyro II (Monox)" in kinds:
         assert kinds["Pyro II (Monox)"]["q"] == "Monox"
-    halo = S._mine_nav({"name": "Aaron Halo", "kind": "Belt"}, "Quantainium")
+    halo = t_trade._mine_nav({"name": "Aaron Halo", "kind": "Belt"}, "Quantainium")
     assert halo["kind"] == "halo" and halo["band"] == 5                  # 量子矿：第5带密度最高
-    assert S._mine_nav({"name": "Aaron Halo", "kind": "Belt"}, "Agricium")["band"] == 7
-    assert S._mine_nav({"name": "Keeger Belt", "kind": "Belt"}, "Gold")["kind"] == "hint"
-    assert S.mineral_search(q="塔兰")[0]["en"] == "Taranite"
+    assert t_trade._mine_nav({"name": "Aaron Halo", "kind": "Belt"}, "Agricium")["band"] == 7
+    assert t_trade._mine_nav({"name": "Keeger Belt", "kind": "Belt"}, "Gold")["kind"] == "hint"
+    assert t_trade.mineral_search(q="塔兰")[0]["en"] == "Taranite"
 
 
 def test_ground_gems_searchable_with_locations():
     """SCMiner 的 ROC 车矿、手采矿也能在百货集搜到：类型、信号、地点（2026-10-25 用户要求）；Hathor 矿洞写「校准站矿洞」、不能导航"""
-    from sc_mining.app import services as S
-    assert S.mineral_search(q="杰金")[0]["en"] == "Jaclium"            # 中文名一字不差先认，不模糊成「愈金」
-    f = S.mineral_info(name="Feynmaline")
+    from sc_mining.tasks import trade as t_trade
+    assert t_trade.mineral_search(q="杰金")[0]["en"] == "Jaclium"            # 中文名一字不差先认，不模糊成「愈金」
+    f = t_trade.mineral_info(name="Feynmaline")
     assert f["gem"]["kind"] == "车矿" and f["gem"]["rs"] == 4000 and f["rows"][0]["pct"] == 100
-    j = S.mineral_info(name="Jaclium")
+    j = t_trade.mineral_info(name="Jaclium")
     assert j["rows"][0]["place"] == "校准站矿洞" and j["rows"][0]["nav"]["kind"] == "none"
-    assert S.mineral_info(name="Taranite")["gem"] is None
+    assert t_trade.mineral_info(name="Taranite")["gem"] is None
 
 
 def test_craft_filter_by_mineral_and_item_hud_expires(monkeypatch):
@@ -1827,7 +1881,8 @@ def test_craft_filter_by_mineral_and_item_hud_expires(monkeypatch):
     悬浮窗「物品」结果过一段时间自动收起（2026-10-23 用户：一直挂着不消失）"""
     import time as _t
     from sc_mining import crafting
-    from sc_mining.app import services as S
+    from sc_mining.tasks import goals as t_goals, trade as t_trade
+    from sc_mining.app import hud_state
     if not crafting.blueprints():
         pytest.skip("没有制造数据")
     gated = next((m for m in ("Titanium", "Riccite", "Agricium", "Quantainium", "Laranite", "Tungsten")
@@ -1836,27 +1891,30 @@ def test_craft_filter_by_mineral_and_item_hud_expires(monkeypatch):
         if not mat:
             continue
         s = crafting.mat_summary(mat, 500)
-        r = S.craft_browse(mat=mat, mq=500)
+        r = t_goals.craft_browse(mat=mat, mq=500)
         assert r["total"] == s["count"] > 0 and r["mat"]["en"] == mat and r["mat"]["count"] == s["count"]
         zh = crafting.material_zh(mat)
         assert all(zh in x["need"] for x in r["rows"])
         assert sum(1 for x in r["rows"] if "ok" in x) <= s["gated"]
-        assert S.craft_browse(mat=mat, cat=r["cats"][0]["key"])["total"] == r["cats"][0]["count"]
+        assert t_goals.craft_browse(mat=mat, cat=r["cats"][0]["key"])["total"] == r["cats"][0]["count"]
     if gated:
         lo, hi = crafting.mat_summary(gated, 1), crafting.mat_summary(gated, 1000)
         assert lo["ok"] <= hi["ok"] == hi["count"]
-    assert "craft_count" in S.mineral_info(name="Agricium") and S.mineral_info(name="Agricium")["craft_count"] > 0
-    assert "mat" not in S.craft_browse()
+    assert "craft_count" in t_trade.mineral_info(name="Agricium") and t_trade.mineral_info(name="Agricium")["craft_count"] > 0
+    assert "mat" not in t_goals.craft_browse()
     # 物品悬浮窗定时收起；中途又写了新内容就按新内容重新计时
     hud = {}
-    patch_services(monkeypatch, "_hud", lambda: type("H", (), {"set": lambda self, k, v, *rich: hud.__setitem__(k, v),
-                                                          "clear": lambda self, k: hud.pop(k, None)})())
-    S._item_hud("A", 0.2)
+    from sc_mining.tasks import mining as t_mining, navigation as t_nav, system as t_sys
+    _v = lambda: type("H", (), {"set": lambda self, k, v, *rich: hud.__setitem__(k, v),
+                           "clear": lambda self, k: hud.pop(k, None)})()
+    for _m in (t_mining, t_nav, t_sys, hud_state):
+        monkeypatch.setattr(_m, "_hud", _v)
+    hud_state._item_hud("A", 0.2)
     _t.sleep(0.4)
     assert "物品" not in hud
-    S._item_hud("B", 0.2)
+    hud_state._item_hud("B", 0.2)
     _t.sleep(0.1)
-    S._item_hud("C", 0.5)
+    hud_state._item_hud("C", 0.5)
     _t.sleep(0.25)
     assert hud.get("物品") == "C"                  # B 的计时器到了，但已经换成 C，不收
     _t.sleep(0.4)
@@ -1870,7 +1928,7 @@ def test_hover_ignores_chat_hud_and_markers(monkeypatch):
     from sc_mining.trade import console as C
     from sc_mining.trade import ocr
     from sc_mining.trade.ocr import OcrToken
-    from sc_mining.app import services as S
+    from sc_mining.tasks import hover as t_hover
     T = lambda text, x, y: OcrToken(text, 90, (x, y, max(20, len(text) * 9), 18))
     chat = [T("[全局]RevtheWanderer:", 40, 700), T("thewayifigureditoutwasgoingoutsie", 40, 724),
             T("[全局]Omnicidal-Kitten：", 40, 760), T("LAMP ON", 40, 784)]
@@ -1889,16 +1947,16 @@ def test_hover_ignores_chat_hud_and_markers(monkeypatch):
         return [] if len(calls) <= 2 else chat + marker + hud
     monkeypatch.setattr(ocr, "recognize", fake)
     img = Image.new("RGB", (1920, 1080))
-    toks, name, where = S._read_tooltip(img, (100, 540))
+    toks, name, where = t_hover._read_tooltip(img, (100, 540))
     assert name is None and where == "整屏" and len(calls) == 3
     calls.clear()
     monkeypatch.setattr(ocr, "recognize", lambda img, urgent=False, offset=(0, 0): [] if not calls.append(1) and len(calls) <= 2 else chat + item)
-    toks, name, where = S._read_tooltip(img, (100, 540))
+    toks, name, where = t_hover._read_tooltip(img, (100, 540))
     assert name == ("实准枪口补偿器2", "VeraCompensator2") and where == "整屏"
     # 鼠标在中间（50%~70%）：两轮局部未找到时进入整屏兜底
     calls.clear()
     monkeypatch.setattr(ocr, "recognize", lambda img, urgent=False, offset=(0, 0): [] if not calls.append(1) and len(calls) <= 2 else chat + item)
-    toks, name, where = S._read_tooltip(img, (960, 540))
+    toks, name, where = t_hover._read_tooltip(img, (960, 540))
     assert name == ("实准枪口补偿器2", "VeraCompensator2") and where == "整屏" and len(calls) == 3
 
 
@@ -1913,9 +1971,9 @@ def test_live_signals_pause_while_scan_panel_open(monkeypatch, tmp_path):
     def sig(img):
         calls.append(1)
         return [(13586, False, "13,586", (0, 0, 10, 10))]
-    from sc_mining.app import services as S
-    patch_services(monkeypatch, "_where_now", lambda: None)           # 不去读真屏幕右上角（Windows 上会很慢）
-    patch_services(monkeypatch, "goal_short", lambda force=False: {})   # 不读真的目标 / 库存
+    from sc_mining.tasks import goals as t_goals, navigation as t_nav
+    monkeypatch.setattr(t_nav, "_where_now", lambda: None)           # 不去读真屏幕右上角（Windows 上会很慢）
+    monkeypatch.setattr(t_goals, "goal_short", lambda force=False: {})   # 不读真的目标 / 库存
     frames = [None] * 6 + [a] * 60
     msgs, hud = _live_run(monkeypatch, tmp_path, frames, seconds=1.0, sig=sig)
     assert len(calls) <= 6                                  # 面板出现后不再调用信号识别
@@ -1926,19 +1984,21 @@ def test_live_signals_pause_while_scan_panel_open(monkeypatch, tmp_path):
 def test_goal_shortage_marked_everywhere(monkeypatch):
     """目标还缺的材料：扫描结果、悬浮窗、信号、物品页、矿物页都标出来；精炼后的量给 SCU 和 uSCU（2026-10-23 用户要求）"""
     from sc_mining.parse import parse_scan
-    from sc_mining.app import services as S
+    from sc_mining.tasks import count as t_count, goals as t_goals, hover as t_hover, mining as t_mining, stock as t_stock, trade as t_trade
     from sc_mining import goals as G
     gold = {"en": "Gold", "zh": "金", "short": 2.0, "unit": "SCU", "minq": 800, "goals": ["某蓝图"], "item": None}
     tung = {"en": "Tungsten", "zh": "钨", "short": 0.5, "unit": "SCU", "minq": 1, "goals": ["某蓝图"], "item": None}
     monkeypatch.setattr(G, "load", lambda: [{"id": "x"}])
     monkeypatch.setattr(G, "plan", lambda t=None, goals=None: {"goals": [], "shortfall": [gold, tung]})
-    patch_services(monkeypatch, "trade", lambda: None)
-    S._SHORT["t"] = 0.0
-    assert S._gkey("Gold (Ore)") == S._gkey("gold") and S._gkey("钨矿石") == S._gkey("钨")
-    assert S._goal_for("钨矿石")["en"] == "Tungsten" and S._goal_for("Iron") is None
+    _v = lambda: None
+    for _m in (t_count, t_goals, t_hover, t_stock, t_trade):
+        monkeypatch.setattr(_m, "trade", _v)
+    t_goals._SHORT["t"] = 0.0
+    assert t_goals._gkey("Gold (Ore)") == t_goals._gkey("gold") and t_goals._gkey("钨矿石") == t_goals._gkey("钨")
+    assert t_goals._goal_for("钨矿石")["en"] == "Tungsten" and t_goals._goal_for("Iron") is None
     s = parse_scan(["扫描结果", "钨矿石", "质量： 44336", "抗性： 4% ", "不稳定性： 17.32", "组成 23.68 SCU",
                     "6.55% 兰石原矿 510", "12.95% 钨矿石 662", "49.41% 钨矿石 363", "31.07% 情性物质 。"])
-    v = S.scan_view(s, ({"Inert Materials": 0.3}, 0.3, 96.0))
+    v = t_mining.scan_view(s, ({"Inert Materials": 0.3}, 0.3, 96.0))
     assert [g["en"] for g in v["goal"]] == ["Tungsten"] and v["goal"][0]["ok"]
     assert "🎯 目标缺少 钨 0.5 SCU" in v["hud"]
     assert "aUEC" in v["hud"] and "净值" not in v["hud"]                 # 用户：净值就是 aUEC，写价格
@@ -1947,13 +2007,13 @@ def test_goal_shortage_marked_everywhere(monkeypatch):
     assert [c["name"] for c in r["comp"]] == ["钨", "砬兰石", "惰性物质"] and r["comp"][0]["pct"] == "62.36%"
     assert [(q["q"], q["pct"], q["hi"]) for q in r["comp"][0]["subs"]] == [("662", "12.95%", True), ("363", "49.41%", False)]
     assert r["gain"][1][2] == "aUEC" and r["advice"]["heads"]
-    assert S.scu_text(0.42) == "420,000 uSCU（0.420 SCU）" and S.scu_text(3.5).startswith("3.50 SCU（3,500,000 uSCU）")
-    assert "当前 650 未达标" in S._goal_text(gold, 650) and "当前 900 已达标" in S._goal_text(gold, 900)
-    lines = S._mark_goal_lines(["信号 13,600 → 林登金 ×4", "信号 8,000 → 金 ×2", "信号 4,000 → 钨 ×1"])
+    assert t_mining.scu_text(0.42) == "420,000 uSCU（0.420 SCU）" and t_mining.scu_text(3.5).startswith("3.50 SCU（3,500,000 uSCU）")
+    assert "当前 650 未达标" in t_goals._goal_text(gold, 650) and "当前 900 已达标" in t_goals._goal_text(gold, 900)
+    lines = t_goals._mark_goal_lines(["信号 13,600 → 林登金 ×4", "信号 8,000 → 金 ×2", "信号 4,000 → 钨 ×1"])
     assert lines[0].startswith("信号") and lines[1].startswith("🎯") and lines[2].startswith("🎯")
-    assert S.mineral_info(name="Gold")["goal"].startswith("🎯 目标缺少 金 2 SCU")
-    assert S._hover_lines({"name": "Tungsten"}, "Tungsten", "钨")[0].startswith("🎯")
-    S._SHORT["t"] = 0.0
+    assert t_trade.mineral_info(name="Gold")["goal"].startswith("🎯 目标缺少 金 2 SCU")
+    assert t_hover._hover_lines({"name": "Tungsten"}, "Tungsten", "钨")[0].startswith("🎯")
+    t_goals._SHORT["t"] = 0.0
 
 
 def test_hover_unsure_names_and_anchor_lines():
@@ -1987,7 +2047,8 @@ def test_mask_own_window_too():
 def test_waypoint_from_pasted_showlocation(monkeypatch, tmp_path):
     """路标页粘贴 /showlocation 的输出：先预览认出星球 / 经纬度，再起名保存（2026-10-23 用户要求，取代填经纬度）"""
     from sc_mining import navigate as n, paths
-    from sc_mining.app import services as S
+    from sc_mining.tasks import mining as t_mining, navigation as t_nav, system as t_sys
+    from sc_mining.app import hud_state
     data = n.load()
     if not data.get("bodies"):
         pytest.skip("没有星图数据")
@@ -1996,24 +2057,26 @@ def test_waypoint_from_pasted_showlocation(monkeypatch, tmp_path):
     saved = []
     monkeypatch.setattr(n, "add_waypoint", lambda name, body, local: saved.append(("ground", name, body)))
     monkeypatch.setattr(n, "add_space_waypoint", lambda name, system, g: saved.append(("space", name, system)))
-    patch_services(monkeypatch, "waypoints", lambda: [])
-    patch_services(monkeypatch, "_hud", lambda: type("H", (), {"set": lambda *a: None, "clear": lambda *a: None})())
+    monkeypatch.setattr(t_nav, "waypoints", lambda: [])
+    _v = lambda: type("H", (), {"set": lambda *a: None, "clear": lambda *a: None})()
+    for _m in (t_mining, t_nav, t_sys, hud_state):
+        monkeypatch.setattr(_m, "_hud", _v)
     b = data["bodies"]["Daymar"]
     g = n.target_global({"b": "Daymar", "x": 10.0, "y": 20.0, "z": 0.5, "t": "Waypoint"}, data, 1_800_000_000.0) if hasattr(n, "target_global") else None
-    assert "error" in S.waypoint_preview(text="随便一句话")
-    assert "error" in S.waypoint_from_text(name="x", text="没有坐标")
-    assert "error" in S.waypoint_from_text(name="", text="Coordinates: x:1 y:2 z:3")
+    assert "error" in t_nav.waypoint_preview(text="随便一句话")
+    assert "error" in t_nav.waypoint_from_text(name="x", text="没有坐标")
+    assert "error" in t_nav.waypoint_from_text(name="", text="Coordinates: x:1 y:2 z:3")
     lp = next(p for p in data["points"] if p["sys"] == "Stanton" and p["t"] == "Lagrange Point")
     txt = f"Coordinates: x:{lp['x'] + 5000} y:{lp['y']} z:{lp['z']}"
-    pv = S.waypoint_preview(text=txt)
+    pv = t_nav.waypoint_preview(text=txt)
     assert pv["ok"] and pv["space"] and "Stanton" in pv["body"]
-    r = S.waypoint_from_text(name="太空点", text=txt)
+    r = t_nav.waypoint_from_text(name="太空点", text=txt)
     assert saved[-1] == ("space", "太空点", "Stanton") and "太空" in r["desc"]
     if g:
         txt = f"Coordinates: x:{g[0]} y:{g[1]} z:{g[2]}"
-        pv = S.waypoint_preview(text=txt)
+        pv = t_nav.waypoint_preview(text=txt)
         assert pv["ok"] and not pv["space"] and pv["body"] == "Daymar" and "戴玛尔" in pv["desc"]
-        S.waypoint_from_text(name="地面点", text=txt)
+        t_nav.waypoint_from_text(name="地面点", text=txt)
         assert saved[-1] == ("ground", "地面点", "Daymar")
 
 
@@ -2023,7 +2086,8 @@ def test_feedback_report_bundle(monkeypatch, tmp_path):
     import json, zipfile
     from PIL import Image
     from sc_mining import paths, screen
-    from sc_mining.app import services as S
+    from sc_mining.tasks import hover as t_hover, mining as t_mining, navigation as t_nav, system as t_sys
+    from sc_mining.app import hud_state
     monkeypatch.setattr(paths, "USER", tmp_path, raising=False)
     monkeypatch.setattr(paths, "LOGS", tmp_path / "logs", raising=False)
     monkeypatch.setattr(paths, "SHOTS", tmp_path / "shots", raising=False)
@@ -2031,13 +2095,17 @@ def test_feedback_report_bundle(monkeypatch, tmp_path):
     (tmp_path / "shots" / "live").mkdir(parents=True)
     for i in range(7):
         Image.new("RGB", (8, 8)).save(tmp_path / "shots" / "live" / f"{i}.png")
-    patch_services(monkeypatch, "_desktop", lambda: tmp_path / "desk")
+    monkeypatch.setattr(t_sys, "_desktop", lambda: tmp_path / "desk")
     (tmp_path / "desk").mkdir()
-    patch_services(monkeypatch, "_hud", lambda: type("H", (), {"sections": {"信号": "x"}, "set": lambda *a: None, "clear": lambda *a: None})())
-    patch_services(monkeypatch, "WIN", False)
+    _v = lambda: type("H", (), {"sections": {"信号": "x"}, "set": lambda *a: None, "clear": lambda *a: None})()
+    for _m in (t_mining, t_nav, t_sys, hud_state):
+        monkeypatch.setattr(_m, "_hud", _v)
+    _v = False
+    for _m in (t_hover, t_sys):
+        monkeypatch.setattr(_m, "WIN", _v)
     screen.LAST_RAW.update(t=1.0, scan=["扫描结果", "质量： 123"], bag=[])
-    S._FB_LAST["sig"] = {"values": [44336]}
-    r = S.feedback_report(kind="signal", note="屏幕是 33,000", img=Image.new("RGB", (64, 32)))
+    t_sys._FB_LAST["sig"] = {"values": [44336]}
+    r = t_sys.feedback_report(kind="signal", note="屏幕是 33,000", img=Image.new("RGB", (64, 32)))
     d = tmp_path / "feedback"
     assert r["count"] == 1 and (d / r["dir"].split("\\")[-1].split("/")[-1]).is_dir() or d.exists()
     folder = next(p for p in d.iterdir() if p.is_dir())
@@ -2050,32 +2118,34 @@ def test_feedback_report_bundle(monkeypatch, tmp_path):
     assert len((folder / "live_log.txt").read_text(encoding="utf-8").splitlines()) == 150
     with zipfile.ZipFile(folder.with_suffix(".zip")) as z:
         assert any(n.endswith("屏幕.png") for n in z.namelist())
-    S.feedback_report(kind="坏类型", img=Image.new("RGB", (8, 8)))
-    rows = S.feedback_list()
+    t_sys.feedback_report(kind="坏类型", img=Image.new("RGB", (8, 8)))
+    rows = t_sys.feedback_list()
     assert len(rows) == 2 and rows[0]["name"].endswith("_auto")                     # 不认识的类型按 auto
-    e = S.feedback_export()
+    e = t_sys.feedback_export()
     assert e["files"] == 2 and (tmp_path / "desk" / e["path"].split("\\")[-1].split("/")[-1]).exists()
-    assert S.feedback_clear()["removed"] >= 4 and S.feedback_list() == []
-    assert "error" in S.feedback_export()
+    assert t_sys.feedback_clear()["removed"] >= 4 and t_sys.feedback_list() == []
+    assert "error" in t_sys.feedback_export()
     # 热键冲突：反馈键撞了别的键要提示
-    assert any("问题反馈" in w for w in S.hotkey_conflicts({"trade_capture_key": "F10"}))
-    assert "问题反馈" in S.set_settings.__wrapped__(trade_capture_key="F10")["error"] if hasattr(S.set_settings, "__wrapped__") else True
+    assert any("问题反馈" in w for w in t_sys.hotkey_conflicts({"trade_capture_key": "F10"}))
+    assert "问题反馈" in t_sys.set_settings.__wrapped__(trade_capture_key="F10")["error"] if hasattr(t_sys.set_settings, "__wrapped__") else True
 
 
 def test_scan_view_lots_by_quality(monkeypatch):
     """成分表（1.6.42）：石头里每一份（矿 × 品质、惰性物质）一行；同一种矿两种品质标高 / 低；品质写第几档；
     精炼按份算（精炼保留品质，不同品质精炼完还是分开的）；目标按每一份判断品质门槛；悬浮窗写惰性占比和高品质那份"""
     from sc_mining.parse import parse_scan
-    from sc_mining.app import services as S
+    from sc_mining.tasks import count as t_count, goals as t_goals, hover as t_hover, mining as t_mining, stock as t_stock, trade as t_trade
     from sc_mining import goals as G
     tung = {"en": "Tungsten", "zh": "钨", "short": 0.5, "unit": "SCU", "minq": 600, "goals": ["某蓝图"], "item": None}
     monkeypatch.setattr(G, "load", lambda: [{"id": "x"}])
     monkeypatch.setattr(G, "plan", lambda t=None, goals=None: {"goals": [], "shortfall": [tung]})
-    patch_services(monkeypatch, "trade", lambda: None)
-    S._SHORT["t"] = 0.0
+    _v = lambda: None
+    for _m in (t_count, t_goals, t_hover, t_stock, t_trade):
+        monkeypatch.setattr(_m, "trade", _v)
+    t_goals._SHORT["t"] = 0.0
     s = parse_scan(["扫描结果", "钨矿石", "质量： 44336", "抗性： 4% ", "不稳定性： 17.32", "组成 23.68 SCU",
                     "6.55% 兰石原矿 510", "12.95% 钨矿石 662", "49.41% 钨矿石 363", "31.07% 情性物质 。"])
-    v = S.scan_view(s, ({}, None, None))
+    v = t_mining.scan_view(s, ({}, None, None))
     lots = v["lots"]
     assert [(r["zh"], r["q"], r["rank"]) for r in lots] == [("砬兰石", 510, ""), ("钨", 662, "高品质"), ("钨", 363, "低品质"), ("惰性物质", None, "")]
     assert [r["tier"] for r in lots] == ["E 档", "D 档", "F 档（最低）", ""]
@@ -2089,18 +2159,18 @@ def test_scan_view_lots_by_quality(monkeypatch):
     g = v["goal"][0]
     assert g["ok"] and "品质 662：已达标（精炼后 1.50 SCU），品质 363：未达标" in g["text"] and "品质 ≥600" in g["text"]
     # 只有一种品质时照旧：「当前 650 不够」
-    assert "当前 650 未达标" in S._goal_text(dict(tung, minq=800), 650)
-    S._SHORT["t"] = 0.0
+    assert "当前 650 未达标" in t_goals._goal_text(dict(tung, minq=800), 650)
+    t_goals._SHORT["t"] = 0.0
 
 
 def test_scan_view_when_panel_cut_off():
     """面板被屏幕右边挡住（16:10 屏幕上鼹鼠炮塔，2026-10-23 用户反馈）：只有质量、抗性、不稳定性和成分占比，
     照样给破碎方案，写明品质和总 SCU 看不到、调大 FOV视野"""
     from sc_mining.parse import Scan
-    from sc_mining.app import services as S
+    from sc_mining.tasks import mining as t_mining
     c = Scan(rock="Ouratite", mass=745, resistance=20, instability=8.2, total_scu=None, difficulty="简单",
              composition=[("Ouratite", 2.79, None), ("Ouratite", 5.04, None), ("Agricium", 14.52, None), ("Inert Materials", 77.64, None)])
-    v = S.scan_view(c, ({}, None, None), cut=True)
+    v = t_mining.scan_view(c, ({}, None, None), cut=True)
     assert v["cut"] and "FOV视野" in v["note"] and v["plans"] and not v["refine"] and not v["minerals"]
     assert "面板被遮挡：仅计算破碎方案" in v["hud"] and "惰性 78%" in v["hud"]
     assert [r["scu"] for r in v["lots"]] == [None] * 4 and [r["pct"] for r in v["lots"]] == [2.79, 5.04, 14.52, 77.64]
@@ -2149,7 +2219,7 @@ def test_item_search_wiki_gap_fill_and_tail_name_keys():
     ③只有掉落数据的物品也带上 wiki 的类型 / 尺寸当分类"""
     from sc_mining.localization import zh2en_items
     from sc_mining import itemsearch as I
-    from sc_mining.app import services as S
+    from sc_mining.tasks import trade as t_trade
     t = zh2en_items({"item_Cargo_ShipMining_Pod_Golem_BTGL_Name": "Golem MC-4 矿石吊舱\\nGOLEM MC-4 Ore Pod ",
                      "item_Mining_Modules_Active_GRIN_Charge_BTGL_Name": "净采 模组Clearcut\\n[+15%功率|+30%绿区速度]",
                      "item_fuelpod_MISC_Standard_Name": "CR-60\\n[调节1.16 | 血量22800 | 20 SCU]",
@@ -2157,14 +2227,14 @@ def test_item_search_wiki_gap_fill_and_tail_name_keys():
                      "item_scraper_GRIN_Standard_Name": "研磨 刮削模块\\nAbrade Scraper Module", "item_Name_x_Desc": "说明"})
     assert t == {"Golem MC-4 矿石吊舱": "GOLEM MC-4 Ore Pod", "净采 模组": "Clearcut Module", "巨灵": "Gargant", "研磨 刮削模块": "Abrade Scraper Module"}
     assert len(I.wiki_items()) > 7000
-    hit = S.item_search("Hartmoore Inverter")[0]
+    hit = t_trade.item_search("Hartmoore Inverter")[0]
     # 2026-10-27 起汉化包只写中文名的物品也有英文名（data/zh_only_names.json）：带中文名、来源是汉化包
     assert hit["name"] == "Hartmoore Inverter Code" and hit["src"] == "loc" and hit["zh"] == "哈特莫尔转换器密码" \
         and hit["category"] == "钥匙卡"            # 2026-10-27 老大定：芯片卡（DCHS 计算板、密钥）归钥匙卡一类
-    assert S.item_search("Biological Samples")[0]["zh"] == "生物样本" and S.item_search("生物样本")[0]["name"] == "Biological Samples"
-    assert not [r for r in S.item_search("300 Series Amber") if r["src"] == "wiki"]          # 涂装只有汉化包 / 掉落来源，不从 wiki 补
-    assert not any(r["name"] == "Remote Turret" and r["src"] == "wiki" for r in S.item_search("Remote Turret"))
-    assert any(r["category"].startswith("炮塔") for r in S.item_search("Remote Turret"))         # 掉落物品带上 wiki 的类型
+    assert t_trade.item_search("Biological Samples")[0]["zh"] == "生物样本" and t_trade.item_search("生物样本")[0]["name"] == "Biological Samples"
+    assert not [r for r in t_trade.item_search("300 Series Amber") if r["src"] == "wiki"]          # 涂装只有汉化包 / 掉落来源，不从 wiki 补
+    assert not any(r["name"] == "Remote Turret" and r["src"] == "wiki" for r in t_trade.item_search("Remote Turret"))
+    assert any(r["category"].startswith("炮塔") for r in t_trade.item_search("Remote Turret"))         # 掉落物品带上 wiki 的类型
     names = {r["en"] for r in I._build()["rows"]}
     assert "mount_gimbal_mining_golem" not in names                                              # 内部占位名不收
 
@@ -2174,8 +2244,8 @@ def test_item_desc_and_alias_from_wiki(monkeypatch, tmp_path):
     ②汉化包的英文名按游戏内部类名（item_Name_<类名>）对到 wiki 正名，写错 / 过时的（Bulldog → Badger、Monolith Arms → Monolith Armor Arms）
       记进 name_aliases.json，搜旧写法也能找到正名；③wiki 清单带类名 cls"""
     from sc_mining import localization as L, itemsearch as I, paths
-    from sc_mining.app import services as S
-    d = S.item_info(name="Helix II Mining Laser", exact=True)
+    from sc_mining.tasks import trade as t_trade
+    d = t_trade.item_info(name="Helix II Mining Laser", exact=True)
     assert "采矿激光" in d["desc"] and "铝热" in d["desc"]
     t = L.zh2en_items({"item_Name_kap_combat_heavy_arms_01_01_01": "巨石 臂甲\\nMonolith Arms", "item_NameX_Y": "甲\\nFoo Bar"},
                       {"kap_combat_heavy_arms_01_01_01": "Monolith Armor Arms", "x_y": "Foo Bar"})
@@ -2193,9 +2263,9 @@ def test_item_desc_and_alias_from_wiki(monkeypatch, tmp_path):
         if (real / n).exists() and not (tmp_path / n).exists():
             shutil.copyfile(real / n, tmp_path / n)              # Windows 建符号链接要特权，直接复制
     try:
-        hit = S.item_search("Helix 2 Old Name")
+        hit = t_trade.item_search("Helix 2 Old Name")
         assert hit and hit[0]["name"] == "Helix II Mining Laser"
-        assert "Helix 2 Old Name" in S.item_info(name="Helix II Mining Laser", exact=True)["aka"]
+        assert "Helix 2 Old Name" in t_trade.item_info(name="Helix II Mining Laser", exact=True)["aka"]
     finally:
         monkeypatch.setattr(I, "_cache", {"key": None, "index": None})
 
@@ -2203,44 +2273,52 @@ def test_item_desc_and_alias_from_wiki(monkeypatch, tmp_path):
 def test_ore_log_record_and_hotkeys(monkeypatch, tmp_path):
     """1.6.70 原矿记录：记最近一块矿（窗口里点的不带坐标）、删除能撤销；所有热键都能改，原矿记录键能清掉"""
     from sc_mining import ore_log, settings, helpers
-    from sc_mining.app import services as S
+    from sc_mining.tasks import navigation as t_nav, system as t_sys
+    from sc_mining.app import bus
+    from sc_mining.app import hud_state
     monkeypatch.setattr(ore_log, "FILE", tmp_path / "ore_log.json")
-    monkeypatch.setattr(S.bus, "publish", lambda *a, **k: None)
-    patch_services(monkeypatch, "_note_hud", lambda *a, **k: None)
-    patch_services(monkeypatch, "_ORE_LAST", {"view": None})
-    assert "error" in S.ore_record()
-    S._ORE_LAST["view"] = {"rock": "塔兰导电石", "mass": 38775, "resistance": 55, "instability": 323.46, "total_scu": 36.9, "at": "16:02:06",
+    monkeypatch.setattr(bus, "publish", lambda *a, **k: None)
+    _v = lambda *a, **k: None
+    for _m in (t_nav, t_sys, hud_state):
+        monkeypatch.setattr(_m, "_note_hud", _v)
+    _v = {"view": None}
+    for _m in (t_nav, t_sys):
+        monkeypatch.setattr(_m, "_ORE_LAST", _v)
+    assert "error" in t_nav.ore_record()
+    t_sys._ORE_LAST["view"] = {"rock": "塔兰导电石", "mass": 38775, "resistance": 55, "instability": 323.46, "total_scu": 36.9, "at": "16:02:06",
                            "lots": [{"zh": "塔兰导电石", "en": "Taranite", "pct": 11.55, "q": 718, "scu": 4.26, "inert": False},
                                     {"zh": "惰性物质", "en": "Inert Materials", "pct": 30.92, "q": None, "scu": 11.41, "inert": True}],
                            "refine": [{"method": "德尼克斯熔解法", "station": "列夫斯基", "value": 344786, "scu": 12.39}]}
-    rec = S.ore_record()
+    rec = t_nav.ore_record()
     assert rec["value"] == 344786 and rec["lots"][0]["pct"] == 11.55 and "coords" not in rec
-    assert S.ore_list()["rows"][0]["id"] == rec["id"]
-    gone = S.ore_delete(id=rec["id"])
-    assert S.ore_list()["rows"] == []
-    S.ore_restore(rec=gone)
-    assert [r["id"] for r in S.ore_list()["rows"]] == [rec["id"]]
-    assert "没有坐标" in S.ore_go(id=rec["id"])["error"]
+    assert t_nav.ore_list()["rows"][0]["id"] == rec["id"]
+    gone = t_nav.ore_delete(id=rec["id"])
+    assert t_nav.ore_list()["rows"] == []
+    t_nav.ore_restore(rec=gone)
+    assert [r["id"] for r in t_nav.ore_list()["rows"]] == [rec["id"]]
+    assert "没有坐标" in t_nav.ore_go(id=rec["id"])["error"]
     store = dict(settings.DEFAULTS)
     monkeypatch.setattr(settings, "load", lambda: dict(store))
     monkeypatch.setattr(settings, "update", lambda **kw: (store.update(kw), dict(store))[1])
     monkeypatch.setattr(helpers, "start", lambda: None)
-    assert S.set_settings(live_key="f4")["live_key"] == "F4"
-    assert "盘点" in S.set_settings(ore_key="F6")["error"]
-    assert S.set_settings(ore_key="F11")["ore_key"] == "F11" and S.set_settings(ore_key="")["ore_key"] == ""
-    assert "F1–F12" in S.set_settings(mark_key="Q")["error"]
-    w = S.hotkey_conflicts({**store, "mark_key": "F7", "ore_key": "F7"})
+    assert t_sys.set_settings(live_key="f4")["live_key"] == "F4"
+    assert "盘点" in t_sys.set_settings(ore_key="F6")["error"]
+    assert t_sys.set_settings(ore_key="F11")["ore_key"] == "F11" and t_sys.set_settings(ore_key="")["ore_key"] == ""
+    assert "F1–F12" in t_sys.set_settings(mark_key="Q")["error"]
+    w = t_sys.hotkey_conflicts({**store, "mark_key": "F7", "ore_key": "F7"})
     assert len(w) == 1 and "原矿记录" in w[0] and "记录路标" in w[0]
 
 
 def test_gear_change_marks_live_for_recalc(monkeypatch, tmp_path):
     """改配装后，采矿助手正在显示的石头要按新配装重算：set_mining_gear 给 _live 打记号"""
     from sc_mining import settings
-    from sc_mining.app import services as S
+    from sc_mining.tasks import mining as t_mining
+    from sc_mining.app.engines.manager import EngineManager
+    em = EngineManager.get_instance()
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
-    before = S._live.gear_rev
-    S.set_mining_gear(ship="mole", loadout={"heads": [["helix_ii", []]] * 3, "crew": 2})
-    assert S._live.gear_rev == before + 1
+    before = em.live.gear_rev
+    t_mining.set_mining_gear(ship="mole", loadout={"heads": [["helix_ii", []]] * 3, "crew": 2})
+    assert em.live.gear_rev == before + 1
 
 
 def test_item_names_and_categories_unified():
@@ -2252,24 +2330,24 @@ def test_item_names_and_categories_unified():
     assert shop_cat_zh("Mining Laser Heads") == "采矿激光器" and shop_cat_zh("Arms") == "臂甲" and shop_cat_zh("没见过的") == "没见过的"
     assert display_name({"n": "Hofstede-S2 Mining Laser", "z": "霍夫斯泰德-S2 型采矿激光器"}) == "霍夫斯泰德 Hofstede-S2 Mining Laser"
     assert display_name({"n": "Karna Rifle", "z": "卡纳 步枪"}) == "卡纳 步枪 Karna Rifle" and display_name({"n": "X", "z": ""}) == "X"
-    from sc_mining.app import services as S
-    rows = S.item_search("霍夫斯泰德")
+    from sc_mining.tasks import trade as t_trade
+    rows = t_trade.item_search("霍夫斯泰德")
     assert any(r["name"] == "Hofstede-S2 Mining Laser" and r["zh"] == "霍夫斯泰德" and r["category"] == "采矿激光器" for r in rows)
 
 
 def test_disclaimer_and_about_have_required_notices():
     """免责声明和关于页（2026-10-26）：CIG 要求的非官方声明和权利人、版权、EULA 自动化风险、要求注明的数据来源"""
     from sc_mining import paths
-    from sc_mining.app import services as S
+    from sc_mining.tasks import system as t_sys
     h = (paths.CODE / "app" / "web" / "disclaimer.html").read_text(encoding="utf-8")
     for must in ("not affiliated with the Cloud Imperium group of companies", "Cloud Imperium Rights LLC", "Cloud Imperium Rights Limited",
                  "© 2026 Adm_TT", "未经授权的自动化软件", "api.star-citizen.wiki", "CC BY-SA 4.0", "第三方许可.txt"):
         assert must in h, must
-    info = S.about_info()
+    info = t_sys.about_info()
     names = {x["name"] for x in info["sources"]}
     assert {"SCMiner", "UEX", "Star Citizen Wiki API", "Star Citizen Wiki", "星际公民掉落查询", "SC汉化盒子"} <= names
     assert all(x["url"].startswith("https://") for x in info["sources"])
-    assert "text" in S.third_party_licenses()
+    assert "text" in t_sys.third_party_licenses()
 
 
 def test_pyro_place_names_from_localization():
@@ -2304,7 +2382,7 @@ def test_showlocation_keys_freed(monkeypatch, tmp_path):
     """2026-10-27 用户定：/showlocation 只在必要时用，「记录路标」「一键定位」默认不绑；老玩家存着的也清一次（之后自己绑的不再动）"""
     import json
     from sc_mining import settings
-    from sc_mining.app import services as S
+    from sc_mining.tasks import navigation as t_nav, system as t_sys
     f = tmp_path / "settings.json"
     monkeypatch.setattr(settings, "FILE", f)
     assert settings.DEFAULTS["mark_key"] == "" and settings.DEFAULTS["fix_key"] == ""
@@ -2313,10 +2391,10 @@ def test_showlocation_keys_freed(monkeypatch, tmp_path):
     assert cfg["mark_key"] == "" and cfg["fix_key"] == "" and cfg["nav_mode"] == "auto" and cfg["keys_v5"]
     settings.update(fix_key="F11")
     assert settings.load()["fix_key"] == "F11"                       # 清过一次，后来自己绑的不动
-    vals = {n: k for k, _, n in S._hotkey_values({**settings.DEFAULTS})}
+    vals = {n: k for k, _, n in t_sys._hotkey_values({**settings.DEFAULTS})}
     assert vals["mark_key"] == "" and vals["fix_key"] == "" and vals["trade_capture_key"] == "F8"
     monkeypatch.setattr(settings, "load", lambda: dict(settings.DEFAULTS))
-    assert S.fix_key_hint() == ("", "在聊天框输入 /showlocation 定位")
+    assert t_nav.fix_key_hint() == ("", "在聊天框输入 /showlocation 定位")
 
 
 def test_nav_marker_projection():
@@ -2390,7 +2468,7 @@ def test_city_nav(monkeypatch, tmp_path):
     import json
     import os
     from sc_mining import navigate as n
-    from sc_mining.app import services as S
+    from sc_mining.tasks import mining as t_mining
     rows = [{"city": "NewBabbage", "body": "Microtech", "cat": "交易", "en": "TDD", "zh": "交易中心", "area": "广场",
              "x": 520.900, "y": 419.200, "z": 744.100},
             {"city": "NewBabbage", "body": "Microtech", "en": "坏的", "x": "abc", "y": 0, "z": 0},
@@ -2427,9 +2505,9 @@ def test_city_nav(monkeypatch, tmp_path):
     assert n._short(dict(here, body="Hurston"), t).startswith("先量子跳到")
 
     monkeypatch.setattr(n, "here_text", lambda h, data: "")
-    v = S._nav_view(here, t, {})
+    v = t_mining._nav_view(here, t, {})
     assert v["city"] and not v["arrived"] and 45 < v["direct_m"] < 60 and v["updown"] > 10
-    assert S._nav_view(near, t, {})["arrived"]
+    assert t_mining._nav_view(near, t, {})["arrived"]
     n._city.clear()
 
 
@@ -2438,7 +2516,7 @@ def test_city_nav_review(monkeypatch, tmp_path):
     import json
     from datetime import datetime, timezone
     from sc_mining import navigate as n
-    from sc_mining.app import services as S
+    from sc_mining.tasks import navigation as t_nav
     base = {"city": "NewBabbage", "body": "Microtech", "cat": "空港", "en": "ASOP", "zh": "ASOP 终端", "area": "空港"}
     rows = [dict(base, src="a", x=520.9, y=419.2, z=744.1), dict(base, src="b", x=520.95, y=419.2, z=744.1),
             dict(base, src="c", en=None, x=1, y=1, z=1), dict(base, src="d", cat=None, x=1, y=1, z=1),
@@ -2449,8 +2527,8 @@ def test_city_nav_review(monkeypatch, tmp_path):
     ps = n.city_places()
     assert [p["id"] for p in ps] == ["a", "b", "d"] and ps[2]["cat"] == ""
     assert ps[0]["zh"] == "ASOP 终端" and ps[1]["zh"] == "ASOP 终端 2"
-    k0, k1 = S._place_row(ps[0])["key"], S._place_row(ps[1])["key"]
-    assert k0 != k1 and S._places[k1] is ps[1]
+    k0, k1 = t_nav._place_row(ps[0])["key"], t_nav._place_row(ps[1])["key"]
+    assert k0 != k1 and t_nav._places[k1] is ps[1]
 
     t = ps[0]                                                       # 手动定位：100 米不算到，按米显示
     b = {"r": 1_000_000.0, "sys": "Stanton"}
@@ -2475,7 +2553,7 @@ def test_city_nav_review(monkeypatch, tmp_path):
 
     monkeypatch.setattr(n, "load", lambda: data)
     monkeypatch.setattr(n, "latlon", lambda p: (0.0, 0.0, 1000.0))
-    plan = S.nav_plan(k1)
+    plan = t_nav.nav_plan(k1)
     assert plan["city"] and plan["routes"] == [] and plan["area"] == "空港"
     n._city.clear()
 
@@ -2607,7 +2685,7 @@ def test_nav_nearest(monkeypatch, tmp_path):
     import json
     import time
     from sc_mining import navigate as n
-    from sc_mining.app import services as S
+    from sc_mining.tasks import navigation as t_nav
     data = n.load()
     city = [{"city": "NewBabbage", "body": "Microtech", "cat": "医院", "en": "Hospital Check-In", "zh": "登记处",
              "src": "nb/checkin", "x": 520.900, "y": 419.200, "z": 744.100},
@@ -2636,7 +2714,7 @@ def test_nav_nearest(monkeypatch, tmp_path):
     assert [q["city"] for _, q in hits] == ["NewBabbage"] and hits[0][0] < 50          # 在城里：只找本城
     assert all(d is None for d, _ in n.nearest("医院", None, "", None, data))          # 不知道位置：只列出来
     assert n.label({"n": "Checkmate", "zh": "死局空间站 (Checkmate)", "t": "Orbital Station"}) == "死局空间站（Checkmate）"
-    assert "error" in S.nav_near("加油")
+    assert "error" in t_nav.nav_near("加油")
     n._city.clear()
     n._amen.clear()
 

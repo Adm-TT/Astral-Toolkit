@@ -52,7 +52,12 @@ AT 靠截屏识别文字、读游戏写出的日志文件工作，自动跑会�
 
 | 位置 | 内容 |
 |---|---|
-| `sc_mining/` | 程序代码；`app/` 是窗口（`server.py` 本机网页服务、`services.py` 接口、`web/` 界面） |
+| `sc_mining/app/` | 窗口和后台：`server.py` 启动、本机网页服务；`window.py` PyWebview 窗口；`web/` 界面；`api/` 每个领域一个接口文件（Controller），`router.py` 汇总、`bridge.py` 给窗口调；`engines/` 后台读屏 / 导航引擎，`engines/manager.py` 统一管；`hud_state.py` 悬浮窗提示；`overlay.py` 悬浮窗；`tray.py` 托盘 |
+| `sc_mining/tasks/` | 各功能的业务逻辑：交易、库存、目标与制造、导航、采矿、F8 识别、F6 盘点、系统与更新；界面接口经 `app/api/` 转到这里 |
+| `sc_mining/core/` | 基础：路径、设置、版本、性能与识别设备、多语言 |
+| `sc_mining/mining/`、`navigation/`、`crafting/`、`trade/` | 各领域的计算和数据：采矿识别与破碎计算、星图与定位、制造与物品、查价与库存 |
+| `sc_mining/system/`、`update/` | 和系统、游戏打交道（辅助进程、驾驶位检测、显卡识别、问题反馈）；数据下载与升级 |
+| `sc_mining/run.py`、`selftest.py` | 命令行入口、自检 |
 | `tests/` | 测试，`run_all.py` 自带运行器，不用装 pytest |
 | `tools/` | 打包、发布、游戏文件解包等开发工具 |
 | `data/`、`userdata/` | 运行时生成：下载的数据、个人设置和记录（不在仓库里） |

@@ -839,7 +839,7 @@ def test_crafted_head_quality(tmp_path, monkeypatch):
     """自造矿头（1.6.41）：发射器（萨达瑞晶）+ 汇流排（铜）的品质决定激光功率，破碎方案按自造的功率算。
     两个槽的加成相加（1.6.47 起；数据里没有合并规则，游戏制造终端、SCM、Crafter 三处都是相加：947 + 958 → +36.20%）"""
     from sc_mining import settings, laser, quality
-    from sc_mining.app import services
+    from sc_mining.tasks import mining as t_mining
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
     # 档位按各自材料：萨达瑞晶、铜各有 7 档 + 1000 完美（starcitizen.tools 品质表）
     assert [q for _, q in quality.tiers("Sadaryx")] == [258, 510, 688, 797, 865, 940, 971, 1000]
@@ -864,13 +864,13 @@ def test_crafted_head_quality(tmp_path, monkeypatch):
     assert "craft" not in laser.clean_loadout("prospector", {"heads": [["helix_i", []]], "craft": [None]})
     assert laser.clean_loadout("prospector", {"heads": [["helix_i", []]], "craft": [{}]})["craft"] == [{"Emitter": 500, "Bus Bars": 500}]
     # 自造的功率更高 → 满功率能破更重的；方案、悬浮窗里标出「自造 +X%」
-    services.set_mining_gear("prospector", {"heads": [["helix_i", []]], "crew": 1})
+    t_mining.set_mining_gear("prospector", {"heads": [["helix_i", []]], "crew": 1})
     plain = laser.evaluate(laser.loadout(), None, 9000, 30, 10)
-    g = services.set_mining_gear("prospector", {"heads": [["helix_i", []]], "crew": 1, "craft": [{"Emitter": 971, "Bus Bars": 958}]})
+    g = t_mining.set_mining_gear("prospector", {"heads": [["helix_i", []]], "crew": 1, "craft": [{"Emitter": 971, "Bus Bars": 958}]})
     made = laser.evaluate(laser.loadout(), None, 9000, 30, 10)
     assert abs(made.max_mass / plain.max_mass - (1 + 0.1884 + 0.1832)) < 1e-6
     assert "自造 +37%" in laser.recommend(9000, 30, 10)[0].short()
-    assert "自造 +37%" in services.manual_scan(9000, 30, 10)[0]["heads"]
+    assert "自造 +37%" in t_mining.manual_scan(9000, 30, 10)[0]["heads"]
     ship = next(s for s in g["ships"] if s["key"] == "prospector")
     assert ship["power"][0] == {"base": 3900, "now": round(3900 * 1.3716), "pct": 37.2, "craft": True}
     assert not ship["is_default"] and ship["loadout"]["craft"] == [{"Emitter": 971, "Bus Bars": 958}]
@@ -878,7 +878,7 @@ def test_crafted_head_quality(tmp_path, monkeypatch):
     assert [x["slot"] for x in head["craft"]] == ["Emitter", "Bus Bars"] and head["craft"][0]["tiers"][0] == ["商店标准", 500]
     assert head["craft"][1]["tiers"][-1] == ["完美", 1000] and head["craft"][1]["mat_zh"] == "铜"
     # 换回商店买的：功率回到原样
-    services.set_mining_gear("prospector", {"heads": [["helix_i", []]], "crew": 1, "craft": [None]})
+    t_mining.set_mining_gear("prospector", {"heads": [["helix_i", []]], "crew": 1, "craft": [None]})
     assert laser.loadout()[0].max_power() == 3900
 
 
@@ -892,8 +892,8 @@ def test_laser_power_naming_on_craft_page():
     assert [p["name"] for x in eff for p in x["props"]] == ["激光功率", "激光功率"] and eff[0]["material"] == "萨达瑞晶"
     assert C.laser_total(bp, {1: 971, 2: 958})["text"].startswith("激光功率合计 +37.2%")
     assert C.laser_total(bp, {1: 971})["mult"] is None
-    from sc_mining.app import services                               # 目标页「品质影响」：点「计算」也带合计
-    r = services.craft_effect("Helix II Mining Laser", {"1": "971", "2": "958"})
+    from sc_mining.tasks import goals as t_goals                               # 目标页「品质影响」：点「计算」也带合计
+    r = t_goals.craft_effect("Helix II Mining Laser", {"1": "971", "2": "958"})
     assert r["total"]["text"].startswith("激光功率合计 +37.2%") and len(r["slots"]) == 2
     # 武器的冲击力照旧叫冲击力，也没有合计
     gun = next(b for b in C.blueprints() if b["t"] == "weapons" and any(m[0] == "Impact Force" for _, _, mods in b["slots"] for m in mods))
@@ -944,7 +944,7 @@ def test_craft_stats_and_detail_structure(monkeypatch, tmp_path):
     结构化的材料槽位、去哪挖、蓝图来源带掉率。成品基础值来自 data/item_stats.json（star-citizen.wiki 解包数据，按 uuid 对上）"""
     import json
     from sc_mining import crafting as C, itemstats, paths
-    from sc_mining.app import services as S
+    from sc_mining.tasks import goals as t_goals
     bp = next(b for b in C.blueprints() if b["n"] == "Helix II Mining Laser")
     st = C.stats(bp, {1: 947, 2: 958})
     lp = next(p for p in st["props"] if p["name"] == "激光功率")
@@ -965,11 +965,11 @@ def test_craft_stats_and_detail_structure(monkeypatch, tmp_path):
         assert by["激光功率"]["base"] == 4930 and abs(by["激光功率"]["now"] - 4930 * 1.362) < 0.01
         h = C.header(bp)
         assert h["tags"] == ["S2", "A 级"] and h["kind"] == "采矿激光器" and h["stats_version"] == "4.10.2-test"
-        d = S.craft_detail("Helix II Mining Laser")
+        d = t_goals.craft_detail("Helix II Mining Laser")
         assert d["head"]["tags"] == ["S2", "A 级"] and [s["slot"] for s in d["slots"]] == ["框架", "发射器", "汇流排"]
         assert d["slots"][1]["mats"][0] == {"kind": "i", "en": "Sadaryx", "zh": "萨达瑞晶", "qty": 13, "unit": "个", "minq": 1}
         assert d["slots"][2]["curves"][0]["name"] == "激光功率" and d["mine"][0]["zh"] == "铁" and d["sources"][0]["chance"] == 1
-        r = S.craft_stats("Helix II Mining Laser", {"1": "947", "2": "958"})
+        r = t_goals.craft_stats("Helix II Mining Laser", {"1": "947", "2": "958"})
         assert r["stats"]["props"][1]["now"] and len(r["slots"]) == 2
         assert C.header(next(b for b in C.blueprints() if b["t"] == "armour"))["tags"][:1] in ([], ["S0"], ["S1"], ["S2"], ["S3"])
     finally:
@@ -1015,14 +1015,14 @@ def test_gear_labels_bilingual():
 def test_gear_view_has_cards_and_summary(monkeypatch, tmp_path):
     """配置区：每个矿头装上模组后的读数、汇总（总功率、可破碎质量）、预设；改配置后汇总跟着变"""
     from sc_mining import settings
-    from sc_mining.app import services as S
+    from sc_mining.tasks import mining as t_mining
     from sc_mining.data import AUTHOR_MOLE
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
-    g = S.set_mining_gear(ship="mole")
+    g = t_mining.set_mining_gear(ship="mole")
     mole = next(x for x in g["ships"] if x["key"] == "mole")
     assert mole["is_default"] and len(mole["cards"]) == 3 and {p["key"] for p in mole["presets"]} == {"factory", "author"}
     base = mole["summary"]
-    g = S.set_mining_gear(ship="mole", loadout=AUTHOR_MOLE)
+    g = t_mining.set_mining_gear(ship="mole", loadout=AUTHOR_MOLE)
     mole = next(x for x in g["ships"] if x["key"] == "mole")
     c0 = mole["cards"][0]
     assert c0["power"] == 7318 and c0["stats"]["power"] == 48 and c0["stats"]["res"] == -30   # Helix II + Rieger-C3 ×2 + Focus III

@@ -2,7 +2,7 @@
 
 把原来 services.py 建的引擎实例、services.start_background() 的内容、
 server.main() 结尾收尾的几步原样搬到这里，逻辑没改。
-services.py 里照旧保留原名：_live = EngineManager.get_instance().live ……
+阶段 4 删了 services.py：要用引擎的地方直接 EngineManager.get_instance().live / .nav / .pos ……
 """
 import threading
 
@@ -40,7 +40,7 @@ class EngineManager:
         """打开天枢主窗口时启动后台服务：热键监听、定时查更新、搜索索引预热、未发送反馈补发、原矿扫描续跑
         （原来的 services.start_background()，原样搬来）"""
         from ...core import settings
-        from ...tasks import system as _sys    # _online / _online_loop / _fb_dir 在 tasks.system（测试的 patch_services 也换这里）
+        from ...tasks import system as _sys    # _online / _online_loop / _fb_dir 在 tasks.system（测试直接换这里的）
         if not settings.load().get("agreed"):
             return
         self.hover.start()

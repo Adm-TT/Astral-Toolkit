@@ -1,18 +1,28 @@
 """库存盘点读屏（_Count）
 
-2026-10-28 从 app/services.py 原样剪出来（逻辑没改）。用到 services 里的函数 / 变量写成 _S().xxx：
-运行时才取，避免互相 import；services 里仍保留实例（_nav、_live …）。
+2026-10-28 从 app/services.py 原样剪出来（逻辑没改）。2026-10-30 重构阶段 4 删了 services.py，
+用到的函数 / 变量直接到它们所在的模块取，运行时才取，避免互相 import：
+_T("mining").xxx = tasks/mining.py，_H().xxx = app/hud_state.py，_E().live / .nav / .pos / .cam_filter = 引擎实例。
 用到：WIN, _count_review, _game_front, _hud, _note_hud, _place_of, _read_item, qty_text, settings_key, trade
 """
+import importlib
+import sys
 import threading
 import time
 
 from .. import bus
 
+WIN = sys.platform == "win32"
 
-def _S():
-    from .. import services
-    return services
+
+def _T(name):
+    """sc_mining.tasks 里的模块（运行时才取，避免互相 import）"""
+    return importlib.import_module(f"sc_mining.tasks.{name}")
+
+
+def _H():
+    from .. import hud_state
+    return hud_state
 
 
 class _Count:
@@ -31,13 +41,13 @@ class _Count:
         return bool(self.thread and self.thread.is_alive())
 
     def start(self):
-        if not _S().WIN or self.running():
+        if not WIN or self.running():
             return {"running": self.running()}
         from ...crafting import stockplaces as SP
         here = SP.current_place()
-        place = here["label"] if here else _S()._place_of(_S().trade().db.get("last_location", "") or "")[0]
+        place = here["label"] if here else _T("stock")._place_of(_T("trade").trade().db.get("last_location", "") or "")[0]
         if not place:
-            _S()._note_hud("盘点", "盘点：当前位置未知｜先在游戏中打开一次库存")
+            _H()._note_hud("盘点", "盘点：当前位置未知｜先在游戏中打开一次库存")
             return {"error": "当前位置未知：先在游戏中打开一次库存"}
         self.place, self.items, self.cells, self.review = place, {}, set(), None
         self.ev = ev = threading.Event()
@@ -60,8 +70,8 @@ class _Count:
         lines = [f"盘点｜{self.place}"]
         for v in list(self.items.values())[-8:]:
             q = "" if v["quality"] is None else f" Q{v['quality']}"
-            lines.append(f"{v['zh'] or v['en']}{q} ×{v['cells']}  {_S().qty_text(v['qty'], v['unit'])}")
-        _S()._hud().set("盘点", "\n".join(lines))
+            lines.append(f"{v['zh'] or v['en']}{q} ×{v['cells']}  {_T("hover").qty_text(v['qty'], v['unit'])}")
+        _H()._hud().set("盘点", "\n".join(lines))
 
     def _run(self, ev):
         import ctypes
@@ -73,7 +83,7 @@ class _Count:
         pt = wintypes.POINT()
         try:
             while not ev.is_set():
-                if _S()._game_front() is False:              # 切出游戏：不认，也不算闲着
+                if _T("mining")._game_front() is False:              # 切出游戏：不认，也不算闲着
                     last_hit += 0.25
                     ev.wait(0.25)
                     continue
@@ -94,7 +104,7 @@ class _Count:
                 img = grab()
                 cursor = C._cursor_on_image(img)
                 try:
-                    r = _S()._read_item(img, cursor)
+                    r = _T("count")._read_item(img, cursor)
                 except Exception:
                     r = None
                 tries += 1
@@ -120,16 +130,16 @@ class _Count:
             self._finish()
 
     def _finish(self):
-        _S()._hud().clear("盘点")
+        _H()._hud().clear("盘点")
         try:
-            self.review = _S()._count_review(self.place, self.items) if self.items else None
+            self.review = _T("count")._count_review(self.place, self.items) if self.items else None
         except Exception as e:
             self.review = None
             bus.publish("log", {"task": "count", "line": f"盘点对账失败：{e}"})
-        k = _S().settings_key("count_key", "F6")
+        k = _T("navigation").settings_key("count_key", "F6")
         if self.review:
             n = len([r for r in self.review["rows"] if r["delta"]]) + len(self.review["missing"])
-            _S()._note_hud("盘点", f"盘点结束｜{n} 处不一致，需在 AT 中确认" if n else "盘点结束｜数量一致", 8)
+            _H()._note_hud("盘点", f"盘点结束｜{n} 处不一致，需在 AT 中确认" if n else "盘点结束｜数量一致", 8)
         else:
-            _S()._note_hud("盘点", f"盘点结束｜未识别到物品｜按 {k} 重新开始", 8)
+            _H()._note_hud("盘点", f"盘点结束｜未识别到物品｜按 {k} 重新开始", 8)
         bus.publish("count", {"running": False, "review": self.review})

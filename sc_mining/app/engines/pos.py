@@ -1,13 +1,18 @@
 """实时位置读取（右上角调试信息，_Pos）和日志位置跟踪（_LogWatch）
 
-2026-10-28 从 app/services.py 原样剪出来（逻辑没改）。用到 services 里的函数 / 变量写成 _S().xxx：
-运行时才取，避免互相 import；services 里仍保留实例（_nav、_live …）。
+2026-10-28 从 app/services.py 原样剪出来（逻辑没改）。2026-10-30 重构阶段 4 删了 services.py，
+用到的函数 / 变量直接到它们所在的模块取，运行时才取，避免互相 import：
+_T("mining").xxx = tasks/mining.py，_H().xxx = app/hud_state.py，_E().live / .nav / .pos / .cam_filter = 引擎实例。
 用到：WIN, _nav, status
 """
+import importlib
+import sys
 import threading
 import time
 
 from .. import bus
+
+WIN = sys.platform == "win32"
 
 
 def _zone_base(info):
@@ -16,9 +21,15 @@ def _zone_base(info):
     return re.sub(r"[\s_]+[0-9A-Za-z]*\d[0-9A-Za-z]*$", "", ((info or {}).get("inner_zone") or "").strip())
 
 
-def _S():
-    from .. import services
-    return services
+def _T(name):
+    """sc_mining.tasks 里的模块（运行时才取，避免互相 import）"""
+    return importlib.import_module(f"sc_mining.tasks.{name}")
+
+
+def _E():
+    """后台引擎（EngineManager 单例：.live、.nav、.pos、.cam_filter …）"""
+    from .manager import EngineManager
+    return EngineManager.get_instance()
 
 
 class _Pos:
@@ -42,7 +53,7 @@ class _Pos:
         self._pub_at = 0.0
 
     def start(self):
-        if _S().WIN and not self.thread:
+        if WIN and not self.thread:
             self.thread = threading.Thread(target=self._run, daemon=True, name="displayinfo")
             self.thread.start()
 
@@ -57,7 +68,7 @@ class _Pos:
         now = time.time()
         if force or now - self._pub_at >= 1.0:          # 坐标每秒变好几次，窗口一秒刷一次就够；地点变了马上刷
             self._pub_at = now
-            bus.publish("status", _S().status())
+            bus.publish("status", _T("system").status())
 
     def _run(self):
         from ...navigation import navigate as n, gridtext
@@ -74,7 +85,7 @@ class _Pos:
                 ready = gridtext.ready(game_area()["height"])
             except Exception:
                 pass
-            navigating = bool(_S()._nav.target) or time.time() < self.want_until
+            navigating = bool(_E().nav.target) or time.time() < self.want_until
             if not fg:
                 time.sleep(0.5)
                 continue
@@ -123,7 +134,7 @@ class _Pos:
                         # 顺便记进 last_position.json；星球局部坐标用游戏给的，比推算准
                         here = n.locate(g, when=info.get("t"), local=info.get("local"), zone=info.get("zone"),
                                         local_ok=info.get("local_ok"))
-                        _S()._nav.last_here = here
+                        _E().nav.last_here = here
                         self._publish()
             except Exception as e:
                 bus.publish("log", {"task": "displayinfo", "line": f"右上角识别失败：{e}"})
@@ -155,7 +166,7 @@ class _LogWatch:
                 now = (hit[0], hit[1]) if hit else None
                 if now != self.last:
                     self.last = now
-                    bus.publish("status", _S().status())
+                    bus.publish("status", _T("system").status())
             except Exception:
                 pass
             time.sleep(self.EVERY)

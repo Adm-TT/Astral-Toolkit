@@ -1,5 +1,4 @@
 """在线更新：读版本说明、核对下载的安装包（不联网：换掉 _open）"""
-from tests import patch_services
 import hashlib
 import io
 import json
@@ -327,19 +326,19 @@ def test_vpk_falls_back_to_cos(monkeypatch):
 def test_vpk_check_fail_not_up_to_date(monkeypatch):
     """Velopack 版：香港和国内镜像都连不上时「检查更新」不说「已是最新」；latest.json 有新版本就提示手动下载（审查 2026-10-29）"""
     from sc_mining import vpk
-    from sc_mining.app import services as S
+    from sc_mining.tasks import system as t_sys
 
     def boom(rollback=False):
         raise RuntimeError("AT 服务器和国内镜像都无法连接：timed out")
     monkeypatch.setattr(vpk, "installed", lambda: True)
     monkeypatch.setattr(vpk, "check", boom)
-    patch_services(monkeypatch, "_online_info", lambda force=False: {"version": "99.0.0", "date": "", "notes": [], "size": 1, "source": "Gitee"})
-    r = S.upgrade_check(online=True)
+    monkeypatch.setattr(t_sys, "_online_info", lambda force=False: {"version": "99.0.0", "date": "", "notes": [], "size": 1, "source": "Gitee"})
+    r = t_sys.upgrade_check(online=True)
     assert r["online"] is None and r["online_error"] == "无法连接更新服务器" and "AT 99.0.0" in r["online_hint"]
     monkeypatch.setattr(vpk, "check", lambda rollback=False: (None, "", "国内镜像"))       # 连得上、没有新版本：照常
-    r = S.upgrade_check(online=True)
+    r = t_sys.upgrade_check(online=True)
     assert r["online"] is None and r["online_error"] == "" and r["online_hint"] == ""
-    S._online.pop("vpk_fail", None)
+    t_sys._online.pop("vpk_fail", None)
 
 
 def test_killswitch_old_mirror_cannot_undo(monkeypatch, tmp_path):

@@ -1,7 +1,7 @@
 """基础 HUD 与按键状态（从 services.py 原样搬来，2026-10-30 重构阶段 0，逻辑没改）
 
 悬浮窗短提示、物品分区自动收起、功能远程关闭提示、读鼠标位置和按键。
-services.py 里用 from .hud_state import … 保留原名，tasks/引擎照旧可以用 services._note_hud 这些名字。
+tasks 和引擎直接用这里的（阶段 4 删了 services.py，原来经 services 转的 _note_hud 等名字都在这里）。
 """
 import math
 import threading

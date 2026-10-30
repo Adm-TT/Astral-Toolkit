@@ -120,7 +120,7 @@ def _download(info, dest, progress):
     raise ValueError("；".join(errs))
 
 
-CACHE_HOOKS = []          # 别的模块（services）登记自己的清缓存函数：data_pack.CACHE_HOOKS.append(fn)
+CACHE_HOOKS = []          # 别的模块（tasks.goals、tasks.navigation，import 时）登记自己的清缓存函数：data_pack.CACHE_HOOKS.append(fn)
 
 
 def clear_caches():

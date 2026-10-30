@@ -1,5 +1,4 @@
 """空间站站内导航（2026-10-28）：右上角最里层 Zone 名、按区域坐电梯分段。用假数据，不读 data\\ 里的大文件"""
-from tests import patch_services
 import json
 
 
@@ -204,7 +203,11 @@ def test_nav_engine_station_branch(monkeypatch, tmp_path):
     import time
     import types
     n, ps = _station(tmp_path, monkeypatch)
-    from sc_mining.app import services, bus
+    from sc_mining.tasks import mining as t_mining, navigation as t_nav, system as t_sys
+    from sc_mining.app.engines.manager import EngineManager
+    em = EngineManager.get_instance()
+    from sc_mining.app import hud_state
+    from sc_mining.app import bus
     from sc_mining.app.engines import nav as nav_mod
     tgt = ps["rr_x"]
     monkeypatch.setattr(n, "load", lambda: {"bodies": {}, "pois": [], "points": []})
@@ -219,14 +222,16 @@ def test_nav_engine_station_branch(monkeypatch, tmp_path):
 
         def clear(self, k):
             pass
-    patch_services(monkeypatch, "_hud", lambda: Hud())
-    patch_services(monkeypatch, "_marker_tick", lambda *a, **k: None)
+    _v = lambda: Hud()
+    for _m in (t_mining, t_nav, t_sys, hud_state):
+        monkeypatch.setattr(_m, "_hud", _v)
+    monkeypatch.setattr(t_mining, "_marker_tick", lambda *a, **k: None)
     monkeypatch.setattr(bus, "publish", lambda topic, data: pubs.append((topic, data)))
     now = time.time()
     g = (600.0, 0.5, 0.0)
     fake = types.SimpleNamespace(current=(now, g, {"inner_zone": "Hangar SmallFront RestStop 1", "t": now}),
                                  latest=(0.0, None, None), read_at=now, reader=types.SimpleNamespace(active=True))
-    patch_services(monkeypatch, "_pos", fake)
+    monkeypatch.setattr(em, "pos", fake)
     nv = nav_mod._Nav()
     nv.target, nv.session = tgt, 1
     ev = threading.Event()

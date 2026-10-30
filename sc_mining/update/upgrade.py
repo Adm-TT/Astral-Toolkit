@@ -30,7 +30,7 @@ SKIP_DATA = {"scmdb", "loc", "unpack"}        # 原始大文件，更新数据�
 SKIP_DATA_FILES = {"loot_details.zip"}   # 掉落明细整包（约 25 MB，数据包里下载；升级不动它，备份也不带）
 PROGRAM_EXT = (".py", ".js", ".css", ".html")   # 这些算程序文件：装完必须和安装包一字不差（老大审查 2026-10-28 第 3 条）
 REQUIRED = ("sc_mining/__init__.py", "sc_mining/run.py",
-            "sc_mining/app/server.py", "sc_mining/app/services.py")   # 少一个 AT 就起不来：装包前后都要有
+            "sc_mining/app/server.py")      # 少一个 AT 就起不来：装包前后都要有（2026-10-30 重构阶段 4 删了 app/services.py，从这里去掉）
 
 
 def _is_program(rel):

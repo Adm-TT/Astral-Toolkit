@@ -53,7 +53,7 @@ def run(fn):
 def one(label, p):
     from PIL import Image
     from sc_mining import screen, signals, displayinfo, cockpit
-    from sc_mining.app import services as S
+    from sc_mining.tasks import mining as S, hover as _H
     img = Image.open(p).convert("RGB")
     W, H = img.size
     r = {"src": label, "file": p.name, "size": f"{W}x{H}", "err": {}, "ms": {}}
@@ -96,7 +96,7 @@ def one(label, p):
             r["err"]["驾驶位"] = e
         elif v and v[0]:                              # flight_hud 返回 (看没看到, 认到的字)
             r["cockpit"] = True
-    v, e, dt = run(lambda: S._read_tooltip(img, (W // 2, H // 2)))
+    v, e, dt = run(lambda: _H._read_tooltip(img, (W // 2, H // 2)))
     r["ms"]["物品"] = round(dt * 1000)
     if e:
         r["err"]["物品"] = e

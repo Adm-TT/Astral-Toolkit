@@ -57,7 +57,7 @@ with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
         print("含 userdata:", any("/userdata/" in x for x in names), " 含 .venv:", any("/.venv/" in x for x in names),
               " 含 tests:", any("/tests/" in x for x in names), " 含 _claude:", any("_claude" in x for x in names))
         app = tmp / name
-        r = subprocess.run([sys.executable, "-c", "import sc_mining.app.server, sc_mining.app.services, sc_mining.run; "
+        r = subprocess.run([sys.executable, "-c", "import sc_mining.app.server, sc_mining.app.api.router, sc_mining.run; "
                             "from sc_mining import settings; print('agreed', settings.load()['agreed'])"],
                            cwd=app, capture_output=True, text=True, encoding="utf-8", errors="replace")
         print("解压后导入:", r.returncode, r.stdout.strip(), r.stderr.strip()[-500:])

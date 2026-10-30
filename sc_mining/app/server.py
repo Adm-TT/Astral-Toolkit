@@ -16,7 +16,10 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import bus, services
+from . import bus
+# 2026-10-30 阶段 4：services.py 删了。import tasks 这一层会把全部任务模块加载好（tasks/__init__.py），
+# tasks.goals / tasks.navigation 在 import 时登记数据包清缓存函数，和原来 import services 时顺带做的一样早
+from ..tasks import system as _sys_task
 
 WEB = Path(__file__).resolve().parent / "web"
 mimetypes.add_type("font/woff2", ".woff2")            # 1.6.59：D-DIN 字体（Windows 自带的类型表里可能没有）
@@ -76,7 +79,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, f.read_bytes(), ctype)
 
     def _upload_raw(self, n):
-        """安装包整个文件流式写盘；真正存到哪、怎么校验、怎么交给升级任务都在 services.upgrade_receive（新旧接口共用）"""
+        """安装包整个文件流式写盘；真正存到哪、怎么校验、怎么交给升级任务都在 tasks.system.upgrade_receive（新旧接口共用）"""
         from urllib.parse import unquote
         allowed = self._allowed()
         fname = unquote(self.headers.get("X-File-Name") or "")
@@ -99,7 +102,7 @@ class Handler(BaseHTTPRequestHandler):
                 f.write(chunk)
 
         try:
-            result = services.upgrade_receive(fname, write)
+            result = _sys_task.upgrade_receive(fname, write)
         except Exception as e:
             self.close_connection = True
             return self._send(200, json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False))
@@ -442,7 +445,7 @@ def main(open_ui=True, port=0, restart=False):
     threading.Thread(target=server.serve_forever, daemon=True, name="http").start()
     from .overlay import hud
     hud()
-    services.start_background()
+    _sys_task.start_background()                    # = EngineManager.get_instance().start_all()
     print(f"AT 已启动（端口 {server.server_address[1]}）")
     try:
         from ..core import paths

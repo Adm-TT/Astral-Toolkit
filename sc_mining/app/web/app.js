@@ -194,7 +194,7 @@ function menu(anchor, items) {
   document.addEventListener("scroll", hide, true);
 })();
 
-// 游戏里的热键（和 services.HOTKEYS 一样）：[设置名, 默认键, 名字, 说明]
+// 游戏里的热键（和 tasks/system.py 的 HOTKEYS 一样）：[设置名, 默认键, 名字, 说明]
 const HOTKEYS = [["live_key", "F5", "采矿助手开关", "开启后 120 秒未检测到扫描面板和信号自动关闭"], ["count_key", "F6", "盘点", "开始 / 结束盘点"],
   ["mark_key", "", "记录路标", "自动输入 /showlocation，将当前位置保存为路标"], ["trade_capture_key", "F8", "物品识别", "鼠标停在物品上时按下；鼠标移开自动收起，按住 Ctrl 不收；按住 Shift 再按钉住"],
   ["fix_key", "", "一键定位", "手动定位时自动输入 /showlocation"], ["report_key", "F10", "问题反馈", "保存当前截图和识别结果"],
