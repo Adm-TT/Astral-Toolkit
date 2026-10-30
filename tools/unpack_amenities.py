@@ -62,6 +62,14 @@ CITY = {"nyx_levski": "Levski", "stanton1_lorville": "Lorville", "stanton2_oriso
         "stanton4_newbabbage": "NewBabbage"}
 
 
+def star_ids():
+    """星图里各个点的编号（data/starmap.json 的 points[].i）"""
+    if not hasattr(star_ids, "v"):
+        sm = json.loads((ROOT / "data" / "starmap.json").read_text(encoding="utf-8"))
+        star_ids.v = {q["i"] for q in sm.get("points") or [] if q.get("i")}
+    return star_ids.v
+
+
 def ref_of(rec, name):
     r = rec.lower()
     if r in CITY:
@@ -71,7 +79,9 @@ def ref_of(rec, name):
         return {"point": f"{LAG[m[1]]} L{m[2]}"}
     m = re.fullmatch(r"rr_p(\d)_l(\d)", r)
     if m:
-        return {"point": f"PYR{m[1]} L{m[2]}"}
+        # 派罗拉格朗日点上的站离拉格朗日点 1–3 万 km：星图里有站本身（rs_ext_pyroN_lM）就按站导航（审查 2026-10-30）
+        sid = f"rs_ext_pyro{m[1]}_l{m[2]}"
+        return {"point": f"PYR{m[1]} L{m[2]}", **({"point_id": sid} if sid in star_ids() else {})}
     m = re.fullmatch(r"rr_jp_(\w+)", r)
     if m and m[1] in JUMP:
         return {"point": JUMP[m[1]], "point_id": GATEWAY[m[1]]}
