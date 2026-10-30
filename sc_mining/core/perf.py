@@ -223,6 +223,8 @@ def rapidocr():
     """全程序共用的一个 RapidOCR 实例（按用户设置在主进程直接加载 DirectML 或 CPU）。
     切显卡 / CPU 只换它里面的引擎，这个对象本身不换：各处缓存的引用一直有效"""
     global _engine, _last_error
+    if _engine is not None:                   # 建好以后不会再设回 None（切换只换里面的引擎）：不用排队等锁。
+        return _engine                        # 不然切显卡 / CPU 时等着正在跑的识别，每秒的状态查询（ocr_device）也跟着卡住
     with _lock:
         if _engine is None:
             eng, gpu, err = _new_engine(USE_GPU and not _cpu_fallback and is_gpu_preferred() and gpu_available())

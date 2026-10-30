@@ -202,6 +202,36 @@ def test_cpu_engine_cannot_load_raises_gpu_error(monkeypatch):
     assert eng.gpu is True and eng.eng is made[0] and perf._cpu_fallback is False
 
 
+def test_ocr_device_not_blocked_while_switching(monkeypatch):
+    """切显卡 / CPU 时要等正在跑的识别（这里慢 1 秒）跑完才换；这段时间里问「在哪算」不能跟着卡住"""
+    import threading
+    import time as _time
+    import numpy as np
+    made = _fake_engines(monkeypatch)
+    eng = perf.rapidocr()
+    started = threading.Event()
+
+    class Slow(_FakeEng):
+        def __call__(self, *a, **k):
+            started.set()
+            _time.sleep(1.0)
+            return _FakeResult()
+    eng.eng = Slow(True)
+    t1 = threading.Thread(target=eng, args=(np.zeros((8, 8, 3)),))
+    t1.start()
+    started.wait(2)
+    t2 = threading.Thread(target=perf.set_ocr_device, args=("cpu",))
+    t2.start()
+    _time.sleep(0.1)                                      # 切换已经拿着 perf._lock、在等识别跑完
+    t0 = _time.perf_counter()
+    perf.ocr_device()
+    took = _time.perf_counter() - t0
+    t1.join(3)
+    t2.join(3)
+    assert took < 0.3, took
+    assert len(made) == 2 and perf.rapidocr().eng is made[1]
+
+
 def test_cpu_error_not_retried(monkeypatch):
     import numpy as np
     made = _fake_engines(monkeypatch)
