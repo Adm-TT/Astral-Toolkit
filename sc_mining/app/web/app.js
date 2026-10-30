@@ -352,7 +352,7 @@ function renderTop() {
   const b = $("#banner");
   if (s.win && s.game_elevated && !s.admin) {
     b.hidden = false;
-    b.textContent = "游戏以管理员身份运行而 AT 没有，F8、自动跑和防挂机在游戏中无法使用。关闭 AT 后重新打开「" + (s.frozen ? "AT" : "Dubhe.exe") + "」，在 Windows 确认框中点击「是」。";
+    b.textContent = "游戏以管理员身份运行而 AT 没有，F8 和自动跑在游戏中无法使用。关闭 AT 后重新打开「" + (s.frozen ? "AT" : "Dubhe.exe") + "」，在 Windows 确认框中点击「是」。";
   } else b.hidden = true;
   $("#pip-live").className = "pip" + (s.live ? (s.live_paused ? " new" : " on") : "");
   $("#pip-nav").className = "pip" + (s.nav ? " on" : "");
@@ -2617,7 +2617,7 @@ PAGES.settings = () => {
         ${s.frozen ? "" : `<label class="btn" style="cursor:pointer">选择安装包…<input type="file" id="upg-file" accept=".zip" hidden></label>`}</div>
       <div class="set" style="border:0;padding:12px 0 0"><div>启动时检查更新<p>只读取网上的版本信息，下载需点击「下载并升级」</p></div><button class="switch ${c.update_online !== false ? "on" : ""}" id="upd-sw" aria-label="启动时检查更新"></button></div>
       ${s.frozen && !s.vpk ? "" : `<h3 style="margin:16px 0 6px">回滚到旧版本</h3>
-      <p class="muted" style="margin:0 0 8px">${s.vpk ? "新版本出现问题时，可从 AT 服务器装回上一个版本，设置和数据不受影响。" : `新版本出现问题时，可回滚到上一个版本，设置和数据不受影响。每次升级前自动备份当前版本
+      <p class="muted" style="margin:0 0 8px">${s.vpk ? "新版本出现问题时，可从更新服务器装回上一个版本，设置和数据不受影响。" : `新版本出现问题时，可回滚到上一个版本，设置和数据不受影响。每次升级前自动备份当前版本
         （「下载」等文件夹中的旧安装包也列在此处）。`}</p>
       <div id="upg-older" class="muted">查找中…</div>`}
       <div id="upg-prog" style="margin-top:12px" hidden><div class="row" style="justify-content:space-between;margin-bottom:6px">
@@ -2647,12 +2647,10 @@ PAGES.settings = () => {
       <button class="btn" id="export-logs">导出日志</button></div></div>
     <h2>后台运行</h2>
     <div class="panel"><div class="set" style="border:0;padding:0"><div>关闭窗口后，AT 在屏幕右下角的托盘中继续运行
-      <p>F8 识别、自动跑、防挂机和悬浮窗正常可用。双击托盘图标重新打开窗口；右键图标可重启或退出。</p></div>
+      <p>F8 识别、自动跑和悬浮窗正常可用。双击托盘图标重新打开窗口；右键图标可重启或退出。</p></div>
       <button class="btn stop" id="quit-app">退出 AT</button></div></div>
     <h2>游戏辅助</h2>
     <div class="panel">
-      <div class="set"><div>防挂机<p>一段时间无操作时按两次 F12（开关聊天框）</p></div><button class="switch ${c.anti_afk ? "on" : ""}" data-set="anti_afk" aria-label="防挂机"></button></div>
-      <div class="set"><div>挂机判定时间<p>单位秒，另加 1–30 秒随机；游戏约 5 分钟无操作会断开连接，最大 240</p></div><input class="input" id="afk" value="${c.afk_seconds || 200}" size="5" inputmode="numeric"></div>
       <div class="set"><div>双击 W 自动跑<p>再按 W 或 S 停止；驾驶飞船或载具时不触发</p></div><button class="switch ${c.autorun ? "on" : ""}" data-set="autorun" aria-label="双击 W 自动跑"></button></div>
       <div class="set" style="border:0;padding-bottom:0"><div>自动跑时冲刺<p>同时按住 Shift</p></div><button class="switch ${c.autorun_sprint ? "on" : ""}" data-set="autorun_sprint" aria-label="自动跑时冲刺"></button></div>
     </div>
@@ -2731,7 +2729,7 @@ PAGES.settings = () => {
     el.innerHTML = onRow + (r.found.length ? r.found.slice(0, 3).map((f, i) => `<div class="row" style="justify-content:space-between;margin-bottom:6px">
         <span><b>AT ${esc(f.version)}</b> <span class="faint">${esc(f.where)}｜${esc(f.at)}</span></span>
         <button class="btn ${i === 0 && !on ? "primary" : ""} upg-go" data-p="${esc(f.path)}">升级到 ${esc(f.version)}</button></div>`).join("")
-      : on ? "" : `<span class="faint">${r.online_error ? "无法连接更新服务器，未找到更新的安装包" : "当前已是最新版本"}</span>`);
+      : on ? "" : `<span class="faint">${r.online_hint ? esc(r.online_hint) : r.online_error ? "无法连接更新服务器，未找到更新的安装包" : "当前已是最新版本"}</span>`);
     const old = $("#upg-older");
     if (old) old.innerHTML = (r.older || []).length ? r.older.map((f) => `<div class="row" style="justify-content:space-between;margin-bottom:6px">
         <span><b>AT ${esc(f.version)}</b> ${f.stable ? `<span class="tag qt">稳定版</span>` : ""} <span class="faint">${esc(f.where)}｜${esc(f.at)}</span></span>
@@ -2765,7 +2763,7 @@ PAGES.settings = () => {
   $("#upg").addEventListener("click", async (e) => {
     const back = e.target.closest(".upg-back");
     if (back) {
-      const md = openModal({ title: `${back.dataset.a} AT ${back.dataset.v}`, body: `<p style="margin:0">${back.dataset.p === "vpk:prev" ? "从 AT 服务器下载该版本，安装完成后 AT 自动重启。设置和记录不受影响。" : "先备份当前版本（备份失败则不做任何改动），安装完成后 AT 自动重启。"}</p>`,
+      const md = openModal({ title: `${back.dataset.a} AT ${back.dataset.v}`, body: `<p style="margin:0">${back.dataset.p === "vpk:prev" ? "从更新服务器下载该版本，安装完成后 AT 自动重启。设置和记录不受影响。" : "先备份当前版本（备份失败则不做任何改动），安装完成后 AT 自动重启。"}</p>`,
         foot: `<button type="button" class="btn" data-close>取消</button><button type="button" class="btn primary" id="rb-ok">${esc(back.dataset.a)}</button>` });
       md.q("#rb-ok").onclick = async () => {
         md.close(); back.disabled = true;
@@ -2802,11 +2800,6 @@ PAGES.settings = () => {
   $("#admin-sw").onclick = async () => {
     state.status.settings = await api("set_settings", { admin: c.admin === false });
     renderPage();
-  };
-  $("#afk").onchange = async () => {
-    const v = +$("#afk").value;
-    if (v >= 60 && v <= 240) { state.status.settings = await api("set_settings", { afk_seconds: v }); toast("已保存"); }
-    else toast("需在 60–240 秒之间");
   };
   // 1.6.60：热键不用下拉框选，点一下、按一下要用的键（F1–F12；Esc 取消）。1.6.70：所有热键都能改；默认不设的按 Delete 清掉
   document.querySelectorAll("[data-hk]").forEach((b) => (b.onclick = () => {

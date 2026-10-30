@@ -845,31 +845,19 @@ def test_bearing_text_and_deadband():
     assert st(10.0) == 10.0 and st(11.5) == 10.0 and st(358.9) == 358.9 and st(0.5) == 358.9 and st(1.2) == 1.2
 
 
-def test_afk_interval_migrated_and_capped(monkeypatch, tmp_path):
-    """实测游戏约 5 分钟踢人：超过 240 秒的旧设置（690 默认、你设的 300）改回默认 200；旧默认 120 改成 200；别的不动"""
+def test_anti_afk_removed(monkeypatch, tmp_path):
+    """2026-10-30 老大定删掉防挂机：老设置文件里开着防挂机，读出来也没有这几项；只开防挂机不再启动辅助进程"""
     import json
-    from sc_mining import settings
+    from sc_mining import settings, helpers
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
-    for old, new in ((690, 200), (300, 200), (200, 200), (120, 200), (90, 90)):     # 1.6.70：默认 200，旧默认 120 也改成 200
-        settings.FILE.write_text(json.dumps({"afk_seconds": old, "afk_v2": True}), encoding="utf-8")
-        assert settings.load()["afk_seconds"] == new
-        assert settings.load()["afk_seconds"] == new           # 只改一次，之后不再动
-    settings.FILE.write_text(json.dumps({"afk_seconds": 500, "afk_v3": True}), encoding="utf-8")
-    from sc_mining import helpers
-    a = helpers.AntiAfk(settings.load(), None)
-    assert all(a._deadline() <= settings.AFK_MAX + 30 for _ in range(20))   # 就算手动改得很大也有上限
-
-
-def test_afk_ignores_key_stuck_for_long(monkeypatch):
-    """一直「按着」的键（卡住的、摇杆软件模拟的）超过 15 秒就不算，防挂机不会永远等下去"""
-    import time
-    from sc_mining import helpers, showloc
-    a = helpers.AntiAfk({"afk_seconds": 120}, None)
-    a.since = {}
-    monkeypatch.setattr(showloc, "held_keys", lambda: [0x91])
-    assert not a._idle()                                     # 刚按下：算你在按
-    a.since[0x91] = time.time() - 20
-    assert a._idle()                                         # 按了 20 秒还没松：当成卡住的键
+    settings.FILE.write_text(json.dumps({"agreed": True, "keys_v5": True, "anti_afk": True, "afk_seconds": 500, "afk_v3": True}), encoding="utf-8")
+    c = settings.load()
+    assert not any(k in c for k in ("anti_afk", "afk_seconds", "afk_v3", "afk_v4"))
+    assert "anti_afk" not in json.loads(settings.FILE.read_text(encoding="utf-8"))   # 文件里也清掉了（回滚 1.1.0 不会自动开）
+    assert not hasattr(helpers, "AntiAfk")
+    monkeypatch.setattr(helpers.S, "WIN", True)
+    monkeypatch.setattr(helpers, "stop_helpers", lambda: None)
+    assert helpers.start() is False                       # 自动跑没开：不起辅助进程
 
 
 def test_nav_uses_display_info_waypoints_use_showlocation():

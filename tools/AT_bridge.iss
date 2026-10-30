@@ -49,7 +49,8 @@ Name: "chs"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 [Code]
 const
   SetupUrl1 = 'https://dl.astral-trade.com/releases/v{#MyVersion}/AT-win-Setup.exe';
-  SetupUrl2 = 'https://github.com/Adm-TT/Astral-Toolkit/releases/download/v{#MyVersion}/AT-win-Setup.exe';
+  SetupUrl2 = 'https://at-dl-1323647399.cos.ap-guangzhou.myqcloud.com/releases/v{#MyVersion}/AT-win-Setup.exe';   // 国内镜像（2026-10-29）
+  SetupUrl3 = 'https://github.com/Adm-TT/Astral-Toolkit/releases/download/v{#MyVersion}/AT-win-Setup.exe';
   SetupSha = '{#SetupSha256}';
   OldKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{2FA2FDE9-6997-4C2B-8D7B-A7DBCBB941DB}_is1';
 
@@ -193,7 +194,7 @@ function GetSetup(var Path: String): Boolean;
 var
   Local: String;
 begin
-  // 旁边放着同一个安装包（校验对得上）就用它；否则下载：AT 服务器 → GitHub，DownloadTemporaryFile 自己核对 SHA-256
+  // 旁边放着同一个安装包（校验对得上）就用它；否则下载：AT 服务器 → 国内镜像 → GitHub，DownloadTemporaryFile 自己核对 SHA-256
   Result := False;
   Local := ExpandConstant('{src}\AT-win-Setup.exe');
   if FileExists(Local) then
@@ -214,11 +215,18 @@ begin
   except
     Log('AT 服务器下载失败：' + GetExceptionMessage);
     try
-      ShowProgress('AT 服务器无法连接，改从 GitHub 下载…', False);
+      ShowProgress('AT 服务器无法连接，改从国内镜像下载…', False);
       DownloadTemporaryFile(SetupUrl2, 'AT-win-Setup.exe', SetupSha, @OnDownloadProgress);
       Result := True;
     except
-      Log('GitHub 下载失败：' + GetExceptionMessage);
+      Log('国内镜像下载失败：' + GetExceptionMessage);
+      try
+        ShowProgress('国内镜像无法连接，改从 GitHub 下载…', False);
+        DownloadTemporaryFile(SetupUrl3, 'AT-win-Setup.exe', SetupSha, @OnDownloadProgress);
+        Result := True;
+      except
+        Log('GitHub 下载失败：' + GetExceptionMessage);
+      end;
     end;
   end;
   if Result then

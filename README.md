@@ -4,14 +4,26 @@
 
 *An unofficial, free Star Citizen helper (mining HUD reader, crafting, navigation, item lookup, inventory). Chinese UI. Licensed under AGPL-3.0.*
 
-## 下载使用
+## 下载
 
-到「发行版」下载 `AT_Setup_x.y.z.exe` 双击安装，不用装 Python：
+[![国内下载 AT 1.1.1](docs/download_cn.png)](https://at-dl-1323647399.cos.ap-guangzhou.myqcloud.com/releases/v1.1.1/AT-win-Setup.exe)
 
-- Gitee：https://gitee.com/Adm_TT/Astral-Toolkit/releases
-- GitHub：https://github.com/Adm-TT/Astral-Toolkit/releases
+- **国内下载（推荐）**：点上面的按钮，或复制地址：https://at-dl-1323647399.cos.ap-guangzhou.myqcloud.com/releases/v1.1.1/AT-win-Setup.exe
+- **海外下载**：https://dl.astral-trade.com/releases/v1.1.1/AT-win-Setup.exe ，或 [GitHub 发行版](https://github.com/Adm-TT/Astral-Toolkit/releases)
+
+**安装**：双击 `AT-win-Setup.exe`。Windows 提示「已保护你的电脑」时，点「更多信息」→「仍要运行」。不需要安装 Python，不需要管理员权限。装好后会自动提示新版本，升级不影响设置和记录。
 
 详细用法见 [使用说明.txt](使用说明.txt)，使用前请阅读 [免责声明.txt](免责声明.txt)。
+
+## 截图
+
+![采矿助手](docs/shot_mining.jpg)
+
+![游戏内导航悬浮窗](docs/shot_nav.jpg)
+
+![物品查询](docs/shot_item.jpg)
+
+![制造](docs/shot_craft.jpg)
 
 ## 功能
 
@@ -22,7 +34,9 @@
 - **维科洛兑换**：每个兑换要交什么、材料去哪弄
 - **库存 / 目标清单**：按地点和仓位记东西，算离目标还差什么
 
-AT 靠截屏识别文字、读游戏写出的日志文件工作，防挂机和自动跑会模拟按键；不读写游戏内存，不改游戏文件。会联网检查更新、下载数据；按 F10 问题反馈时会把整屏截图、最近的识别截图、识别结果、当时位置和日志片段发给作者；F8 认物品名的一行字小截图（认错的都存，认对的抽一部分）也会攒批发送；两项设置里都能关。
+AT 靠截屏识别文字、读游戏写出的日志文件工作，自动跑会模拟按键；不读写游戏内存，不改游戏文件。会联网检查更新、下载数据；按 F10 问题反馈时会把整屏截图、最近的识别截图、识别结果、当时位置和日志片段发给作者；F8 认物品名的一行字小截图（认错的都存，认对的抽一部分）也会攒批发送；两项设置里都能关。
+
+**关于风险，说实话：** AT 只截屏识别文字、读游戏日志，不读写内存、不改游戏文件。模拟按键只有两处，都要你自己开：记录路标时替你在聊天框输入游戏自带的 `/showlocation`；可选的「双击 W 自动跑」（默认关）。没有防挂机、不自动战斗、不自动开船。RSI 用户协议禁止收集游戏信息的第三方软件和自动化软件，读屏和模拟按键都处在灰色地带。我们无法保证 CIG / RSI 认可，也无法保证使用不会引发账号调查或限制，请自行判断；介意的话可以只用不读屏、不按键的功能（查物品、蓝图、路标）。
 
 ## 从源码运行
 

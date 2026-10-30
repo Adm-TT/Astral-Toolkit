@@ -250,7 +250,7 @@ def test_crafting_dataset_and_links():
 def test_menu_has_all_features():
     from sc_mining.run import MENU
     titles = " ".join(t for _, t, _ in MENU)
-    for word in ("实时读屏", "找矿点", "制造", "更新数据", "导航", "防挂机", "交易"):
+    for word in ("实时读屏", "找矿点", "制造", "更新数据", "导航", "自动跑", "交易"):
         assert word in titles
 
 
@@ -386,6 +386,7 @@ def test_autorun_double_tap(monkeypatch=None):
     H._scan = lambda code, up=False: sent.append((code, up))
     try:
         r = H.AutoRun({"autorun_sprint": True, "double_tap_ms": 250})
+        r.check_hud = False          # 只测按键逻辑；不看真屏幕（屏幕上正好有飞行 HUD 画面时会不触发，2026-10-30）
         r.on_key(H.VK_W, True, False); r.on_key(H.VK_W, False, False)      # 第一下
         r.on_key(H.VK_W, True, False); r.on_key(H.VK_W, True, False)       # 第二下（含按住连发）
         r.on_key(H.VK_W, False, False)                                     # 松开 → 开始自动跑
@@ -399,6 +400,7 @@ def test_autorun_double_tap(monkeypatch=None):
         assert not r.engaged and sent[-2:] == [(H.SC_W, True), (H.SC_SHIFT, True)]
         # 两下间隔太长不算双击
         r2 = H.AutoRun({"autorun_sprint": False, "double_tap_ms": 250})
+        r2.check_hud = False
         r2.on_key(H.VK_W, True, False); r2.on_key(H.VK_W, False, False)
         r2.last_tap -= 1
         r2.on_key(H.VK_W, True, False); r2.on_key(H.VK_W, False, False)
@@ -415,11 +417,11 @@ def test_settings_roundtrip():
     old = settings.FILE
     settings.FILE = Path(tempfile.mkdtemp()) / "settings.json"
     try:
-        c = settings.load()                        # 防挂机、自动跑默认关（2026-10-27 老大定）
-        assert c["anti_afk"] is False and c["autorun"] is False and c["admin"] is None
-        settings.update(autorun=True, afk_seconds=200)
+        c = settings.load()                        # 自动跑默认关（2026-10-27 老大定）；防挂机 2026-10-30 删掉
+        assert c["autorun"] is False and c["admin"] is None and "anti_afk" not in c
+        settings.update(autorun=True)
         c = settings.load()
-        assert c["autorun"] is True and c["afk_seconds"] == 200 and c["anti_afk"] is False
+        assert c["autorun"] is True and "anti_afk" not in c
     finally:
         settings.FILE = old
 

@@ -438,7 +438,7 @@ def main(open_ui=True, port=0, restart=False):
                     break
             elif _last_client["ever"] and not STATE["told_tray"] and time.time() - _last_client["t"] > 3:
                 STATE["told_tray"] = True               # 第一次关窗口：告诉你天枢还在右下角
-                tray.notify("AT 还在后台运行", "F8 识别、自动跑、防挂机、悬浮窗照常可用。双击右下角图标重新打开，右键可以退出。")
+                tray.notify("AT 还在后台运行", "F8 识别、自动跑、悬浮窗照常可用。双击右下角图标重新打开，右键可以退出。")
     except KeyboardInterrupt:
         pass
     finally:

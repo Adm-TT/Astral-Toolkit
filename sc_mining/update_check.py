@@ -1,6 +1,6 @@
 """在线更新（2026-10-25）：启动时到网上读一个很小的版本说明（latest.json），有新版本就提示；玩家点「下载并升级」才下载。
 
-- 先试自己的香港服务器 dl.astral-trade.com（2026-10-27，国内外都快），不通再试 Gitee，再不通试 GitHub；每个地址最多等 5 秒，都不通就当没有新版本，不报错（能离线就离线）
+- 先试自己的香港服务器 dl.astral-trade.com（2026-10-27），再试国内镜像（腾讯云 COS 广州，2026-10-29：国内连不上香港），再试 Gitee、GitHub；每个地址最多等 5 秒，都不通就当没有新版本，不报错（能离线就离线）
 - 下载完核对文件大小和 SHA-256，对不上就删掉、不装；装的时候走 upgrade.apply（先备份，失败可回滚）
 - 下载的安装包放 userdata/updates（只留最新的一个），一键升级也能找到它
 - 版本说明由 tools/make_manifest.py 在发版本时生成
@@ -28,9 +28,11 @@ GITEE = "Adm_TT/Astral-Toolkit"      # https://gitee.com/Adm_TT/Astral-Toolkit�
 GITHUB = "Adm-TT/Astral-Toolkit"     # https://github.com/Adm-TT/Astral-Toolkit（main 分支）
 OWN = "dl.astral-trade.com"          # 自己的香港服务器（2026-10-27）：latest.json、data.json 放根目录，文件放 releases/<标签>/
 OWN_NAME = "AT 服务器"
+COS = "at-dl-1323647399.cos.ap-guangzhou.myqcloud.com"   # 国内镜像（腾讯云 COS 广州，2026-10-29）：路径和香港服务器一样
+COS_NAME = "国内镜像"
 TIMEOUT = 5
 EVERY = 6 * 3600                     # 一直开着时，每 6 小时再查一次
-HOSTS = (OWN, "gitee.com", "github.com", "raw.githubusercontent.com", "objects.githubusercontent.com",
+HOSTS = (OWN, COS, "gitee.com", "github.com", "raw.githubusercontent.com", "objects.githubusercontent.com",
          "release-assets.githubusercontent.com", "foruda.gitee.com")
 UPDATES = USER / "updates"
 NAME = re.compile(r"^Dubhe_\d+\.\d+\.\d+\.zip$", re.I)
@@ -41,10 +43,12 @@ _state = {"at": 0.0, "info": None, "error": "", "lock": threading.Lock()}
 
 
 def release_urls(tag, name):
-    """发行版里一个文件的下载地址：自己的服务器、Gitee、GitHub（按这个顺序试）"""
+    """发行版里一个文件的下载地址：自己的服务器、国内镜像、Gitee、GitHub（按这个顺序试）"""
     out = []
     if OWN:
         out.append(f"https://{OWN}/releases/{tag}/{name}")
+    if COS:
+        out.append(f"https://{COS}/releases/{tag}/{name}")
     if GITEE:
         out.append(f"https://gitee.com/{GITEE}/releases/download/{tag}/{name}")
     if GITHUB:
@@ -56,13 +60,15 @@ def where(url):
     """下载地址是哪个网站（给玩家看）"""
     m = re.match(r"^https://([^/:]+)/", url or "")
     host = m.group(1).lower() if m else ""
-    return OWN_NAME if OWN and host == OWN else "Gitee" if "gitee" in host else "GitHub" if "github" in host else "网上"
+    return OWN_NAME if OWN and host == OWN else COS_NAME if COS and host == COS else "Gitee" if "gitee" in host else "GitHub" if "github" in host else "网上"
 
 
 def manifest_urls():
     out = []
     if OWN:
         out.append((OWN_NAME, f"https://{OWN}/latest.json"))
+    if COS:
+        out.append((COS_NAME, f"https://{COS}/latest.json"))
     if GITEE:
         out.append(("Gitee", f"https://gitee.com/{GITEE}/raw/master/latest.json"))
     if GITHUB:

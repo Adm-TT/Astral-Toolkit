@@ -131,7 +131,7 @@ def main():
     step("免责声明：错的话不放行", lambda: c.call("agree", text="随便写"), lambda r: bool(r.get("error")) or "错的也放行了", allow_error=True)
     step("免责声明：同意", lambda: c.call("agree", text="本软件是免费软件"))
     st = step("状态 status", lambda: c.call("status"), lambda r: bool(r.get("version")) or "没有版本号")
-    step("设置 set_settings", lambda: c.call("set_settings", anti_afk=False), lambda r: r.get("anti_afk") is False or r)
+    step("设置 set_settings", lambda: c.call("set_settings", autorun=False), lambda r: r.get("autorun") is False or r)
     step("刚升级提示 upgraded", lambda: c.call("upgraded"))
     # ---- 全局搜索
     step("全局搜索：量子", lambda: c.call("search", q="量子"), lambda r: any(r.get(k) for k in r) or "所有分类都没结果")
