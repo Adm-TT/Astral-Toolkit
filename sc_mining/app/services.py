@@ -32,134 +32,32 @@ def api(fn):
     return fn
 
 
-# ================================================================ 基础 HUD 与按键状态
-def _hud():
-    try:
-        from .overlay import hud
-        return hud()
-    except Exception:
-        return None
-
-
-_ITEM_SEQ = [0]
-ITEM_HUD_SECONDS = 60
-_OFF_TOLD = set()
-
-
-def _off(feature):
-    """这个功能有没有被远程关掉（latest.json 的 disabled，update_check.disabled）"""
-    try:
-        from ..update import update_check
-        why = update_check.disabled(feature)
-    except Exception:
-        return None
-    if why and feature not in _OFF_TOLD:
-        _OFF_TOLD.add(feature)
-        try:
-            _note_hud("AT", f"{update_check.FEATURES.get(feature, feature)}暂时关闭：{why}", 8)
-        except Exception:
-            pass
-    return why
-
-
-def _note_hud(section, text, secs=6):
-    """悬浮窗上一条短提示，secs 秒后自己收起"""
-    h = _hud()
-    if not h:
-        return
-    if hasattr(h, "note"):
-        h.note(text, secs)
-        return
-    h.set(section, text)
-
-    def gone():
-        if getattr(_hud(), "sections", {}).get(section) == text:
-            _hud().clear(section)
-    t = threading.Timer(secs, gone)
-    t.daemon = True
-    t.start()
-
-
-ITEM_AWAY_PX = 160
-ITEM_AWAY_AFTER = 1.5
-_ITEM_MODE = {"pinned": False, "origin": None, "shown_at": 0.0}
-
-
-def _cursor():
-    try:
-        import ctypes
-        from ctypes import wintypes
-        pt = wintypes.POINT()
-        ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
-        return pt.x, pt.y
-    except Exception:
-        return None
-
-
-def _key_down(vk):
-    try:
-        import ctypes
-        return bool(ctypes.windll.user32.GetAsyncKeyState(vk) & 0x8000)
-    except Exception:
-        return False
-
-
-def item_key_pressed():
-    """按下物品识别键那一刻：记下鼠标位置与 Shift 状态"""
-    _ITEM_MODE.update(pinned=_key_down(0x10), origin=_cursor(), shown_at=time.time())
-
-
-def _item_hud(text, secs=ITEM_HUD_SECONDS):
-    """悬浮窗「物品」分区：鼠标移开自动收起（按住 Ctrl 不收，Shift+F8 钉住）"""
-    h = _hud()
-    if not h:
-        return
-    _ITEM_SEQ[0] += 1
-    my = _ITEM_SEQ[0]
-    h.set("物品", text)
-    _ITEM_MODE["shown_at"] = time.time()
-    if _ITEM_MODE["pinned"]:
-        return
-
-    def watch():
-        import ctypes
-        try:
-            h_px = ctypes.windll.user32.GetSystemMetrics(1) or 1080
-        except Exception:
-            h_px = 1080
-        away = ITEM_AWAY_PX * max(1.0, h_px / 1080)
-        end = time.time() + secs
-        while _ITEM_SEQ[0] == my and time.time() < end:
-            time.sleep(0.1)
-            o, c = _ITEM_MODE["origin"], _cursor()
-            if (o and c and time.time() - _ITEM_MODE["shown_at"] >= ITEM_AWAY_AFTER and not _key_down(0x11)
-                    and math.dist(o, c) > away):
-                break
-            if _key_down(0x11):
-                end = max(end, time.time() + 1)
-        if _ITEM_SEQ[0] == my:
-            h_cur = _hud()
-            if h_cur:
-                h_cur.clear("物品")
-    threading.Thread(target=watch, daemon=True, name="item-hud").start()
+# ================================================================ 基础 HUD 与按键状态（2026-10-30 阶段 0 搬到 hud_state.py，这里保留原名）
+from .hud_state import (  # noqa: E402,F401
+    _hud, _off, _note_hud, _cursor, _key_down, item_key_pressed, _item_hud,
+    ITEM_HUD_SECONDS, ITEM_AWAY_PX, ITEM_AWAY_AFTER, _ITEM_MODE, _ITEM_SEQ, _OFF_TOLD,
+)
 
 
 # ================================================================ 后台引擎实例（Engines）
-from .engines.nav import _Steady, _CamFilter, _Nav, _GameEvents
-from .engines.live import _Live
-from .engines.hover import _Hover
-from .engines.count import _Count
-from .engines.pos import _Pos, _LogWatch
+# 2026-10-30 阶段 0：实例由 engines/manager.py 的 EngineManager 建，这里保留原名
+from .engines.nav import _Steady, _CamFilter, _Nav, _GameEvents  # noqa: E402,F401
+from .engines.live import _Live  # noqa: E402,F401
+from .engines.hover import _Hover  # noqa: E402,F401
+from .engines.count import _Count  # noqa: E402,F401
+from .engines.pos import _Pos, _LogWatch  # noqa: E402,F401
+from .engines.manager import EngineManager  # noqa: E402
 
-_game_events = _GameEvents()
-_nav = _Nav()
-_live = _Live()
-_pos = _Pos()
-_count = _Count()
-_hover = _Hover()
-_cam_filter = _CamFilter()
-_steady = _Steady()
-_logwatch = _LogWatch()
+_M = EngineManager.get_instance()
+_game_events = _M.game_events
+_nav = _M.nav
+_live = _M.live
+_pos = _M.pos
+_count = _M.count
+_hover = _M.hover
+_cam_filter = _M.cam_filter
+_steady = _M.steady
+_logwatch = _M.logwatch
 
 
 # ================================================================ 动态挂载并 Re-export 全部 Tasks 任务层
@@ -245,36 +143,9 @@ for _mod, _symbols in _TASK_OWNERSHIP:
 
 # ================================================================ 运行时后台服务与诊断
 def start_background():
-    """打开天枢主窗口时启动后台服务：热键监听、定时查更新、搜索索引预热、未发送反馈补发、原矿扫描续跑"""
-    from ..core import settings
-    if not settings.load().get("agreed"):
-        return
-    _hover.start()
-    _pos.start()
-    _logwatch.start()
-    _game_events.start()
-    _online = getattr(sys.modules[__name__], "_online", {})
-    if not _online.get("loop"):
-        _online["loop"] = True
-        threading.Thread(target=_online_loop, daemon=True, name="update").start()
-        from ..crafting import itemsearch
-        itemsearch.warm_up()
-    if not _online.get("fb_retry"):
-        _online["fb_retry"] = True
-        from ..system import feedback_up
-        threading.Thread(target=lambda: feedback_up.retry_pending(_fb_dir()), daemon=True, name="feedback-retry").start()
-    if settings.load().get("live_on"):
-        _live.start()
-    try:
-        from ..core import perf
-        threading.Thread(target=perf.rapidocr, daemon=True, name="ocr-warmup").start()
-    except Exception:
-        pass
-    try:
-        from ..core.perfmon import monitor
-        monitor.start()
-    except Exception:
-        pass
+    """打开天枢主窗口时启动后台服务：热键监听、定时查更新、搜索索引预热、未发送反馈补发、原矿扫描续跑
+    （2026-10-30 阶段 0：内容搬到 EngineManager.start_all）"""
+    _M.start_all()
 
 
 @api
