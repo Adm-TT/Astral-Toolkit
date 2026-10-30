@@ -479,6 +479,20 @@ def test_reader_backoff_capped_while_navigating(monkeypatch):
         r2.poll(force=True)
     assert r2.next_at - time.time() > 20          # 不导航时照旧慢慢退
 
+def test_nav_tip_texts():
+    """窗口状态和悬浮窗提示说法一致（审查 2026-10-30）：读得到不提示；8–30 秒前读到过有上次结果标暂停；
+    刚开始没结果只说等待；更久 / 从没读到才教开调试信息"""
+    from sc_mining.app.engines.nav import nav_tip
+    st, tip = nav_tip(True, 100.0, 101.0, True, "H")
+    assert tip == "" and "实时" in st
+    st, tip = nav_tip(False, 100.0, 110.0, True, "H")
+    assert "r_DisplayInfo" not in st + tip and "暂停更新" in tip
+    st, tip = nav_tip(False, 100.0, 110.0, False, "H")
+    assert "上次结果" not in st + tip
+    for last in (60.0, 0.0):
+        st, tip = nav_tip(False, last, 100.0, True, "H")
+        assert "r_DisplayInfo 2" in tip and st.startswith("H")
+
 def test_first_run_agreement(monkeypatch, tmp_path):
     from sc_mining import settings, helpers
     from sc_mining.tasks import system as t_sys

@@ -31,6 +31,19 @@ def _E():
     return EngineManager.get_instance()
 
 
+def nav_tip(on, last_ok, now, has_shown, di_help):
+    """导航时右上角读位置的说法 → (窗口状态, 悬浮窗末尾那行)。窗口和悬浮窗说法一致（审查 2026-10-30）：
+    读得到：实时；8–30 秒前读到过而且有上次结果：标「暂停更新」，不冒充实时；刚开始还没结果：等待；
+    更久没读到 / 从没读到：教开调试信息"""
+    if on:
+        return "右上角调试信息：实时识别位置", ""
+    if last_ok and now - last_ok < 30:
+        if has_shown:
+            return "右上角位置暂时认不出，显示的是上次结果", "\n位置暂停更新，以上是上次结果"
+        return "等待右上角位置信息…", ""
+    return di_help + "（或在聊天框输入 /showlocation）", "\n读不到位置：控制台输入 r_DisplayInfo 2，或聊天框输入 /showlocation"
+
+
 class _Steady:
     """显示的方位角防抖：真实方位角变了 2° 以上才换显示，免得数字在 359/000/001 之间来回跳"""
     DEADBAND = 2.0
@@ -319,18 +332,12 @@ class _Nav:
             if ev.is_set():
                 return
             rd = _E().pos.reader
-            on = rd.active
-            # 「读不到位置」提示：读到过的话，30 秒内偶尔认岔不提示（玩家反馈 2026-10-30：调试信息开着还一直挂着这句）
-            last_ok = getattr(rd, "ok_at", 0.0)
-            recent = bool(last_ok and time.time() - last_ok < 30)
-            # 没读到新位置时不能让旧方向冒充实时的：先标「暂停更新」，超过 30 秒再教怎么开调试信息（Codex 审查 2026-10-30）
-            tip = "" if on else ("\n位置暂停更新，以上是上次结果" if recent else
-                                 "\n读不到位置：控制台输入 r_DisplayInfo 2，或聊天框输入 /showlocation")
-            stat_text = "右上角调试信息：实时识别位置" if on else _T("navigation").DI_HELP + "（或在聊天框输入 /showlocation）"
+            stat_text, tip = nav_tip(rd.active, getattr(rd, "ok_at", 0.0), time.time(), bool(shown), _T("navigation").DI_HELP)
             pub = None
             if fresh or state["status"] != stat_text:
                 state["status"] = stat_text
-                state["at"] = time.strftime("%H:%M:%S")
+                if fresh:                         # 只有真读到新位置才改「几点更新」（以前状态文字一变就改，看着像刚更新过）
+                    state["at"] = time.strftime("%H:%M:%S")
                 pub = state
             # 算的时候被停掉 / 换了目标：_commit 在锁里核对 session，不对就什么都不发、记号不画（老大审查 2026-10-28）
             ok, mk_seen = self._commit(sess, here=here if fresh else None, ref=ref if fresh else None, state=pub,
