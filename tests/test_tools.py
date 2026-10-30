@@ -653,6 +653,7 @@ def test_hover_overlay_updates_before_network(monkeypatch):
     gate = threading.Event()
     monkeypatch.setattr(C, "match_tooltip", lambda *a, **k: (gate.wait(5), (None, []))[1])   # 联网很慢
     monkeypatch.setattr(C, "_hover_log", lambda *a, **k: None)
+    monkeypatch.setattr(C, "_cursor_on_image", lambda img: (1280, 720))   # 不看真鼠标在哪
     shown = []
 
     class Hud:
@@ -663,7 +664,7 @@ def test_hover_overlay_updates_before_network(monkeypatch):
     r = S.hover_once(Image.new("RGB", (2560, 1440)))
     assert r["ok"] and shown[-1][1].startswith(("CQ7步枪", "CQ7 步枪"))      # 名字按汉化包纠正成标准写法（1.6.37）
     assert shown[-1][0] - t0 < 2.0                           # 没等联网
-    assert calls[0] == ((1280, 1109), True)                 # 只认了屏幕中间，插队识别
+    assert calls[0] == ((512, 1440), True)                  # 鼠标在 50%：先认左边 30%~50% 整高一条，插队识别（NGU 2026-10-30 改的分区）
     gate.set()
 
 
