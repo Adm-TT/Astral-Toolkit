@@ -278,6 +278,8 @@ def _read_tooltip(img, cursor):
     W, H = img.size
     regions = get_hover_regions(cursor, W)
     best_candidate = None
+    last = ([], None, regions[-1][4])
+    anchor_seen = False
 
     for l, t, r, b, label in regions:
         box = (int(W * l), int(H * t), int(W * r), int(H * b))
@@ -287,6 +289,15 @@ def _read_tooltip(img, cursor):
             return tokens, name, label
         if name and plausible_name(*name) and not best_candidate:
             best_candidate = (tokens, name, label)
+        anchor_seen = anchor_seen or any(_is_anchor(k.text) for k in tokens)
+        last = (tokens, None, label)
+
+    # 驾驶位保护：鼠标在屏幕中间、认过的区域里连说明框的样子（体积 / 制造商 / 物品类型…）都没有，
+    # 多半是开着船按了 F8，不再整屏找（整屏一次 5~16 秒，2026-10-23 两位玩家在驾驶位上按 F8 都等了很久，CPU 也白占）
+    ml, _mt, mr, _mb = HOVER_REGIONS["中间"]
+    inside = cursor is None or (W * ml <= cursor[0] <= W * mr and 0 <= cursor[1] <= H)
+    if inside and not anchor_seen:
+        return best_candidate or last
 
     # 都不行的时候全屏兜底
     full = recognize(img, urgent=True)

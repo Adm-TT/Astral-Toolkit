@@ -136,5 +136,42 @@ class TestReadTooltipExecution(unittest.TestCase):
         self.assertEqual(len(calls), 3)
 
 
+def _fake_ocr(monkeypatch, toks):
+    """假识别：每次都返回 toks（位置按偏移挪），记下每次认的图多宽"""
+    from sc_mining.trade import ocr
+    widths = []
+
+    def fake(img, urgent=False, offset=(0, 0), native=False):
+        widths.append(img.width)
+        return [OcrToken(k.text, k.confidence, (k.box[0] + offset[0], k.box[1] + offset[1], k.box[2], k.box[3])) for k in toks]
+    monkeypatch.setattr(ocr, "recognize", fake)
+    return widths
+
+
+def test_cockpit_guard_no_fullscreen_with_candidate(monkeypatch):
+    """鼠标在中间、认过的区域里没有说明框特征：不认整屏，有像样的候选名就返回候选"""
+    widths = _fake_ocr(monkeypatch, [
+        OcrToken("能量突击步枪", 90, (60, 300, 100, 18)),
+        OcrToken("P4-AR Rifle", 90, (60, 324, 100, 18)),
+    ])
+    toks, name, where = _read_tooltip(MockImage(1000, 1000), (500, 500))
+    assert 1000 not in widths and len(widths) == 2          # 两个区域都认了，整屏没认
+    assert name == ("能量突击步枪", "P4-AR Rifle") and where == "30-50%"
+
+
+def test_cockpit_guard_no_fullscreen_miss(monkeypatch):
+    """鼠标在中间、只认到 HUD 碎字：不认整屏，直接返回认不出"""
+    widths = _fake_ocr(monkeypatch, [OcrToken("SCM 220", 90, (60, 300, 60, 18))])
+    toks, name, where = _read_tooltip(MockImage(1000, 1000), None)
+    assert 1000 not in widths and len(widths) == 1 and name is None
+
+
+def test_cockpit_guard_allows_fullscreen_when_anchor_seen(monkeypatch):
+    """认过的区域里有说明框特征（体积…）但没对上名字：照旧整屏兜底"""
+    widths = _fake_ocr(monkeypatch, [OcrToken("体积：20uSCU", 90, (60, 348, 100, 18))])
+    _read_tooltip(MockImage(1000, 1000), (500, 500))
+    assert widths[-1] == 1000
+
+
 if __name__ == "__main__":
     unittest.main()

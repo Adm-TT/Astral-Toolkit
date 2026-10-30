@@ -2010,11 +2010,11 @@ def test_hover_ignores_chat_hud_and_markers(monkeypatch):
     monkeypatch.setattr(ocr, "recognize", lambda img, urgent=False, offset=(0, 0): [] if not calls.append(1) and len(calls) <= 2 else chat + item)
     toks, name, where = t_hover._read_tooltip(img, (100, 540))
     assert name == ("实准枪口补偿器2", "VeraCompensator2") and where == "整屏"
-    # 鼠标在中间（50%~70%）：两轮局部未找到时进入整屏兜底
+    # 鼠标在中间（30%~70%）、两轮局部连说明框特征都没有：多半是驾驶位上按的 F8，不进整屏兜底（1.1.1 的驾驶位保护）
     calls.clear()
     monkeypatch.setattr(ocr, "recognize", lambda img, urgent=False, offset=(0, 0): [] if not calls.append(1) and len(calls) <= 2 else chat + item)
     toks, name, where = t_hover._read_tooltip(img, (960, 540))
-    assert name == ("实准枪口补偿器2", "VeraCompensator2") and where == "整屏" and len(calls) == 3
+    assert name is None and len(calls) == 2
 
 
 def test_live_signals_pause_while_scan_panel_open(monkeypatch, tmp_path):
