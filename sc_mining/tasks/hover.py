@@ -33,50 +33,30 @@ from ..trade.inspector import (
 _last_hover = {}
 
 
-# ---------------------------------------------------------------- 依赖转发辅助
-def _services():
-    from ..app import services
-    return services
-
-
-def _item_hud(text, secs=30):
-    try:
-        _services()._item_hud(text, secs=secs)
-    except Exception:
-        pass
-
-
-def _off(feature):
-    try:
-        return _services()._off(feature)
-    except Exception:
-        return None
+# ---------------------------------------------------------------- 依赖（2026-10-30 重构阶段 3：不再经 services 转发）
+from ..app.hud_state import _item_hud, _off
+from . import goals as _t_goals
+from . import trade as _t_trade
 
 
 def item_info(*args, **kwargs):
-    return _services().item_info(*args, **kwargs)
+    return _t_trade.item_info(*args, **kwargs)
 
 
 def trade():
-    return _services().trade()
+    return _t_trade.trade()
 
 
 def _market_rows(item_id, tier):
-    return _services()._market_rows(item_id, tier)
+    return _t_trade._market_rows(item_id, tier)
 
 
 def _goal_for(*names):
-    try:
-        return _services()._goal_for(*names)
-    except Exception:
-        return None
+    return _t_goals._goal_for(*names)
 
 
 def _goal_text(g):
-    try:
-        return _services()._goal_text(g)
-    except Exception:
-        return ""
+    return _t_goals._goal_text(g)
 
 
 def qty_text(qty, unit):
