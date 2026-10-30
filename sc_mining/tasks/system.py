@@ -25,19 +25,14 @@ from pathlib import Path
 from ..app import bus
 
 WIN = sys.platform == "win32"
-API = {}
 
 
-def api(fn):
-    """标记为暴露给前端的 API 函数（名字就是接口路径 /api/<fn_name>）"""
-    API[fn.__name__] = fn
-    return fn
-
-
-# ---------------------------------------------------------------- 依赖转发辅助
-def _services():
-    from ..app import services
-    return services
+# ---------------------------------------------------------------- 依赖
+# 2026-10-30 重构阶段 4：界面接口由 app/api/system.py 的 ROUTES 提供；
+# 后台引擎直接从 EngineManager 拿，F8 上次结果、当前位置缓存直接读 tasks.hover / tasks.navigation。
+def _engines():
+    from ..app.engines.manager import EngineManager
+    return EngineManager.get_instance()
 
 
 def _hud():
@@ -45,8 +40,7 @@ def _hud():
         from ..app.overlay import hud
         return hud()
     except Exception:
-        srv = _services()
-        return srv._hud() if hasattr(srv, "_hud") else None
+        return None
 
 
 def _note_hud(section, text, secs=6):
@@ -100,21 +94,20 @@ def hotkey_conflicts(cfg=None):
 
 
 # ---------------------------------------------------------------- 状态与系统信息
-@api
 def status():
     from ..core import settings
     from ..system import helpers
     from ..system import showloc
     from ..mining.data import GAME_VERSION
     cfg = settings.load()
-    srv = _services()
+    m = _engines()
 
-    live_running = srv._live.running() if hasattr(srv, "_live") else False
-    live_paused = bool(live_running and srv._live.paused) if hasattr(srv, "_live") else False
-    nav_label = srv._nav.target_label() if hasattr(srv, "_nav") else ""
-    nav_space = srv._nav.space_mode if hasattr(srv, "_nav") else False
-    pos_reader_active = srv._pos.reader.active if hasattr(srv, "_pos") else False
-    game_events_dict = {k: v for k, (_, v) in list(srv._game_events.last.items())} if hasattr(srv, "_game_events") else {}
+    live_running = m.live.running()
+    live_paused = bool(live_running and m.live.paused)
+    nav_label = m.nav.target_label()
+    nav_space = m.nav.space_mode
+    pos_reader_active = m.pos.reader.active
+    game_events_dict = {k: v for k, (_, v) in list(m.game_events.last.items())}
 
     out = {"settings": cfg, "game_version": GAME_VERSION, "win": WIN,
            "admin": showloc.is_admin() if WIN else True,
@@ -155,21 +148,20 @@ def status():
         pass
     # 右上角读到的具体地点：记住最后一次读到的，切屏、某一次没认出来都不换（以前会在「附近」和站名之间来回闪）。
     # 只有游戏日志里有更新的地点（比如到别的站开了库存）才换掉它
-    if hasattr(srv, "_pos"):
-        lab_t, lab = srv._pos.label
-        if lab and time.time() - lab_t < 3 * 3600:
-            log_t = 0.0
-            try:
-                from ..navigation.position import from_log
-                hit = from_log()
-                log_t = hit[0] if hit else 0.0
-            except Exception:
-                pass
-            if lab_t >= log_t:
-                sys_t, sysname = srv._pos.system
-                out["position"] = {"label": lab, "minutes": int((time.time() - lab_t) // 60),
-                                   "sys": sysname or (out["position"] or {}).get("sys", ""),
-                                   "live": pos_reader_active and time.time() - lab_t < 15}
+    lab_t, lab = m.pos.label
+    if lab and time.time() - lab_t < 3 * 3600:
+        log_t = 0.0
+        try:
+            from ..navigation.position import from_log
+            hit = from_log()
+            log_t = hit[0] if hit else 0.0
+        except Exception:
+            pass
+        if lab_t >= log_t:
+            sys_t, sysname = m.pos.system
+            out["position"] = {"label": lab, "minutes": int((time.time() - lab_t) // 60),
+                               "sys": sysname or (out["position"] or {}).get("sys", ""),
+                               "live": pos_reader_active and time.time() - lab_t < 15}
     if out["position"] is not None:
         out["position"].setdefault("live", False)
     out["gridtext"] = _gridtext_status()
@@ -260,7 +252,6 @@ def _system_info():
     return "\n".join(lines) + "\n"
 
 
-@api
 def export_logs():
     """「导出日志」：运行日志 + 设置 + 一页系统说明打成一个压缩包，放到桌面，并在文件夹里选中它"""
     from ..core import paths
@@ -338,7 +329,6 @@ def _online_public(info):
     return {k: info[k] for k in ("version", "date", "notes", "size", "source")} if info else None
 
 
-@api
 def upgrade_check(online=False):
     """online=True：顺便到网上查一次（设置页「检查更新」；最多等 5 秒×2）"""
     from ..update.upgrade import find_packages, rollback_options
@@ -438,7 +428,6 @@ def _online_task():
     return _upgrade_task(str(path))
 
 
-@api
 def upgrade_online():
     """「下载并升级」：下载网上的新版本，核对后照常升级（先备份，能回滚）。
     Velopack 安装版直接问更新源有没有新版本（latest.json 读不到也能升）"""
@@ -450,7 +439,6 @@ def upgrade_online():
     return {"started": True}
 
 
-@api
 def upgrade_rollback(path=""):
     """回滚到旧版本（稳定版 / 自动备份 / 旧安装包）：和升级同一套流程，装之前也会先备份现在的版本。
     Velopack 安装版：path = VPK_PREV，从 AT 服务器装回上一个版本"""
@@ -464,7 +452,6 @@ def upgrade_rollback(path=""):
     return upgrade_apply(path)
 
 
-@api
 def upgrade_mark_stable():
     from ..update.upgrade import mark_stable
     try:
@@ -502,7 +489,6 @@ def _upgrade_task(path):
     return r
 
 
-@api
 def upgrade_apply(path=""):
     from ..core.paths import FROZEN
     if FROZEN:                              # 独立打包版：程序在 _internal 里，按旧方式覆盖源码会出错
@@ -567,7 +553,6 @@ def upgrade_receive(name, write):
     return r
 
 
-@api
 def upgrade_upload(name="", data=""):
     """旧接口（base64 整包进内存）：1.0.4 起网页改走 /api/upgrade_upload_raw 流式上传，这里只留给老窗口"""
     try:
@@ -577,7 +562,6 @@ def upgrade_upload(name="", data=""):
     return upgrade_receive(name, lambda f: f.write(raw))
 
 
-@api
 def upgraded():
     """刚升级完重启后：窗口弹一句「已升级到 x」"""
     from ..update.upgrade import just_upgraded, adopt_previous
@@ -596,7 +580,6 @@ def upgraded():
 _legacy = {"rows": None}
 
 
-@api
 def legacy_scan():
     """安装版：电脑上的旧版天枢（压缩包版），以及哪些正开着。ask=True 表示还没问过要不要导入"""
     from ..update import legacy
@@ -617,7 +600,6 @@ def legacy_scan():
     return {"found": rows, "running": run, "ask": bool(rows) and not settings.load().get("legacy_checked")}
 
 
-@api
 def legacy_import(path=""):
     """把旧版的设置、路标、目标等复制过来，然后重新打开 AT（热键、悬浮窗按新设置重新挂）"""
     from ..update import legacy
@@ -638,14 +620,12 @@ def legacy_import(path=""):
     return {"done": done}
 
 
-@api
 def legacy_skip():
     from ..core import settings
     settings.update(legacy_checked=True)
     return {"ok": True}
 
 
-@api
 def legacy_quit(path=""):
     """关掉正在运行的旧版天枢（请它自己退出）"""
     from ..update import legacy
@@ -670,7 +650,6 @@ def _fb_dir():
     return d
 
 
-@api
 def feedback_report(kind="auto", note="", img=None):
     """一键反馈：现在的整屏截图 + 最近几帧采矿助手截图 + OCR 原文 + 当时显示的结果 + 日志尾巴，打成一个文件夹和 zip
     放在 userdata\\feedback\\。kind：scan（矿物认错）/ signal（信号不对）/ item（F8 认错）/ auto"""
@@ -696,16 +675,17 @@ def feedback_report(kind="auto", note="", img=None):
                 except OSError:
                     pass
 
-    srv = _services()
-    last_hover = getattr(srv, "_last_hover", {})
-    live_running = srv._live.running() if hasattr(srv, "_live") else False
-    live_paused = getattr(srv._live, "paused", False) if hasattr(srv, "_live") else False
-    where_now = srv._WHERE.get("v") if hasattr(srv, "_WHERE") else None
-    nav_label = srv._nav.target_label() if hasattr(srv, "_nav") else ""
-    nav_space = srv._nav.space_mode if hasattr(srv, "_nav") else False
+    from . import hover as _hv, navigation as _nv
+    m = _engines()
+    last_hover = _hv._last_hover
+    live_running = m.live.running()
+    live_paused = getattr(m.live, "paused", False)
+    where_now = _nv._WHERE.get("v")
+    nav_label = m.nav.target_label()
+    nav_space = m.nav.space_mode
 
-    fb_sig = getattr(srv, "_FB_LAST", {}).get("sig") if hasattr(srv, "_FB_LAST") else _FB_LAST["sig"]
-    fb_scan = getattr(srv, "_FB_LAST", {}).get("scan") if hasattr(srv, "_FB_LAST") else _FB_LAST["scan"]
+    fb_sig = _FB_LAST["sig"]
+    fb_scan = _FB_LAST["scan"]
 
     info = {"time": time.strftime("%Y-%m-%d %H:%M:%S"), "version": _version(), "kind": kind, "note": note or "",
             "screen": [img.width, img.height] if img else None,
@@ -762,7 +742,6 @@ def feedback_report(kind="auto", note="", img=None):
             "upload": upload}
 
 
-@api
 def feedback_list():
     rows = []
     for z in sorted(_fb_dir().glob("*.zip"), key=lambda f: f.stat().st_mtime, reverse=True)[:30]:
@@ -777,7 +756,6 @@ def feedback_list():
     return rows
 
 
-@api
 def feedback_export():
     """把所有反馈 zip 再打成一个包放到桌面，并在文件夹里选中"""
     zs = sorted(_fb_dir().glob("*.zip"))
@@ -796,7 +774,6 @@ def feedback_export():
     return {"path": str(out), "files": len(zs), "kb": round(out.stat().st_size / 1024)}
 
 
-@api
 def feedback_clear():
     n = 0
     for f in list(_fb_dir().iterdir()):
@@ -809,7 +786,6 @@ def feedback_clear():
 
 
 # ---------------------------------------------------------------- 辅助、悬浮窗与设置修改
-@api
 def cockpit_check():
     """辅助进程双击 W 时问：现在画面中间有没有飞行 HUD（用主程序的识别引擎，辅助进程不用自己加载一份）"""
     from ..system import cockpit
@@ -820,7 +796,6 @@ def cockpit_check():
     return {"flying": bool(flying), "hits": hits[:4]}
 
 
-@api
 def overlay_move(on=False):
     """「移动悬浮窗」：打开时悬浮窗能拖动（不穿透），关上恢复鼠标穿透"""
     h = _hud()
@@ -829,7 +804,6 @@ def overlay_move(on=False):
     return {"on": bool(on)}
 
 
-@api
 def set_settings(**kw):
     from ..core import settings
     from ..system import helpers
@@ -899,7 +873,6 @@ def set_settings(**kw):
     return cfg
 
 
-@api
 def update_data():
     from ..run import update
     if bus.run_task_once("update", update, title="更新数据") is None:   # 已经在更新：不再起第二份
@@ -925,20 +898,17 @@ DATA_SOURCES = (
 )
 
 
-@api
 def about_info():
     """关于页：版权、数据来源"""
     return {"copyright": "© 2026 Adm_TT　AGPL-3.0 开源", "sources": [{"name": n, "url": u, "what": w} for n, u, w in DATA_SOURCES]}
 
 
-@api
 def open_source_site(i=0):
     """关于页点数据来源：用系统默认浏览器打开（只开 DATA_SOURCES 里的网址）"""
     webbrowser.open(DATA_SOURCES[int(i)][1])
     return {"ok": True}
 
 
-@api
 def third_party_licenses():
     """开源组件许可证原文（安装目录的「第三方许可.txt」，打包时由 tools/collect_licenses.py 生成）"""
     from ..core import paths
@@ -949,7 +919,6 @@ def third_party_licenses():
         return {"text": "", "error": "未找到「第三方许可.txt」（开发目录里没有，打包时生成）"}
 
 
-@api
 def open_referral():
     """用系统默认浏览器打开作者的星际公民邀请注册页（只能打开这一个固定网址）"""
     webbrowser.open(REFERRAL_URL)
@@ -959,7 +928,6 @@ def open_referral():
 AGREE_TEXT = "本软件是免费软件"
 
 
-@api
 def agree(text=""):
     """第一次打开：必须一字不差地输入「本软件是免费软件」才能用"""
     from ..core import settings
@@ -973,27 +941,10 @@ def agree(text=""):
 
 
 def start_background():
-    """窗口打开时：后台监听与轮询初始化"""
-    try:
-        srv = _services()
-        if hasattr(srv, "start_background"):
-            srv.start_background()
-            return
-    except Exception:
-        pass
-    from ..core import settings
-    if not settings.load().get("agreed"):
-        return
-    if not _online.get("loop"):
-        _online["loop"] = True
-        threading.Thread(target=_online_loop, daemon=True, name="update").start()
-    if not _online.get("fb_retry"):
-        _online["fb_retry"] = True
-        from ..system import feedback_up
-        threading.Thread(target=lambda: feedback_up.retry_pending(_fb_dir()), daemon=True, name="feedback-retry").start()
+    """窗口打开时：后台监听与轮询初始化（EngineManager.start_all，没同意协议时它自己不启动）"""
+    _engines().start_all()
 
 
-@api
 def show():
     """又双击了一次 Dubhe.exe：后台开着的 AT 把窗口打开"""
     from ..app.server import show_window
@@ -1001,7 +952,6 @@ def show():
     return {"ok": True}
 
 
-@api
 def quit():
     """又双击了一次 Dubhe.exe：旧的这个退出，让新的接手"""
     from ..app.server import QUIT
@@ -1041,7 +991,6 @@ __all__ = [
     "quit",
     "start_background",
     "hotkey_conflicts",
-    "API",
     "HOTKEYS",
     "DATA_SOURCES",
     "VPK_PREV",

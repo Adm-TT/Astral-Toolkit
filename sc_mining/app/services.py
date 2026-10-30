@@ -148,22 +148,8 @@ def start_background():
     _M.start_all()
 
 
-@api
-def runtime_capture_now():
-    """手动立即截取一帧画面，更新实时监控"""
-    from ..core.perf import grab_screen
-    img = grab_screen()
-    bus.update_preview(img, source="manual", force=True)
-    bus.runtime_log("手动截取屏幕画面", tag="SCREEN", level="INFO")
-    _, meta = bus.get_preview_bytes(full=False)
-    return meta
-
-
-@api
-def runtime_clear_logs():
-    """清空前端实时运行日志"""
-    bus.clear_runtime_logs()
-    return {"ok": True}
+# 2026-10-30 阶段 4：搬到 app/api/system.py，这里保留原名
+from .api.system import runtime_capture_now, runtime_clear_logs  # noqa: E402,F401
 
 
 @api
