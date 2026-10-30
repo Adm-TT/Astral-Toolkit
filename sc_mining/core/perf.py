@@ -174,11 +174,21 @@ class _Locked:
             except Exception as e:
                 if not self.gpu:
                     raise
-                _cpu_fallback = True
+                old = self.eng
+                try:
+                    eng, _gpu, _err = _new_engine(False)
+                except Exception:
+                    raise e                           # CPU 版建不起来：报原来显卡的错，引擎不动
+                self.eng = eng                        # 调用方已拿着 self.lock，直接换
+                try:
+                    out = self._infer(a, kw, native)
+                except Exception:
+                    self.eng = old                    # CPU 版也认不了：多半不是显卡的问题，换回显卡版，报原来的错
+                    raise e
+                self.kind, self.gpu = type(eng).__module__, False
+                _cpu_fallback = True                  # CPU 版重试成功了才算「改用 CPU」
                 _last_error = f"显卡识别出错，已改用 CPU：{e}"
-                eng, _gpu, _err = _new_engine(False)
-                self.eng, self.kind, self.gpu = eng, type(eng).__module__, False     # 调用方已拿着 self.lock，直接换
-                return self._infer(a, kw, native)
+                return out
         finally:
             try:                              # 记一笔：性能记录里看各功能识别花了多少时间
                 from .perfmon import note_ocr

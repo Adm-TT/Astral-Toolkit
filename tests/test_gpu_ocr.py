@@ -122,13 +122,14 @@ class _FakeResult:
 
 class _FakeEng:
     """假识别引擎：记被调了几次；fail=True 时一调用就报错（模拟显卡驱动出问题）"""
-    def __init__(self, gpu=False, fail=False):
+    def __init__(self, gpu=False, fail=False, exc=None):
         self.gpu, self.fail, self.calls = gpu, fail, 0
+        self.exc = exc or RuntimeError("DML 设备丢失")
 
     def __call__(self, *a, **kw):
         self.calls += 1
         if self.fail:
-            raise RuntimeError("DML 设备丢失")
+            raise self.exc
         return _FakeResult()
 
 
@@ -166,6 +167,39 @@ def test_gpu_error_falls_back_to_cpu(monkeypatch):
     assert not perf.rapidocr().gpu                        # 重新加载也还是 CPU，直到玩家再切
     perf.set_ocr_device("gpu")                            # 玩家在设置里切回显卡：再试显卡
     assert not perf._cpu_fallback and perf.rapidocr().gpu
+
+
+def test_gpu_and_cpu_both_fail_keeps_gpu(monkeypatch):
+    """显卡版、CPU 版都认不了（多半是图片本身的问题）：报原来的错，不切 CPU、不记「已改用 CPU」"""
+    import numpy as np
+    made = _fake_engines(monkeypatch)
+    eng = perf.rapidocr()
+    made[0].fail, made[0].exc = True, ZeroDivisionError("坏图")
+    monkeypatch.setattr(perf, "_new_engine", lambda gpu: (_FakeEng(gpu, True, ZeroDivisionError("坏图")), bool(gpu), ""))
+    try:
+        eng(np.zeros((8, 8, 3)))
+        raise AssertionError("应该抛 ZeroDivisionError")
+    except ZeroDivisionError:
+        pass
+    assert eng.gpu is True and eng.eng is made[0] and perf._cpu_fallback is False
+    assert "已改用 CPU" not in perf.last_ocr_error()
+
+
+def test_cpu_engine_cannot_load_raises_gpu_error(monkeypatch):
+    """显卡版出错、CPU 版又建不起来：报原来显卡的错，引擎不动"""
+    import numpy as np
+    made = _fake_engines(monkeypatch, gpu_fails=True)
+    eng = perf.rapidocr()
+
+    def no_cpu(gpu):
+        raise OSError("缺少模型文件")
+    monkeypatch.setattr(perf, "_new_engine", no_cpu)
+    try:
+        eng(np.zeros((8, 8, 3)))
+        raise AssertionError("应该抛原来的显卡错")
+    except RuntimeError as e:
+        assert "DML" in str(e)
+    assert eng.gpu is True and eng.eng is made[0] and perf._cpu_fallback is False
 
 
 def test_cpu_error_not_retried(monkeypatch):
