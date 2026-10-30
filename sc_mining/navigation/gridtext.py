@@ -128,8 +128,15 @@ class Grid:
             self.lh = int(round(self.pitch)) - 1
             self.xr = right_edge(tm, tm.shape[1] - 1)
             bands = [(t, t + self.lh) for t in tops]
-            a0 = ADV_1080 * screen_h / 1080
-            adv, off, edge, rnd = _fit(tm, bands[:6], self.xr, a0) if bands else (a0, 0.0, 0.0, 0.0)
+            # 字距起点试两个：按屏幕高度缩放的，和 1440 起步的——1440 以下调试字不再变小
+            # （1080p 实测字距 7.5、行距 13，和 1440 一样；只按高度缩到 5.6 会判成「不是等宽字」，快路起不来，玩家反馈 2026-10-30）
+            best = None
+            for a0 in sorted({ADV_1080 * screen_h / 1080, ADV_1080 * max(screen_h, 1440) / 1080}):
+                fit = _fit(tm, bands[:6], self.xr, a0) if bands else (a0, 0.0, 0.0, 0.0)
+                ratio = fit[2] / fit[3] if fit[3] else float("inf")
+                if best is None or ratio < best[0]:
+                    best = (ratio, a0, fit)
+            _, a0, (adv, off, edge, rnd) = best
             self.ok = bool(bands) and edge < rnd * 0.4            # 格子边界明显比别处干净：真的是等宽字
             # 小字号：挑出按主字号对不上的行再拟合
             small_rows = [b for b in bands if (_row_score(tm[b[0]:b[1]].astype(np.float32).sum(0), self.xr, adv, off) or 0) > rnd * 0.5]
