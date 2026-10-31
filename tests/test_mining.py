@@ -633,13 +633,11 @@ def test_settings_roundtrip():
     old = settings.FILE
     settings.FILE = Path(tempfile.mkdtemp()) / "settings.json"
     try:
-        c = (
-            settings.load()
-        )  # 防挂机 2026-10-30、自动跑（控制台第 4 批）删掉；autorun 键由 S5 的测试管
-        assert c["admin"] is None and "anti_afk" not in c and "autorun" not in c
+        c = settings.load()
+        assert c["admin"] is None
         settings.update(admin=True)
         c = settings.load()
-        assert c["admin"] is True and "anti_afk" not in c
+        assert c["admin"] is True
     finally:
         settings.FILE = old
 
@@ -692,7 +690,7 @@ def test_real_screenshot_scan():
     assert scan.composition and scan.mass and abs(scan.mass - 43066) / 43066 < 0.02
 
 
-def test_autorun_seat_from_real_log():
+def test_seat_from_real_log():
     """你 2026-10-20 的日志：上船只加入一次频道、一直不退；离开驾驶位靠 ClearDriver，坐回去靠导航模块的日志"""
     from sc_mining.system.gamelog import GameLog
 
@@ -723,7 +721,7 @@ def test_autorun_seat_from_real_log():
     assert not g.aboard
 
 
-def test_autorun_state_after_replaying_real_log():
+def test_seat_state_after_replaying_real_log():
     from pathlib import Path
     import pytest
     from sc_mining.system.gamelog import GameLog

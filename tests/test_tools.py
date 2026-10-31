@@ -1550,44 +1550,6 @@ def test_bearing_text_and_deadband():
     )
 
 
-def test_anti_afk_removed(monkeypatch, tmp_path):
-    """2026-10-30 删掉防挂机、2026-10-31 删掉自动跑（不再模拟任何按键）：老设置文件里开着的，读出来也没有这几项；不再启动辅助进程"""
-    import json  # noqa: F811
-    from sc_mining.core import settings
-
-    monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
-    settings.FILE.write_text(
-        json.dumps(
-            {
-                "agreed": True,
-                "keys_v5": True,
-                "anti_afk": True,
-                "afk_seconds": 500,
-                "afk_v3": True,
-                "autorun": True,
-                "autorun_sprint": True,
-            }
-        ),
-        encoding="utf-8",
-    )
-    c = settings.load()
-    assert not any(
-        k in c
-        for k in (
-            "anti_afk",
-            "afk_seconds",
-            "afk_v3",
-            "afk_v4",
-            "autorun",
-            "autorun_sprint",
-        )
-    )
-    saved = json.loads(settings.FILE.read_text(encoding="utf-8"))
-    assert (
-        "anti_afk" not in saved and "autorun" not in saved
-    )  # 文件里也清掉了（回滚旧版不会自动开）
-
-
 def test_nav_uses_display_info_waypoints_use_showlocation():
     """导航实时方位只读右上角调试信息（不往游戏里打字）；自定义路标只用 /showlocation（2026-10-23 用户要求）"""
     import inspect
@@ -4151,8 +4113,6 @@ def test_showlocation_keys_freed(monkeypatch, tmp_path):
                 "mark_key": "F7",
                 "fix_key": "F9",
                 "nav_mode": "space",
-                "afk_v3": True,
-                "afk_v4": True,
             }
         ),
         encoding="utf-8",

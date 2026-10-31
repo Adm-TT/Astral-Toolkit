@@ -220,7 +220,6 @@ _DELETE = (
             "刷新矿价.bat",
             "测试结果.txt",
             "test_result.txt",
-            ".autorun_on",
         )
     ]
     + [
@@ -228,9 +227,8 @@ _DELETE = (
         for n in ("glossary_names.py", "signature.py", "sigscreen.py", "calibrate.py")
     ]
     + [ROOT / "tests" / "test_core.py", ROOT / "tests" / "trade"]
-    + [USER / "showloc_method.txt"]
-    + [USER / ".autorun_on", USER / "restart_request"]
-)  # 自动 /showlocation 已删掉，它记的按键方式也不要了
+    + [USER / "restart_request"]
+)  # restart_request：以前远程重启用的请求文件，功能已删，启动时清掉残留
 
 
 def seed_data():

@@ -141,8 +141,7 @@ class GameLog:
         m = SEAT.search(text)
         if m:
             if "PostInitialize" in text:
-                # 附近别人的船（或刚刷出来的船）初始化导航模块时也写这条、带船名，不是你坐上了（1.6.45）。
-                # 以前当成坐上驾驶位，双击 W 自动跑一直被挡：10-20 以来 26 个日志里 41 次、约 12 小时
+                # 附近别人的船（或刚刷出来的船）初始化导航模块时也写这条、带船名，不是你坐上了（1.6.45）
                 return
             if self.vehicle is None:
                 self.vehicle = m.group(1)

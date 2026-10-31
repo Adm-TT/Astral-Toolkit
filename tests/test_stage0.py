@@ -152,31 +152,6 @@ def test_no_synthetic_input():
     assert not (paths.CODE / "system" / "helpers.py").exists()
 
 
-def test_settings_drop_autorun(monkeypatch, tmp_path):
-    """1.1.2 删掉自动跑：没有 autorun / autorun_sprint 默认值；老设置文件里的读出来也没有，文件里也清掉（回滚旧版不会自动开）"""
-    import json
-    from sc_mining.core import settings
-
-    monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
-    assert (
-        "autorun" not in settings.DEFAULTS and "autorun_sprint" not in settings.DEFAULTS
-    )
-    settings.FILE.write_text(
-        json.dumps(
-            {"agreed": True, "keys_v5": True, "autorun": True, "autorun_sprint": True}
-        ),
-        encoding="utf-8",
-    )
-    c = settings.load()
-    assert "autorun" not in c and "autorun_sprint" not in c and c["agreed"] is True
-    saved = json.loads(settings.FILE.read_text(encoding="utf-8"))
-    assert (
-        "autorun" not in saved
-        and "autorun_sprint" not in saved
-        and saved["agreed"] is True
-    )
-
-
 ENGINES = (
     "game_events",
     "nav",
@@ -408,14 +383,13 @@ def test_frozen_main_old_helper_args_exit(monkeypatch):
 
 
 def test_startup_drops_stale_helper_files():
-    """老版本留下的「自动跑中」标记和重启请求：启动时（paths.migrate）删掉，没有代码再读它们"""
+    """老版本留下的重启请求文件：启动时（paths.migrate）删掉，没有代码再读它"""
     from sc_mining.core import paths
 
     names = [
         p.name for p in paths._DELETE
     ]  # 测试时 paths.USER 被换成临时目录，_DELETE 是导入时算好的，只比名字
     assert "restart_request" in names
-    assert names.count(".autorun_on") == 2  # 程序目录一个（更老的版本）、userdata 一个
 
 
 def test_live_fail_off_without_hud(monkeypatch):

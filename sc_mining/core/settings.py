@@ -10,10 +10,7 @@ FILE = USER / "settings.json"
 
 DEFAULTS = {
     "admin": None,  # True = 每次都用管理员身份打开；False = 不用；None = 还没问过
-    # 防挂机（anti_afk / afk_seconds / afk_v3 / afk_v4）2026-10-30 删掉；老设置文件里的这几项读取时自动忽略
     "keys_v5": False,  # 已经把老玩家的「记录路标」「一键定位」热键清掉（只清一次，2026-10-27 用户定）
-    # 双击 W 自动跑（autorun / autorun_sprint）1.1.2 删掉；老设置文件里的这两项读取时自动清掉
-    "double_tap_ms": 250,  # 两次按 W 间隔多短算双击
     "game_log": None,  # 游戏日志 Game.log 的位置（自动找到后记下）
     "trade_capture_key": "F8",  # 交易界面里截图入库的热键（F1~F12）
     "mark_key": "",  # 记录路标：默认不绑（2026-10-27 用户定：玩家自己输 /showlocation，AT 盯剪贴板接住）
@@ -72,20 +69,6 @@ def _load():
         data = {}
     cfg = {**DEFAULTS, **{k: v for k, v in data.items() if k in DEFAULTS}}
     changed = False
-    if any(
-        k in data
-        for k in (
-            "anti_afk",
-            "afk_seconds",
-            "afk_v3",
-            "afk_v4",
-            "autorun",
-            "autorun_sprint",
-        )
-    ):
-        changed = (
-            True  # 防挂机删了：把老键清出文件，免得回滚 1.1.0 时又自动开（2026-10-30）
-        )
     if data and not cfg["keys_v5"]:
         # 1.0.5：/showlocation 只在必要时用，F7、F9 空出来给玩家（老玩家存着的也清掉；想用的自己去设置里绑回）
         cfg["mark_key"] = cfg["fix_key"] = ""
