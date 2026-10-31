@@ -42,12 +42,12 @@ class _Hover:
         # 每个热键按下去做什么：(要不要占着「忙」, 动作)。占着忙的同一时间只跑一个（要截屏的）；
         # 记路标 / 一键定位 / 原矿记录 1.1.2 起只等玩家自己输 /showlocation（最多 60 秒），不占着忙，免得这段时间 F8 用不了
         acts = {"trade_capture_key": (True, lambda: (_S().item_key_pressed(), bus.run_task("hover", self._recognize, title="识别物品"))),
-                "mark_key": (False, lambda: bus.run_task("mark", self._mark, title="记录路标")),
-                "fix_key": (False, lambda: bus.run_task("fix", self._fix, title="一键定位")),
+                "mark_key": (False, lambda: bus.run_task_once("mark", self._mark, title="记录路标")),
+                "fix_key": (False, lambda: bus.run_task_once("fix", self._fix, title="一键定位")),
                 "report_key": (True, lambda: bus.run_task("feedback", self._report, title="问题反馈")),
                 "live_key": (False, lambda: threading.Thread(target=self._toggle_live, daemon=True, name="live-key").start()),
                 "count_key": (False, lambda: threading.Thread(target=_S().count_toggle, daemon=True, name="count-key").start()),
-                "ore_key": (False, lambda: bus.run_task("ore", self._ore, title="原矿记录"))}
+                "ore_key": (False, lambda: bus.run_task_once("ore", self._ore, title="原矿记录"))}
         prev = {}
         while True:
             keys, seen = [], set()
@@ -87,23 +87,14 @@ class _Hover:
         finally:
             self.busy = False
 
-    def _mark(self):
-        try:
-            return _S().mark_here()
-        finally:
-            self.busy = False
+    def _mark(self):                      # 不占着忙（1.1.2），结束时也不能清别人的忙
+        return _S().mark_here()
 
     def _ore(self):
-        try:
-            return _S().ore_record(here=True)
-        finally:
-            self.busy = False
+        return _S().ore_record(here=True)
 
     def _fix(self):
-        try:
-            return _S().fix_here()
-        finally:
-            self.busy = False
+        return _S().fix_here()
 
     def _recognize(self):
         try:
