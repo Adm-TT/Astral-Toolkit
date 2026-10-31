@@ -376,8 +376,13 @@ def waypoint_add(name="", body="", lat=None, lon=None, alt=0.0, here=False):
         return {"error": "需填写路标名称"}
     if here:
         # 只用 /showlocation 的坐标（不读右上角）：等你在游戏聊天框自己输入 /showlocation（AT 不替你输入）
+        from ..system import showloc
+
         _HERE.update(name=name.strip(), until=time.time() + HERE_WAIT)
-        _start_here_watch()
+        if (
+            not showloc._WAITING.locked()
+        ):  # 热键记路标已经在等 /showlocation：名字交给它，不另起一份（合并后审查）
+            _start_here_watch()
         return {
             "pending": True,
             "message": f"切回游戏在聊天框输入 /showlocation 后回车；{HERE_WAIT} 秒内获取到坐标即保存为「{name.strip()}」",
@@ -715,14 +720,22 @@ def _start_here_watch():
 
 def _wait_showloc():
     """等玩家自己在聊天框输入 /showlocation（AT 不替你输入，控制台指令第 4 批）：先在悬浮窗上提示一下"""
-    from ..system.showloc import showlocation, TYPE_WAIT
+    from ..system import showloc
 
-    _note_hud(
-        "定位",
-        f"请在游戏聊天框输入 /showlocation 后回车（{TYPE_WAIT} 秒内）",
-        TYPE_WAIT,
-    )  # 等多久就挂多久（第 4 批审查）
-    return showlocation(log=_wp_log)
+    if (
+        not showloc._WAITING.locked()
+    ):  # 已经有一份在等：不再挂提示，showlocation 会马上说「已经在等」（合并后审查）
+        _note_hud(
+            "定位",
+            f"请在游戏聊天框输入 /showlocation 后回车（{showloc.TYPE_WAIT} 秒内）",
+            showloc.TYPE_WAIT,
+        )  # 等多久就挂多久（第 4 批审查）
+    g, why = showloc.showlocation(log=_wp_log)
+    if g:
+        _note_hud(
+            "定位", "", 1
+        )  # 拿到坐标：提示马上收起，免得以为没定上位（合并后审查）
+    return g, why
 
 
 def mark_here():

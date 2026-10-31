@@ -36,12 +36,25 @@ def installed():
     return paths.VELOPACK
 
 
-def _mgr(rollback=False, timeout_ms=0, feed=None):
-    """timeout_ms：整个请求（连上 + 传完）最多多久；查版本给 8 秒，下载不限（大文件）。feed：更新源地址（默认第一个）"""
+def _channels(rollback):
+    """要问哪些频道：回滚只问 prev；装的是测试版（x.y.z-beta.N）时 beta 和 win 都问、取更新的那个
+    （发布脚本把测试版打进 beta 频道；只问 win 的话测试版玩家收不到下一个测试版，2026-10-31 合并后审查）"""
+    if rollback:
+        return [PREV]
+    from . import upgrade
+
+    return ["beta", CHANNEL] if "-" in str(upgrade.VERSION) else [CHANNEL]
+
+
+def _mgr(rollback=False, timeout_ms=0, feed=None, channel=None):
+    """timeout_ms：整个请求（连上 + 传完）最多多久；查版本给 8 秒，下载不限（大文件）。feed：更新源地址（默认第一个）。
+    channel：频道（默认 win，回滚是 prev）"""
     import velopack
 
     feed = feed or FEED
-    opts = velopack.UpdateOptions(bool(rollback), 10, PREV if rollback else CHANNEL)
+    opts = velopack.UpdateOptions(
+        bool(rollback), 10, channel or (PREV if rollback else CHANNEL)
+    )
     # 超时只对网址有用；本地文件夹（沙盒测试）直接给路径，HttpSource 不认本地路径（2026-10-27 沙盒发现回滚列表是空的）
     src = (
         velopack.HttpSource(feed, velopack.HttpOptions([], timeout_ms))
@@ -60,14 +73,33 @@ def _version_of(info):
 _last = {"feed": None}  # 上一次答上来的源：下次先问它（国内不用每次先等香港超时）
 
 
+def _ask(feed, rollback, timeout_ms=8000):
+    """在一个源上把要问的频道都问一遍 → (版本最新的 UpdateInfo 或 None, 它的频道)；所有频道都出错才抛错"""
+    from .upgrade import vkey
+
+    best, best_ch, err, ok = None, None, None, False
+    for ch in _channels(rollback):
+        try:
+            info = _mgr(rollback, timeout_ms, feed, ch).check_for_updates()
+            ok = True
+        except Exception as e:  # 这个频道没有（比如还没发过测试版）或连不上：问下一个
+            err = e
+            continue
+        if info and (best is None or vkey(_version_of(info)) > vkey(_version_of(best))):
+            best, best_ch = info, ch
+    if not ok:
+        raise err if err else RuntimeError("更新源没有回答")
+    return best, best_ch
+
+
 def _check_at(rollback):
-    """按顺序问更新源（上次答上来的 → 香港 → 国内镜像），第一个答得上的 → (UpdateInfo 或 None, 源地址, 源名字)；都连不上抛 RuntimeError"""
+    """按顺序问更新源（上次答上来的 → 香港 → 国内镜像），第一个答得上的 → (UpdateInfo 或 None, 源地址, 源名字, 频道)；都连不上抛 RuntimeError"""
     err = None
     for feed, name in sorted(FEEDS, key=lambda f: f[0] != _last["feed"]):
         try:
-            info = _mgr(rollback, 8000, feed).check_for_updates()
+            info, ch = _ask(feed, rollback)
             _last["feed"] = feed
-            return info, feed, name
+            return info, feed, name, ch
         except Exception as e:  # 连不上 / 超时：换下一个
             err = e
     raise RuntimeError(f"{'和'.join(n for _, n in FEEDS)}都无法连接：{err}") from err
@@ -75,7 +107,7 @@ def _check_at(rollback):
 
 def check(rollback=False):
     """有可装的版本就返回 (UpdateInfo, 版本号, 源名字)，没有返回 (None, "", 源名字)。都连不上抛 RuntimeError"""
-    info, _, name = _check_at(rollback)
+    info, _, name, _ = _check_at(rollback)
     if not info:
         return None, "", name
     return info, _version_of(info), name
@@ -84,7 +116,7 @@ def check(rollback=False):
 def install(rollback=False, progress=print):
     """下载并安排安装：下载完后让 Update.exe 等 AT 退出再换文件、重新打开 AT。返回版本号；调用方随后要让 AT 退出。
     rollback=True：装回上一个版本"""
-    info, feed, name = _check_at(rollback)
+    info, feed, name, ch = _check_at(rollback)
     if not info:
         raise ValueError("没有可回滚的上一个版本" if rollback else "未找到新版本")
     v = _version_of(info)
@@ -107,13 +139,13 @@ def install(rollback=False, progress=print):
     for k, (fd, nm) in enumerate([(feed, name)] + rest):
         if k:  # 上一个源下载失败：换下一个源重新问一遍、再下载
             try:
-                info = _mgr(rollback, 8000, fd).check_for_updates()
+                info, ch = _ask(fd, rollback)
             except Exception as e:
                 last_err = e
                 continue
             if not info or _version_of(info) != v:
                 continue
-        m = _mgr(rollback, DOWNLOAD_MS, fd)
+        m = _mgr(rollback, DOWNLOAD_MS, fd, ch)
         progress(f"正在下载 AT {v}（{nm}）…")
         try:
             try:

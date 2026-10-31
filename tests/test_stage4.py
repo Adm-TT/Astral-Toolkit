@@ -263,3 +263,41 @@ def test_feedback_scrub_personal_info(monkeypatch, tmp_path):
     assert "5f20" not in t_sys._scrub(
         json.dumps({"p": "C:\\Users\\张三\\x"})
     )  # 中文用户名被 json 转义成 \uXXXX
+
+
+def test_showloc_hotkey_and_new_here_do_not_double_save(monkeypatch):
+    """合并后审查 2026-10-31：热键记路标已经在等 /showlocation 时，再点「用当前位置新建」不另起盯剪贴板（不然一次输入记成两个路标）；
+    已经在等时不再挂「请输入」提示；拿到坐标后提示马上收起"""
+    from sc_mining.system import showloc
+    from sc_mining.tasks import navigation as nav
+
+    started, notes = [], []
+    monkeypatch.setattr(nav, "_start_here_watch", lambda: started.append(1))
+    monkeypatch.setattr(nav, "_note_hud", lambda sec, text, secs=6: notes.append(text))
+    monkeypatch.setattr(nav, "_HERE", {"name": None, "until": 0.0, "thread": None})
+    assert showloc._WAITING.acquire(blocking=False)
+    try:
+        r = nav.waypoint_add("测试点", here=True)
+        assert isinstance(r, dict)
+        assert r.get("pending") and not started and nav._HERE["name"] == "测试点"
+        monkeypatch.setattr(
+            showloc,
+            "showlocation",
+            lambda log=None: (None, "已经在等你输入 /showlocation 了"),
+        )
+        assert nav._wait_showloc()[0] is None and not notes  # 已经在等：不挂提示
+    finally:
+        showloc._WAITING.release()
+    nav._HERE["name"] = None
+    nav.waypoint_add("测试点2", here=True)
+    assert started  # 没人在等：照常盯剪贴板
+    monkeypatch.setattr(
+        showloc,
+        "showlocation",
+        lambda log=None: ((1.0, 2.0, 3.0), "Coordinates: x:1 y:2 z:3"),
+    )
+    notes.clear()
+    assert nav._wait_showloc()[0] == (1.0, 2.0, 3.0)
+    assert (
+        notes[0].startswith("请在游戏聊天框") and notes[-1] == ""
+    )  # 先提示，拿到后收起

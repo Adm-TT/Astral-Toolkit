@@ -776,7 +776,7 @@ def test_vpk_beta_gets_same_number_live(monkeypatch):
     from sc_mining.update import upgrade, vpk
     from sc_mining.tasks import system as t_sys
 
-    versions = {"win": "1.1.2", "prev": None}
+    versions = {"win": "1.1.2", "beta": None, "prev": None}
     monkeypatch.setattr(vpk, "FEEDS", [("https://example.invalid/velopack", "测试源")])
     monkeypatch.setattr(vpk, "_last", {"feed": None})
     monkeypatch.setattr(vpk, "installed", lambda: True)
@@ -788,13 +788,24 @@ def test_vpk_beta_gets_same_number_live(monkeypatch):
     try:
         assert vpk.install(progress=lambda *a: None) == "1.1.2"
         assert t_sys.upgrade_check(online=True)["online"]["version"] == "1.1.2"
-        versions["win"] = "1.1.2-beta.1"  # 同号同 beta：不是新版本
+        versions.update(win=None, beta="1.1.2-beta.1")  # 同号同 beta：不是新版本
         try:
             vpk.install(progress=lambda *a: None)
             raise AssertionError("应该报已经是最新")
         except ValueError as e:
             assert "最新" in str(e)
         assert t_sys.upgrade_check(online=True)["online"] is None
+        # 测试版在 beta 频道（发布脚本的规定）：装着 beta.1 能收到 beta.2；win 上旧的正式版不抢（合并后审查 2026-10-31）
+        versions.update(win="1.1.1", beta="1.1.2-beta.2")
+        assert vpk.install(progress=lambda *a: None) == "1.1.2-beta.2"
+        # 正式版玩家不看 beta 频道
+        monkeypatch.setattr(upgrade, "VERSION", "1.1.2")
+        versions.update(win=None, beta="1.1.3-beta.1")
+        try:
+            vpk.install(progress=lambda *a: None)
+            raise AssertionError("正式版不该收到测试版")
+        except ValueError as e:
+            assert "未找到" in str(e) or "最新" in str(e)
         monkeypatch.setattr(upgrade, "VERSION", "1.1.2")  # 正式版回滚到同号 beta
         versions.update(win=None, prev="1.1.2-beta.3")
         assert vpk.install(rollback=True, progress=lambda *a: None) == "1.1.2-beta.3"
