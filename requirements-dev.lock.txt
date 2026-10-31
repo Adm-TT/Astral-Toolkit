@@ -1,0 +1,5 @@
+# 开发依赖（锁版本）：打包依赖 + lint 和类型检查（AGENTS.md「验证命令」；升级时一起改 pyproject.toml 里的规则）
+-r requirements-build.lock.txt
+ruff==0.17.3
+basedpyright==1.40.2
+nodejs-wheel-binaries==24.19.0

@@ -1,0 +1,30 @@
+﻿AT 星际公民助手 —— 名称和图标说明
+
+AT 的源代码按 GNU Affero 通用公共许可证第 3 版（AGPL-3.0，见 LICENSE）开源。
+下列名称和图片文件不在 AGPL-3.0 范围内，© 2026 Adm_TT 保留所有权利（AGPL-3.0 第 7 条允许作者不授予名称、商标的使用权）。
+
+名称：
+  AT、Astral Toolkit、天枢、Dubhe、阿塔
+
+图片文件：
+  sc_mining/app/icon.ico
+  sc_mining/app/web/icon.png
+  sc_mining/app/web/icon.svg
+  sc_mining/app/web/at-mark-dark.svg
+  sc_mining/app/web/at-mark-light.svg
+  tools/shell/ATShell/icon.ico
+  tools/shell/ATShell/icon.png
+  tools/velopack_splash.png
+
+可以：
+  - 自己使用、学习、修改源代码，包括这些文件（只在自己电脑上跑）
+  - 如实说明自己的项目「基于 AT 修改」或「源自 AT」
+
+不可以（未经书面许可）：
+  - 发布修改版时继续用上面的名称或图标，或使用容易混淆的名称、图标
+  - 让人误以为修改版是 AT 官方或作者发布、认可的
+
+发布修改版时，把上面的图片文件换成自己的、把程序里显示的名称改掉即可，其余代码照 AGPL-3.0 办。
+
+字体（D-DIN、DejaVu Sans Mono）是第三方开源字体，按各自许可证使用，见 第三方许可.txt。
+星际公民及源自游戏的名称、图像归 Cloud Imperium Rights LLC 和 Cloud Imperium Rights Limited 所有。

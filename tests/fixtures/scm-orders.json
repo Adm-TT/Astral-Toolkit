@@ -1,0 +1,110 @@
+{
+  "code": 0,
+  "data": {
+    "list": [
+      {
+        "orderNumber": "CSDD202610192027071",
+        "creatorType": 1,
+        "remainingQuantity": 3,
+        "unitPrice": 1000000.0,
+        "status": 1,
+        "expireTime": 253402185600000,
+        "createTime": 1792412828000,
+        "displayType": 1,
+        "itemName": "科力晶（单个矿块）",
+        "itemDetails": [
+          {
+            "itemId": "43475",
+            "itemName": "科力晶（单个矿块）",
+            "quantity": 1,
+            "unitPrice": 1000000.0,
+            "qualityData": "{\"type\": \"material\", \"quality\": 909}"
+          }
+        ]
+      },
+      {
+        "orderNumber": "CSDD202610191622441",
+        "creatorType": 1,
+        "remainingQuantity": 8,
+        "unitPrice": 100000.0,
+        "status": 1,
+        "expireTime": 253402185600000,
+        "createTime": 1792398165000,
+        "displayType": 1,
+        "itemName": "紫钠水晶（单个矿块）",
+        "itemDetails": [
+          {
+            "itemId": "42738",
+            "itemName": "紫钠水晶（单个矿块）",
+            "quantity": 1,
+            "unitPrice": 100000.0,
+            "qualityData": "{\"type\": \"material\", \"quality\": 916}"
+          }
+        ]
+      },
+      {
+        "orderNumber": "QGDD202610191249511",
+        "creatorType": 0,
+        "remainingQuantity": 3,
+        "unitPrice": 1000000.0,
+        "status": 1,
+        "expireTime": 253402185600000,
+        "createTime": 1792385392000,
+        "displayType": 1,
+        "itemName": "DCHS-05 轨道定位计算板",
+        "itemDetails": [
+          {
+            "itemId": "52161",
+            "itemName": "DCHS-05 轨道定位计算板",
+            "quantity": 1,
+            "unitPrice": 1000000.0,
+            "qualityData": null
+          }
+        ]
+      },
+      {
+        "orderNumber": "CSDD202610190221201",
+        "creatorType": 1,
+        "remainingQuantity": 6,
+        "unitPrice": 1000000.0,
+        "status": 1,
+        "expireTime": 1792944000000,
+        "createTime": 1792347680000,
+        "displayType": 1,
+        "itemName": "王牌 截击者 头盔",
+        "itemDetails": [
+          {
+            "itemId": "42502",
+            "itemName": "王牌 截击者 头盔",
+            "quantity": 1,
+            "unitPrice": 1000000.0,
+            "qualityData": null
+          }
+        ]
+      },
+      {
+        "orderNumber": "CSDD202610181616501",
+        "creatorType": 1,
+        "remainingQuantity": 1,
+        "unitPrice": 2000000.0,
+        "status": 1,
+        "expireTime": 253402185600000,
+        "createTime": 1792311410000,
+        "displayType": 1,
+        "itemName": "科力晶（单个矿块）",
+        "itemDetails": [
+          {
+            "itemId": "43475",
+            "itemName": "科力晶（单个矿块）",
+            "quantity": 1,
+            "unitPrice": 2000000.0,
+            "qualityData": "{\"type\": \"material\", \"quality\": 880}"
+          }
+        ]
+      }
+    ],
+    "total": 37,
+    "extra": null
+  },
+  "msg": ""
+}

@@ -1,0 +1,24 @@
+{
+ "version": "2026.10.28-2118",
+ "date": "2026-10-28",
+ "game": "4.10.2",
+ "file": "AT_data_2026.10.28-2118.zip",
+ "size": 1790726,
+ "sha256": "8d8ec8e4b2380c9b46e48f9757658e4c770afe9480fbbd5910f6dd8395192a93",
+ "urls": [
+  "https://dl.astral-trade.com/releases/data-2026.10.28-2118/AT_data_2026.10.28-2118.zip",
+  "https://gitee.com/Adm_TT/Astral-Toolkit/releases/download/data-2026.10.28-2118/AT_data_2026.10.28-2118.zip",
+  "https://github.com/Adm-TT/Astral-Toolkit/releases/download/data-2026.10.28-2118/AT_data_2026.10.28-2118.zip"
+ ],
+ "loot": {
+  "version": "4.10.2LIVE",
+  "file": "AT_loot_4.10.2LIVE.zip",
+  "size": 21135349,
+  "sha256": "260b1dcc95aca066b9b8c6a5ca38da2a04f041c3604aec947454e9eb45f8990b",
+  "urls": [
+   "https://dl.astral-trade.com/releases/data-2026.10.28-2118/AT_loot_4.10.2LIVE.zip",
+   "https://gitee.com/Adm_TT/Astral-Toolkit/releases/download/data-2026.10.28-2118/AT_loot_4.10.2LIVE.zip",
+   "https://github.com/Adm-TT/Astral-Toolkit/releases/download/data-2026.10.28-2118/AT_loot_4.10.2LIVE.zip"
+  ]
+ }
+}

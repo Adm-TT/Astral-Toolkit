@@ -1,0 +1,32 @@
+# lint 和类型检查配置（2026-10-31 接入第一步）
+# 现在只开最基本的规则，先登记老问题，不自动修、不格式化。
+
+[tool.ruff]
+target-version = "py312"
+extend-exclude = [
+    "tests/fixtures",
+    "tools/shell/ATShell/bin",
+    "tools/shell/ATShell/obj",
+    "tools/publish_hk.py",
+]
+
+[tool.ruff.lint]
+# E4 导入位置、E7 语句、E9 语法 / IO 错误、F pyflakes（未定义名字、没用的导入等）
+select = ["E4", "E7", "E9", "F"]
+
+[tool.basedpyright]
+pythonVersion = "3.12"
+typeCheckingMode = "standard"
+# 主仓库根目录下的 .venv；在 worktree 里跑时用 --pythonpath 指过去
+venvPath = "."
+venv = ".venv"
+include = ["sc_mining", "tests", "tools"]
+exclude = [
+    "**/__pycache__",
+    ".venv",
+    "tests/fixtures",
+    "tests/samples",
+    "tools/shell/ATShell/bin",
+    "tools/shell/ATShell/obj",
+    "tools/publish_hk.py",
+]

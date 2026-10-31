@@ -1,0 +1,29 @@
+{
+ "version": "1.1.1",
+ "date": "2026-10-29",
+ "notes": [
+  "国内下载：新增国内镜像，香港服务器连不上时自动改从国内下载，在线更新、数据包、安装包都适用",
+  "检查更新连不上服务器时如实提示，不再误显示「已是最新版本」",
+  "出错提示改为中文"
+ ],
+ "file": "Dubhe_1.1.1.zip",
+ "size": 3562923,
+ "sha256": "3129a1ed7ab3997659a1532dd7935d0e34473928f2a648de4ac50d6c183d2cf3",
+ "urls": [
+  "https://dl.astral-trade.com/releases/v1.1.1/Dubhe_1.1.1.zip",
+  "https://at-dl-1323647399.cos.ap-guangzhou.myqcloud.com/releases/v1.1.1/Dubhe_1.1.1.zip",
+  "https://gitee.com/Adm_TT/Astral-Toolkit/releases/download/v1.1.1/Dubhe_1.1.1.zip",
+  "https://github.com/Adm-TT/Astral-Toolkit/releases/download/v1.1.1/Dubhe_1.1.1.zip"
+ ],
+ "installer": {
+  "file": "AT_Setup_1.1.1.exe",
+  "size": 2096270,
+  "sha256": "e8ac50d0eacae76e7542e38573d8669d5e8b442ad9c8712254ea10204c3221c8",
+  "urls": [
+   "https://dl.astral-trade.com/releases/v1.1.1/AT_Setup_1.1.1.exe",
+   "https://at-dl-1323647399.cos.ap-guangzhou.myqcloud.com/releases/v1.1.1/AT_Setup_1.1.1.exe",
+   "https://gitee.com/Adm_TT/Astral-Toolkit/releases/download/v1.1.1/AT_Setup_1.1.1.exe",
+   "https://github.com/Adm-TT/Astral-Toolkit/releases/download/v1.1.1/AT_Setup_1.1.1.exe"
+  ]
+ }
+}
