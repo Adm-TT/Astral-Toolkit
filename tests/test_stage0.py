@@ -390,8 +390,12 @@ def test_frozen_main_old_helper_args_exit(monkeypatch):
     from sc_mining import frozen_main
     from sc_mining.core import paths
 
+    from sc_mining import run
+
     seeded = []
     monkeypatch.setattr(frozen_main, "_velopack", lambda: None)
+    fake = lambda *a, **k: seeded.append("menu")  # noqa: E731  万一没退出，也别真把 AT 跑起来
+    monkeypatch.setattr(run, "ENTRIES", {**run.ENTRIES, "menu": fake})
     monkeypatch.setattr(paths, "seed_data", lambda: seeded.append(1))
     for argv in (["AT.exe", "helpers", "123"], ["AT.exe", "ocrworker"]):
         monkeypatch.setattr(sys, "argv", argv)
@@ -412,3 +416,23 @@ def test_startup_drops_stale_helper_files():
     ]  # 测试时 paths.USER 被换成临时目录，_DELETE 是导入时算好的，只比名字
     assert "restart_request" in names
     assert names.count(".autorun_on") == 2  # 程序目录一个（更老的版本）、userdata 一个
+
+
+def test_live_fail_off_without_hud(monkeypatch):
+    """悬浮窗没建起来时采矿助手出错：照样关掉、存 live_on=False、告诉窗口（以前收尾时擦悬浮窗抛错，线程死掉，界面一直显示在运行）"""
+    import threading
+    from sc_mining.app import bus, hud_state
+    from sc_mining.app.engines import live as live_mod
+    from sc_mining.core import settings
+
+    saved, pub = [], []
+    monkeypatch.setattr(hud_state, "_hud", lambda: None)
+    monkeypatch.setattr(hud_state, "_note_hud", lambda *a, **k: None)
+    monkeypatch.setattr(settings, "update", lambda **kw: saved.append(kw))
+    monkeypatch.setattr(bus, "publish", lambda kind, data: pub.append((kind, data)))
+    live = live_mod._Live()
+    ev = threading.Event()
+    live._fail_off(ev, "坏了")
+    assert ev.is_set() and {"live_on": False} in saved
+    assert ("live", {"running": False, "error": "坏了"}) in pub
+    live.stop()  # 停止收尾也不抛错

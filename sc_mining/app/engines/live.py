@@ -24,6 +24,14 @@ def _H():
     return hud_state
 
 
+def _hud_clear(*keys):
+    """擦掉悬浮窗上的几块；悬浮窗没建起来（_hud() 为 None）就什么也不做，别让停止 / 出错收尾半路抛错（审查 2026-10-31）"""
+    hud = _H()._hud()
+    if hud is not None:
+        for k in keys:
+            hud.clear(k)
+
+
 class _Live:
     """实时读屏：和命令行版同样的投票逻辑，结果推给窗口和悬浮窗"""
 
@@ -190,12 +198,7 @@ class _Live:
                 with (
                     self.lock
                 ):  # 重来前把上一轮的旧结果清掉（新一轮的过期清理不认旧的）
-                    hud = _H()._hud()
-                    if (
-                        hud is not None
-                    ):  # 悬浮窗没建起来时别在这里抛错，让重试接着走（审查 2026-10-31）
-                        for k in ("信号", "扫描", "矿袋"):
-                            hud.clear(k)
+                    _hud_clear("信号", "扫描", "矿袋")
                 ev.wait(1)
 
     def _fail_off(self, ev, why):
@@ -207,8 +210,7 @@ class _Live:
                 return
             ev.set()
             self.paused = False
-            for k in ("信号", "扫描", "矿袋"):
-                _H()._hud().clear(k)
+            _hud_clear("信号", "扫描", "矿袋")
         try:
             settings.update(live_on=False)
         except Exception:
@@ -236,8 +238,7 @@ class _Live:
                 return
             ev.set()
             self.paused = False
-            for k in ("信号", "扫描", "矿袋"):
-                _H()._hud().clear(k)
+            _hud_clear("信号", "扫描", "矿袋")
         settings.update(live_on=False)
         bus.publish("scan_hint", {"why": "", "text": ""})
         bus.publish("live", {"running": False, "auto_off": True})
@@ -254,8 +255,7 @@ class _Live:
         self.thread = None
         with self.lock:
             self.paused = False
-            for k in ("信号", "扫描", "矿袋"):
-                _H()._hud().clear(k)
+            _hud_clear("信号", "扫描", "矿袋")
         bus.runtime_log("采矿助手实时识别引擎已停止", tag="LIVE", level="INFO")
         bus.publish("scan_hint", {"why": "", "text": ""})
         bus.publish("live", {"running": False})

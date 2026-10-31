@@ -56,7 +56,8 @@ AT 靠截屏识别文字、读游戏写出的日志文件工作；不模拟按�
 | `sc_mining/tasks/` | 各功能的业务逻辑：交易、库存、目标与制造、导航、采矿、F8 识别、F6 盘点、系统与更新；界面接口经 `app/api/` 转到这里 |
 | `sc_mining/core/` | 基础：路径、设置、版本、性能与识别设备、多语言 |
 | `sc_mining/mining/`、`navigation/`、`crafting/`、`trade/` | 各领域的计算和数据：采矿识别与破碎计算、星图与定位、制造与物品、查价与库存 |
-| `sc_mining/system/`、`update/` | 和系统、游戏打交道（辅助进程、驾驶位检测、显卡识别、问题反馈）；数据下载与升级 |
+| `sc_mining/ocr/` | 读屏识别统一入口（各处认字都经这里），引擎本体在 `core/perf.py` |
+| `sc_mining/system/`、`update/` | 和系统、游戏打交道（驾驶位检测、问题反馈等）；数据下载与升级 |
 | `sc_mining/run.py`、`selftest.py` | 命令行入口、自检 |
 | `tests/` | 测试，`run_all.py` 自带运行器，不用装 pytest |
 | `tools/` | 打包、发布、游戏文件解包等开发工具 |

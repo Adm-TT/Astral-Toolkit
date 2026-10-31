@@ -4,6 +4,7 @@
   AT.exe restart         重新启动（托盘「重新启动」、升级后用）
   AT.exe admin <入口>    管理员身份重开时用
   AT.exe selftest        自检：模块、数据、文字识别、计算、本机服务，结果写进 userdata\\logs\\selftest.txt
+  AT.exe helpers / ocrworker   老版本拉起的辅助进程 / 识别小进程，这两个已删除：直接退出
 Python 版不用这个文件（照旧 python -m sc_mining.run）
 """
 
