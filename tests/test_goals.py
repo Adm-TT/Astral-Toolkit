@@ -234,7 +234,7 @@ def test_goal_quality_effect_and_stock_quality(monkeypatch, tmp_path):
 
 def test_tooltip_quality():
     from types import SimpleNamespace as N
-    from sc_mining.tasks.hover import tooltip_quality
+    from sc_mining.trade.inspector import tooltip_quality
 
     tk = lambda s, y=0: N(text=s, box=(0, y, 10, y + 5))  # noqa: E731
     assert tooltip_quality([tk("钛"), tk("品质：650", 10)]) == 650

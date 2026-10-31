@@ -216,14 +216,12 @@ def test_start_all_needs_agreed(monkeypatch):
 
 def test_stop_all_sets_events(monkeypatch):
     from sc_mining.app.engines.manager import EngineManager
-    from sc_mining.system import gpu_ocr
 
     m = EngineManager.get_instance()
     monkeypatch.setattr(
         m.live, "stop_ev", threading.Event()
     )  # 用新的，测完换回原来的（别把真引擎停了）
     monkeypatch.setattr(m.nav, "stop_ev", threading.Event())
-    monkeypatch.setattr(gpu_ocr, "shutdown", lambda: None)
     m.stop_all()
     assert m.live.stop_ev.is_set() and m.nav.stop_ev.is_set()
 

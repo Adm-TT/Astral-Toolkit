@@ -164,50 +164,35 @@ class _Live:
         bus.publish("live", {"running": True})
 
     def _run_gpu(self, ev):
-        """跑采矿助手（出错最多重试 3 次）。识别引擎在主进程里，按设置用显卡（DirectML）或 CPU，采矿助手关掉后引擎照样留着；
-        gpu_ocr 现在只是兼容层：acquire 只是顺带把引擎建好（还没建的话），release 什么都不做（以前的显卡识别小进程 NGU 重构时去掉了，2026-10-31 控制台定认现状）"""
-        from ...system import gpu_ocr
-
-        try:
-            gpu_ocr.acquire()
-        except Exception:
-            pass
-        try:
-            for attempt in range(3):
-                try:
-                    self._run(ev)
-                    break
-                except Exception as e:
-                    import traceback
-                    from ...core import paths
-
-                    msg = f"采矿助手出错（第 {attempt + 1} 次）：{e!r}"
-                    try:
-                        with open(
-                            paths.log("live_log.txt"), "a", encoding="utf-8"
-                        ) as f:
-                            f.write(
-                                f"{time.strftime('%F %T')} ERROR {msg}\n{traceback.format_exc()}"
-                            )
-                    except OSError:
-                        pass
-                    print(msg)
-                    if ev.is_set():
-                        break
-                    if attempt == 2:
-                        self._fail_off(ev, str(e))
-                        break
-                    with (
-                        self.lock
-                    ):  # 重来前把上一轮的旧结果清掉（新一轮的过期清理不认旧的）
-                        for k in ("信号", "扫描", "矿袋"):
-                            _H()._hud().clear(k)
-                    ev.wait(1)
-        finally:
+        """跑采矿助手（出错最多重试 3 次）。识别引擎在主进程里，按设置用显卡（DirectML）或 CPU，采矿助手关掉后引擎照样留着"""
+        for attempt in range(3):
             try:
-                gpu_ocr.release()
-            except Exception:
-                pass
+                self._run(ev)
+                break
+            except Exception as e:
+                import traceback
+                from ...core import paths
+
+                msg = f"采矿助手出错（第 {attempt + 1} 次）：{e!r}"
+                try:
+                    with open(paths.log("live_log.txt"), "a", encoding="utf-8") as f:
+                        f.write(
+                            f"{time.strftime('%F %T')} ERROR {msg}\n{traceback.format_exc()}"
+                        )
+                except OSError:
+                    pass
+                print(msg)
+                if ev.is_set():
+                    break
+                if attempt == 2:
+                    self._fail_off(ev, str(e))
+                    break
+                with (
+                    self.lock
+                ):  # 重来前把上一轮的旧结果清掉（新一轮的过期清理不认旧的）
+                    for k in ("信号", "扫描", "矿袋"):
+                        _H()._hud().clear(k)
+                ev.wait(1)
 
     def _fail_off(self, ev, why):
         """连着出错：自己关掉并告诉玩家（和 _auto_off 一样收尾）"""

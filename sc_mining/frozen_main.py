@@ -46,13 +46,6 @@ def main():
         sys.exit(0)
     args = sys.argv[1:]
     cmd = args[0] if args else "menu"
-    if (
-        cmd == "ocrworker"
-    ):  # 显卡 OCR 小进程（采矿助手开着时，2026-10-27）：只认字，别的都不跑
-        from sc_mining.system import gpu_ocr
-
-        gpu_ocr.worker_main()
-        sys.exit(0)
     from sc_mining.core import paths
 
     try:

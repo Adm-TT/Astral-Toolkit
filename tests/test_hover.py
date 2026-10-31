@@ -2,7 +2,7 @@
 
 import unittest
 from sc_mining.ocr import OcrToken
-from sc_mining.tasks.hover import get_hover_regions, _read_tooltip, HOVER_REGIONS  # noqa: F401
+from sc_mining.trade.inspector import get_hover_regions, _read_tooltip, HOVER_REGIONS  # noqa: F401
 
 
 class MockImage:

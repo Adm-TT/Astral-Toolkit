@@ -93,7 +93,7 @@ class TestOcrDeviceSwitch(unittest.TestCase):
 
     def test_cell_labels_tokens_reuse(self):
         from unittest.mock import MagicMock
-        from sc_mining.tasks.hover import cell_labels
+        from sc_mining.trade.inspector import cell_labels
         from sc_mining.ocr import OcrToken
 
         mock_img = MagicMock()
@@ -110,7 +110,7 @@ class TestOcrDeviceSwitch(unittest.TestCase):
 
     def test_cell_labels_native_param(self):
         from unittest.mock import MagicMock, patch
-        from sc_mining.tasks.hover import cell_labels
+        from sc_mining.trade.inspector import cell_labels
 
         mock_img = MagicMock()
         mock_img.size = (1920, 1080)

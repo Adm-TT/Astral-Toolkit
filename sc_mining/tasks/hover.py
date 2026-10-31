@@ -13,24 +13,9 @@ import threading
 import time
 
 from ..app import bus
+from ..trade.inspector import inspect_item
 
 WIN = sys.platform == "win32"
-
-# ---------------------------------------------------------------- 视觉识别组件重导出（保持向后兼容）
-from ..trade.inspector import (  # noqa: E402
-    HOVER_REGIONS,  # noqa: F401
-    HOVER_REGION,  # noqa: F401
-    get_hover_regions,  # noqa: F401
-    _read_tooltip,  # noqa: F401
-    tooltip_quality,  # noqa: F401
-    _AMOUNT,  # noqa: F401
-    tooltip_row,  # noqa: F401
-    parse_qlabel,  # noqa: F401
-    parse_count,  # noqa: F401
-    cell_labels,  # noqa: F401
-    _is_mineral,  # noqa: F401
-    inspect_item,
-)
 
 _last_hover = {}
 _seq = itertools.count(

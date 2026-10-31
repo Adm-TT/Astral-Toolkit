@@ -866,7 +866,7 @@ def _tok(text, x, y, w=40, h=14):
 
 def test_tooltip_row_quality_and_amount():
     """说明框内容行「塔兰导电石Taranite｜925｜0.495 SCU」：品质 925、数量 0.495 SCU；「容量：1.00SCU」不算"""
-    from sc_mining.tasks.hover import tooltip_row
+    from sc_mining.trade.inspector import tooltip_row
 
     toks = [
         _tok("塔兰导电石Taranite", 100, 50, 120),
@@ -888,7 +888,7 @@ def test_tooltip_row_quality_and_amount():
 
 def test_cell_quality_and_count_labels():
     """格子左上角「575Q」是品质（Q 常被认成 0：907Q → 9070，0Q → QQ），右上角「200x」是数量，「200/200」两样都不是"""
-    from sc_mining.tasks.hover import parse_qlabel, parse_count, cell_labels
+    from sc_mining.trade.inspector import parse_qlabel, parse_count, cell_labels
 
     assert [
         parse_qlabel(t)
@@ -924,7 +924,7 @@ def test_cell_quality_and_count_labels():
 
 def test_inventory_cell_labels_real_screens():
     """真截图（2026-10-23 用户发的物品栏）：20 个格子的品质全对（其中 7 个 Q 被认成 0），0Q 是 0，200x / 3x 是数量，200/200 不算"""
-    from sc_mining.tasks.hover import cell_labels, tooltip_row  # noqa: F401
+    from sc_mining.trade.inspector import cell_labels, tooltip_row  # noqa: F401
 
     d = Path(__file__).parent / "ingame"
     if not (d / "inv_grid.png").exists():
@@ -1009,7 +1009,7 @@ def test_tooltip_zh_only_medal_not_description():
 def test_tooltip_double_picks_bright():
     """2026-10-27 老大：两个说明框叠在一起（上面亮的是鼠标指着的，下面暗的是身上装备的对比框）只认亮的那个。
     以前认成了下面的「焦焰 RYT “血统红” 多功能工具」"""
-    from sc_mining.tasks.hover import _read_tooltip
+    from sc_mining.trade.inspector import _read_tooltip
     from sc_mining.trade.names import canonical
 
     d = Path(__file__).parent / "ingame"

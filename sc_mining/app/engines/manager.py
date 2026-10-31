@@ -92,8 +92,5 @@ class EngineManager:
         try:
             self.live.stop_ev.set()
             self.nav.stop_ev.set()
-            from ...system import gpu_ocr
-
-            gpu_ocr.shutdown()
         except Exception:
             pass
