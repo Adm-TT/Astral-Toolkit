@@ -2,9 +2,6 @@ from dataclasses import dataclass, field  # noqa: F401
 from datetime import datetime
 from decimal import Decimal
 
-# 兼容性导入：OcrToken 已迁移至 sc_mining.ocr.models
-from ..ocr.models import OcrToken
-
 
 @dataclass(frozen=True)
 class Item:
@@ -107,5 +104,4 @@ __all__ = [
     "StockKey",
     "StockLine",
     "ImportRow",
-    "OcrToken",
 ]

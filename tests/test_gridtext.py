@@ -163,13 +163,13 @@ def test_displayinfo_fast_path_and_fallback(monkeypatch, tmp_path):
     D._layout.update(at=0.0, boxes=None)
     calls = []
     monkeypatch.setattr(
-        "sc_mining.trade.ocr.recognize", lambda img, **k: calls.append("full") or []
+        "sc_mining.ocr.recognize", lambda img, **k: calls.append("full") or []
     )
     loc_text = "Current player location : Hospital Stanton4 NewBabbage (LZ : Stanton4 NewBabbage)"
     zone_text = "Zone: OOC_Stanton_4_Microtech Pos: 520.9152km 419.2893km 744.0843km"
     answers = iter([loc_text, zone_text])  # 先认地点那一行，再认区域名那一行
     monkeypatch.setattr(
-        "sc_mining.trade.ocr.read_line",
+        "sc_mining.ocr.read_line",
         lambda img: calls.append("line") or (next(answers), 0.9),
     )
     D._loc.update(hash=None, text="", at=0.0, top=None)

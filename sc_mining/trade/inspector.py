@@ -362,7 +362,7 @@ def _read_tooltip(img, cursor):
     4. 均未命中时，使用全屏兜底。
     5. 鼠标位置异常则直接尝试中间 30%~70%，失败后再全屏兜底。
     """
-    from .ocr import recognize
+    from ..ocr import recognize
 
     W, H = img.size
     regions = get_hover_regions(cursor, W)
@@ -478,7 +478,7 @@ def cell_labels(img, cursor, tokens=None, size=None):
     cw, ch = size or (int(W * 0.065), int(H * 0.11))
     cx, cy = cursor
     if tokens is None:
-        from .ocr import recognize
+        from ..ocr import recognize
 
         box = (max(0, cx - cw), max(0, cy - ch), min(W, cx + cw), min(H, cy + ch // 6))
         # native=True 避免小裁剪图被 RapidOCR 强行放大至 736px，提速 2~3 倍

@@ -1016,7 +1016,7 @@ def test_live_scan_updates_when_read_gets_more_complete(monkeypatch, tmp_path):
 def test_tooltip_name_food_without_english_name():
     """食物说明框只有中文名，下面是「NDR:20 免疫下降」「剩余容量：100%」这类属性行，不能当名字（实测 肉串）"""
     from sc_mining.trade import console as C
-    from sc_mining.trade.ocr import OcrToken
+    from sc_mining.ocr import OcrToken
 
     T = lambda text, x, y: OcrToken(text, 90, (x, y, max(20, len(text) * 9), 18))  # noqa: E731
     toks = [
@@ -1242,7 +1242,7 @@ def test_hover_overlay_updates_before_network(monkeypatch, tmp_path):
     )
     from sc_mining.app import hud_state
     from sc_mining.trade import console as C
-    from sc_mining.trade.ocr import OcrToken
+    from sc_mining.ocr import OcrToken
 
     T = lambda text, x, y: OcrToken(text, 90, (x, y, max(20, len(text) * 9), 18))  # noqa: E731
     toks = [
@@ -1252,7 +1252,7 @@ def test_hover_overlay_updates_before_network(monkeypatch, tmp_path):
     ]
     calls = []
     monkeypatch.setattr(
-        "sc_mining.trade.ocr.recognize",
+        "sc_mining.ocr.recognize",
         lambda img, urgent=False, offset=(0, 0): (
             calls.append((img.size, urgent)) or toks
         ),
@@ -1388,7 +1388,7 @@ def test_market_sources_are_queried_at_the_same_time(tmp_path):
 
 def test_tooltip_anchor_tolerates_missing_char():
     from sc_mining.trade import console as C
-    from sc_mining.trade.ocr import OcrToken
+    from sc_mining.ocr import OcrToken
 
     T = lambda text, x, y: OcrToken(text, 90, (x, y, max(20, len(text) * 9), 18))  # noqa: E731
     toks = [
@@ -1408,7 +1408,7 @@ def test_displayinfo_reads_only_needed_lines_after_first_time(monkeypatch):
     """右上角：第一次整块认、记下要用的几行在哪；之后只认这几行；认出来对不上就重新整块认"""
     from PIL import Image
     from sc_mining.navigation import displayinfo as D
-    from sc_mining.trade.ocr import OcrToken
+    from sc_mining.ocr import OcrToken
 
     D._layout.update(at=0.0, boxes=None)
     T = lambda text, x, y: OcrToken(text, 90, (x, y, len(text) * 9, 20))  # noqa: E731
@@ -1422,12 +1422,12 @@ def test_displayinfo_reads_only_needed_lines_after_first_time(monkeypatch):
         T(t, 1740 - len(t) * 9, 20 + 40 * i) for i, t in enumerate(lines)
     ]
     monkeypatch.setattr(
-        "sc_mining.trade.ocr.recognize",
+        "sc_mining.ocr.recognize",
         lambda img, **k: full_calls.append(img.size) or toks,
     )
     answers = iter(lines + lines + ["乱码"] * 3)
     monkeypatch.setattr(
-        "sc_mining.trade.ocr.read_line",
+        "sc_mining.ocr.read_line",
         lambda img: line_calls.append(img.size) or (next(answers), 0.9),
     )
     img = Image.new("RGB", (2560, 1440))
@@ -3243,8 +3243,8 @@ def test_hover_ignores_chat_hud_and_markers(monkeypatch):
     整屏找的时候必须名字下面紧跟「体积/制造商/物品类型…」才算说明框"""
     from PIL import Image
     from sc_mining.trade import console as C
-    from sc_mining.trade import ocr
-    from sc_mining.trade.ocr import OcrToken
+    from sc_mining import ocr
+    from sc_mining.ocr import OcrToken
     from sc_mining.tasks import hover as t_hover
 
     T = lambda text, x, y: OcrToken(text, 90, (x, y, max(20, len(text) * 9), 18))  # noqa: E731
@@ -3446,7 +3446,7 @@ def test_hover_unsure_names_and_anchor_lines():
     """2026-10-23 全量样本测试发现：中间没把握时会把碎字（「力 mnoc」）、地点标记、系统界面当物品；
     靠「体积」往上找名字时会把「制造商：灰猫工业」当名字"""
     from sc_mining.trade import console as C
-    from sc_mining.trade.ocr import OcrToken
+    from sc_mining.ocr import OcrToken
 
     T = lambda text, x, y: OcrToken(text, 90, (x, y, max(20, len(text) * 9), 18))  # noqa: E731
     assert C.plausible_name("受辐射的瓦拉卡蛋", "IradiatedValakkar Egg")
@@ -4957,7 +4957,7 @@ def test_train_data(monkeypatch, tmp_path):
     from PIL import Image
     from sc_mining.system import train_data as T
     from sc_mining.core import settings, paths
-    from sc_mining.trade.models import OcrToken
+    from sc_mining.ocr import OcrToken
 
     monkeypatch.setattr(paths, "USER", tmp_path)
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")

@@ -42,7 +42,6 @@ MODULES = (
     "app.api.router",
     "app.bus",
     "trade.console",
-    "trade.ocr",
     "trade.inventory",
     "ocr",
     "ocr.models",

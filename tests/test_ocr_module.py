@@ -16,10 +16,6 @@ class TestOcrModule(unittest.TestCase):
             raw_recognizer,
         )
         from sc_mining.ocr.models import OcrToken as DirectOcrToken
-        from sc_mining.trade.models import OcrToken as CompatModelOcrToken
-        from sc_mining.trade.ocr import OcrToken as CompatOcrToken
-        from sc_mining.trade.ocr import recognize as compat_recognize
-        from sc_mining.trade.ocr import read_line as compat_read_line
 
         # 验证新模块导出
         self.assertIs(OcrToken, DirectOcrToken)
@@ -28,11 +24,11 @@ class TestOcrModule(unittest.TestCase):
         self.assertTrue(callable(raw_detector))
         self.assertTrue(callable(raw_recognizer))
 
-        # 验证向后兼容性别名
-        self.assertIs(CompatOcrToken, OcrToken)
-        self.assertIs(CompatModelOcrToken, OcrToken)
-        self.assertTrue(callable(compat_recognize))
-        self.assertTrue(callable(compat_read_line))
+        # 验证 trade.ocr 垫片已彻底下线
+        import importlib
+
+        with self.assertRaises((ModuleNotFoundError, ImportError)):
+            importlib.import_module("sc_mining.trade.ocr")
 
     def test_ocr_token_properties(self):
         from sc_mining.ocr import OcrToken

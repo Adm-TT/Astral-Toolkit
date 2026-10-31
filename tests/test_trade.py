@@ -8,7 +8,8 @@ import pytest
 from sc_mining.trade.inventory import Inventory
 from sc_mining.trade.models import Item, StockKey, StockLine  # noqa: F811
 from datetime import datetime, timezone
-from sc_mining.trade.models import Item, OcrToken  # noqa: F811
+from sc_mining.trade.models import Item  # noqa: F811
+from sc_mining.ocr import OcrToken
 from sc_mining.trade.names import to_english, has_chinese
 from sc_mining.trade.parser import parse_inventory
 from sc_mining.trade.market_service import MarketService
@@ -16,7 +17,7 @@ from dataclasses import replace
 from pathlib import Path
 import shutil  # noqa: F401
 from PIL import Image, ImageDraw, ImageFont  # noqa: F401
-from sc_mining.trade.models import Item, OcrToken, ImportRow  # noqa: F811
+from sc_mining.trade.models import Item, ImportRow  # noqa: F811
 from sc_mining.trade.parser import parse_inventory, validate_rows  # noqa: F811
 from datetime import datetime, timedelta, timezone  # noqa: F811
 from decimal import Decimal as D
@@ -929,7 +930,7 @@ def test_inventory_cell_labels_real_screens():
     if not (d / "inv_grid.png").exists():
         pytest.skip("没有物品栏截图")
     try:
-        from sc_mining.trade.ocr import recognize
+        from sc_mining.ocr import recognize
 
         recognize(Image.new("RGB", (40, 20)))
     except Exception:
@@ -1015,7 +1016,7 @@ def test_tooltip_double_picks_bright():
     if not (d / "hover_double.jpg").exists():
         pytest.skip("没有叠框截图")
     try:
-        from sc_mining.trade.ocr import recognize
+        from sc_mining.ocr import recognize
 
         recognize(Image.new("RGB", (40, 20)))
     except Exception:

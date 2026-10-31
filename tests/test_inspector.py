@@ -3,7 +3,7 @@
 import unittest
 from unittest.mock import patch, MagicMock  # noqa: F401
 
-from sc_mining.trade.models import OcrToken
+from sc_mining.ocr import OcrToken
 
 
 class MockImage:

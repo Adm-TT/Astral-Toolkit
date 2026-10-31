@@ -1,7 +1,7 @@
 """F8 悬停识别自适应区域与兜底流程测试"""
 
 import unittest
-from sc_mining.trade.models import OcrToken
+from sc_mining.ocr import OcrToken
 from sc_mining.tasks.hover import get_hover_regions, _read_tooltip, HOVER_REGIONS  # noqa: F401
 
 
@@ -66,7 +66,7 @@ class TestHoverRegions(unittest.TestCase):
 
 class TestReadTooltipExecution(unittest.TestCase):
     def setUp(self):
-        from sc_mining.trade import ocr
+        from sc_mining import ocr
 
         self.ocr = ocr
         self._orig_recognize = ocr.recognize
@@ -140,7 +140,7 @@ class TestReadTooltipExecution(unittest.TestCase):
 
 def _fake_ocr(monkeypatch, toks):
     """假识别：每次都返回 toks（位置按偏移挪），记下每次认的图多宽"""
-    from sc_mining.trade import ocr
+    from sc_mining import ocr
 
     widths = []
 

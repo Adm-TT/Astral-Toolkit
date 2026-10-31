@@ -94,7 +94,7 @@ class TestOcrDeviceSwitch(unittest.TestCase):
     def test_cell_labels_tokens_reuse(self):
         from unittest.mock import MagicMock
         from sc_mining.tasks.hover import cell_labels
-        from sc_mining.trade.models import OcrToken
+        from sc_mining.ocr import OcrToken
 
         mock_img = MagicMock()
         mock_img.size = (1920, 1080)
@@ -116,7 +116,7 @@ class TestOcrDeviceSwitch(unittest.TestCase):
         mock_img.size = (1920, 1080)
         mock_img.crop.return_value = mock_img
 
-        with patch("sc_mining.trade.ocr.recognize", return_value=[]) as mock_rec:
+        with patch("sc_mining.ocr.recognize", return_value=[]) as mock_rec:
             cell_labels(mock_img, (500, 500), tokens=None)
             self.assertTrue(mock_rec.called)
             # 确认调用了 native=True
@@ -274,30 +274,31 @@ def test_cpu_error_not_retried(monkeypatch):
 
 
 def test_switch_device_reaches_every_caller(monkeypatch):
-    """切显卡 / CPU 后，交易识别（trade.ocr）、采矿读屏（screen._ocr / _recognize）用的都是新引擎：
+    """切显卡 / CPU 后，统一 OCR（sc_mining.ocr）、采矿读屏（screen._ocr / _recognize）用的都是新引擎：
     它们缓存的是同一个共享对象，切换只换里面的引擎"""
     import numpy as np
     from PIL import Image
-    from sc_mining.trade import ocr as T
+    from sc_mining import ocr as O
+    from sc_mining.ocr import engine as OE
     from sc_mining.mining import screen as S
 
     made = _fake_engines(monkeypatch)
-    monkeypatch.setattr(T, "_engine", None)
+    monkeypatch.setattr(OE, "_engine", None)
     monkeypatch.setattr(S, "_engine", None)
     monkeypatch.setattr(S, "_rec", None)
     img, arr = Image.new("RGB", (16, 16)), np.zeros((16, 16, 3), dtype=np.uint8)
 
     def use_all():
-        T.recognize(img)
-        T.recognize(img, urgent=True)
-        T.read_line(img)
+        O.recognize(img)
+        O.recognize(img, urgent=True)
+        O.read_line(img)
         S._ocr()(arr)
         S._recognize()(arr)
 
     use_all()  # 各处先各自缓存一次
     assert len(made) == 1 and made[0].gpu and made[0].calls == 5
     shared = perf.rapidocr()
-    assert T._engine is shared
+    assert OE._engine is shared
     monkeypatch.setattr(perf, "is_gpu_preferred", lambda: False)
     assert perf.set_ocr_device("cpu") == "CPU"
     assert perf.rapidocr() is shared and len(made) == 2 and not made[1].gpu

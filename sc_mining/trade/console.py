@@ -1008,7 +1008,7 @@ def capture_flow(t, ov=None):
         print("已取消截图")
         return
     print("识别中…")
-    from .ocr import recognize
+    from ..ocr import recognize
 
     tokens = recognize(crop)
     rows = parse_inventory(tokens, t.catalog)
