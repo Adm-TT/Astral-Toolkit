@@ -838,7 +838,7 @@ def overlay_move(on=False):
 @api
 def set_settings(**kw):
     from .. import settings, helpers
-    allowed = {"autorun", "autorun_sprint", "admin", "hud_scale", "hud_plate", "hud_theme"} | {k for k, _, _ in HOTKEYS}
+    allowed = {"admin", "hud_scale", "hud_plate", "hud_theme"} | {k for k, _, _ in HOTKEYS}
     if "stock_mode" in kw and kw["stock_mode"] not in ("simple", "pro"):
         kw.pop("stock_mode")
     allowed.add("stock_mode")
@@ -883,7 +883,7 @@ def set_settings(**kw):
             _hud().restyle()
         except Exception:
             pass
-    if any(k in kw for k in ("autorun", "autorun_sprint", "admin")):
+    if "admin" in kw:
         helpers.start()                                   # 只有辅助相关的项变了才重启辅助进程（2026-10-28 用户反馈连点开关卡一下）
     bus.publish("status", status())
     return cfg
@@ -2410,11 +2410,10 @@ def waypoint_add(name="", body="", lat=None, lon=None, alt=0.0, here=False):
     if not name.strip():
         return {"error": "需填写路标名称"}
     if here:
-        # 只用 /showlocation 的坐标（不读右上角）：等你在游戏里按 F7（天枢替你打 /showlocation）或自己打
+        # 只用 /showlocation 的坐标（不读右上角）：等你在游戏聊天框自己输入 /showlocation
         _HERE.update(name=name.strip(), until=time.time() + HERE_WAIT)
         _start_here_watch()
-        mk = settings_key("mark_key", "")
-        how = f"切回游戏按 {mk}（AT 自动输入 /showlocation），或" if mk else "切回游戏"
+        how = "切回游戏"
         return {"pending": True,
                 "message": f"{how}在聊天框输入 /showlocation 后回车；{HERE_WAIT} 秒内获取到坐标即保存为「{name.strip()}」"}
     else:
@@ -2584,7 +2583,7 @@ def fix_key_hint():
     bad = [w for w in hotkey_conflicts() if "一键定位" in w]
     if bad:
         return key, bad[0]
-    return key, (f"一键定位：按 {key}（或输入 /showlocation）" if key else "在聊天框输入 /showlocation 定位")
+    return key, (f"一键定位：按 {key} 后在聊天框输入 /showlocation" if key else "在聊天框输入 /showlocation 定位")
 
 
 def settings_key(k, default):
@@ -2660,11 +2659,18 @@ def _start_here_watch():
     _HERE["thread"].start()
 
 
+def _wait_showloc():
+    """等玩家自己在聊天框输入 /showlocation（1.1.2 起 AT 不替你输入）：先在悬浮窗上提示一下"""
+    from ..showloc import showlocation, TYPE_WAIT
+    _note_hud("定位", f"请在游戏聊天框输入 /showlocation 后回车（{TYPE_WAIT} 秒内）", 8)
+    return showlocation(log=_wp_log)
+
+
 def mark_here():
-    """游戏里按热键（默认 F7）：替你在聊天框输入 /showlocation，读剪贴板里的坐标记成路标。
+    """游戏里按热键：等你在聊天框输入 /showlocation，读剪贴板里的坐标记成路标（1.1.2 起不替你输入）。
     点过「用当前位置新建」就用那里填的名字，否则按时间和地点起名"""
     from ..showloc import showlocation
-    g, why = showlocation(log=_wp_log)
+    g, why = _wait_showloc()
     if not g:
         _note_hud("路标", f"未保存：{why}", 8)
         _wp_log(f"失败：{why}")
@@ -2694,7 +2700,7 @@ def _coord_desc(g):
 
 @api
 def ore_record(here=False):
-    """记下最近这块矿。here=True（游戏里按热键）：顺便替玩家输 /showlocation，把坐标一起记下；窗口里点的不记坐标"""
+    """记下最近这块矿。here=True（游戏里按热键）：等玩家自己输 /showlocation，把坐标一起记下；窗口里点的不记坐标"""
     from .. import ore_log
     view = _ORE_LAST["view"]
     if not view:
@@ -2705,7 +2711,7 @@ def ore_record(here=False):
     if here:
         try:
             from ..showloc import showlocation
-            g, why = showlocation(log=_wp_log)
+            g, why = _wait_showloc()
         except Exception as e:
             g, why = None, str(e)
         if g:
@@ -2895,13 +2901,13 @@ def halo_check(g, clip=None, sess=None):
 
 
 def fix_here():
-    """游戏里按一键定位热键（默认 F9）：导航去太空路标时，替你输 /showlocation 更新距离和偏离角；
+    """游戏里按一键定位热键：导航去太空路标时，等你输 /showlocation 更新距离和偏离角；
     挂着小行星带方案时，核对现在在不在那条带里"""
     from .. import navigate as n
     from ..showloc import showlocation
     if (not _nav.target or not _nav.space_mode) and _HALO["plan"]:
         sess = _HALO["sess"]                     # 等坐标期间方案取下或换了，这次结果就作废
-        g, clip = showlocation(log=_wp_log)
+        g, clip = _wait_showloc()
         with _HALO["lock"]:
             plan = _HALO["plan"] if _HALO["sess"] == sess else None
             if not g and plan:
@@ -2914,7 +2920,7 @@ def fix_here():
         threading.Timer(5, lambda: _hud().clear("导航") if not _nav.target else None).start()
         return {"error": "当前未导航到太空路标"}
     sess = _nav.session                          # 等坐标期间导航结束或换了目标，这次结果就作废
-    g, clip = showlocation(log=_wp_log)
+    g, clip = _wait_showloc()
     if not g:
         if _nav.session == sess and _nav.target:
             _hud().set("导航", f"→ {n.label(_nav.target)}\n这次没定位成功：{clip}")

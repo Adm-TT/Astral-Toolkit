@@ -846,18 +846,18 @@ def test_bearing_text_and_deadband():
 
 
 def test_anti_afk_removed(monkeypatch, tmp_path):
-    """2026-10-30 老大定删掉防挂机：老设置文件里开着防挂机，读出来也没有这几项；只开防挂机不再启动辅助进程"""
+    """2026-10-30 删掉防挂机、1.1.2 删掉自动跑：老设置文件里开着的，读出来也没有这几项；不再启动辅助进程"""
     import json
     from sc_mining import settings, helpers
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
-    settings.FILE.write_text(json.dumps({"agreed": True, "keys_v5": True, "anti_afk": True, "afk_seconds": 500, "afk_v3": True}), encoding="utf-8")
+    settings.FILE.write_text(json.dumps({"agreed": True, "keys_v5": True, "anti_afk": True, "afk_seconds": 500, "afk_v3": True, "autorun": True, "autorun_sprint": True}), encoding="utf-8")
     c = settings.load()
-    assert not any(k in c for k in ("anti_afk", "afk_seconds", "afk_v3", "afk_v4"))
-    assert "anti_afk" not in json.loads(settings.FILE.read_text(encoding="utf-8"))   # 文件里也清掉了（回滚 1.1.0 不会自动开）
-    assert not hasattr(helpers, "AntiAfk")
-    monkeypatch.setattr(helpers.S, "WIN", True)
+    assert not any(k in c for k in ("anti_afk", "afk_seconds", "afk_v3", "afk_v4", "autorun", "autorun_sprint"))
+    saved = json.loads(settings.FILE.read_text(encoding="utf-8"))
+    assert "anti_afk" not in saved and "autorun" not in saved     # 文件里也清掉了（回滚旧版不会自动开）
+    assert not hasattr(helpers, "AntiAfk") and not hasattr(helpers, "AutoRun")
     monkeypatch.setattr(helpers, "stop_helpers", lambda: None)
-    assert helpers.start() is False                       # 自动跑没开：不起辅助进程
+    assert helpers.start() is False                       # 不再有辅助进程
 
 
 def test_nav_uses_display_info_waypoints_use_showlocation():
@@ -2266,7 +2266,7 @@ def test_disclaimer_and_about_have_required_notices():
     from sc_mining.app import services as S
     h = (paths.CODE / "app" / "web" / "disclaimer.html").read_text(encoding="utf-8")
     for must in ("not affiliated with the Cloud Imperium group of companies", "Cloud Imperium Rights LLC", "Cloud Imperium Rights Limited",
-                 "© 2026 Adm_TT", "未经授权的自动化软件", "api.star-citizen.wiki", "CC BY-SA 4.0", "第三方许可.txt"):
+                 "© 2026 Adm_TT", "自动化软件", "api.star-citizen.wiki", "CC BY-SA 4.0", "第三方许可.txt"):
         assert must in h, must
     info = S.about_info()
     names = {x["name"] for x in info["sources"]}

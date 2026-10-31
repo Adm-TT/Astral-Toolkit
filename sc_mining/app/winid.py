@@ -139,11 +139,8 @@ def focus_window(title=TITLE):
     else:
         u32.ShowWindow(hwnd, 5)                                   # SW_SHOW
     if not u32.SetForegroundWindow(hwnd):
-        # Windows 不让后台程序抢前台：先按一下 Alt 再试（常用的合法做法），还不行就让任务栏图标闪一下
-        u32.keybd_event(0x12, 0, 0, 0)
-        u32.keybd_event(0x12, 0, 2, 0)
-        if not u32.SetForegroundWindow(hwnd):
-            u32.FlashWindow(hwnd, True)
+        # Windows 不让后台程序抢前台：让任务栏图标闪一下（1.1.2 起不再模拟按 Alt）
+        u32.FlashWindow(hwnd, True)
     return True
 
 

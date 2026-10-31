@@ -187,7 +187,7 @@ class _Nav:
 
     def _run_space(self, target, ev, sess):
         """去太空路标：只用 /showlocation 的坐标（玩家社区的通用做法），不读右上角、不靠机头朝向。
-        按一键定位热键 AT 替你输；自己在聊天框输 /showlocation 也行（盯着剪贴板）"""
+        玩家自己在聊天框输 /showlocation（盯着剪贴板；1.1.2 起 AT 不替你输入）"""
         from ... import navigate as n
         key, hint = _S().fix_key_hint()
         with self.fix_lock:
@@ -195,7 +195,7 @@ class _Nav:
                 return
             bus.publish("nav", {"active": True, "target": _S()._place_row(target), "here": None, "msgs": [],
                                 "status": hint, "help": ""})
-            _S()._hud().set("导航", f"→ {n.label(target)}\n" + (f"按 {key} 定位（自动输入 /showlocation）" if hint.startswith("一键定位") else hint))
+            _S()._hud().set("导航", f"→ {n.label(target)}\n" + (f"按 {key} 后输入 /showlocation 定位" if hint.startswith("一键定位") else hint))
             self.clip_seen = n.read_clipboard()       # 开始前剪贴板里的旧坐标不算
         while not ev.is_set():
             clip = n.read_clipboard()

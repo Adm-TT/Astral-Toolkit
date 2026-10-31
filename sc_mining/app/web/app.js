@@ -191,8 +191,8 @@ function menu(anchor, items) {
 
 // 游戏里的热键（和 services.HOTKEYS 一样）：[设置名, 默认键, 名字, 说明]
 const HOTKEYS = [["live_key", "F5", "采矿助手开关", "开启后 120 秒未检测到扫描面板和信号自动关闭"], ["count_key", "F6", "盘点", "开始 / 结束盘点"],
-  ["mark_key", "", "记录路标", "自动输入 /showlocation，将当前位置保存为路标"], ["trade_capture_key", "F8", "物品识别", "鼠标停在物品上时按下；鼠标移开自动收起，按住 Ctrl 不收；按住 Shift 再按钉住"],
-  ["fix_key", "", "一键定位", "手动定位时自动输入 /showlocation"], ["report_key", "F10", "问题反馈", "保存当前截图和识别结果"],
+  ["mark_key", "", "记录路标", "按下后在聊天框输入 /showlocation，将当前位置保存为路标"], ["trade_capture_key", "F8", "物品识别", "鼠标停在物品上时按下；鼠标移开自动收起，按住 Ctrl 不收；按住 Shift 再按钉住"],
+  ["fix_key", "", "一键定位", "手动定位时按下，再在聊天框输入 /showlocation"], ["report_key", "F10", "问题反馈", "保存当前截图和识别结果"],
   ["ore_key", "", "原矿记录", "记录当前矿石和坐标"]];
 
 const state = {
@@ -352,7 +352,7 @@ function renderTop() {
   const b = $("#banner");
   if (s.win && s.game_elevated && !s.admin) {
     b.hidden = false;
-    b.textContent = "游戏以管理员身份运行而 AT 没有，F8 和自动跑在游戏中无法使用。关闭 AT 后重新打开「" + (s.frozen ? "AT" : "Dubhe.exe") + "」，在 Windows 确认框中点击「是」。";
+    b.textContent = "游戏以管理员身份运行而 AT 没有，F8 在游戏中无法使用。关闭 AT 后重新打开「" + (s.frozen ? "AT" : "Dubhe.exe") + "」，在 Windows 确认框中点击「是」。";
   } else b.hidden = true;
   $("#pip-live").className = "pip" + (s.live ? (s.live_paused ? " new" : " on") : "");
   $("#pip-nav").className = "pip" + (s.nav ? " on" : "");
@@ -1373,7 +1373,7 @@ function renderNavLive() {
     box.innerHTML = `<div class="panel" style="margin-bottom:18px">
       <div class="item-head"><span class="name">${esc(n.target.label)}</span><span class="muted">${esc(n.target.body)}</span><span style="margin-left:auto">${navModeHTML(n)}</span></div>
       ${(state.status?.hotkey_warn || []).filter((w) => /一键定位/.test(w)).map((w) => `<p style="margin:6px 0;color:var(--warn,#d9822b)">⚠️ ${esc(w)}</p>`).join("")}
-      ${!h ? `<p style="margin:6px 0">${state.status?.settings?.fix_key ? `在游戏里按 <kbd>${esc(state.status.settings.fix_key)}</kbd>（AT 自动输入 /showlocation），或` : "在游戏"}聊天框输入 /showlocation 后回车。
+      ${!h ? `<p style="margin:6px 0">${state.status?.settings?.fix_key ? `在游戏里按 <kbd>${esc(state.status.settings.fix_key)}</kbd>，再在` : "在游戏"}聊天框输入 /showlocation 后回车。
           ${n.target.city ? "朝目标方向走一段" : "朝目标方向直线飞行一段"}后再按一次，即可计算偏离角度和预计到达时间。</p>`
         : h.arrived || h.far ? `<p class="${h.arrived ? "good" : ""}" style="font-size:20px;margin:6px 0">${esc(lines[0])}</p>`
         : `<div style="font-size:34px;font-weight:700;margin:6px 0">${esc(lines[0])}</div>
@@ -1437,7 +1437,7 @@ async function navWaypointView() {
       ${wps.map((w) => `<tr><td>${esc(w.name)}</td><td class="muted">${esc(w.body)}</td><td class="muted">${w.space ? "太空固定点" : `纬度 ${w.lat.toFixed(3)}° 经度 ${w.lon.toFixed(3)}° 高度 ${money(w.alt)} m`}</td>
         <td class="n"><button class="btn small" data-go="${esc(w.key)}">导航</button> <button class="btn small" data-del="${esc(w.name)}">删除</button></td></tr>`).join("")}</table>`
       : `<p class="muted" style="margin:0">暂无路标</p>`}
-    <p class="muted" style="margin:10px 0 0">点「用当前位置新建」后，在游戏聊天框输入 /showlocation 回车即可保存${state.status?.settings?.mark_key ? `，或按 <b>${esc(state.status.settings.mark_key)}</b> 由 AT 自动输入（需英文输入法）` : ""}。星球表面和太空均可使用。</p>
+    <p class="muted" style="margin:10px 0 0">点「用当前位置新建」后，在游戏聊天框输入 /showlocation 回车即可保存${state.status?.settings?.mark_key ? `` : ""}。星球表面和太空均可使用。</p>
   </div>
   <h2>新建路标</h2>
   <div class="panel">
@@ -2647,12 +2647,10 @@ PAGES.settings = () => {
       <button class="btn" id="export-logs">导出日志</button></div></div>
     <h2>后台运行</h2>
     <div class="panel"><div class="set" style="border:0;padding:0"><div>关闭窗口后，AT 在屏幕右下角的托盘中继续运行
-      <p>F8 识别、自动跑和悬浮窗正常可用。双击托盘图标重新打开窗口；右键图标可重启或退出。</p></div>
+      <p>F8 识别和悬浮窗正常可用。双击托盘图标重新打开窗口；右键图标可重启或退出。</p></div>
       <button class="btn stop" id="quit-app">退出 AT</button></div></div>
     <h2>游戏辅助</h2>
     <div class="panel">
-      <div class="set"><div>双击 W 自动跑<p>再按 W 或 S 停止；驾驶飞船或载具时不触发</p></div><button class="switch ${c.autorun ? "on" : ""}" data-set="autorun" aria-label="双击 W 自动跑"></button></div>
-      <div class="set" style="border:0;padding-bottom:0"><div>自动跑时冲刺<p>同时按住 Shift</p></div><button class="switch ${c.autorun_sprint ? "on" : ""}" data-set="autorun_sprint" aria-label="自动跑时冲刺"></button></div>
     </div>
     <h2>关于 AT</h2>
     <div class="panel about">

@@ -250,7 +250,7 @@ def test_crafting_dataset_and_links():
 def test_menu_has_all_features():
     from sc_mining.run import MENU
     titles = " ".join(t for _, t, _ in MENU)
-    for word in ("实时读屏", "找矿点", "制造", "更新数据", "导航", "自动跑", "交易"):
+    for word in ("实时读屏", "找矿点", "制造", "更新数据", "导航", "交易"):
         assert word in titles
 
 
@@ -377,37 +377,15 @@ def test_nearby_and_feed():
     assert "附近" in n.here_text(here, d) and " m）" in n.near_text(here, d)
 
 
-def test_autorun_double_tap(monkeypatch=None):
-    import time as _t
-    from sc_mining import helpers as H, showloc as S
-    sent = []
-    old_fg, old_scan = S.game_foreground, H._scan
-    S.game_foreground = lambda: True
-    H._scan = lambda code, up=False: sent.append((code, up))
-    try:
-        r = H.AutoRun({"autorun_sprint": True, "double_tap_ms": 250})
-        r.check_hud = False          # 只测按键逻辑；不看真屏幕（屏幕上正好有飞行 HUD 画面时会不触发，2026-10-30）
-        r.on_key(H.VK_W, True, False); r.on_key(H.VK_W, False, False)      # 第一下
-        r.on_key(H.VK_W, True, False); r.on_key(H.VK_W, True, False)       # 第二下（含按住连发）
-        r.on_key(H.VK_W, False, False)                                     # 松开 → 开始自动跑
-        r.step()
-        assert r.engaged and sent == [(H.SC_SHIFT, False), (H.SC_W, False)]
-        r.on_key(H.VK_W, True, True)                                       # 自己发的键不算
-        r.step()
-        assert r.engaged
-        r.on_key(H.VK_W, True, False)                                      # 再按一下 W → 停
-        r.step()
-        assert not r.engaged and sent[-2:] == [(H.SC_W, True), (H.SC_SHIFT, True)]
-        # 两下间隔太长不算双击
-        r2 = H.AutoRun({"autorun_sprint": False, "double_tap_ms": 250})
-        r2.check_hud = False
-        r2.on_key(H.VK_W, True, False); r2.on_key(H.VK_W, False, False)
-        r2.last_tap -= 1
-        r2.on_key(H.VK_W, True, False); r2.on_key(H.VK_W, False, False)
-        r2.step()
-        assert not r2.engaged
-    finally:
-        S.game_foreground, H._scan = old_fg, old_scan
+def test_no_synthetic_input():
+    """1.1.2：AT 不再模拟任何键盘 / 鼠标输入（防挂机、双击 W 自动跑、自动输入 /showlocation、抢前台按 Alt 都删了）"""
+    import re
+    from sc_mining import paths, helpers as H
+    bad = re.compile(r"SendInput|keybd_event|mouse_event|KEYEVENTF|_KEYBDINPUT")
+    hits = [f"{p.relative_to(paths.CODE)}:{i}" for p in paths.CODE.rglob("*.py")
+            for i, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1) if bad.search(line)]
+    assert not hits, hits
+    assert H.autorun_on() is False and not hasattr(H, "AutoRun")
 
 
 def test_settings_roundtrip():
@@ -417,48 +395,25 @@ def test_settings_roundtrip():
     old = settings.FILE
     settings.FILE = Path(tempfile.mkdtemp()) / "settings.json"
     try:
-        c = settings.load()                        # 自动跑默认关（2026-10-27 老大定）；防挂机 2026-10-30 删掉
-        assert c["autorun"] is False and c["admin"] is None and "anti_afk" not in c
-        settings.update(autorun=True)
+        c = settings.load()                        # 防挂机 2026-10-30、自动跑 1.1.2 删掉
+        assert c["admin"] is None and "anti_afk" not in c and "autorun" not in c
+        settings.update(admin=True)
         c = settings.load()
-        assert c["autorun"] is True and "anti_afk" not in c
+        assert c["admin"] is True and "autorun" not in c
     finally:
         settings.FILE = old
 
 
-def test_autorun_blocked_in_vehicle():
-    from sc_mining import helpers as H, showloc as S
+def test_gamelog_vehicle_channel():
+    """读游戏日志判断在不在驾驶位（自动跑 1.1.2 删了，日志判断还在用）"""
     from sc_mining.gamelog import GameLog
     g = GameLog()
     g.line('<2026-10-20T07:36:58.726Z> [Notice] <SHUDEvent_OnNotification> Added notification "你已加入 频道 \'Aegis Idris-P : NeuromancerTT\'。')
     assert not g.aboard and g.channel.startswith("Aegis Idris")                  # 在伊德里斯里走动：不算在开
-    sent = []
-    old_fg, old_scan = S.game_foreground, H._scan
-    S.game_foreground = lambda: True
-    H._scan = lambda code, up=False: sent.append((code, up))
-    try:
-        r = H.AutoRun({"autorun_sprint": True, "double_tap_ms": 250}, g)
-        r.check_hud = False
-        for down in (True, False, True, False):
-            r.on_key(H.VK_W, down, False)
-        r.step()
-        assert r.engaged                                                    # 大船里走动：可以自动跑
-        g.line("<y> [Notice] <Failed to get starmap route data!> [ItemNavigation][CL][27808] | NOT AUTH | "
-               "AEGS_Idris_P_891312926245[891312926245]|CSCItemNavigation::GetStarmapRouteSegmentData|No ")
-        r.step()
-        assert not r.engaged                                                # 跑着坐进驾驶位：自动松开
-        r.last_tap = 0
-        sent.clear()
-        for down in (True, False, True, False):
-            r.on_key(H.VK_W, down, False)
-        r.step()
-        assert not r.engaged and not sent                                   # 在驾驶位上：不触发
-        g.line('<z> [Notice] <SHUDEvent_OnNotification> Added notification "你退出了 频道 \'Aegis Idris-P : NeuromancerTT\'。')
-        assert not g.aboard
-        g.line('<z> [CSessionManager::OnClientSpawned] Spawned!')
-        assert not g.aboard and g.channel is None
-    finally:
-        S.game_foreground, H._scan = old_fg, old_scan
+    g.line('<z> [Notice] <SHUDEvent_OnNotification> Added notification "你退出了 频道 \'Aegis Idris-P : NeuromancerTT\'。')
+    assert not g.aboard
+    g.line('<z> [CSessionManager::OnClientSpawned] Spawned!')
+    assert not g.aboard and g.channel is None
 
 
 def test_real_screenshot_scan():
