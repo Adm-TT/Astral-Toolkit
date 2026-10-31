@@ -65,6 +65,7 @@ MODULES = [
     "tests.test_gpu_ocr",
     "tests.test_hover",
     "tests.test_inspector",
+    "tests.test_ocr_module",
 ]
 
 if __name__ == "__main__":

@@ -32,7 +32,7 @@ def _ms(fn, n=N):
 def main():
     from sc_mining.core import perf
     from sc_mining.tasks import hover as S
-    from sc_mining.trade.ocr import recognize
+    from sc_mining.ocr import recognize
     from sc_mining.mining import screen
     from sc_mining.navigation import displayinfo
 

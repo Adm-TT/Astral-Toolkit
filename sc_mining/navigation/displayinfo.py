@@ -229,7 +229,7 @@ def _rows(toks):
 
 
 def _lines(piece):
-    from ..trade.ocr import recognize
+    from ..ocr import recognize
 
     return [" ".join(t.text for t in ts) for ts in _rows(recognize(piece, native=True))]
 
@@ -278,7 +278,7 @@ def last_fov():
 def _camdir_band(piece, box):
     """CamDir 那一行单独放大再认，返回 (俯仰, 横滚, 偏航) 或 None"""
     from PIL import Image
-    from ..trade.ocr import read_line
+    from ..ocr import read_line
 
     x0, y0, x1, y1 = box
     w = x1 - x0
@@ -313,7 +313,7 @@ def _cam_box(rows, scale):
 def _full_read(piece, screen_h=None):
     """整块认（找字 + 认字），顺便记下要用的几行的位置；认出来的文字喂给字模校准（gridtext）"""
     from PIL import Image
-    from ..trade.ocr import recognize
+    from ..ocr import recognize
 
     up = piece.resize((piece.width * UPSCALE, piece.height * UPSCALE), Image.LANCZOS)
     rows = _rows(recognize(up, native=True))
@@ -468,7 +468,7 @@ def _zone_name(piece, rows, zone, screen_h):
         from PIL import Image
         import numpy as np
         from . import gridtext
-        from ..trade.ocr import read_line
+        from ..ocr import read_line
 
         top = row[0]
         lh = gridtext._for(screen_h).g.lh
@@ -524,7 +524,7 @@ def _ocr_location(piece, arr, top, screen_h, key=None):
     _loc["at"] = time.time()
     try:
         from PIL import Image
-        from ..trade.ocr import read_line
+        from ..ocr import read_line
 
         cols = (gridtext.textness(band) > 50).sum(0)
         xs = [x for x, v in enumerate(cols) if v]
@@ -557,7 +557,7 @@ def _ocr_location(piece, arr, top, screen_h, key=None):
 
 def _fast_read(piece, boxes):
     """只认记下的那几行：每行左边多留一点（数字变长时字往左长），按原尺寸认"""
-    from ..trade.ocr import read_line
+    from ..ocr import read_line
 
     lines = []
     for x0, y0, x1, y1 in boxes:

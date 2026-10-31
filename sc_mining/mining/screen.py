@@ -11,6 +11,12 @@ import re
 import sys
 import time
 
+# 复用统一 OCR 模块的底层检测与单行识别器
+from ..ocr import raw_detector as _ocr, raw_recognizer as _recognize
+
+_engine = None
+_rec = None
+
 # 搜索区域：(左, 上, 右, 下)，按屏幕宽高的比例。驾驶位和炮塔位的面板位置不同，
 # 所以取一大块，再按文字聚类自动找出"扫描结果"和"货舱"两个面板。
 # 右边一直到屏幕边上（1.6.42）：16:10 屏幕（2560×1600）上鼹鼠炮塔的面板挤到了屏幕最右边，
@@ -22,55 +28,6 @@ SEG_TARGET_PX = (
 )
 INTERVAL = 1.0  # 读屏间隔（秒）：1 秒一帧，少占资源，同一块石头两帧读稳就出结果
 VOTE_FRAMES = 5  # 同一块石头取最近几帧投票
-
-_engine = None
-
-
-def _ocr():
-    """兼容两种 RapidOCR 包：rapidocr_onnxruntime（旧）和 rapidocr（新，支持 Python 3.13）。
-    统一返回 [(四点框, 文字, 置信度)]"""
-    global _engine
-    if _engine is None:
-        from ..core.perf import rapidocr
-
-        eng = rapidocr()
-        if eng.kind.startswith("rapidocr_onnxruntime"):
-            _engine = lambda arr: eng(arr)[0] or []  # noqa: E731
-        else:
-
-            def run(arr):
-                r = eng(arr)
-                if r.boxes is None:
-                    return []
-                return list(zip(r.boxes.tolist(), r.txts, r.scores))
-
-            _engine = run
-    return _engine
-
-
-_rec = None
-
-
-def _recognize():
-    """只做文字识别（不做检测），输入一小块单行文字图，返回 (文字, 置信度)"""
-    global _rec
-    if _rec is None:
-        from ..core.perf import rapidocr
-
-        eng = rapidocr()
-        if eng.kind.startswith("rapidocr_onnxruntime"):
-
-            def run(arr):
-                res, _ = eng(arr, use_det=False, use_cls=False, use_rec=True)
-                return (res[0][0], float(res[0][1])) if res else ("", 0.0)
-        else:
-
-            def run(arr):
-                r = eng(arr, use_det=False, use_cls=False, use_rec=True)
-                return (r.txts[0], float(r.scores[0])) if r.txts else ("", 0.0)
-
-        _rec = run
-    return _rec
 
 
 WHITE_TEXT = True  # 勘探者驾驶舱的扫描面板是白字（MOLE 炮塔是橙/绿字），两种都要认
