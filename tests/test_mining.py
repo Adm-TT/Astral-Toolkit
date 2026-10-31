@@ -648,7 +648,7 @@ def test_gamelog_vehicle_channel():
 
     g = GameLog()
     g.line(
-        "<2026-10-20T07:36:58.726Z> [Notice] <SHUDEvent_OnNotification> Added notification \"你已加入 频道 'Aegis Idris-P : NeuromancerTT'。"
+        "<2026-10-20T07:36:58.726Z> [Notice] <SHUDEvent_OnNotification> Added notification \"你已加入 频道 'Aegis Idris-P : TestPilot01'。"
     )
     assert not g.aboard and g.channel.startswith(
         "Aegis Idris"
@@ -660,7 +660,7 @@ def test_gamelog_vehicle_channel():
     g.line(seat)
     assert g.aboard and g.vehicle == "AEGS_Idris_P"  # 坐上驾驶位
     g.line(
-        "<z> [Notice] <SHUDEvent_OnNotification> Added notification \"你退出了 频道 'Aegis Idris-P : NeuromancerTT'。"
+        "<z> [Notice] <SHUDEvent_OnNotification> Added notification \"你退出了 频道 'Aegis Idris-P : TestPilot01'。"
     )
     assert not g.aboard  # 坐着退出频道：清掉
     g.line(seat)
@@ -696,7 +696,7 @@ def test_seat_from_real_log():
 
     g = GameLog()
     g.line(
-        "<2026-10-20T06:39:22.010Z> [Notice] <SHUDEvent_OnNotification> Added notification \"你已加入 频道 'Anvil C8R Pisces Rescue : NeuromancerTT'。"
+        "<2026-10-20T06:39:22.010Z> [Notice] <SHUDEvent_OnNotification> Added notification \"你已加入 频道 'Anvil C8R Pisces Rescue : TestPilot01'。"
     )
     assert not g.aboard  # 只是登船
     g.line(
