@@ -25,5 +25,48 @@
    "https://gitee.com/Adm_TT/Astral-Toolkit/releases/download/v1.1.1/AT_Setup_1.1.1.exe",
    "https://github.com/Adm-TT/Astral-Toolkit/releases/download/v1.1.1/AT_Setup_1.1.1.exe"
   ]
- }
+ },
+ "kill_rev": 1793426539,
+ "disabled": [
+  {
+   "feature": "feedback",
+   "versions": "<=1.1.1",
+   "why": "请升级到 1.1.2（已删除全部模拟按键）"
+  },
+  {
+   "feature": "train",
+   "versions": "<=1.1.1",
+   "why": "请升级到 1.1.2（已删除全部模拟按键）"
+  },
+  {
+   "feature": "nav_marker",
+   "versions": "<=1.1.1",
+   "why": "请升级到 1.1.2（已删除全部模拟按键）"
+  },
+  {
+   "feature": "radar",
+   "versions": "<=1.1.1",
+   "why": "请升级到 1.1.2（已删除全部模拟按键）"
+  },
+  {
+   "feature": "scan",
+   "versions": "<=1.1.1",
+   "why": "请升级到 1.1.2（已删除全部模拟按键）"
+  },
+  {
+   "feature": "item",
+   "versions": "<=1.1.1",
+   "why": "请升级到 1.1.2（已删除全部模拟按键）"
+  },
+  {
+   "feature": "halo_auto",
+   "versions": "<=1.1.1",
+   "why": "请升级到 1.1.2（已删除全部模拟按键）"
+  },
+  {
+   "feature": "game_events",
+   "versions": "<=1.1.1",
+   "why": "请升级到 1.1.2（已删除全部模拟按键）"
+  }
+ ]
 }
