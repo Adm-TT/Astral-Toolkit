@@ -676,7 +676,7 @@ class _Live:
                             break
                         if hint["why"]:
                             self._hint(ev, hint, None, log)
-                        last_key, last_shown, scan_live, last_view = (
+                        last_key, last_shown, scan_live, last_view = (  # noqa: F841
                             None,
                             shown,
                             True,

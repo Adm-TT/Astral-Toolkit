@@ -76,7 +76,7 @@ def parse(s):
     )
     rs = re.search(r"Radar Sig \(⊙\)\|([\d,]+)", s, re.I)
     price = re.search(r"Terminal Value\|Live NPC\|([\d,]+|TBD)", s, re.I)
-    level = lambda lab: (
+    level = lambda lab: (  # noqa: E731
         (m := re.search(lab + r"\|([A-Za-z ]+)\|", s, re.I))
         and LEVEL.get(m.group(1).strip().lower())
     )  # noqa: E731

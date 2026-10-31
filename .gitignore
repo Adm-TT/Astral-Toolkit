@@ -17,6 +17,7 @@
 !/产品设计文档.md
 !/.github/
 !/.basedpyright/
+!/.git-blame-ignore-revs
 !/pyproject.toml
 !/第三方许可.txt
 !/免责声明.txt

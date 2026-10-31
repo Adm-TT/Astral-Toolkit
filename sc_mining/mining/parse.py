@@ -290,9 +290,11 @@ def _fix_by_tiers(comp, rock):
     ②品质多认了一位（「5882」）、和这种矿某一档只差一个字 → 改成那一档"""
     from .quality_tiers import TIERS
 
-    owners = lambda q: [
-        m for m, ts in TIERS.items() if q in ts[:-1]
-    ]  # 哪几种矿有这一档（1000 每种都有，不算）  # noqa: E731
+    owners = (  # noqa: E731
+        lambda q: [  # noqa: E731
+            m for m, ts in TIERS.items() if q in ts[:-1]
+        ]
+    )  # 哪几种矿有这一档（1000 每种都有，不算）  # noqa: E731
     ice = lambda m: {"Pressurized Ice": "Ice"}.get(m, m)  # noqa: E731
     # 第一遍：有矿名的行，品质不在这种矿的档位里 → 改品质（差一个字）或改矿名（品质只有另一种矿有）
     named = []

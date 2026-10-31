@@ -648,7 +648,8 @@ def stock_move(id="", qkey="", location="", ukey="", qty="", to="", note="", bin
             _raw_amount(qty, ukey)
             if str(qty or "").strip()
             else next(
-                (l.quantity for l in trade().inventory.list_stock() if l.key == key), 0
+                (l.quantity for l in trade().inventory.list_stock() if l.key == key),  # noqa: E741
+                0,  # noqa: E741
             )
         )  # noqa: E741
         if not n:
@@ -781,7 +782,8 @@ def stock_bin_delete(place="", name=""):
     bins = _bins(t)
     meta = bins.get(place) or {}
     if not any(x["name"] == name for x in meta.get("bins", [])) and not any(
-        l.key.location == SP.join_loc(place, name) for l in t.inventory.list_stock()
+        l.key.location == SP.join_loc(place, name)
+        for l in t.inventory.list_stock()  # noqa: E741
     ):  # noqa: E741
         return {"error": "未找到此仓位"}
     try:

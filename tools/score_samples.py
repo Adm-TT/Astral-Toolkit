@@ -35,7 +35,7 @@ def _same(a, b, tol=0.0):
 
 def check_scan(exp, scan):
     """→ {字段: 对/错}；exp 里没写的字段不算（面板被挡住时只标得出一部分）"""
-    norm = lambda n, p, q: [
+    norm = lambda n, p, q: [  # noqa: E731
         n or "",
         round(float(p), 2) if p is not None else None,
         None if n == "Inert Materials" else q,

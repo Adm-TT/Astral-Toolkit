@@ -329,8 +329,9 @@ def test_console_commands(monkeypatch):
     C.wikelo_flow(
         "Asgard"
     )  # 船名中文与否看玩家装的汉化包（有的包船名不翻译），这里用英文名
-    assert any("Asgard" in l or "阿斯加德" in l for l in out) and any(
-        "Wikelo Favor" in l or "维科洛" in l for l in out
+    assert any("Asgard" in l or "阿斯加德" in l for l in out) and any(  # noqa: E741
+        "Wikelo Favor" in l or "维科洛" in l
+        for l in out  # noqa: E741
     )  # noqa: E741
 
 
@@ -984,7 +985,7 @@ def test_live_scan_updates_when_read_gets_more_complete(monkeypatch, tmp_path):
     from sc_mining.tasks import navigation as t_nav, system as t_sys
     from sc_mining.app import hud_state
 
-    _v = lambda: type(
+    _v = lambda: type(  # noqa: E731
         "H", (), {"set": lambda *a: None, "clear": lambda *a: None}
     )()  # 不弹真悬浮窗  # noqa: E731
     for _m in (t_mining, t_nav, t_sys, hud_state):
@@ -1142,7 +1143,7 @@ def test_hud_prices_fall_back_when_no_minimum():
     from types import SimpleNamespace as N
     from sc_mining.trade.console import hud_prices
 
-    st = lambda src, mn, mean, wk: N(
+    st = lambda src, mn, mean, wk: N(  # noqa: E731
         key=N(source=src), minimum=mn, mean=mean, week_mean=wk
     )  # noqa: E731
     r = lambda src, *s: N(source=src, stats=s)  # noqa: E731
@@ -1169,7 +1170,7 @@ def test_log_location_learns_ids_and_follows_moves(monkeypatch, tmp_path):
     position._log_cache.clear()
     position._log_cache["ids"] = {}
     log = tmp_path / "Game.log"
-    L = lambda t, body: (
+    L = lambda t, body: (  # noqa: E731
         f"<2026-10-20T05:{t}.000Z> [Notice] {body} [Team_CoreGameplayFeatures][Inventory]\n"
     )  # noqa: E731
     log.write_text(
@@ -2136,7 +2137,7 @@ def _live_run(
     from sc_mining.tasks import navigation as t_nav, system as t_sys
     from sc_mining.app import hud_state
 
-    _v = lambda: type(
+    _v = lambda: type(  # noqa: E731
         "H",
         (),
         {
@@ -2548,7 +2549,7 @@ def test_space_fix_navigation(monkeypatch, tmp_path):
     from sc_mining.tasks import mining as t_mining, system as t_sys
     from sc_mining.app import hud_state
 
-    _v = lambda: type(
+    _v = lambda: type(  # noqa: E731
         "H",
         (),
         {
@@ -2865,7 +2866,7 @@ def test_halo_services(monkeypatch, tmp_path):
     from sc_mining.tasks import mining as t_mining, system as t_sys
     from sc_mining.app import hud_state
 
-    _v = lambda: type(
+    _v = lambda: type(  # noqa: E731
         "H",
         (),
         {
@@ -3215,7 +3216,7 @@ def test_craft_filter_by_mineral_and_item_hud_expires(monkeypatch):
     hud = {}
     from sc_mining.tasks import mining as t_mining, navigation as t_nav, system as t_sys
 
-    _v = lambda: type(
+    _v = lambda: type(  # noqa: E731
         "H",
         (),
         {
@@ -3576,7 +3577,7 @@ def test_feedback_report_bundle(monkeypatch, tmp_path):
         Image.new("RGB", (8, 8)).save(tmp_path / "shots" / "live" / f"{i}.png")
     monkeypatch.setattr(t_sys, "_desktop", lambda: tmp_path / "desk")
     (tmp_path / "desk").mkdir()
-    _v = lambda: type(
+    _v = lambda: type(  # noqa: E731
         "H",
         (),
         {"sections": {"信号": "x"}, "set": lambda *a: None, "clear": lambda *a: None},

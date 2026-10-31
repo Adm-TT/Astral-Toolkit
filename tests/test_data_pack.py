@@ -127,7 +127,7 @@ def test_unreachable_returns_none_and_run_falls_back(monkeypatch, tmp_path):
 
 def test_pack_up_to_date_skips_sources(monkeypatch, tmp_path):
     data, m = _pack(tmp_path, {"shops.json": "{}"})
-    P = _setup(
+    P = _setup(  # noqa: F841
         monkeypatch,
         tmp_path,
         {

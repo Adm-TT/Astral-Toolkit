@@ -572,7 +572,8 @@ def test_overlay_paint_rules():
         "foot": "精炼结果为估算",
     }
     kinds = [
-        l[0] for l in O.layout({"扫描": "x"}, s, {"扫描": rich})[0]["lines"]
+        l[0]
+        for l in O.layout({"扫描": "x"}, s, {"扫描": rich})[0]["lines"]  # noqa: E741
     ]  # 1.6.65：照用户样图的层次  # noqa: E741
     assert kinds == [
         "t",
@@ -595,7 +596,7 @@ def test_overlay_paint_rules():
         "title": "铜",
         "comp": [{"name": "铜", "pct": "18%", "subs": [{"q": "450", "pct": "18%"}]}],
     }  # 1.6.66：只有一种品质的合成一行
-    assert [l[0] for l in O.layout({"扫描": "x"}, s, {"扫描": one})[0]["lines"]] == [
+    assert [l[0] for l in O.layout({"扫描": "x"}, s, {"扫描": one})[0]["lines"]] == [  # noqa: E741
         "t",
         "d",
         "h",
@@ -1400,7 +1401,7 @@ def test_panel_cut_and_chroma_shift():
 
     img = Image.new("RGB", (2560, 1600))
     ox, oy = int(screen.SEARCH[0] * 2560), int(screen.SEARCH[1] * 1600)  # noqa: F841
-    it = lambda x0, x1: (
+    it = lambda x0, x1: (  # noqa: E731
         "质量： 745",
         ((x0 + x1) / 2, 10),
         14,

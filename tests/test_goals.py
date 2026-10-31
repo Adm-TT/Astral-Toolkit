@@ -592,7 +592,7 @@ def test_stock_v1_import_leaves_old_file(tmp_path):
     t = Trade(d, providers=[])
     assert (d / "dubhe_inventory.db").exists()
     lines = t.inventory.list_stock()
-    assert [(l.key.item_id, l.key.location, l.quantity) for l in lines] == [
+    assert [(l.key.item_id, l.key.location, l.quantity) for l in lines] == [  # noqa: E741
         ("ber", "新巴贝奇", 1495000)
     ]  # noqa: E741
     h = t.inventory.history()
@@ -662,7 +662,7 @@ def test_stock_bins_reserve_ledger_and_values(monkeypatch, tmp_path):
     for _m in (t_count, t_goals, t_hover, t_stock, t_trade):
         monkeypatch.setattr(_m, "trade", _v)
     monkeypatch.setattr("sc_mining.crafting.stockplaces.current_place", lambda: None)
-    add = lambda **k: t_stock.stock_add_named(
+    add = lambda **k: t_stock.stock_add_named(  # noqa: E731
         **{
             "name": "钛",
             "en": "Titanium",
@@ -727,7 +727,9 @@ def test_stock_bins_reserve_ledger_and_values(monkeypatch, tmp_path):
     sell = next(x for x in d["rows"] if x["bin"] == "卖的")
     assert sell["reserved"] and sell["goal_qty"] == 0
     assert G.stock_lots(t) and all(
-        l[2] != sell["location"] for ls in G.stock_lots(t).values() for l in ls
+        l[2] != sell["location"]
+        for ls in G.stock_lots(t).values()
+        for l in ls  # noqa: E741
     )  # noqa: E741
     d = t_stock.stock_reserve(
         id=sell["id"],

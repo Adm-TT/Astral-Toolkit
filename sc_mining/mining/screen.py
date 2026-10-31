@@ -1103,7 +1103,8 @@ def _live_loop(root, shots, log, recent, ov):
                 ov.set(
                     "信号",
                     "\n".join(
-                        l.split("｜精炼后")[0].replace("信号 ", "") for l in lines[:4]
+                        l.split("｜精炼后")[0].replace("信号 ", "")
+                        for l in lines[:4]  # noqa: E741
                     ),
                 )  # noqa: E741
                 log.write(f"{time.strftime('%F %T')} SIG {sorted(sigs)}\n")

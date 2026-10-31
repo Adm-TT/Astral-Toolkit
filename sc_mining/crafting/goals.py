@@ -320,11 +320,11 @@ def _take(lots, need, minq):
     usable = sorted(
         (
             l
-            for l in lots
+            for l in lots  # noqa: E741
             if l[3] > 0
             and (l[0] is not None and l[0] >= minq or (l[0] is None and not minq))
         ),  # noqa: E741
-        key=lambda l: -1 if l[0] is None else l[0],
+        key=lambda l: -1 if l[0] is None else l[0],  # noqa: E741
     )  # noqa: E741
     for lot in usable:
         if got >= need - 1e-9:

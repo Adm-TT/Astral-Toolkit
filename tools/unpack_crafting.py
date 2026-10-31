@@ -458,7 +458,7 @@ def _hauling(loc, res, orders, pools):
 def contracts(loc, res):
     """所有任务生成器里的任务（含子任务）→ scmdb 的 contracts 行（只放我们用到的字段）"""
     pools, rows = {}, []
-    systems_of = lambda pre: sorted(
+    systems_of = lambda pre: sorted(  # noqa: E731
         {
             _sys(p.get("locationAvailable"))
             for p in pre or []

@@ -19,15 +19,15 @@ from ..tasks import system as _sys_task  # main 里启动后台引擎
 from .http_server import WEB, TOKEN, MAX_BODY, Handler, Server, _last_client  # noqa: F401
 from .launcher import (
     QUIT,
-    STATE,
-    EDGE_FLAGS,
-    SHELL_FALLBACK,
-    _browser,
-    shell_exe,
+    STATE,  # noqa: F401
+    EDGE_FLAGS,  # noqa: F401
+    SHELL_FALLBACK,  # noqa: F401
+    _browser,  # noqa: F401
+    shell_exe,  # noqa: F401
     open_window,  # noqa: F401
-    _open_edge,
-    show_window,
-    _close_edge,
+    _open_edge,  # noqa: F401
+    show_window,  # noqa: F401
+    _close_edge,  # noqa: F401
 )  # noqa: F401
 from .instance import _call_old, _try_lock, release_instance, _single_instance  # noqa: F401
 

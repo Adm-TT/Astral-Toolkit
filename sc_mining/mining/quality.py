@@ -71,7 +71,7 @@ def tiers(material):
     k = _key(material)
     if not k:
         return []
-    return [(f"{l} 档", q) for l, q in zip(LETTERS, TIERS[k]) if q] + [
+    return [(f"{l} 档", q) for l, q in zip(LETTERS, TIERS[k]) if q] + [  # noqa: E741
         ("完美", PERFECT)
     ]  # noqa: E741
 

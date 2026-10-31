@@ -219,7 +219,7 @@ def main():
             (isinstance(r, list) and len(r) > 0 and "short" in r[0]) or "没有破碎方案"
         ),
     )
-    g = step(
+    g = step(  # noqa: F841
         "配装 mining_gear",
         lambda: c.call("mining_gear"),
         lambda r: bool(r.get("ships")) or "没有船",

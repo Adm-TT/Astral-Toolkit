@@ -25,8 +25,8 @@ from sc_mining.trade.models import (
     Quote,
     Snapshot,
     PriceStats,
-    StockKey,
-    StockLine,
+    StockKey,  # noqa: F811
+    StockLine,  # noqa: F811
 )  # noqa: F811
 from sc_mining.trade.pricing import aggregate, value_stock
 from sc_mining.trade.history import History

@@ -221,7 +221,7 @@ class Inventory:
             )
             if is_duplicate and not allow_duplicate:
                 raise ValueError("此截图已导入，请核对重复记录")
-            if not preview.lines or len({l.key for l in preview.lines}) != len(
+            if not preview.lines or len({l.key for l in preview.lines}) != len(  # noqa: E741
                 preview.lines
             ):  # noqa: E741
                 raise ValueError("请重新生成入库预览")

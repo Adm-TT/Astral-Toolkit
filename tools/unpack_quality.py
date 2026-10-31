@@ -18,7 +18,7 @@ def main(d):
             "qualityQuantization"
         ]["bands"]
         game[f.stem[len("quantization_") :]] = [b["mappedValue"] for b in bands]
-    key = lambda n: {"pressurizedice": "rawice"}.get(
+    key = lambda n: {"pressurizedice": "rawice"}.get(  # noqa: E731
         n.lower().replace(" ", ""), n.lower().replace(" ", "")
     )  # noqa: E731
     bad = 0

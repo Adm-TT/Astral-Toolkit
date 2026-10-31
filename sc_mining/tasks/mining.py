@@ -663,7 +663,7 @@ def _gear_summary(key, lo):
     model, k = active_model()
     n = max(1, min(lo.get("crew") or 1, len(setups)))
     combos = list(combinations(setups, n))
-    best = lambda g: max(
+    best = lambda g: max(  # noqa: E731
         evaluate(list(c), g, 1.0, 30, 0, k=k, model=model).max_mass for c in combos
     )  # noqa: E731
     return {
