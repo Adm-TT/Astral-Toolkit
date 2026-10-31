@@ -1,4 +1,5 @@
 """F8 悬停识别自适应区域与兜底流程测试"""
+
 import unittest
 from sc_mining.trade.models import OcrToken
 from sc_mining.tasks.hover import get_hover_regions, _read_tooltip, HOVER_REGIONS  # noqa: F401
@@ -66,6 +67,7 @@ class TestHoverRegions(unittest.TestCase):
 class TestReadTooltipExecution(unittest.TestCase):
     def setUp(self):
         from sc_mining.trade import ocr
+
         self.ocr = ocr
         self._orig_recognize = ocr.recognize
         self.img = MockImage(1000, 1000)
@@ -139,23 +141,35 @@ class TestReadTooltipExecution(unittest.TestCase):
 def _fake_ocr(monkeypatch, toks):
     """假识别：每次都返回 toks（位置按偏移挪），记下每次认的图多宽"""
     from sc_mining.trade import ocr
+
     widths = []
 
     def fake(img, urgent=False, offset=(0, 0), native=False):
         widths.append(img.width)
-        return [OcrToken(k.text, k.confidence, (k.box[0] + offset[0], k.box[1] + offset[1], k.box[2], k.box[3])) for k in toks]
+        return [
+            OcrToken(
+                k.text,
+                k.confidence,
+                (k.box[0] + offset[0], k.box[1] + offset[1], k.box[2], k.box[3]),
+            )
+            for k in toks
+        ]
+
     monkeypatch.setattr(ocr, "recognize", fake)
     return widths
 
 
 def test_cockpit_guard_no_fullscreen_with_candidate(monkeypatch):
     """鼠标在中间、认过的区域里没有说明框特征：不认整屏，有像样的候选名就返回候选"""
-    widths = _fake_ocr(monkeypatch, [
-        OcrToken("能量突击步枪", 90, (60, 300, 100, 18)),
-        OcrToken("P4-AR Rifle", 90, (60, 324, 100, 18)),
-    ])
+    widths = _fake_ocr(
+        monkeypatch,
+        [
+            OcrToken("能量突击步枪", 90, (60, 300, 100, 18)),
+            OcrToken("P4-AR Rifle", 90, (60, 324, 100, 18)),
+        ],
+    )
     toks, name, where = _read_tooltip(MockImage(1000, 1000), (500, 500))
-    assert 1000 not in widths and len(widths) == 2          # 两个区域都认了，整屏没认
+    assert 1000 not in widths and len(widths) == 2  # 两个区域都认了，整屏没认
     assert name == ("能量突击步枪", "P4-AR Rifle") and where == "30-50%"
 
 

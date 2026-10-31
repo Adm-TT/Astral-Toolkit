@@ -3,6 +3,7 @@
 采矿助手启停、扫描面板、激光头配置、手动输入扫描数据。
 每个接口只是薄转发：收关键字参数、调 tasks/mining.py 里同名函数、原样返回；校验照旧留在 tasks。
 """
+
 from ...tasks import mining as _t
 
 

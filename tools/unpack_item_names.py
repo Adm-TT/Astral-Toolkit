@@ -5,6 +5,7 @@
 读：E:\\Game3\\unpack\\p4k_out\\Data\\Localization\\english\\global.ini（unpack_all 解出来的游戏英文文本）+ data\\loc\\global_zh.ini（汉化包）
 写：data\\zh_only_names.json  {中文名: 英文名}（随数据包发给玩家；trade/names.table() 合进对照表）。只发名字，不发游戏原文件。
 """
+
 import json
 import pathlib
 import re
@@ -26,9 +27,11 @@ KEY = re.compile(r"^item_(?:name_?|mining_)(?P<cls>.+?)$", re.I)
 def known_items():
     """商店、掉落、wiki 物品表里真有的英文名（折叠过的）：「无→None」「红色→Red」「导弹→MISSILES」这种界面词不收（独立审查 2026-10-27）"""
     from sc_mining.trade.names import _known_names, _fold_en
+
     out = set(_known_names())
     try:
         from sc_mining.crafting.itemsearch import wiki_items
+
         out |= {_fold_en(w["n"]) for w in wiki_items() if w.get("n")}
     except Exception:
         pass
@@ -39,6 +42,7 @@ def build(en_ini, zh_ini, known=None):
     en = {k.lower(): v for k, v in en_ini.items()}
     out, skipped = {}, 0
     from sc_mining.trade.names import _fold_en
+
     known = known_items() if known is None else known
     for k, v in zh_ini.items():
         kl = k.lower()
@@ -46,18 +50,36 @@ def build(en_ini, zh_ini, known=None):
         if not m or kl.endswith(("_short", "_shop")) or "desc" in kl:
             continue
         v = re.sub(r"<[^>]+>", "", v).strip()
-        attr = "\\n[" in v                                # 「名字\n[属性|属性]」（采矿模组 / 激光器）：属性行不是名字
+        attr = "\\n[" in v  # 「名字\n[属性|属性]」（采矿模组 / 激光器）：属性行不是名字
         if attr:
             v = v.split("\\n[")[0].strip()
-        if "\\n" in v or not re.search(f"[{CJK}]", v) or re.search(r"[A-Za-z]{3,}\s*$", v) and re.search(f"[{CJK}].*[A-Za-z]{{3,}}", v) \
-                or attr and re.search(f"[{CJK}].*[A-Za-z]{{3,}}", v):
-            continue                       # 已经带英文（「中文\nEnglish」「中文English」「里格-C3 模组Rieger-C3」）：原来的对照表管
+        if (
+            "\\n" in v
+            or not re.search(f"[{CJK}]", v)
+            or re.search(r"[A-Za-z]{3,}\s*$", v)
+            and re.search(f"[{CJK}].*[A-Za-z]{{3,}}", v)
+            or attr
+            and re.search(f"[{CJK}].*[A-Za-z]{{3,}}", v)
+        ):
+            continue  # 已经带英文（「中文\nEnglish」「中文English」「里格-C3 模组Rieger-C3」）：原来的对照表管
         e = re.sub(r"<[^>]+>", "", en.get(kl, "")).split("\\n")[0].strip()
-        if not e or re.search(f"[{CJK}]", e) or e.startswith("@") or len(e) < 2 or len(e) > 80:
+        if (
+            not e
+            or re.search(f"[{CJK}]", e)
+            or e.startswith("@")
+            or len(e) < 2
+            or len(e) > 80
+        ):
             skipped += 1
             continue
         zh = v.strip(' "“”')
-        if len(zh) > 40 or zh.startswith("[") or "@" in zh or "@" in e or len(re.sub(r"\s+", "", zh)) < 3:
+        if (
+            len(zh) > 40
+            or zh.startswith("[")
+            or "@" in zh
+            or "@" in e
+            or len(re.sub(r"\s+", "", zh)) < 3
+        ):
             continue
         if _fold_en(e) not in known:
             skipped += 1
@@ -70,8 +92,13 @@ def main():
     if not EN_INI.exists():
         raise SystemExit(f"没有游戏英文文本：{EN_INI}（先跑 tools\\unpack_all.py）")
     out, skipped = build(read_ini(EN_INI), read_ini(ZH_INI))
-    OUT.write_text(json.dumps(out, ensure_ascii=False, separators=(",", ":"), sort_keys=True), encoding="utf-8")
-    print(f"只有中文名的物品：补上英文名 {len(out)} 条，跳过 {skipped} 条（英文文本里没有 / 商店掉落都没有这个物品）→ {OUT}")
+    OUT.write_text(
+        json.dumps(out, ensure_ascii=False, separators=(",", ":"), sort_keys=True),
+        encoding="utf-8",
+    )
+    print(
+        f"只有中文名的物品：补上英文名 {len(out)} 条，跳过 {skipped} 条（英文文本里没有 / 商店掉落都没有这个物品）→ {OUT}"
+    )
 
 
 if __name__ == "__main__":

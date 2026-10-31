@@ -4,6 +4,7 @@
 server.main() 结尾收尾的几步原样搬到这里，逻辑没改。
 阶段 4 删了 services.py：要用引擎的地方直接 EngineManager.get_instance().live / .nav / .pos ……
 """
+
 import threading
 
 
@@ -26,6 +27,7 @@ class EngineManager:
         from .hover import _Hover
         from .count import _Count
         from .pos import _Pos, _LogWatch
+
         self.game_events = _GameEvents()
         self.nav = _Nav()
         self.live = _Live()
@@ -40,7 +42,10 @@ class EngineManager:
         """打开天枢主窗口时启动后台服务：热键监听、定时查更新、搜索索引预热、未发送反馈补发、原矿扫描续跑
         （原来的 services.start_background()，原样搬来）"""
         from ...core import settings
-        from ...tasks import system as _sys    # _online / _online_loop / _fb_dir 在 tasks.system（测试直接换这里的）
+        from ...tasks import (
+            system as _sys,
+        )  # _online / _online_loop / _fb_dir 在 tasks.system（测试直接换这里的）
+
         if not settings.load().get("agreed"):
             return
         self.hover.start()
@@ -50,22 +55,34 @@ class EngineManager:
         _online = getattr(_sys, "_online", {})
         if not _online.get("loop"):
             _online["loop"] = True
-            threading.Thread(target=_sys._online_loop, daemon=True, name="update").start()
+            threading.Thread(
+                target=_sys._online_loop, daemon=True, name="update"
+            ).start()
             from ...crafting import itemsearch
+
             itemsearch.warm_up()
         if not _online.get("fb_retry"):
             _online["fb_retry"] = True
             from ...system import feedback_up
-            threading.Thread(target=lambda: feedback_up.retry_pending(_sys._fb_dir()), daemon=True, name="feedback-retry").start()
+
+            threading.Thread(
+                target=lambda: feedback_up.retry_pending(_sys._fb_dir()),
+                daemon=True,
+                name="feedback-retry",
+            ).start()
         if settings.load().get("live_on"):
             self.live.start()
         try:
             from ...core import perf
-            threading.Thread(target=perf.rapidocr, daemon=True, name="ocr-warmup").start()
+
+            threading.Thread(
+                target=perf.rapidocr, daemon=True, name="ocr-warmup"
+            ).start()
         except Exception:
             pass
         try:
             from ...core.perfmon import monitor
+
             monitor.start()
         except Exception:
             pass
@@ -76,6 +93,7 @@ class EngineManager:
             self.live.stop_ev.set()
             self.nav.stop_ev.set()
             from ...system import gpu_ocr
+
             gpu_ocr.shutdown()
         except Exception:
             pass

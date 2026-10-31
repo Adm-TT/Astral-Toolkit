@@ -4,6 +4,7 @@
 - 单件物品的掉落详情 q/<uuid>.json：先查 loot_details.zip（作者每个游戏版本全量抓一次、随 Gitee 数据包发布），没有再现取，缓存在 data/loot/ 下
 - 概率是该站算出的「单个箱子开出这件东西的最高概率」，只作参考
 """
+
 import json
 import re
 import urllib.request
@@ -11,17 +12,23 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 from ..core.paths import DATA  # noqa: E402
+
 INDEX = DATA / "loot_index.json"
 CACHE_DIR = DATA / "loot"
 BASE = "https://scl.miao.network/d/"
-UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36",
-      "Referer": "https://scl.miao.network/"}
+UA = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36",
+    "Referer": "https://scl.miao.network/",
+}
 _index = None
 
 
 def _get(url, timeout=60):
     from ..core.net import read
-    return json.loads(read(urllib.request.Request(url, headers=UA), timeout=timeout).decode("utf-8"))
+
+    return json.loads(
+        read(urllib.request.Request(url, headers=UA), timeout=timeout).decode("utf-8")
+    )
 
 
 def _fold(s):
@@ -32,7 +39,10 @@ def latest_version():
     """站点当前的数据版本（例如 4.10.2LIVE）；从首页脚本里的 manifest 地址拿不到时用缓存里的"""
     try:
         from ..core.net import read
-        html = read(urllib.request.Request("https://scl.miao.network/", headers=UA), timeout=30).decode("utf-8", "replace")
+
+        html = read(
+            urllib.request.Request("https://scl.miao.network/", headers=UA), timeout=30
+        ).decode("utf-8", "replace")
         m = re.search(r"/d/([0-9.]+(?:LIVE|PTU)?)/", html)
         if m:
             return m.group(1)
@@ -42,11 +52,17 @@ def latest_version():
 
 
 def update(version=None, progress=print):
-    version = version or latest_version() or (load_index(False) or {}).get("version") or "4.10.2LIVE"
+    version = (
+        version
+        or latest_version()
+        or (load_index(False) or {}).get("version")
+        or "4.10.2LIVE"
+    )
     manifest = _get(f"{BASE}{version}/manifest.json")
     rows = _get(f"{BASE}{version}/search.json", timeout=120)
     data = {"version": manifest.get("version", version), "rows": rows}
     from ..core.paths import write_json
+
     write_json(INDEX, data, separators=(",", ":"))
     global _index
     _index = data
@@ -74,21 +90,29 @@ _folded = {"of": None, "rows": []}
 def _folded_rows(idx):
     """索引里每个物品的名字先折叠好存着（以前每查一次要折叠 2 万多次）"""
     if _folded["of"] is not idx:
-        _folded.update(of=idx, rows=[(u, en, zh, rar, _fold(en), _fold(zh), (cls or "").lower(), n or 0)
-                                     for u, en, cls, rar, n, zh in idx["rows"]])
+        _folded.update(
+            of=idx,
+            rows=[
+                (u, en, zh, rar, _fold(en), _fold(zh), (cls or "").lower(), n or 0)
+                for u, en, cls, rar, n, zh in idx["rows"]
+            ],
+        )
     return _folded["rows"]
 
 
 # 同名的「变体」：NPC 专用、不显示的、测试 / 枪械游戏模式、低模、模板……玩家拿不到，掉落不算它的（2026-10-24 全量核对：
 # 「Citadel 胸甲」对到了 _ai_exclusive、「FSK-8 战斗刀」对到了 _gungame）
-_VARIANT = re.compile(r"(_ai_exclusive|^nodraw_|_gungame|_debug|_lowpoly|_template|_dummy|_atls|_securitynetwork|"
-                      r"_hair_extension|_salvation_|_active$)")
+_VARIANT = re.compile(
+    r"(_ai_exclusive|^nodraw_|_gungame|_debug|_lowpoly|_template|_dummy|_atls|_securitynetwork|"
+    r"_hair_extension|_salvation_|_active$)"
+)
 
 
 def _wiki_classes(name_en):
     """物品查询（wiki）里这个英文名对应的全部游戏类名；没有返回空集"""
     try:
         from .itemsearch import wiki_items
+
         k = _fold(name_en)
         out = set()
         for w in wiki_items():
@@ -104,7 +128,7 @@ def find(name_en="", name_zh=""):
     """按名字找物品：[(uuid, 英文名, 中文名, 稀有度)]，完全同名的排前面。
     同名的有好几个实体时，先要物品查询（wiki）里这个名字的类名，再去掉 NPC 专用、测试这些变体，有掉落的在前。
     名字只是开头像 / 包含的（Zeus 探索头盔 → Zeus 探索头盔 Echo）：物品查询里本来就有这个物品时不算"""
-    idx = load_index(False)                       # 索引缺了也不在 F8 / 物品页里联网下（更新数据会下）
+    idx = load_index(False)  # 索引缺了也不在 F8 / 物品页里联网下（更新数据会下）
     if not idx:
         return []
     ke, kz = _fold(name_en), _fold(name_zh)
@@ -112,11 +136,19 @@ def find(name_en="", name_zh=""):
     for u, en, zh, rar, fe, fz, cls, n in _folded_rows(idx):
         if (ke and fe == ke) or (kz and fz == kz):
             exact.append((u, en, zh, rar, cls, n))
-        elif (ke and len(ke) >= 6 and fe.startswith(ke)) or (ke and len(ke) >= 5 and ke in fe) or (kz and len(kz) >= 3 and kz in fz):
+        elif (
+            (ke and len(ke) >= 6 and fe.startswith(ke))
+            or (ke and len(ke) >= 5 and ke in fe)
+            or (kz and len(kz) >= 3 and kz in fz)
+        ):
             part.append((u, en, zh, rar, cls, n))
     if exact:
         good = _wiki_classes(name_en or (exact[0][1] if not name_en else ""))
-        pick = [h for h in exact if h[4] in good] or [h for h in exact if not _VARIANT.search(h[4])] or exact
+        pick = (
+            [h for h in exact if h[4] in good]
+            or [h for h in exact if not _VARIANT.search(h[4])]
+            or exact
+        )
         pick.sort(key=lambda h: -h[5])
         return [h[:4] for h in pick]
     if name_en and _wiki_classes(name_en):
@@ -125,7 +157,7 @@ def find(name_en="", name_zh=""):
     return [h[:4] for h in part[:5]]
 
 
-_failed = {}                 # 下载失败的物品 → 时间：10 分钟内不再重试（断网时每次都要等超时）
+_failed = {}  # 下载失败的物品 → 时间：10 分钟内不再重试（断网时每次都要等超时）
 
 
 # ---------------------------------------------------------------- 掉落明细整包（2026-10-26 用户定）
@@ -139,6 +171,7 @@ _zip_lock = __import__("threading").Lock()
 def details_version(path=None):
     """整包对应的掉落数据版本（4.10.2LIVE）；没有整包返回空"""
     import zipfile
+
     p = Path(path or DETAILS)
     try:
         with zipfile.ZipFile(p) as z:
@@ -149,6 +182,7 @@ def details_version(path=None):
 
 def _from_zip(uuid, version):
     import zipfile
+
     try:
         mt = DETAILS.stat().st_mtime
     except OSError:
@@ -159,7 +193,9 @@ def _from_zip(uuid, version):
                 _zip["z"].close()
             try:
                 z = zipfile.ZipFile(DETAILS)
-                _zip.update(z=z, mtime=mt, version=z.read("version.txt").decode("utf-8").strip())
+                _zip.update(
+                    z=z, mtime=mt, version=z.read("version.txt").decode("utf-8").strip()
+                )
             except Exception:
                 _zip.update(z=None, mtime=mt, version=None)
         z = _zip["z"]
@@ -186,6 +222,7 @@ def crawl_details(out=None, workers=16, progress=print):
     import urllib.error
     from concurrent.futures import ThreadPoolExecutor
     from ..core.net import read
+
     idx = update(progress=None)
     version, rows = idx["version"], idx["rows"]
     out = Path(out or DETAILS)
@@ -197,7 +234,10 @@ def crawl_details(out=None, workers=16, progress=print):
         if stop["why"]:
             return uuid, None
         try:
-            return uuid, read(urllib.request.Request(f"{BASE}{version}/q/{uuid}.json", headers=ua), timeout=30)
+            return uuid, read(
+                urllib.request.Request(f"{BASE}{version}/q/{uuid}.json", headers=ua),
+                timeout=30,
+            )
         except urllib.error.HTTPError as e:
             if e.code in (403, 429):
                 stop["why"] = f"对方返回 HTTP {e.code}，已停止"
@@ -206,7 +246,10 @@ def crawl_details(out=None, workers=16, progress=print):
             return uuid, None
 
     ok = bad = 0
-    with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z, ThreadPoolExecutor(workers) as ex:
+    with (
+        zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z,
+        ThreadPoolExecutor(workers) as ex,
+    ):
         z.writestr("version.txt", version)
         for i, (uuid, body) in enumerate(ex.map(one, [r[0] for r in rows]), 1):
             if body:
@@ -222,10 +265,14 @@ def crawl_details(out=None, workers=16, progress=print):
                 progress(f"掉落明细：{i}/{len(rows)}（失败 {bad}）")
     if stop["why"]:
         tmp.unlink(missing_ok=True)
-        raise RuntimeError(f"掉落明细没抓完：{stop['why']}（已抓 {ok} 件），整包没有生成")
+        raise RuntimeError(
+            f"掉落明细没抓完：{stop['why']}（已抓 {ok} 件），整包没有生成"
+        )
     tmp.replace(out)
     if progress:
-        progress(f"掉落明细整包：{version}，{ok} 件，失败 {bad} 件，{out.stat().st_size / 2 ** 20:.1f} MB")
+        progress(
+            f"掉落明细整包：{version}，{ok} 件，失败 {bad} 件，{out.stat().st_size / 2**20:.1f} MB"
+        )
     return ok, bad, version
 
 
@@ -245,7 +292,7 @@ def detail(uuid, online=True):
         raise ValueError("物品编号格式不对")
     if not isinstance(version, str) or not _VER_RE.fullmatch(version):
         raise ValueError("掉落数据版本号格式不对")
-    hit = _from_zip(uuid, version)                  # 先查整包（Gitee 数据包带来的）
+    hit = _from_zip(uuid, version)  # 先查整包（Gitee 数据包带来的）
     if hit is not None:
         return hit
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -253,11 +300,14 @@ def detail(uuid, online=True):
     if f.exists():
         try:
             return json.loads(f.read_text(encoding="utf-8"))
-        except ValueError:                          # 半个文件（旧版直接写、写到一半被结束）：删掉当没有，别永远卡在坏缓存上
+        except (
+            ValueError
+        ):  # 半个文件（旧版直接写、写到一半被结束）：删掉当没有，别永远卡在坏缓存上
             f.unlink(missing_ok=True)
     if not online:
         raise Pending()
     import time as _t
+
     if _t.time() - _failed.get(uuid, 0) < 600:
         raise OSError("网络不通，稍后再试")
     try:
@@ -266,7 +316,8 @@ def detail(uuid, online=True):
         _failed[uuid] = _t.time()
         raise
     from ..core.paths import write_json
-    write_json(f, d)                                # 先写临时文件再换名，不留半个文件
+
+    write_json(f, d)  # 先写临时文件再换名，不留半个文件
     return d
 
 
@@ -278,17 +329,29 @@ def summary(d, top=5):
     out = []
     for r in d.get("regions") or []:
         best = r.get("best") or 0
-        cs = sorted(r.get("containers") or [], key=lambda c: c.get("openp") or c.get("p") or 0, reverse=True)
+        cs = sorted(
+            r.get("containers") or [],
+            key=lambda c: c.get("openp") or c.get("p") or 0,
+            reverse=True,
+        )
         where = ""
         if cs:
             c = cs[0]
             where = c.get("loc") or ""
             raw = (d.get("raw") or "").split(".")[-1].lower()
             name = (c.get("name") or "").split(" · ")[0].strip()
-            if raw and name.lower() == raw:            # 「容器」就是物品自己：直接刷在场景里（奖励室架子上、地上），不在箱子里
+            if (
+                raw and name.lower() == raw
+            ):  # 「容器」就是物品自己：直接刷在场景里（奖励室架子上、地上），不在箱子里
                 box = PLACED
             else:
-                box = re.sub(r"^Lootable_(Generated_)?Container_?", "", c.get("name") or "").replace("_", " ").strip()
+                box = (
+                    re.sub(
+                        r"^Lootable_(Generated_)?Container_?", "", c.get("name") or ""
+                    )
+                    .replace("_", " ")
+                    .strip()
+                )
             where = "｜".join(x for x in (where, box) if x)
         out.append((r.get("name") or r.get("id"), best, where))
     out.sort(key=lambda x: x[1], reverse=True)
@@ -304,8 +367,18 @@ INSTANCE_ORES = {
     "jaclium": ("mineablerock_fps_jaclium", None),
     "saldynium": ("mineablerock_fps_saldynium", None),
 }
-_INSTANCE_ZH = {"科力晶": "carinite", "科力晶（纯）": "carinitepure", "科力晶(纯)": "carinitepure", "纯科力晶": "carinitepure", "纯净科力晶": "carinitepure",
-                "加纳石": "janalite", "杰金": "jaclium", "杰金矿石": "jaclium", "烁迪银": "saldynium", "烁迪银矿石": "saldynium"}
+_INSTANCE_ZH = {
+    "科力晶": "carinite",
+    "科力晶（纯）": "carinitepure",
+    "科力晶(纯)": "carinitepure",
+    "纯科力晶": "carinitepure",
+    "纯净科力晶": "carinitepure",
+    "加纳石": "janalite",
+    "杰金": "jaclium",
+    "杰金矿石": "jaclium",
+    "烁迪银": "saldynium",
+    "烁迪银矿石": "saldynium",
+}
 
 
 def instance_ore(name_en="", name_zh=""):
@@ -322,8 +395,12 @@ def mine_info(key, top=5, online=True):
     if not idx:
         return None
     want, skip = INSTANCE_ORES[key]
-    rocks = [r for r in _folded_rows(idx) if r[6].startswith(want) and not (skip and r[6].startswith(skip))]
-    best = {}                                      # 地区 → (概率, 位置说明)
+    rocks = [
+        r
+        for r in _folded_rows(idx)
+        if r[6].startswith(want) and not (skip and r[6].startswith(skip))
+    ]
+    best = {}  # 地区 → (概率, 位置说明)
     for r in rocks:
         try:
             d = detail(r[0], online)
@@ -338,14 +415,24 @@ def mine_info(key, top=5, online=True):
     groups = {}
     for region, (p, loc) in best.items():
         groups.setdefault((round(p, 6), loc), []).append(region)
-    rows = [{"p": p, "box": loc, "regions": regions}
-            for (p, loc), regions in sorted(groups.items(), key=lambda kv: -kv[0][0])[:top]]
+    rows = [
+        {"p": p, "box": loc, "regions": regions}
+        for (p, loc), regions in sorted(groups.items(), key=lambda kv: -kv[0][0])[:top]
+    ]
     shown = sum(len(r["regions"]) for r in rows)
     from ..core.i18n import mineral_zh
+
     en = {"carinitepure": "Carinite (Pure)"}.get(key, key.capitalize())
     zh = mineral_zh(en) if key != "carinitepure" else "科力晶（纯）"
-    return {"name": zh, "en": en, "mine": True, "src": "scl.miao.network 开采点出现概率", "note": "副本专属矿：不会从箱子里开出来，只能开采",
-            "groups": rows, "more": max(0, len(best) - shown)}
+    return {
+        "name": zh,
+        "en": en,
+        "mine": True,
+        "src": "scl.miao.network 开采点出现概率",
+        "note": "副本专属矿：不会从箱子里开出来，只能开采",
+        "groups": rows,
+        "more": max(0, len(best) - shown),
+    }
 
 
 def ship_mineral(name_en="", name_zh=""):
@@ -371,16 +458,27 @@ def ship_info(mineral, top=5):
     """船挖矿物的挖矿地点（SCMiner 的船挖地点数据）：格式同 info，多 mine=True、note、src"""
     from ..core.i18n import mineral_zh
     from ..mining.locations import where, zh_name
+
     groups = {}
     for pct, loc in where(mineral):
         groups.setdefault(round(pct / 100, 6), []).append(zh_name(loc))
-    rows = [{"p": p, "box": "", "regions": regions} for p, regions in sorted(groups.items(), key=lambda kv: -kv[0])[:top]]
+    rows = [
+        {"p": p, "box": "", "regions": regions}
+        for p, regions in sorted(groups.items(), key=lambda kv: -kv[0])[:top]
+    ]
     shown = sum(len(r["regions"]) for r in rows)
     total = sum(len(v) for v in groups.values())
     zh = {"Pressurized Ice": "高压冰"}.get(mineral) or mineral_zh(mineral)
-    return {"name": zh, "en": mineral, "mine": True, "src": "SCMiner 船挖地点",
-            "note": "船挖矿物：太大进不了战利品箱，只能用船开采" + ("" if rows else "（暂无地点数据）"),
-            "groups": rows, "more": max(0, total - shown)}
+    return {
+        "name": zh,
+        "en": mineral,
+        "mine": True,
+        "src": "SCMiner 船挖地点",
+        "note": "船挖矿物：太大进不了战利品箱，只能用船开采"
+        + ("" if rows else "（暂无地点数据）"),
+        "groups": rows,
+        "more": max(0, total - shown),
+    }
 
 
 def info(name_en="", name_zh="", top=5, online=True):
@@ -403,17 +501,24 @@ def info(name_en="", name_zh="", top=5, online=True):
         return {"pending": True}
     except Exception as e:
         return {"error": f"掉落数据暂时取不到（{e}）"}
-    groups = {}                                  # 概率和箱子一样的地点合成一行
+    groups = {}  # 概率和箱子一样的地点合成一行
     for region, p, where in summary(d, top=99):
         box = where.split("｜")[-1] if where else ""
         groups.setdefault((round(p, 6), box), []).append(region)
     if not groups:
         return None
-    rows = [{"p": p, "box": box, "regions": regions, "placed": box == PLACED}
-            for (p, box), regions in sorted(groups.items(), key=lambda kv: -kv[0][0])[:top]]
+    rows = [
+        {"p": p, "box": box, "regions": regions, "placed": box == PLACED}
+        for (p, box), regions in sorted(groups.items(), key=lambda kv: -kv[0][0])[:top]
+    ]
     shown = sum(len(r["regions"]) for r in rows)
-    return {"name": zh or en, "en": en, "uuid": u, "groups": rows,
-            "more": max(0, len(d.get("regions") or []) - shown)}
+    return {
+        "name": zh or en,
+        "en": en,
+        "uuid": u,
+        "groups": rows,
+        "more": max(0, len(d.get("regions") or []) - shown),
+    }
 
 
 def text(name_en="", name_zh="", top=5):
@@ -428,13 +533,23 @@ def text(name_en="", name_zh="", top=5):
             return f"  {d['note']}"
         lines = [f"  {d['note']}（{d['name']}，{d['src']}）："]
         for g in d["groups"]:
-            lines.append(f"    {g['p'] * 100:.2f}%｜" + "、".join(g["regions"][:6]) + (f"｜{g['box']}" if g["box"] else ""))
+            lines.append(
+                f"    {g['p'] * 100:.2f}%｜"
+                + "、".join(g["regions"][:6])
+                + (f"｜{g['box']}" if g["box"] else "")
+            )
         return "\n".join(lines)
     lines = [f"  掉落（{d['name']}，scl.miao.network，单个箱子开出的最高概率）："]
     for g in d["groups"]:
         regions = g["regions"]
-        names = "、".join(regions[:6]) + (f" 等 {len(regions)} 类" if len(regions) > 6 else "")
-        lines.append(f"    {g['p'] * 100:.2f}%" + (f"｜{g['box']}" + ("" if g.get("placed") else " 箱") if g["box"] else "") + f"｜{names}")
+        names = "、".join(regions[:6]) + (
+            f" 等 {len(regions)} 类" if len(regions) > 6 else ""
+        )
+        lines.append(
+            f"    {g['p'] * 100:.2f}%"
+            + (f"｜{g['box']}" + ("" if g.get("placed") else " 箱") if g["box"] else "")
+            + f"｜{names}"
+        )
     if d["more"] > 0:
         lines.append(f"    …还有 {d['more']} 类地点概率更低")
     return "\n".join(lines)

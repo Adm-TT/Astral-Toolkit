@@ -4,6 +4,7 @@
 不会把 MachineGuid 原样存下来或传出去。拿不到时退回电脑名的散列。
 设备名就是电脑名（DESKTOP-XXXX），只用来在记录里给你看是哪台录的。
 """
+
 import hashlib
 import os
 import platform
@@ -13,8 +14,13 @@ from functools import lru_cache
 def _machine_guid():
     try:
         import winreg
-        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Cryptography", 0,
-                            winreg.KEY_READ | getattr(winreg, "KEY_WOW64_64KEY", 0)) as k:
+
+        with winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            r"SOFTWARE\Microsoft\Cryptography",
+            0,
+            winreg.KEY_READ | getattr(winreg, "KEY_WOW64_64KEY", 0),
+        ) as k:
             return str(winreg.QueryValueEx(k, "MachineGuid")[0])
     except Exception:
         return ""
@@ -25,4 +31,6 @@ def device():
     """(设备编号, 设备名)"""
     name = os.environ.get("COMPUTERNAME") or platform.node() or "本机"
     seed = _machine_guid() or ("node:" + name)
-    return hashlib.sha256(("dubhe-device|" + seed).encode("utf-8")).hexdigest()[:16], name
+    return hashlib.sha256(("dubhe-device|" + seed).encode("utf-8")).hexdigest()[
+        :16
+    ], name

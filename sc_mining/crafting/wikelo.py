@@ -3,6 +3,7 @@
 数据来自 scmdb 的任务数据（和制造蓝图同一份 merged-*.json），中文名来自用户的汉化包。
 菜单 5 更新制造数据时会一起重建 wikelo.json。
 """
+
 import json
 import re
 from functools import lru_cache
@@ -10,12 +11,20 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 from ..core.paths import DATA  # noqa: E402
+
 OUT = DATA / "wikelo.json"
-TYPE_ZH = {"Wikelo - Vehicles": "载具", "Wikelo - Other Items": "装备/物品", "Collection": "收集"}
+TYPE_ZH = {
+    "Wikelo - Vehicles": "载具",
+    "Wikelo - Other Items": "装备/物品",
+    "Collection": "收集",
+}
 # 汉化包里没有中文名、或者需要说明来源的材料（游戏里 RCMBNT 本身就显示英文代号）
 NOTES = {
-    "RCMBNT-": ("重组样本", "玛瑙设施（Onyx Facility）任务里在终端合成：催化剂 XTL/PWL/RGL 配反应物，"
-                          "做出的样本送到设施货梯"),
+    "RCMBNT-": (
+        "重组样本",
+        "玛瑙设施（Onyx Facility）任务里在终端合成：催化剂 XTL/PWL/RGL 配反应物，"
+        "做出的样本送到设施货梯",
+    ),
     "Wikelo Favor": ("维科洛人情", "做维科洛的「换人情」兑换拿到"),
 }
 
@@ -67,6 +76,7 @@ def note_for(name):
 def build(merged_path, names_path, out=OUT):
     """merged-*.json + 汉化名 → wikelo.json"""
     from .build_crafting import _load_names, _item_names
+
     merged = json.loads(Path(merged_path).read_text(encoding="utf-8"))
     ini, items = _load_names(names_path)
     en2zh = _item_names(items)
@@ -80,7 +90,9 @@ def build(merged_path, names_path, out=OUT):
     any_en = {}
     for v in ini.values():
         v = re.sub(r"<[^>]+>", "", v)
-        m = re.fullmatch(r"(.*?[\u4e00-\u9fff][^\\]*?)\s*(?:\\n)?([A-Za-z][\x20-\x7e]*)", v.strip())
+        m = re.fullmatch(
+            r"(.*?[\u4e00-\u9fff][^\\]*?)\s*(?:\\n)?([A-Za-z][\x20-\x7e]*)", v.strip()
+        )
         if m and len(m.group(2)) > 2:
             any_en.setdefault(m.group(2).strip().lower(), m.group(1).strip())
 
@@ -88,15 +100,22 @@ def build(merged_path, names_path, out=OUT):
         if note_for(name):
             return note_for(name)[0]
         z = text(key) if key else ""
-        if z:                                       # 「幽影 臂甲 ASD 版\nGeist Armor Arms ASD Edition」→ 只留中文名（2026-10-28 改用和蓝图一样的 _strip_en，不在第一个英文字母处截断）
+        if z:  # 「幽影 臂甲 ASD 版\nGeist Armor Arms ASD Edition」→ 只留中文名（2026-10-28 改用和蓝图一样的 _strip_en，不在第一个英文字母处截断）
             from .build_crafting import _strip_en
+
             first, _, rest = z.partition("\\n")
             return (_strip_en(first.strip(), rest.strip(), name) or first).strip()
-        return en2zh.get(name.lower()) or en2zh.get(name.lower().replace("-", "")) or any_en.get(name.lower(), "")
+        return (
+            en2zh.get(name.lower())
+            or en2zh.get(name.lower().replace("-", ""))
+            or any_en.get(name.lower(), "")
+        )
 
     out_rows = []
     for c in merged.get("contracts") or []:
-        if "wikelo" not in (c.get("contractorName") or "").lower():      # scmdb 写 Wikelo，解包写 Wikelo Emporium（2026-10-28）
+        if (
+            "wikelo" not in (c.get("contractorName") or "").lower()
+        ):  # scmdb 写 Wikelo，解包写 Wikelo Emporium（2026-10-28）
             continue
         req = []
         for h in c.get("haulingOrders") or []:
@@ -106,7 +125,9 @@ def build(merged_path, names_path, out=OUT):
                 qty, unit = h.get("minSCU") or 0, "SCU"
             else:
                 qty, unit = max(h.get("minAmount") or 0, h.get("maxAmount") or 0), "个"
-            req.append({"n": name, "z": zh_of(name, pool.get("nameKey")), "q": qty, "u": unit})
+            req.append(
+                {"n": name, "z": zh_of(name, pool.get("nameKey")), "q": qty, "u": unit}
+            )
         rewards = []
         for r in c.get("itemRewards") or []:
             if r.get("name"):
@@ -116,15 +137,31 @@ def build(merged_path, names_path, out=OUT):
         title_raw = text(c.get("titleLocKey") or c.get("titleKey"))
         title_zh, _, bracket = title_raw.partition("\\n")
         reward_zh = re.sub(r"^\[兑换\s*-\s*|\]$", "", bracket.strip())
-        out_rows.append({"id": c.get("debugName") or c.get("id"), "type": TYPE_ZH.get(c.get("missionType"), c.get("missionType")),
-                         "t": title_zh.strip() or c.get("title", ""), "te": c.get("title", ""), "rz": reward_zh,
-                         "rewards": rewards, "req": req, "systems": c.get("availableSystems") or c.get("systems") or []})
+        out_rows.append(
+            {
+                "id": c.get("debugName") or c.get("id"),
+                "type": TYPE_ZH.get(c.get("missionType"), c.get("missionType")),
+                "t": title_zh.strip() or c.get("title", ""),
+                "te": c.get("title", ""),
+                "rz": reward_zh,
+                "rewards": rewards,
+                "req": req,
+                "systems": c.get("availableSystems") or c.get("systems") or [],
+            }
+        )
     out_rows.sort(key=lambda r: (r["type"], r["te"]))
     import os
+
     tmp = Path(out).with_name(f".{Path(out).stem}.{os.getpid()}.tmp")
     try:
-        tmp.write_text(json.dumps({"version": merged.get("version"), "contracts": out_rows}, ensure_ascii=False,
-                                  separators=(",", ":")), encoding="utf-8")
+        tmp.write_text(
+            json.dumps(
+                {"version": merged.get("version"), "contracts": out_rows},
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
+            encoding="utf-8",
+        )
         tmp.replace(out)
     finally:
         tmp.unlink(missing_ok=True)
@@ -137,7 +174,7 @@ def load():
         cs = json.loads(OUT.read_text(encoding="utf-8"))["contracts"]
     except Exception:
         return []
-    for c in cs:                     # 汉化包里个别名字末尾带了个反斜杠（「约曼迪之眼\」）
+    for c in cs:  # 汉化包里个别名字末尾带了个反斜杠（「约曼迪之眼\」）
         for r in c.get("req", []):
             r["z"] = (r.get("z") or "").rstrip("\\ ").strip()
     return cs
@@ -149,7 +186,9 @@ def _fold(s):
 
 def _same(a, b):
     fa, fb = _fold(a), _fold(b)
-    return bool(fa and fb) and (fa == fb or (len(fb) >= 4 and fb in fa) or (len(fa) >= 4 and fa in fb))
+    return bool(fa and fb) and (
+        fa == fb or (len(fb) >= 4 and fb in fa) or (len(fa) >= 4 and fa in fb)
+    )
 
 
 def uses(name_en="", name_zh=""):
@@ -157,12 +196,16 @@ def uses(name_en="", name_zh=""):
     hits = []
     for c in load():
         for r in c["req"]:
-            if (name_en and _fold(r["n"]) == _fold(name_en)) or (name_zh and r["z"] and _fold(r["z"]) == _fold(name_zh)):
+            if (name_en and _fold(r["n"]) == _fold(name_en)) or (
+                name_zh and r["z"] and _fold(r["z"]) == _fold(name_zh)
+            ):
                 hits.append((c, r["q"], r["u"]))
-    if not hits:                                     # 名字被 OCR 截断时放宽成包含
+    if not hits:  # 名字被 OCR 截断时放宽成包含
         for c in load():
             for r in c["req"]:
-                if (name_en and _same(r["n"], name_en)) or (name_zh and r["z"] and _same(r["z"], name_zh)):
+                if (name_en and _same(r["n"], name_en)) or (
+                    name_zh and r["z"] and _same(r["z"], name_zh)
+                ):
                     hits.append((c, r["q"], r["u"]))
     return hits
 
@@ -174,7 +217,17 @@ def search(text):
         return load()
     out = []
     for c in load():
-        hay = _fold(" ".join([c["t"], c["te"], c["rz"], *c["rewards"], *(r["n"] + r["z"] for r in c["req"])]))
+        hay = _fold(
+            " ".join(
+                [
+                    c["t"],
+                    c["te"],
+                    c["rz"],
+                    *c["rewards"],
+                    *(r["n"] + r["z"] for r in c["req"]),
+                ]
+            )
+        )
         if t in hay:
             out.append(c)
     return out
@@ -184,12 +237,17 @@ def req_label(r):
     return f"{r['z']}（{r['n']}）" if r["z"] else r["n"]
 
 
-
-
 def print_spots(name):
     """打印机打印的物品在哪打（data/print_spots.json，tools/unpack_printers.py 从解包生成，2026-10-27）→ [地点]"""
     from ..core.paths import cached_json
-    table = cached_json(DATA / "print_spots.json", lambda d: {k.lower(): v.get("where") or [] for k, v in (d.get("items") or {}).items()}, {})
+
+    table = cached_json(
+        DATA / "print_spots.json",
+        lambda d: {
+            k.lower(): v.get("where") or [] for k, v in (d.get("items") or {}).items()
+        },
+        {},
+    )
     return table.get((name or "").strip().lower(), [])
 
 
@@ -198,11 +256,15 @@ def source_note(name):
     if n:
         return n[1]
     w = [x for x in print_spots(name) if isinstance(x, str) and x]
-    if name in SOURCES:                               # 手写说明（如 DCHS-05 宝库）+ 有打印地点也写上（二审 2026-10-27）
+    if (
+        name in SOURCES
+    ):  # 手写说明（如 DCHS-05 宝库）+ 有打印地点也写上（二审 2026-10-27）
         return SOURCES[name] + ("；打印：" + "；".join(w) if w else "")
     if w:
         return "打印：" + "；".join(w)
-    if (name or "").upper().startswith("DCHS-"):     # 老大 2026-10-27：DCHS 计算板是派罗争夺区打印的（数据包里没有地点时的兜底）
+    if (
+        (name or "").upper().startswith("DCHS-")
+    ):  # 老大 2026-10-27：DCHS 计算板是派罗争夺区打印的（数据包里没有地点时的兜底）
         return "派罗争夺区（Contested Zone）内打印"
     return ""
 

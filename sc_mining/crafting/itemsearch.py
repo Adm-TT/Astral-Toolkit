@@ -12,6 +12,7 @@
   同一档里基础款排在涂装 / 限定版（名字带引号的）前面，有商店或掉落数据的排在前面，短的在前
 - 英文：完全一样 > 开头对得上 > 包含 > 每个词都有（顺序不限）
 """
+
 import json
 import re
 import unicodedata
@@ -19,7 +20,9 @@ import unicodedata
 from . import shops
 
 _cache = {"key": None, "index": None}
-_build_lock = __import__("threading").Lock()     # 启动时后台先建索引；玩家这时搜索就等它建完，不重复建
+_build_lock = __import__(
+    "threading"
+).Lock()  # 启动时后台先建索引；玩家这时搜索就等它建完，不重复建
 
 
 def zh_key(s):
@@ -41,7 +44,7 @@ def _variant(en, zh):
 
 
 def _trigrams(s):
-    return {s[i:i + 3] for i in range(len(s) - 2)}
+    return {s[i : i + 3] for i in range(len(s) - 2)}
 
 
 def _build():
@@ -58,6 +61,7 @@ def warm_up():
             _build()
         except Exception:
             pass
+
     threading.Thread(target=run, daemon=True, name="search-warmup").start()
 
 
@@ -65,11 +69,18 @@ def _build_locked():
     from . import loot
     from ..core.i18n import gear_zh_of_item
     from ..trade import names
+
     data = shops.load(auto_update=False)
     idx = loot.load_index(False) or {}
     table = names.table()
     from ..core.paths import DATA as _D, file_stamp
-    key = (file_stamp(_D / "shops.json"), file_stamp(_D / "loot_index.json"), file_stamp(_D / "zh_names.json"), id(table))   # 地址会被复用（细查 2026-10-28）
+
+    key = (
+        file_stamp(_D / "shops.json"),
+        file_stamp(_D / "loot_index.json"),
+        file_stamp(_D / "zh_names.json"),
+        id(table),
+    )  # 地址会被复用（细查 2026-10-28）
     if _cache["key"] == key:
         return _cache["index"]
     by_en, rows = {}, []
@@ -80,8 +91,17 @@ def _build_locked():
             return None
         e = by_en.get(ek)
         if e is None:
-            e = by_en[ek] = {"en": en.replace("\xa0", " "), "ek": ek, "zh": "", "zh_loot": "", "zks": set(),
-                             "shop": None, "cat": "", "loot": False, "loc": False}
+            e = by_en[ek] = {
+                "en": en.replace("\xa0", " "),
+                "ek": ek,
+                "zh": "",
+                "zh_loot": "",
+                "zks": set(),
+                "shop": None,
+                "cat": "",
+                "loot": False,
+                "loc": False,
+            }
             rows.append(e)
         return e
 
@@ -91,9 +111,11 @@ def _build_locked():
             e["shop"], e["cat"] = int(iid), cat or ""
     for r in idx.get("rows") or []:
         en, zh = r[1], r[5] or ""
-        if _has_cjk(en) and not _has_cjk(zh):       # 掉落数据里个别中英文填反了（「DYL - 夹克 - 名称」）
+        if _has_cjk(en) and not _has_cjk(
+            zh
+        ):  # 掉落数据里个别中英文填反了（「DYL - 夹克 - 名称」）
             en, zh = zh or en, en
-        if not _has_cjk(zh):                         # 「PH - hdh_boots_01_01_13」这种占位名不算中文名
+        if not _has_cjk(zh):  # 「PH - hdh_boots_01_01_13」这种占位名不算中文名
             zh = ""
         e = entry(en)
         if e:
@@ -101,20 +123,25 @@ def _build_locked():
             if zh:
                 e["zh_loot"] = e["zh_loot"] or zh
                 e["zks"].add(zh_key(zh))
-    for zh, en in table.items():                 # 汉化包（和游戏里看到的名字一样）
+    for zh, en in table.items():  # 汉化包（和游戏里看到的名字一样）
         e = entry(en)
         if e:
             e["loc"] = True
             e["zh"] = e["zh"] or zh
             e["zks"].add(zh_key(zh))
-    for w in wiki_items():                       # 英文 wiki 的物品清单（1.6.48）：只补别处都没有的英文名，带类型 / 尺寸 / 描述；中文名只信汉化包
+    for w in wiki_items():  # 英文 wiki 的物品清单（1.6.48）：只补别处都没有的英文名，带类型 / 尺寸 / 描述；中文名只信汉化包
         e = entry(w["n"])
         if e:
             e.setdefault("wiki", True)
-            e["wtype"], e["wsize"], e["desc"] = w.get("t") or "", w.get("s"), w.get("d") or ""
-    aliases = {}                                 # 汉化包里写错 / 过时的英文（1.6.49，localization.rebuild 写的 name_aliases.json）：搜旧写法也能找到正名
+            e["wtype"], e["wsize"], e["desc"] = (
+                w.get("t") or "",
+                w.get("s"),
+                w.get("d") or "",
+            )
+    aliases = {}  # 汉化包里写错 / 过时的英文（1.6.49，localization.rebuild 写的 name_aliases.json）：搜旧写法也能找到正名
     try:
         from ..core.paths import DATA
+
         aliases = json.loads((DATA / "name_aliases.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         pass
@@ -124,8 +151,14 @@ def _build_locked():
             e.setdefault("aka", []).append(old)
     # 只有汉化包里有、中文名又和一件有数据的物品一样的：是同一件东西的另一种英文写法（「劳森采矿激光器」→ Lawson），不单列
     taken = {k for e in rows if e["shop"] is not None or e["loot"] for k in e["zks"]}
-    rows = [e for e in rows if e["shop"] is not None or e["loot"] or not (e["zks"] & taken)]
-    rows = [e for e in rows if e["shop"] is not None or e["loot"] or e["loc"] or not _wiki_noise(e)]
+    rows = [
+        e for e in rows if e["shop"] is not None or e["loot"] or not (e["zks"] & taken)
+    ]
+    rows = [
+        e
+        for e in rows
+        if e["shop"] is not None or e["loot"] or e["loc"] or not _wiki_noise(e)
+    ]
     by_en = {e["ek"]: e for e in rows}
     for e in rows:
         for old in e.get("aka") or []:
@@ -133,7 +166,9 @@ def _build_locked():
     by_char, by_tri = {}, {}
     for i, e in enumerate(rows):
         e["zh"] = e["zh"] or e["zh_loot"]
-        gz = gear_zh_of_item(e["en"])              # 采矿装备：中文写不带型号的名字（霍夫斯泰德），中文也搜得到（2026-10-26）
+        gz = gear_zh_of_item(
+            e["en"]
+        )  # 采矿装备：中文写不带型号的名字（霍夫斯泰德），中文也搜得到（2026-10-26）
         if gz:
             e["zh"] = gz
             e["zks"] = tuple(dict.fromkeys((*e["zks"], zh_key(gz))))
@@ -153,18 +188,24 @@ def _build_locked():
     return index
 
 
-
-
 def wiki_items():
     """data/wiki_items.json：star-citizen.wiki（游戏解包）的物品清单 [{n, t, s, mfr}]；没有这份数据就是空的"""
     from ..core.paths import DATA, cached_json
+
     return cached_json(DATA / "wiki_items.json", lambda d: d.get("items") or [], [])
 
 
 def _wiki_noise(e):
     """只在 wiki 清单里、玩家不会去搜的：涂装（物品查询不卖、不掉）、飞船内部件（遥控炮塔、对接舱这种没名字的通用件）"""
     t = (e.get("wtype") or "").lower()
-    return t in ("paints", "misc", "flair_surface") or e["en"].lower() in ("turret", "remote turret", "docking bay", "fuel tanks", "radar", "waste")
+    return t in ("paints", "misc", "flair_surface") or e["en"].lower() in (
+        "turret",
+        "remote turret",
+        "docking bay",
+        "fuel tanks",
+        "radar",
+        "waste",
+    )
 
 
 def _subseq(q, s):
@@ -244,14 +285,35 @@ def find(query, limit=30):
                     r = r2
             if r is not None:
                 hits.append((r, i))
-    size = (lambda e: e["zlen"]) if _has_cjk(q) else (lambda e: len(e["en"]))      # 同一档里短的（基础款）在前
-    hits.sort(key=lambda h: (h[0], rows[h[1]]["variant"], not rows[h[1]]["has_data"], size(rows[h[1]]), rows[h[1]]["en"].lower()))
+    size = (
+        (lambda e: e["zlen"]) if _has_cjk(q) else (lambda e: len(e["en"]))
+    )  # 同一档里短的（基础款）在前
+    hits.sort(
+        key=lambda h: (
+            h[0],
+            rows[h[1]]["variant"],
+            not rows[h[1]]["has_data"],
+            size(rows[h[1]]),
+            rows[h[1]]["en"].lower(),
+        )
+    )
     out = []
     for _, i in hits[:limit]:
         e = rows[i]
-        out.append({"en": e["en"], "zh": e["zh"], "shop": e["shop"], "cat": e["cat"], "loot": e["loot"],
-                    "loc": not e["has_data"], "variant": e["variant"], "wiki": bool(e.get("wiki")) and not e["has_data"] and not e["loc"],
-                    "wtype": e.get("wtype") or "", "wsize": e.get("wsize")})
+        out.append(
+            {
+                "en": e["en"],
+                "zh": e["zh"],
+                "shop": e["shop"],
+                "cat": e["cat"],
+                "loot": e["loot"],
+                "loc": not e["has_data"],
+                "variant": e["variant"],
+                "wiki": bool(e.get("wiki")) and not e["has_data"] and not e["loc"],
+                "wtype": e.get("wtype") or "",
+                "wsize": e.get("wsize"),
+            }
+        )
     return out
 
 

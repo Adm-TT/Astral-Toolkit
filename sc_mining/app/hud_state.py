@@ -3,6 +3,7 @@
 悬浮窗短提示、物品分区自动收起、功能远程关闭提示、读鼠标位置和按键。
 tasks 和引擎直接用这里的（阶段 4 删了 services.py，原来经 services 转的 _note_hud 等名字都在这里）。
 """
+
 import math
 import threading
 import time
@@ -11,6 +12,7 @@ import time
 def _hud():
     try:
         from .overlay import hud
+
         return hud()
     except Exception:
         return None
@@ -25,13 +27,16 @@ def _off(feature):
     """这个功能有没有被远程关掉（latest.json 的 disabled，update_check.disabled）"""
     try:
         from ..update import update_check
+
         why = update_check.disabled(feature)
     except Exception:
         return None
     if why and feature not in _OFF_TOLD:
         _OFF_TOLD.add(feature)
         try:
-            _note_hud("AT", f"{update_check.FEATURES.get(feature, feature)}暂时关闭：{why}", 8)
+            _note_hud(
+                "AT", f"{update_check.FEATURES.get(feature, feature)}暂时关闭：{why}", 8
+            )
         except Exception:
             pass
     return why
@@ -50,6 +55,7 @@ def _note_hud(section, text, secs=6):
     def gone():
         if getattr(_hud(), "sections", {}).get(section) == text:
             _hud().clear(section)
+
     t = threading.Timer(secs, gone)
     t.daemon = True
     t.start()
@@ -64,6 +70,7 @@ def _cursor():
     try:
         import ctypes
         from ctypes import wintypes
+
         pt = wintypes.POINT()
         ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
         return pt.x, pt.y
@@ -74,6 +81,7 @@ def _cursor():
 def _key_down(vk):
     try:
         import ctypes
+
         return bool(ctypes.windll.user32.GetAsyncKeyState(vk) & 0x8000)
     except Exception:
         return False
@@ -98,6 +106,7 @@ def _item_hud(text, secs=ITEM_HUD_SECONDS):
 
     def watch():
         import ctypes
+
         try:
             h_px = ctypes.windll.user32.GetSystemMetrics(1) or 1080
         except Exception:
@@ -107,8 +116,13 @@ def _item_hud(text, secs=ITEM_HUD_SECONDS):
         while _ITEM_SEQ[0] == my and time.time() < end:
             time.sleep(0.1)
             o, c = _ITEM_MODE["origin"], _cursor()
-            if (o and c and time.time() - _ITEM_MODE["shown_at"] >= ITEM_AWAY_AFTER and not _key_down(0x11)
-                    and math.dist(o, c) > away):
+            if (
+                o
+                and c
+                and time.time() - _ITEM_MODE["shown_at"] >= ITEM_AWAY_AFTER
+                and not _key_down(0x11)
+                and math.dist(o, c) > away
+            ):
                 break
             if _key_down(0x11):
                 end = max(end, time.time() + 1)
@@ -116,4 +130,5 @@ def _item_hud(text, secs=ITEM_HUD_SECONDS):
             h_cur = _hud()
             if h_cur:
                 h_cur.clear("物品")
+
     threading.Thread(target=watch, daemon=True, name="item-hud").start()

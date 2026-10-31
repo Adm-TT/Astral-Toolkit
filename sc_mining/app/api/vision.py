@@ -4,6 +4,7 @@ F8 物品悬停识别、F6 盘点。
 每个接口只是薄转发：收关键字参数、调 tasks 里同名函数、原样返回；校验照旧留在 tasks。
 hover_trigger 原来定义在 services.py，搬到这里（services 里那份阶段 4 删）。
 """
+
 from .. import bus
 from ...tasks import count as _count
 from ...tasks import hover as _hover

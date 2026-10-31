@@ -14,6 +14,7 @@
   data\\ship_items.json         给 AT：部件英文名 → 自带这个部件的船（中文名）
 只发整理出的数字和名字，不发游戏原文件、模型、贴图。
 """
+
 import csv
 import json
 import re
@@ -36,20 +37,74 @@ OUT_DEFAULT = Path(r"E:\Game3\飞船数据")
 GAME = Path(r"D:\StarCitizen\LIVE")
 
 # 不是玩家能拥有的版本：AI、模板、展示、教程、剧情、残骸……（文件名里带这些的不收）
-NOT_PLAYER = re.compile(r"(_ai(_|$)|_pu_ai|template|_display|_test|tutorial|unmanned|_ea_|derelict|wreck|boarded|"
-                        r"_s42|cinematic|_dummy|_prop|hijacked|_npc|_fleetweek|_showdown|_pir$|_crim$|_civ$|_sec_|_bis\d|"
-                        r"_hangar|_destructible|_spawn|_mission|_drone|_tow$|_exec_|_lowpoly|_nointerior|_noint|_fake|"
-                        r"_temp|_tier_\d|_prison|_tsg|_fw_\d+|^eaobjective|^probe_)", re.I)
+NOT_PLAYER = re.compile(
+    r"(_ai(_|$)|_pu_ai|template|_display|_test|tutorial|unmanned|_ea_|derelict|wreck|boarded|"
+    r"_s42|cinematic|_dummy|_prop|hijacked|_npc|_fleetweek|_showdown|_pir$|_crim$|_civ$|_sec_|_bis\d|"
+    r"_hangar|_destructible|_spawn|_mission|_drone|_tow$|_exec_|_lowpoly|_nointerior|_noint|_fake|"
+    r"_temp|_tier_\d|_prison|_tsg|_fw_\d+|^eaobjective|^probe_)",
+    re.I,
+)
 # 默认配置里不收的部件类型（界面、门、灯、座位、控制器这些不算「配置」）
-SKIP_TYPES = {"Display", "Door", "DoorController", "Light", "LightController", "Seat", "SeatAccess", "SeatDashboard", "Usable",
-              "Relay", "AirTrafficController", "DockingCollar", "LandingSystem", "SelfDestruct", "CommsController",
-              "EnergyController", "CoolerController", "ShieldController", "WeaponController", "MiningController",
-              "FuelController", "CapacitorAssignmentController", "FlightController", "Paints", "Elevator", "Button",
-              "Interactable", "SalvageController", "TractorBeamController", "Ping", "TurretBase_Controller",
-              "AttachedPart", "Transponder", "Scanner", "Misc", "Container_Interior", "ManneuverThruster", "MainThruster",
-              "Lightgroup", "StatusScreen", "Sensor", "InventoryContainer", "VehicleController", "WheeledController",
-              "Player", "Decal", "Flair_Wall", "Flair_Floor", "Flair_Surface", "Holder", "Bed", "Armor_Interior",
-              "DockingAnimator", "ControlPanel", "Room", "WeaponPersonal", "RoomConnector", "Cargo_Interior"}
+SKIP_TYPES = {
+    "Display",
+    "Door",
+    "DoorController",
+    "Light",
+    "LightController",
+    "Seat",
+    "SeatAccess",
+    "SeatDashboard",
+    "Usable",
+    "Relay",
+    "AirTrafficController",
+    "DockingCollar",
+    "LandingSystem",
+    "SelfDestruct",
+    "CommsController",
+    "EnergyController",
+    "CoolerController",
+    "ShieldController",
+    "WeaponController",
+    "MiningController",
+    "FuelController",
+    "CapacitorAssignmentController",
+    "FlightController",
+    "Paints",
+    "Elevator",
+    "Button",
+    "Interactable",
+    "SalvageController",
+    "TractorBeamController",
+    "Ping",
+    "TurretBase_Controller",
+    "AttachedPart",
+    "Transponder",
+    "Scanner",
+    "Misc",
+    "Container_Interior",
+    "ManneuverThruster",
+    "MainThruster",
+    "Lightgroup",
+    "StatusScreen",
+    "Sensor",
+    "InventoryContainer",
+    "VehicleController",
+    "WheeledController",
+    "Player",
+    "Decal",
+    "Flair_Wall",
+    "Flair_Floor",
+    "Flair_Surface",
+    "Holder",
+    "Bed",
+    "Armor_Interior",
+    "DockingAnimator",
+    "ControlPanel",
+    "Room",
+    "WeaponPersonal",
+    "RoomConnector",
+    "Cargo_Interior",
+}
 DAMAGE_KEYS = ("Physical", "Energy", "Distortion", "Thermal", "Biochemical", "Stun")
 
 
@@ -61,7 +116,10 @@ def load(p):
 
 
 def comp(v, t):
-    return next((c for c in (v or {}).get("Components") or [] if c and c.get("_Type_") == t), None)
+    return next(
+        (c for c in (v or {}).get("Components") or [] if c and c.get("_Type_") == t),
+        None,
+    )
 
 
 def ref_path(ref):
@@ -92,7 +150,11 @@ class Loc:
 
     def __init__(self):
         self.zh = {k.lower(): v for k, v in read_ini(ZH_INI).items()}
-        self.en = {k.lower(): v for k, v in read_ini(EN_INI).items()} if EN_INI.exists() else {}
+        self.en = (
+            {k.lower(): v for k, v in read_ini(EN_INI).items()}
+            if EN_INI.exists()
+            else {}
+        )
 
     @staticmethod
     def _clean(v):
@@ -101,7 +163,11 @@ class Loc:
     def en_of(self, key):
         k = (key or "").lstrip("@").lower()
         v = self._clean(self.en.get(k, ""))
-        return v.split("\\n")[0].strip() if v and not v.startswith("@") and k not in ("loc_empty", "loc_placeholder") else ""
+        return (
+            v.split("\\n")[0].strip()
+            if v and not v.startswith("@") and k not in ("loc_empty", "loc_placeholder")
+            else ""
+        )
 
     def zh_of(self, key):
         """汉化组的写法有「中文\\nEnglish」「English\\n中文」「中文English」：只取中文那部分；汉化组没翻的返回空"""
@@ -115,11 +181,17 @@ class Loc:
             return ""
         zh = cjk[0]
         en = self.en_of(key)
-        if en and zh.endswith(en) and len(zh) > len(en):          # 「勘探者Prospector」→ 勘探者
+        if en and zh.endswith(en) and len(zh) > len(en):  # 「勘探者Prospector」→ 勘探者
             zh = zh[: -len(en)].strip()
         # 汉化组在中文后面接了英文（「5CA 阿库拉Akura」「刀轴 MH2 型采矿激光器Arbor MH2」）：去掉中文后面紧贴的英文尾巴
-        m = re.fullmatch(r"(.*[\u4e00-\u9fff）)」”])\s*([A-Za-z][A-Za-z0-9 \-'\".()/&]*)", zh)
-        if m and re.search(r"[A-Za-z]{3,}", m.group(2)) and re.search(r"[a-z]", m.group(2)):   # 「南船座 SRV」「自由枪骑兵 MAX」的型号码留着
+        m = re.fullmatch(
+            r"(.*[\u4e00-\u9fff）)」”])\s*([A-Za-z][A-Za-z0-9 \-'\".()/&]*)", zh
+        )
+        if (
+            m
+            and re.search(r"[A-Za-z]{3,}", m.group(2))
+            and re.search(r"[a-z]", m.group(2))
+        ):  # 「南船座 SRV」「自由枪骑兵 MAX」的型号码留着
             zh = m.group(1).strip()
         return zh
 
@@ -134,10 +206,20 @@ def build_item_index():
         v = d.get("_RecordValue_") or {}
         att = comp(v, "SAttachableComponentParams") or {}
         ad = att.get("AttachDef") or {}
-        return d.get("_RecordName_", "").split(".", 1)[-1].lower(), f.stem.lower(), {
-            "file": f, "type": ad.get("Type") or "", "sub": ad.get("SubType") or "", "size": ad.get("Size"),
-            "grade": ad.get("Grade"), "name_key": ((ad.get("Localization") or {}).get("Name") or ""),
-            "mfr": ad.get("Manufacturer")}
+        return (
+            d.get("_RecordName_", "").split(".", 1)[-1].lower(),
+            f.stem.lower(),
+            {
+                "file": f,
+                "type": ad.get("Type") or "",
+                "sub": ad.get("SubType") or "",
+                "size": ad.get("Size"),
+                "grade": ad.get("Grade"),
+                "name_key": ((ad.get("Localization") or {}).get("Name") or ""),
+                "mfr": ad.get("Manufacturer"),
+            },
+        )
+
     idx = {}
     with ThreadPoolExecutor(32) as ex:
         for r in ex.map(one, files):
@@ -153,7 +235,11 @@ def manufacturers(loc):
         d = load(f)
         v = (d or {}).get("_RecordValue_") or {}
         name_key = ((v.get("Localization") or {}).get("Name")) or ""
-        out[f.resolve()] = {"code": v.get("Code") or "", "en": loc.en_of(name_key), "zh": loc.zh_of(name_key)}
+        out[f.resolve()] = {
+            "code": v.get("Code") or "",
+            "en": loc.en_of(name_key),
+            "zh": loc.zh_of(name_key),
+        }
     return out
 
 
@@ -179,7 +265,9 @@ def _vxml_file(name):
         return None
     if not name.lower().endswith(".xml"):
         name += ".xml"
-    return next((p for p in VXML.rglob("*.xml") if p.name.lower() == name.lower()), None)
+    return next(
+        (p for p in VXML.rglob("*.xml") if p.name.lower() == name.lower()), None
+    )
 
 
 def vehicle_xml(path, mod=""):
@@ -195,7 +283,14 @@ def vehicle_xml(path, mod=""):
         return None, []
     base = _mass_parts(root)
     if mod:
-        m = next((x for x in root.iter("Modification") if (x.get("name") or "").lower() == mod.lower()), None)
+        m = next(
+            (
+                x
+                for x in root.iter("Modification")
+                if (x.get("name") or "").lower() == mod.lower()
+            ),
+            None,
+        )
         if m is not None:
             pf = _vxml_file(m.get("patchFile"))
             if pf:
@@ -244,7 +339,9 @@ class Ships:
         self.items = build_item_index()
         self.mfr = manufacturers(self.loc)
         self._detail = {}
-        print(f"部件索引 {len(self.items)} 条、厂商 {len(self.mfr)} 家（{time.time() - t:.1f} 秒）")
+        print(
+            f"部件索引 {len(self.items)} 条、厂商 {len(self.mfr)} 家（{time.time() - t:.1f} 秒）"
+        )
 
     def mfr_of(self, ref):
         p = ref_path(ref)
@@ -260,34 +357,63 @@ class Ships:
             self._detail[cls] = None
             return None
         v = (load(it["file"]) or {}).get("_RecordValue_") or {}
-        d = {"class": cls, "type": it["type"], "subtype": it["sub"], "size": it["size"], "grade": it["grade"],
-             "name_en": self.loc.en_of(it["name_key"]), "name_zh": self.loc.zh_of(it["name_key"]),
-             "manufacturer": (self.mfr_of(it["mfr"]) or {}).get("code") or ""}
+        d = {
+            "class": cls,
+            "type": it["type"],
+            "subtype": it["sub"],
+            "size": it["size"],
+            "grade": it["grade"],
+            "name_en": self.loc.en_of(it["name_key"]),
+            "name_zh": self.loc.zh_of(it["name_key"]),
+            "manufacturer": (self.mfr_of(it["mfr"]) or {}).get("code") or "",
+        }
         sh = comp(v, "SCItemShieldGeneratorParams")
         if sh:
-            d["shield_hp"], d["shield_regen"] = sh.get("MaxShieldHealth"), sh.get("MaxShieldRegen")
+            d["shield_hp"], d["shield_regen"] = (
+                sh.get("MaxShieldHealth"),
+                sh.get("MaxShieldRegen"),
+            )
         if it["type"] in ("FuelTank", "QuantumFuelTank", "ExternalFuelTank"):
-            d["fuel_scu"] = find_key([c for c in v.get("Components") or [] if c and "capacity" in c], "standardCargoUnits")
+            d["fuel_scu"] = find_key(
+                [c for c in v.get("Components") or [] if c and "capacity" in c],
+                "standardCargoUnits",
+            )
         ifcs = comp(v, "IFCSParams")
         if ifcs:
-            d["speed"] = {"scm": ifcs.get("scmSpeed"), "boost_forward": ifcs.get("boostSpeedForward"), "max": ifcs.get("maxSpeed")}
+            d["speed"] = {
+                "scm": ifcs.get("scmSpeed"),
+                "boost_forward": ifcs.get("boostSpeedForward"),
+                "max": ifcs.get("maxSpeed"),
+            }
         qd = comp(v, "SCItemQuantumDriveParams")
         if qd:
             d["qt_speed_mps"] = (qd.get("params") or {}).get("driveSpeed")
         arm = comp(v, "SCItemVehicleArmorParams")
         if arm:
             dm = arm.get("damageMultiplier") or {}
-            d["armor"] = {"signal_ir": arm.get("signalInfrared"), "signal_em": arm.get("signalElectromagnetic"),
-                          "signal_cs": arm.get("signalCrossSection"),
-                          "damage_multiplier": {k.lower(): dm.get("Damage" + k) for k in DAMAGE_KEYS}}
+            d["armor"] = {
+                "signal_ir": arm.get("signalInfrared"),
+                "signal_em": arm.get("signalElectromagnetic"),
+                "signal_cs": arm.get("signalCrossSection"),
+                "damage_multiplier": {
+                    k.lower(): dm.get("Damage" + k) for k in DAMAGE_KEYS
+                },
+            }
         inv = comp(v, "SCItemInventoryContainerComponentParams")
         if inv:
-            c = ((load(ref_path(inv.get("containerParams")) or "") or {}).get("_RecordValue_")) or {}
+            c = (
+                (load(ref_path(inv.get("containerParams")) or "") or {}).get(
+                    "_RecordValue_"
+                )
+            ) or {}
             scu = container_scu(c)
             if scu:
                 d["cargo_scu"] = scu
         elif it["type"] == "Container":
-            scu = find_key([c for c in v.get("Components") or [] if c and "capacity" in c], "standardCargoUnits")
+            scu = find_key(
+                [c for c in v.get("Components") or [] if c and "capacity" in c],
+                "standardCargoUnits",
+            )
             if scu:
                 d["cargo_scu"] = scu
         self._detail[cls] = d
@@ -311,7 +437,7 @@ class Ships:
             if not cls and e.get("entityClassReference"):
                 m = re.search(r"/([^/]+)\.json", str(e["entityClassReference"]))
                 cls = m.group(1).lower() if m else ""
-            sub_ = ((e.get("loadout") or {}).get("entries"))
+            sub_ = (e.get("loadout") or {}).get("entries")
             if not sub_ and cls and cls not in stack:
                 sub_ = self.own_loadout(cls)
             kids = self.loadout(sub_, depth + 1, stack + (cls,))
@@ -333,36 +459,86 @@ class Ships:
             return None
         ad = (comp(v, "SAttachableComponentParams") or {}).get("AttachDef") or {}
         sig = comp(v, "SSCSignatureSystemParams") or {}
-        cs = ((((sig.get("radarProperties") or {}).get("crossSectionParams")) or {}).get("crossSection")) or {}
+        cs = (
+            (((sig.get("radarProperties") or {}).get("crossSectionParams")) or {}).get(
+                "crossSection"
+            )
+        ) or {}
         lo = comp(v, "SEntityComponentDefaultLoadoutParams") or {}
         tree = self.loadout(((lo.get("loadout") or {}).get("entries")))
         flat = list(walk(tree))
-        mass, parts = vehicle_xml(vc.get("vehicleDefinition"), vc.get("modification") or "")
+        mass, parts = vehicle_xml(
+            vc.get("vehicleDefinition"), vc.get("modification") or ""
+        )
         stem = f.stem.lower()  # noqa: F841
         armor = next((n for n in flat if n["type"] == "Armor"), None)
         cs_mult = ((armor or {}).get("armor") or {}).get("signal_cs") or 1.0
         fc = next((n for n in flat if n.get("speed")), None)
         m = self.mfr_of(vc.get("manufacturer")) or {}
         ship = {
-            "class": f.stem.lower(), "kind": kind,
-            "name_en": self.loc.en_of(vc["vehicleName"]), "name_zh": self.loc.zh_of(vc["vehicleName"]),
+            "class": f.stem.lower(),
+            "kind": kind,
+            "name_en": self.loc.en_of(vc["vehicleName"]),
+            "name_zh": self.loc.zh_of(vc["vehicleName"]),
             "manufacturer": m,
-            "career": {"en": self.loc.en_of(vc.get("vehicleCareer")), "zh": self.loc.zh_of(vc.get("vehicleCareer"))},
-            "role": {"en": self.loc.en_of(vc.get("vehicleRole")), "zh": self.loc.zh_of(vc.get("vehicleRole"))},
-            "size": ad.get("Size"), "crew": vc.get("crewSize"), "mass_kg": mass,
-            "hull": {"hp_total": round(sum(h for _, h in parts)), "parts": [{"name": n, "hp": h} for n, h in parts]},
+            "career": {
+                "en": self.loc.en_of(vc.get("vehicleCareer")),
+                "zh": self.loc.zh_of(vc.get("vehicleCareer")),
+            },
+            "role": {
+                "en": self.loc.en_of(vc.get("vehicleRole")),
+                "zh": self.loc.zh_of(vc.get("vehicleRole")),
+            },
+            "size": ad.get("Size"),
+            "crew": vc.get("crewSize"),
+            "mass_kg": mass,
+            "hull": {
+                "hp_total": round(sum(h for _, h in parts)),
+                "parts": [{"name": n, "hp": h} for n, h in parts],
+            },
             "cross_section_raw": [cs.get(k) for k in ("x", "y", "z")] if cs else None,
-            "cross_section": sorted(round(cs[k] * cs_mult) for k in ("x", "y", "z")) if cs else None,
-            "armor": {"class": armor["class"], **armor.get("armor", {})} if armor else None,
+            "cross_section": sorted(round(cs[k] * cs_mult) for k in ("x", "y", "z"))
+            if cs
+            else None,
+            "armor": {"class": armor["class"], **armor.get("armor", {})}
+            if armor
+            else None,
             "shield_generators": sum(1 for n in flat if n.get("shield_hp")) or None,
-            "shield_hp_each": max((n.get("shield_hp") or 0 for n in flat), default=0) or None,
+            "shield_hp_each": max((n.get("shield_hp") or 0 for n in flat), default=0)
+            or None,
             "shield_hp_all": round(sum(n.get("shield_hp") or 0 for n in flat)) or None,
-            "shield_regen_all": round(sum(n.get("shield_regen") or 0 for n in flat)) or None,
-            "cargo_scu": round(sum(n.get("cargo_scu") or 0 for n in flat if not is_pod(n) and not is_personal(n)), 2) or None,
-            "personal_storage_scu": round(sum(n.get("cargo_scu") or 0 for n in flat if is_personal(n)), 2) or None,
-            "mining_pod_scu": round(sum(n.get("cargo_scu") or 0 for n in flat if is_pod(n)), 2) or None,
-            "fuel_hydrogen_scu": round(sum(n.get("fuel_scu") or 0 for n in flat if n["type"] == "FuelTank"), 2) or None,
-            "fuel_quantum_scu": round(sum(n.get("fuel_scu") or 0 for n in flat if n["type"] == "QuantumFuelTank"), 2) or None,
+            "shield_regen_all": round(sum(n.get("shield_regen") or 0 for n in flat))
+            or None,
+            "cargo_scu": round(
+                sum(
+                    n.get("cargo_scu") or 0
+                    for n in flat
+                    if not is_pod(n) and not is_personal(n)
+                ),
+                2,
+            )
+            or None,
+            "personal_storage_scu": round(
+                sum(n.get("cargo_scu") or 0 for n in flat if is_personal(n)), 2
+            )
+            or None,
+            "mining_pod_scu": round(
+                sum(n.get("cargo_scu") or 0 for n in flat if is_pod(n)), 2
+            )
+            or None,
+            "fuel_hydrogen_scu": round(
+                sum(n.get("fuel_scu") or 0 for n in flat if n["type"] == "FuelTank"), 2
+            )
+            or None,
+            "fuel_quantum_scu": round(
+                sum(
+                    n.get("fuel_scu") or 0
+                    for n in flat
+                    if n["type"] == "QuantumFuelTank"
+                ),
+                2,
+            )
+            or None,
             "speed": (fc or {}).get("speed"),
             "loadout": prune(tree),
         }
@@ -376,7 +552,9 @@ def is_personal(n):
 
 def is_pod(n):
     """采矿船的矿石吊舱（矿袋）：不算货舱"""
-    return n["type"] == "Container" and ("mining" in (n.get("port") or "") or "shipmining" in n["class"])
+    return n["type"] == "Container" and (
+        "mining" in (n.get("port") or "") or "shipmining" in n["class"]
+    )
 
 
 def orphan_grids(S, ships):
@@ -388,27 +566,45 @@ def orphan_grids(S, ships):
             used.add(n["class"])
     # 被门、模块（报复者前后舱模块的升降梯门）自带配置引用的货舱格：有正经挂法，只是这条船默认没装，不算孤儿
     for k, it in S.items.items():
-        if it["type"] in ("Door", "Module", "Container", "Usable") and it["file"].stem.lower() == k:
+        if (
+            it["type"] in ("Door", "Module", "Container", "Usable")
+            and it["file"].stem.lower() == k
+        ):
             for e in S.own_loadout(k):
-                ref = (e.get("entityClassName") or "").lower() or \
-                    (re.search(r"/([^/]+)\.json", str(e.get("entityClassReference") or "")) or [None, ""])[1].lower()
+                ref = (e.get("entityClassName") or "").lower() or (
+                    re.search(
+                        r"/([^/]+)\.json", str(e.get("entityClassReference") or "")
+                    )
+                    or [None, ""]
+                )[1].lower()
                 if "cargogrid" in ref:
                     used.add(ref)
     classes = {sh["class"]: sh for sh in ships}
     got = {}
     for k, it in S.items.items():
-        if "cargogrid" not in k or it["file"].stem.lower() != k or "template" in k or k in used:
+        if (
+            "cargogrid" not in k
+            or it["file"].stem.lower() != k
+            or "template" in k
+            or k in used
+        ):
             continue
         m = re.match(r"(.+?)_cargogrid(?:_(.+))?$", k)
         if not m:
             continue
         pre, rest = m.group(1), (m.group(2) or "")
-        if any(u.startswith(pre + "_cargogrid") for u in used):     # 同系列的货舱格有正经挂法（报复者的模块）：这一个也不按名字归
+        if any(
+            u.startswith(pre + "_cargogrid") for u in used
+        ):  # 同系列的货舱格有正经挂法（报复者的模块）：这一个也不按名字归
             continue
-        if rest and f"{pre}_{rest}" in classes:                     # 完整后缀先对：anvl_hornet_cargogrid_f7c_mk2 → anvl_hornet_f7c_mk2
+        if (
+            rest and f"{pre}_{rest}" in classes
+        ):  # 完整后缀先对：anvl_hornet_cargogrid_f7c_mk2 → anvl_hornet_f7c_mk2
             cands = {f"{pre}_{rest}"}
         else:
-            cands = {c for c in classes if c == pre} | {f"{pre}_{t}" for t in rest.split("_") if f"{pre}_{t}" in classes}
+            cands = {c for c in classes if c == pre} | {
+                f"{pre}_{t}" for t in rest.split("_") if f"{pre}_{t}" in classes
+            }
         if len(cands) != 1:
             continue
         c = S.item(k)
@@ -419,7 +615,9 @@ def orphan_grids(S, ships):
         if sh["cargo_scu"]:
             continue
         sh["cargo_scu"] = round(sum(v for _, v in grids), 2)
-        sh["cargo_note"] = "货舱格没挂在默认配置里，按名字归属：" + "、".join(k for k, _ in grids)
+        sh["cargo_note"] = "货舱格没挂在默认配置里，按名字归属：" + "、".join(
+            k for k, _ in grids
+        )
 
 
 def walk(tree, path=()):
@@ -507,7 +705,12 @@ README = """# 星际公民 飞船数据包
 
 def game_version():
     try:
-        b = json.loads((GAME / "build_manifest.id").read_text(encoding="utf-8")).get("Data") or {}
+        b = (
+            json.loads((GAME / "build_manifest.id").read_text(encoding="utf-8")).get(
+                "Data"
+            )
+            or {}
+        )
         return f"{b.get('Branch', '')} {b.get('RequestedP4ChangeNum', '')}".strip()
     except Exception:
         return ""
@@ -538,16 +741,51 @@ def main(out_dir=OUT_DEFAULT):
         main_ = group[0]
         main_["other_classes"] = [g["class"] for g in group[1:]]
         uniq.append(main_)
-    uniq.sort(key=lambda x: (x["kind"], x["manufacturer"].get("code") or "", x["name_en"]))
+    uniq.sort(
+        key=lambda x: (x["kind"], x["manufacturer"].get("code") or "", x["name_en"])
+    )
     ver = game_version()
-    meta = {"game": ver, "made": time.strftime("%Y-%m-%d %H:%M"), "source": "游戏解包（StarBreaker 0.3.2）",
-            "count": len(uniq)}
-    (out_dir / "ships.json").write_text(json.dumps({"meta": meta, "ships": uniq}, ensure_ascii=False, indent=1), encoding="utf-8")
-    cols = ["class", "kind", "name_zh", "name_en", "manufacturer", "career_zh", "role_zh", "size", "crew", "mass_kg",
-            "hull_hp_total", "shield_generators", "shield_hp_each", "shield_hp_all", "shield_regen_all", "cargo_scu", "mining_pod_scu", "personal_storage_scu",
-            "fuel_hydrogen_scu", "fuel_quantum_scu",
-            "scm_speed", "boost_forward", "max_speed", "cs_min", "cs_mid", "cs_max", "armor_signal_ir", "armor_signal_em",
-            "armor_signal_cs"]
+    meta = {
+        "game": ver,
+        "made": time.strftime("%Y-%m-%d %H:%M"),
+        "source": "游戏解包（StarBreaker 0.3.2）",
+        "count": len(uniq),
+    }
+    (out_dir / "ships.json").write_text(
+        json.dumps({"meta": meta, "ships": uniq}, ensure_ascii=False, indent=1),
+        encoding="utf-8",
+    )
+    cols = [
+        "class",
+        "kind",
+        "name_zh",
+        "name_en",
+        "manufacturer",
+        "career_zh",
+        "role_zh",
+        "size",
+        "crew",
+        "mass_kg",
+        "hull_hp_total",
+        "shield_generators",
+        "shield_hp_each",
+        "shield_hp_all",
+        "shield_regen_all",
+        "cargo_scu",
+        "mining_pod_scu",
+        "personal_storage_scu",
+        "fuel_hydrogen_scu",
+        "fuel_quantum_scu",
+        "scm_speed",
+        "boost_forward",
+        "max_speed",
+        "cs_min",
+        "cs_mid",
+        "cs_max",
+        "armor_signal_ir",
+        "armor_signal_em",
+        "armor_signal_cs",
+    ]
     with open(out_dir / "ships.csv", "w", encoding="utf-8-sig", newline="") as fo:
         w = csv.writer(fo)
         w.writerow(cols)
@@ -555,23 +793,83 @@ def main(out_dir=OUT_DEFAULT):
             cs = s["cross_section"] or [None] * 3
             a = s["armor"] or {}
             sp = s["speed"] or {}
-            w.writerow([s["class"], s["kind"], s["name_zh"], s["name_en"], s["manufacturer"].get("code"),
-                        s["career"]["zh"] or s["career"]["en"], s["role"]["zh"] or s["role"]["en"], s["size"], s["crew"],
-                        s["mass_kg"], s["hull"]["hp_total"], s["shield_generators"], s["shield_hp_each"], s["shield_hp_all"],
-                        s["shield_regen_all"], s["cargo_scu"], s["mining_pod_scu"], s["personal_storage_scu"],
-                        s["fuel_hydrogen_scu"], s["fuel_quantum_scu"], sp.get("scm"), sp.get("boost_forward"),
-                        sp.get("max"), *cs, a.get("signal_ir"), a.get("signal_em"), a.get("signal_cs")])
+            w.writerow(
+                [
+                    s["class"],
+                    s["kind"],
+                    s["name_zh"],
+                    s["name_en"],
+                    s["manufacturer"].get("code"),
+                    s["career"]["zh"] or s["career"]["en"],
+                    s["role"]["zh"] or s["role"]["en"],
+                    s["size"],
+                    s["crew"],
+                    s["mass_kg"],
+                    s["hull"]["hp_total"],
+                    s["shield_generators"],
+                    s["shield_hp_each"],
+                    s["shield_hp_all"],
+                    s["shield_regen_all"],
+                    s["cargo_scu"],
+                    s["mining_pod_scu"],
+                    s["personal_storage_scu"],
+                    s["fuel_hydrogen_scu"],
+                    s["fuel_quantum_scu"],
+                    sp.get("scm"),
+                    sp.get("boost_forward"),
+                    sp.get("max"),
+                    *cs,
+                    a.get("signal_ir"),
+                    a.get("signal_em"),
+                    a.get("signal_cs"),
+                ]
+            )
     with open(out_dir / "loadouts.csv", "w", encoding="utf-8-sig", newline="") as fo:
         w = csv.writer(fo)
-        w.writerow(["ship_class", "ship_zh", "ship_en", "port_path", "item_class", "item_zh", "item_en", "type", "subtype",
-                    "size", "grade", "manufacturer"])
+        w.writerow(
+            [
+                "ship_class",
+                "ship_zh",
+                "ship_en",
+                "port_path",
+                "item_class",
+                "item_zh",
+                "item_en",
+                "type",
+                "subtype",
+                "size",
+                "grade",
+                "manufacturer",
+            ]
+        )
         for s in uniq:
             for p, n in flat_rows(s["loadout"]):
-                w.writerow([s["class"], s["name_zh"], s["name_en"], p, n["class"], n.get("name_zh", ""), n.get("name_en", ""),
-                            n["type"], n.get("subtype", ""), n.get("size", ""), n.get("grade", ""), n.get("manufacturer", "")])
-    (out_dir / "README.md").write_text(README.format(game=ver, made=meta["made"], n=len(uniq),
-                                                     sp=sum(1 for x in uniq if x["kind"] == "spaceship"),
-                                                     gr=sum(1 for x in uniq if x["kind"] == "ground")), encoding="utf-8")
+                w.writerow(
+                    [
+                        s["class"],
+                        s["name_zh"],
+                        s["name_en"],
+                        p,
+                        n["class"],
+                        n.get("name_zh", ""),
+                        n.get("name_en", ""),
+                        n["type"],
+                        n.get("subtype", ""),
+                        n.get("size", ""),
+                        n.get("grade", ""),
+                        n.get("manufacturer", ""),
+                    ]
+                )
+    (out_dir / "README.md").write_text(
+        README.format(
+            game=ver,
+            made=meta["made"],
+            n=len(uniq),
+            sp=sum(1 for x in uniq if x["kind"] == "spaceship"),
+            gr=sum(1 for x in uniq if x["kind"] == "ground"),
+        ),
+        encoding="utf-8",
+    )
     # 给 AT：部件英文名 → 自带这个部件的船（中文名，汉化组没翻的用英文）
     by = {}
     for s in uniq:
@@ -581,9 +879,16 @@ def main(out_dir=OUT_DEFAULT):
             if n.get("name_en"):
                 by.setdefault(n["name_en"], set()).add(s["name_zh"] or s["name_en"])
     (ROOT / "data" / "ship_items.json").write_text(
-        json.dumps({"game": ver, "items": {k: sorted(v) for k, v in sorted(by.items())}}, ensure_ascii=False,
-                   separators=(",", ":")), encoding="utf-8")
-    print(f"飞船 / 载具 {len(uniq)} 条（跳过 AI、模板、任务版等 {skipped} 个记录；同名的其他版本 {len(ships) - len(uniq)} 条记在 other_classes）→ {out_dir}")
+        json.dumps(
+            {"game": ver, "items": {k: sorted(v) for k, v in sorted(by.items())}},
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ),
+        encoding="utf-8",
+    )
+    print(
+        f"飞船 / 载具 {len(uniq)} 条（跳过 AI、模板、任务版等 {skipped} 个记录；同名的其他版本 {len(ships) - len(uniq)} 条记在 other_classes）→ {out_dir}"
+    )
     print(f"AT：{len(by)} 种部件有「随船自带」来源 → data\\ship_items.json")
     return uniq
 

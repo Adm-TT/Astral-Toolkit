@@ -5,6 +5,7 @@
 （uuid 从掉落数据的索引里按类名取，同样来自游戏文件）。汉化包里写错 / 过时的英文名按 name_aliases.json 先改成正名。
 对不上的返回 None，不硬猜。
 """
+
 import json
 import re
 
@@ -18,6 +19,7 @@ def _fold(s):
 def _index():
     from ..crafting.itemsearch import wiki_items
     from ..core.paths import DATA
+
     rows = wiki_items()
     if _IDX["key"] is rows and _IDX["by_name"]:
         return _IDX
@@ -26,13 +28,20 @@ def _index():
         by_name.setdefault(_fold(w.get("n")), w)
     uuid = {}
     try:
-        for u, en, cls, *_ in json.loads((DATA / "loot_index.json").read_text(encoding="utf-8")).get("rows") or []:
+        for u, en, cls, *_ in (
+            json.loads((DATA / "loot_index.json").read_text(encoding="utf-8")).get(
+                "rows"
+            )
+            or []
+        ):
             uuid.setdefault((cls or "").lower(), u)
     except (OSError, ValueError):
         pass
     alias = {}
     try:
-        for old, new in (json.loads((DATA / "name_aliases.json").read_text(encoding="utf-8")) or {}).items():
+        for old, new in (
+            json.loads((DATA / "name_aliases.json").read_text(encoding="utf-8")) or {}
+        ).items():
             alias[_fold(old)] = new
     except (OSError, ValueError):
         pass
@@ -50,5 +59,12 @@ def resolve(name_en):
     if not w or not w.get("cls"):
         return None
     cls = w["cls"].lower()
-    u = idx["uuid"].get(cls) or next((idx["uuid"][a.lower()] for a in w.get("alt") or [] if a.lower() in idx["uuid"]), "")
+    u = idx["uuid"].get(cls) or next(
+        (
+            idx["uuid"][a.lower()]
+            for a in w.get("alt") or []
+            if a.lower() in idx["uuid"]
+        ),
+        "",
+    )
     return cls, u

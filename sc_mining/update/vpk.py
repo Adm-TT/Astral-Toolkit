@@ -7,16 +7,28 @@
 - 回滚：同一个地址的「prev」频道只放上一个版本（tools/build_velopack.py 发布时生成），允许降级，装回上一版
 - 设置和记录在 %LOCALAPPDATA%\\AT_userdata，升级、回滚都不动
 """
+
 from ..core import paths
 from .update_check import OWN, OWN_NAME, COS, COS_NAME
 
 import os
-_dev = (not paths.FROZEN) or os.environ.get("AT_DEV") == "1"       # 发布版不认环境变量里的更新源（2026-10-28 整体审查）；作者测试时设 AT_DEV=1
-_env = os.environ.get("AT_VPK_FEED") if _dev else None                 # AT_VPK_FEED：沙盒测试时指到本地文件夹
-FEEDS = [(_env, "测试源")] if _env else [(f"https://{OWN}/velopack", OWN_NAME), (f"https://{COS}/velopack", COS_NAME)]
+
+_dev = (not paths.FROZEN) or os.environ.get(
+    "AT_DEV"
+) == "1"  # 发布版不认环境变量里的更新源（2026-10-28 整体审查）；作者测试时设 AT_DEV=1
+_env = (
+    os.environ.get("AT_VPK_FEED") if _dev else None
+)  # AT_VPK_FEED：沙盒测试时指到本地文件夹
+FEEDS = (
+    [(_env, "测试源")]
+    if _env
+    else [(f"https://{OWN}/velopack", OWN_NAME), (f"https://{COS}/velopack", COS_NAME)]
+)
 FEED = FEEDS[0][0]
 CHANNEL = "win"
-DOWNLOAD_MS = 60 * 60 * 1000          # 下载最多 60 分钟（网断了不会一直卡在「正在下载」；完整包 141 MB，慢网也够）
+DOWNLOAD_MS = (
+    60 * 60 * 1000
+)  # 下载最多 60 分钟（网断了不会一直卡在「正在下载」；完整包 141 MB，慢网也够）
 PREV = "prev"
 
 
@@ -27,11 +39,17 @@ def installed():
 def _mgr(rollback=False, timeout_ms=0, feed=None):
     """timeout_ms：整个请求（连上 + 传完）最多多久；查版本给 8 秒，下载不限（大文件）。feed：更新源地址（默认第一个）"""
     import velopack
+
     feed = feed or FEED
     opts = velopack.UpdateOptions(bool(rollback), 10, PREV if rollback else CHANNEL)
     # 超时只对网址有用；本地文件夹（沙盒测试）直接给路径，HttpSource 不认本地路径（2026-10-27 沙盒发现回滚列表是空的）
-    src = velopack.HttpSource(feed, velopack.HttpOptions([], timeout_ms)) if timeout_ms and feed.startswith("http") else feed
+    src = (
+        velopack.HttpSource(feed, velopack.HttpOptions([], timeout_ms))
+        if timeout_ms and feed.startswith("http")
+        else feed
+    )
     return velopack.UpdateManager(src, opts)
+
 
 def _version_of(info):
     """UpdateInfo → 版本号字符串"""
@@ -39,7 +57,7 @@ def _version_of(info):
     return str(getattr(rel, "Version", "") or "")
 
 
-_last = {"feed": None}                  # 上一次答上来的源：下次先问它（国内不用每次先等香港超时）
+_last = {"feed": None}  # 上一次答上来的源：下次先问它（国内不用每次先等香港超时）
 
 
 def _check_at(rollback):
@@ -50,7 +68,7 @@ def _check_at(rollback):
             info = _mgr(rollback, 8000, feed).check_for_updates()
             _last["feed"] = feed
             return info, feed, name
-        except Exception as e:                          # 连不上 / 超时：换下一个
+        except Exception as e:  # 连不上 / 超时：换下一个
             err = e
     raise RuntimeError(f"{'和'.join(n for _, n in FEEDS)}都无法连接：{err}") from err
 
@@ -70,7 +88,8 @@ def install(rollback=False, progress=print):
     if not info:
         raise ValueError("没有可回滚的上一个版本" if rollback else "未找到新版本")
     v = _version_of(info)
-    from .upgrade import vkey, current_key                 # 算上 beta 后缀比（1.1.2-beta.1 < 1.1.2）
+    from .upgrade import vkey, current_key  # 算上 beta 后缀比（1.1.2-beta.1 < 1.1.2）
+
     if rollback and vkey(v) >= current_key():
         raise ValueError(f"服务器上的上一个版本是 {v}，不比现在的旧，不用回滚")
     if not rollback and vkey(v) <= current_key():
@@ -82,10 +101,11 @@ def install(rollback=False, progress=print):
         if p // 5 != shown["p"] // 5:
             shown["p"] = p
             progress(f"已下载 {p}%")
+
     rest = [f for f in FEEDS if f[0] != feed]
     last_err = None
     for k, (fd, nm) in enumerate([(feed, name)] + rest):
-        if k:                                          # 上一个源下载失败：换下一个源重新问一遍、再下载
+        if k:  # 上一个源下载失败：换下一个源重新问一遍、再下载
             try:
                 info = _mgr(rollback, 8000, fd).check_for_updates()
             except Exception as e:
@@ -98,7 +118,7 @@ def install(rollback=False, progress=print):
         try:
             try:
                 m.download_updates(info, cb)
-            except TypeError:                          # 老版本的接口没有进度回调
+            except TypeError:  # 老版本的接口没有进度回调
                 m.download_updates(info)
             break
         except Exception as e:
@@ -106,7 +126,7 @@ def install(rollback=False, progress=print):
                 raise
             last_err = e
             progress(f"{nm} 下载失败：{e}")
-    else:                                              # 后面的源都问不到同一个版本
+    else:  # 后面的源都问不到同一个版本
         raise RuntimeError(f"更新源都下载不了，稍后再试（{last_err}）")
     progress("下载完成，校验通过")
     m.wait_exit_then_apply_updates(info.TargetFullRelease, False, True, [])

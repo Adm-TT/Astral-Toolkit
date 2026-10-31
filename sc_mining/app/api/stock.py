@@ -3,6 +3,7 @@
 库存、货架、出入库、台账的接口：收关键字参数，原样转给 tasks/stock.py 里同名函数。
 只做转发，不加校验（校验留在 tasks 里，改行为要 NGU 定）。router 自动收集文件末尾的 ROUTES。
 """
+
 from ...tasks import stock as _t
 
 

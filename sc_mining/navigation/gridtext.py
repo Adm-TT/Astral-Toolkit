@@ -13,6 +13,7 @@
 坐标一个数字不错。字体对不上时（以后游戏换字体）才退回老办法：用文字识别认几帧，每行文字对到格子上学。
 认不出的格子写「?」；数字中间的格子只在数字、小数点里挑（6 不会认成 S、再被当成 5）。
 """
+
 import json
 import re
 import time
@@ -22,15 +23,17 @@ import numpy as np
 
 from ..core.paths import USER
 
-ADV_1080 = 5.62              # 1080p 下主字号的字距（像素）
-SMALL = 0.88                 # 小字号 / 主字号
-PITCH_1080 = 9.45            # 1080p 下的行距
-INK = 50                     # textness 高于这个算有墨
-BRIGHT = 130                 # 真正的字至少有一个像素这么亮（小字号抗锯齿后只有 150 左右）；白墙边缘这种杂讯最多 110
-MIN_SAMPLES = 2              # 一个字至少见过几次才算学会
-REQUIRED = set("0123456789.:kmZoneRtPsSlary")       # 主字号必需：数字、单位、Zone / Root / Pos / SolarSystem
-MIN_SCORE = 0.6              # 和最像的字模相关低于这个：不硬猜，写 ?（坐标里的 ? 当空格，解析不出就退回识别引擎）
-VERIFY_TIMES = 2             # 和识别引擎读出的坐标对上几次才算校准好（只学齐字不算）
+ADV_1080 = 5.62  # 1080p 下主字号的字距（像素）
+SMALL = 0.88  # 小字号 / 主字号
+PITCH_1080 = 9.45  # 1080p 下的行距
+INK = 50  # textness 高于这个算有墨
+BRIGHT = 130  # 真正的字至少有一个像素这么亮（小字号抗锯齿后只有 150 左右）；白墙边缘这种杂讯最多 110
+MIN_SAMPLES = 2  # 一个字至少见过几次才算学会
+REQUIRED = set(
+    "0123456789.:kmZoneRtPsSlary"
+)  # 主字号必需：数字、单位、Zone / Root / Pos / SolarSystem
+MIN_SCORE = 0.6  # 和最像的字模相关低于这个：不硬猜，写 ?（坐标里的 ? 当空格，解析不出就退回识别引擎）
+VERIFY_TIMES = 2  # 和识别引擎读出的坐标对上几次才算校准好（只学齐字不算）
 # 只从这几种行学字（2026-10-26 实测：识别引擎会认错字，比如 Vulkan 认成 vutkan，什么行都学会把字模带坏）：
 # 坐标行格式固定、认错了对不上格式；地点行（小字号）只用来找到那一行，内容另外用识别引擎认
 TRUST_POS = re.compile(r"^Zone:[A-Za-z0-9_\-]+Pos:(?:-?\d+\.\d+k?m){3}$")
@@ -38,28 +41,33 @@ TRUST_CAM = re.compile(r"^CamDir:(?:-?\d+){3}FOV:\d+Focal:\d+\.\d+FStop:\d+\.\d+
 TRUST_LOC = re.compile(r"^Currentplayerlocation:\S+")
 GLYPH_DIR = USER / "glyphs"
 FONT_FILE = Path(__file__).resolve().parent.parent / "fonts" / "DejaVuSansMono.ttf"
-FONT_CHARS = [chr(c) for c in range(33, 127)]          # 可打印的英文字符全画
-CAP_HEIGHT = 0.729                                      # 大写字母高 / 字号（Vera Sans Mono）
-FONT_RETRY = 15.0                                       # 画字模没成功（没在游戏里、没开调试信息）：过多久再试
+FONT_CHARS = [chr(c) for c in range(33, 127)]  # 可打印的英文字符全画
+CAP_HEIGHT = 0.729  # 大写字母高 / 字号（Vera Sans Mono）
+FONT_RETRY = 15.0  # 画字模没成功（没在游戏里、没开调试信息）：过多久再试
 DIGITS = set("0123456789.")
-DASH_MIN = 0.3               # 负号最低相关（游戏的负号和字体的不太一样，要求放低，但完全不像就不算）
-MAX_SAMPLES = 40             # 每个字最多留几张学字样本（finalize 只用最后 40 张；多的删掉，免得内存一直涨）
-GRID_FAILS = 3               # 字模读不出、识别引擎读得出，连续几次就当字模失效，重画
+DASH_MIN = 0.3  # 负号最低相关（游戏的负号和字体的不太一样，要求放低，但完全不像就不算）
+MAX_SAMPLES = (
+    40  # 每个字最多留几张学字样本（finalize 只用最后 40 张；多的删掉，免得内存一直涨）
+)
+GRID_FAILS = 3  # 字模读不出、识别引擎读得出，连续几次就当字模失效，重画
 SCALES = ("main", "small")
 
 
 def textness(rgb):
     """RGB 数组 → 每个像素「像字的程度」0..255（全程 uint8 运算，871×352 的块约 1 毫秒）"""
     import cv2
+
     a = np.asarray(rgb)
     if a.ndim == 3:
         r, g, b = a[..., 0], a[..., 1], a[..., 2]
         lum = np.maximum(np.maximum(r, g), b)
-        colorful = cv2.absdiff(r, g) > 70                 # 彩色的（黄字、HUD）不要
+        colorful = cv2.absdiff(r, g) > 70  # 彩色的（黄字、HUD）不要
     else:
         lum, colorful = a, None
     t = np.zeros_like(lum)
-    t[:-1, :-1] = cv2.subtract(lum[:-1, :-1], lum[1:, 1:])      # 亮度 − 右下角像素亮度，负数截成 0
+    t[:-1, :-1] = cv2.subtract(
+        lum[:-1, :-1], lum[1:, 1:]
+    )  # 亮度 − 右下角像素亮度，负数截成 0
     if colorful is not None:
         t[colorful] = 0
     return t
@@ -95,7 +103,11 @@ def _fit(tm, bands, xr, adv0):
     col_cache = [tm[t:b].astype(np.float32).sum(0) for t, b in bands]
     for adv in np.arange(adv0 - 0.15, adv0 + 0.16, 0.01):
         for off in np.arange(0, adv, 0.2):
-            vals = [v for v in (_row_score(c, xr, adv, off) for c in col_cache) if v is not None]
+            vals = [
+                v
+                for v in (_row_score(c, xr, adv, off) for c in col_cache)
+                if v is not None
+            ]
             if not vals:
                 continue
             sc = float(np.mean(vals))
@@ -124,30 +136,60 @@ class Grid:
             self.ok = True
         else:
             tops = row_tops(tm)
-            self.pitch = float(np.median(np.diff(tops[:8]))) if len(tops) > 3 else PITCH_1080 * screen_h / 1080
+            self.pitch = (
+                float(np.median(np.diff(tops[:8])))
+                if len(tops) > 3
+                else PITCH_1080 * screen_h / 1080
+            )
             self.lh = int(round(self.pitch)) - 1
             self.xr = right_edge(tm, tm.shape[1] - 1)
             bands = [(t, t + self.lh) for t in tops]
             # 字距起点试两个：按屏幕高度缩放的，和 1440 起步的——1440 以下调试字不再变小
             # （1080p 实测字距 7.5、行距 13，和 1440 一样；只按高度缩到 5.6 会判成「不是等宽字」，快路起不来，玩家反馈 2026-10-30）
             best = None
-            for a0 in sorted({ADV_1080 * screen_h / 1080, ADV_1080 * max(screen_h, 1440) / 1080}):
+            for a0 in sorted(
+                {ADV_1080 * screen_h / 1080, ADV_1080 * max(screen_h, 1440) / 1080}
+            ):
                 fit = _fit(tm, bands[:6], self.xr, a0) if bands else (a0, 0.0, 0.0, 0.0)
                 ratio = fit[2] / fit[3] if fit[3] else float("inf")
                 if best is None or ratio < best[0]:
                     best = (ratio, a0, fit)
             _, a0, (adv, off, edge, rnd) = best
-            self.ok = bool(bands) and edge < rnd * 0.4            # 格子边界明显比别处干净：真的是等宽字
+            self.ok = (
+                bool(bands) and edge < rnd * 0.4
+            )  # 格子边界明显比别处干净：真的是等宽字
             # 小字号：挑出按主字号对不上的行再拟合
-            small_rows = [b for b in bands if (_row_score(tm[b[0]:b[1]].astype(np.float32).sum(0), self.xr, adv, off) or 0) > rnd * 0.5]
-            adv_s, off_s, _, _ = _fit(tm, small_rows, self.xr, a0 * SMALL) if small_rows else (a0 * SMALL, 0.0, 0.0, 0.0)
-            self.adv = {"main": (float(adv), float(off)), "small": (float(adv_s), float(off_s))}
+            small_rows = [
+                b
+                for b in bands
+                if (
+                    _row_score(
+                        tm[b[0] : b[1]].astype(np.float32).sum(0), self.xr, adv, off
+                    )
+                    or 0
+                )
+                > rnd * 0.5
+            ]
+            adv_s, off_s, _, _ = (
+                _fit(tm, small_rows, self.xr, a0 * SMALL)
+                if small_rows
+                else (a0 * SMALL, 0.0, 0.0, 0.0)
+            )
+            self.adv = {
+                "main": (float(adv), float(off)),
+                "small": (float(adv_s), float(off_s)),
+            }
 
     def params(self):
-        return {"pitch": float(self.pitch), "lh": int(self.lh), "xr": int(self.xr), "adv": self.adv}
+        return {
+            "pitch": float(self.pitch),
+            "lh": int(self.lh),
+            "xr": int(self.xr),
+            "adv": self.adv,
+        }
 
     def scale_of(self, tm, top):
-        cols = tm[top:top + self.lh].astype(np.float32).sum(0)
+        cols = tm[top : top + self.lh].astype(np.float32).sum(0)
         best = None
         for name, (adv, off) in self.adv.items():
             sc = _row_score(cols, self.xr, adv, off)
@@ -159,25 +201,37 @@ class Grid:
         """一行切格（从左到右）：返回 (格数, lh, cw) 的 float32 数组；没字返回 None"""
         adv, off = self.adv[scale]
         cw = int(np.ceil(adv)) + 1
-        strip = tm[top:top + self.lh]
-        if strip.shape[0] < self.lh:                 # 最底下一行被截掉半截：补空白，格子大小才和字模一样
-            strip = np.vstack([strip, np.zeros((self.lh - strip.shape[0], strip.shape[1]), strip.dtype)])
+        strip = tm[top : top + self.lh]
+        if (
+            strip.shape[0] < self.lh
+        ):  # 最底下一行被截掉半截：补空白，格子大小才和字模一样
+            strip = np.vstack(
+                [
+                    strip,
+                    np.zeros((self.lh - strip.shape[0], strip.shape[1]), strip.dtype),
+                ]
+            )
         colsum = strip.sum(0, dtype=np.int32)
         xs = np.nonzero((strip > INK).any(0))[0]
         if not len(xs):
             return None
         # 每一行再微调一下相位（±1 像素）：格子边界尽量落在空白列上，认字准很多
-        off = min(np.arange(off - 1.0, off + 1.01, 0.25), key=lambda o: _row_score(colsum, self.xr, adv, o))
+        off = min(
+            np.arange(off - 1.0, off + 1.01, 0.25),
+            key=lambda o: _row_score(colsum, self.xr, adv, o),
+        )
         right = self.xr + off
         n_cells = int(np.ceil((right - xs.min()) / adv))
-        lefts = np.round(right - (np.arange(n_cells, 0, -1)) * adv).astype(int)        # 从左到右每格的左边界
-        idx = lefts[:, None] + np.arange(cw)[None, :]                                    # (格数, cw) 列号
+        lefts = np.round(right - (np.arange(n_cells, 0, -1)) * adv).astype(
+            int
+        )  # 从左到右每格的左边界
+        idx = lefts[:, None] + np.arange(cw)[None, :]  # (格数, cw) 列号
         ok = (idx >= 0) & (idx < strip.shape[1])
-        cells = strip[:, np.clip(idx, 0, strip.shape[1] - 1)].astype(np.float32)        # (lh, 格数, cw)
+        cells = strip[:, np.clip(idx, 0, strip.shape[1] - 1)].astype(
+            np.float32
+        )  # (lh, 格数, cw)
         cells = np.transpose(cells, (1, 0, 2)) * ok[:, None, :]
         return np.ascontiguousarray(cells)
-
-
 
 
 def _inks(cells):
@@ -227,6 +281,7 @@ def _hires(em, ch, ss=8):
     hit = _HIRES.get(key)
     if hit is None:
         from PIL import Image, ImageDraw, ImageFont
+
         if len(_HIRES) > 4000:
             _HIRES.clear()
         fkey = ("font", round(float(em), 3), ss)
@@ -238,24 +293,40 @@ def _hires(em, ch, ss=8):
         W, H = int(1.2 * em * ss) + 2 * pad, int(1.6 * em * ss) + 2 * pad
         im = Image.new("L", (W, H), 0)
         ImageDraw.Draw(im).text((pad, pad), ch, fill=255, font=font)
-        hit = _HIRES[key] = (np.asarray(im, np.float32) / 255.0, pad + asc - CAP_HEIGHT * em * ss, pad)
+        hit = _HIRES[key] = (
+            np.asarray(im, np.float32) / 255.0,
+            pad + asc - CAP_HEIGHT * em * ss,
+            pad,
+        )
     return hit
 
 
-def font_templates(em, dy, lh, cw, chars=FONT_CHARS, phases=(0.0, 0.25, 0.5, 0.75), ss=8):
+def font_templates(
+    em, dy, lh, cw, chars=FONT_CHARS, phases=(0.0, 0.25, 0.5, 0.75), ss=8
+):
     """用字体画字模：{字: [lh×cw 的 textness 图, ...]}。em = 字号（像素），dy = 大写字母顶边相对行顶边的位置，
     phases = 字在格子里往右挪的小数像素（字距不是整数，同一个字落在不同相位上抗锯齿不一样）。
     画法和游戏一样：白字 + 右下角 1 像素黑影，再算 textness"""
     out = {}
     for ch in chars:
         hi, cap_top, pad = _hires(em, ch, ss)
-        y0 = int(round(cap_top - dy * ss))                        # 格子第 0 行在高清图里的 y
-        hi = np.pad(hi, ((max(0, -y0), max(0, y0 + lh * ss - hi.shape[0])), (0, max(0, cw * ss + pad - hi.shape[1]))))
+        y0 = int(round(cap_top - dy * ss))  # 格子第 0 行在高清图里的 y
+        hi = np.pad(
+            hi,
+            (
+                (max(0, -y0), max(0, y0 + lh * ss - hi.shape[0])),
+                (0, max(0, cw * ss + pad - hi.shape[1])),
+            ),
+        )
         y0 = max(0, y0)
         lst = []
         for ph in phases:
             x0 = int(round(pad - ph * ss))
-            a = hi[y0:y0 + lh * ss, x0:x0 + cw * ss].reshape(lh, ss, cw, ss).mean(axis=(1, 3))
+            a = (
+                hi[y0 : y0 + lh * ss, x0 : x0 + cw * ss]
+                .reshape(lh, ss, cw, ss)
+                .mean(axis=(1, 3))
+            )
             sh = np.zeros_like(a)
             sh[:-1, :-1] = a[1:, 1:]
             lst.append(np.clip(a - sh, 0, 1) * 255.0)
@@ -297,7 +368,9 @@ def fit_font(tm, grid, scale):
     X = X / (np.linalg.norm(X, axis=1, keepdims=True) + 1e-6)
     chars = FIT_CHARS[scale]
     best = None
-    for em in np.arange(adv / 0.76, adv / 0.54, 0.25):          # 字距 ÷ 字号 在 0.54～0.76 之间（Vera 自身是 0.60）
+    for em in np.arange(
+        adv / 0.76, adv / 0.54, 0.25
+    ):  # 字距 ÷ 字号 在 0.54～0.76 之间（Vera 自身是 0.60）
         for dy in np.arange(-2.0, 1.51, 0.5):
             sc = _fit_score(X, em, dy, grid.lh, cw, chars)
             if best is None or sc > best[0]:
@@ -311,8 +384,22 @@ def fit_font(tm, grid, scale):
     return float(best[1]), float(best[2]), float(best[0])
 
 
-_FOLD = str.maketrans({"0": "o", "O": "o", "1": "l", "I": "l", "i": "l", "|": "l", "5": "s", "S": "s", "8": "b", "B": "b",
-                       "2": "z", "Z": "z"})
+_FOLD = str.maketrans(
+    {
+        "0": "o",
+        "O": "o",
+        "1": "l",
+        "I": "l",
+        "i": "l",
+        "|": "l",
+        "5": "s",
+        "S": "s",
+        "8": "b",
+        "B": "b",
+        "2": "z",
+        "Z": "z",
+    }
+)
 
 
 def fold(text):
@@ -330,7 +417,11 @@ def _roles(text):
         return ["fixed"] * len(text.replace(" ", ""))
     head, name, tail = m.groups()
     fixed_name = bool(re.fullmatch(r"Root|SolarSystem_\d+", name.strip()))
-    for part, role in ((head, "fixed"), (name, "fixed" if fixed_name else "name"), (tail, "fixed")):
+    for part, role in (
+        (head, "fixed"),
+        (name, "fixed" if fixed_name else "name"),
+        (tail, "fixed"),
+    ):
         out += [role] * len(part.replace(" ", ""))
     return out
 
@@ -347,24 +438,29 @@ def _digit_context(out, sc_of, SK, keys):
     for i in range(len(out) + 1):
         if i == len(out) or out[i] in " _:":
             core = seg[:]
-            if len(core) > 1 and out[core[-1]] == "m":            # 单位 m / km
+            if len(core) > 1 and out[core[-1]] == "m":  # 单位 m / km
                 core = core[:-1]
                 if len(core) > 1 and out[core[-1]] == "k":
                     core = core[:-1]
             body = core[1:] if core and out[core[0]] not in DIGITS else core
-            if len(body) >= 2 and sum(out[j] in DIGITS for j in body) >= 0.6 * len(body):
+            if len(body) >= 2 and sum(out[j] in DIGITS for j in body) >= 0.6 * len(
+                body
+            ):
                 for n, j in enumerate(core):
                     if out[j] in DIGITS:
                         continue
                     cand = dig + dash if n == 0 else dig
-                    if n == 0 and dash:                            # 段首：像负号就是负号（游戏的负号只是一小横）
+                    if n == 0 and dash:  # 段首：像负号就是负号（游戏的负号只是一小横）
                         k = max(cand, key=lambda kk: SK[j, kk])
                         k = dash[0] if _is_dash(SK, j, dash[0], dig) else k
                     else:
                         k = max(cand, key=lambda kk: SK[j, kk])
                     sc = float(SK[j, k])
                     if sc < (DASH_MIN if keys[k] == "-" else MIN_SCORE):
-                        out[j], sc_of[j] = "?", sc                # 挑出来的数字也不像：不硬猜（Codex 2026-10-27 补审）
+                        out[j], sc_of[j] = (
+                            "?",
+                            sc,
+                        )  # 挑出来的数字也不像：不硬猜（Codex 2026-10-27 补审）
                     else:
                         out[j], sc_of[j] = keys[k], sc
             seg = []
@@ -385,12 +481,14 @@ class Glyphs:
         self.g = grid
         self.samples = {s: {} for s in SCALES}
         self.keys = {s: [] for s in SCALES}
-        self.T = {s: None for s in SCALES}          # 字模图 (M, lh, cw)
-        self.owner = {s: None for s in SCALES}      # 每张字模是 keys 里第几个字
+        self.T = {s: None for s in SCALES}  # 字模图 (M, lh, cw)
+        self.owner = {s: None for s in SCALES}  # 每张字模是 keys 里第几个字
         self.Tn = {s: None for s in SCALES}
-        self.verified = 0                            # 自检通过了几次（存下来的字模读回来算通过）
-        self.font = {}                               # 用字体画的：{字号: (字号像素, dy, 吻合度)}
-        self.starts = {s: None for s in SCALES}      # 每个字的第一张字模在 T 里的位置（字模按字排好）
+        self.verified = 0  # 自检通过了几次（存下来的字模读回来算通过）
+        self.font = {}  # 用字体画的：{字号: (字号像素, dy, 吻合度)}
+        self.starts = {
+            s: None for s in SCALES
+        }  # 每个字的第一张字模在 T 里的位置（字模按字排好）
 
     # ---- 学 ----
     def learn(self, tm, top, text, part="fixed"):
@@ -415,7 +513,7 @@ class Glyphs:
             if part == "name" and not self._looks_like(scale, im, ch):
                 continue
             lst = bag.setdefault(ch, [])
-            lst.append(im.copy())                       # 复制一份：切片会连带留住整块大图
+            lst.append(im.copy())  # 复制一份：切片会连带留住整块大图
             del lst[:-MAX_SAMPLES]
             n += 1
         if part == "fixed":
@@ -441,22 +539,24 @@ class Glyphs:
         if ch in best:
             return best[ch] >= 0.85 and best[ch] >= other
         near = max(((v, c) for c, v in best.items()), default=(0.0, ""))
-        return not (near[0] >= 0.8 and fold(near[1]) == fold(ch))      # 新字长得像学过的「易混字」（O 像 0）：不收
-
-
+        return not (
+            near[0] >= 0.8 and fold(near[1]) == fold(ch)
+        )  # 新字长得像学过的「易混字」（O 像 0）：不收
 
     def finalize(self):
         """同一个字按「渲染相位」分成几个字模：字距不是整数像素，同一个字落在不同相位上抗锯齿长得不一样
         （1440p 两种、1600p 三种），一张平均图糊在一起认不准。相关 ≥ 0.85 的并成一组取平均，最多 4 组"""
         for s in SCALES:
             bag = self.samples[s]
-            keys = sorted(c for c, v in bag.items() if len(v) >= MIN_SAMPLES or c == " ")
+            keys = sorted(
+                c for c, v in bag.items() if len(v) >= MIN_SAMPLES or c == " "
+            )
             self.keys[s] = keys
             if not keys:
                 continue
             T, owner = [], []
             for ki, c in enumerate(keys):
-                groups = []                                   # [(平均图, 个数)]
+                groups = []  # [(平均图, 个数)]
                 for im in bag[c][-40:]:
                     best, bi = -1.0, -1
                     for gi, (m, n) in enumerate(groups):
@@ -470,7 +570,8 @@ class Glyphs:
                         groups.append((im.copy(), 1))
                 big = [g for g in groups if g[1] >= 2] or groups
                 for m, n in big:
-                    T.append(m); owner.append(ki)  # noqa: E702
+                    T.append(m)
+                    owner.append(ki)  # noqa: E702
             self.T[s] = np.stack(T)
             self.owner[s] = np.array(owner)
             self.starts[s] = np.searchsorted(self.owner[s], np.arange(len(keys)))
@@ -502,7 +603,9 @@ class Glyphs:
                 return None
             g.font[s] = (em, dy, sc)
             adv, _ = grid.adv[s]
-            for ch, lst in font_templates(em, dy, grid.lh, int(np.ceil(adv)) + 1).items():
+            for ch, lst in font_templates(
+                em, dy, grid.lh, int(np.ceil(adv)) + 1
+            ).items():
                 for t in lst:
                     g.samples[s].setdefault(ch, []).extend([t, t])
         g.finalize()
@@ -529,22 +632,29 @@ class Glyphs:
         X = imgs.reshape(len(imgs), -1)
         Xn = X - X.mean(1, keepdims=True)
         Xn = Xn / (np.linalg.norm(Xn, axis=1, keepdims=True) + 1e-6)
-        S = (Xn @ Tn.T).reshape(len(imgs), 3, len(owner)).max(1)      # 三个位移取最好 → (格数, 字模数)
-        SK = np.maximum.reduceat(S, self.starts[scale], axis=1)      # 每个字取它几张字模里最像的 → (格数, 字数)
+        S = (
+            (Xn @ Tn.T).reshape(len(imgs), 3, len(owner)).max(1)
+        )  # 三个位移取最好 → (格数, 字模数)
+        SK = np.maximum.reduceat(
+            S, self.starts[scale], axis=1
+        )  # 每个字取它几张字模里最像的 → (格数, 字数)
         best = SK.argmax(1)
         out, sc_of = [], []
         for i in range(len(imgs)):
             if ink[i] < 3:
-                out.append(" "); sc_of.append(1.0)  # noqa: E702
+                out.append(" ")
+                sc_of.append(1.0)  # noqa: E702
                 continue
             sc = float(SK[i, best[i]])
             ch = keys[best[i]]
             if sc < MIN_SCORE:
-                if ink[i] < 6:                      # 几个像素的墨、又谁都不像：邻格漏进来的，当空格
-                    out.append(" "); sc_of.append(1.0)  # noqa: E702
+                if ink[i] < 6:  # 几个像素的墨、又谁都不像：邻格漏进来的，当空格
+                    out.append(" ")
+                    sc_of.append(1.0)  # noqa: E702
                     continue
                 ch, sc = "?", 0.0
-            out.append(ch); sc_of.append(sc)  # noqa: E702
+            out.append(ch)
+            sc_of.append(sc)  # noqa: E702
         _digit_context(out, sc_of, SK, keys)
         low = min([v for v, c in zip(sc_of, out) if c != " "] or [1.0])
         return "".join(out).strip(), low, scale
@@ -564,7 +674,11 @@ class Glyphs:
     # ---- 存取 ----
     def save(self, path):
         path.parent.mkdir(parents=True, exist_ok=True)
-        data = {"grid": json.dumps(self.g.params()), "h": self.g.h, "font": json.dumps(self.font)}
+        data = {
+            "grid": json.dumps(self.g.params()),
+            "h": self.g.h,
+            "font": json.dumps(self.font),
+        }
         for s in SCALES:
             if self.T[s] is not None:
                 data[f"T_{s}"] = self.T[s]
@@ -582,9 +696,11 @@ class Glyphs:
                 keys = [str(k) for k in z[f"keys_{s}"]]
                 T = z[f"T_{s}"].astype(np.float32)
                 for t, ki in zip(T, z[f"owner_{s}"]):
-                    g.samples[s].setdefault(keys[int(ki)], []).extend([t, t])   # 每张字模当两个样本，做以后继续学的底子
+                    g.samples[s].setdefault(keys[int(ki)], []).extend(
+                        [t, t]
+                    )  # 每张字模当两个样本，做以后继续学的底子
         g.finalize()
-        g.verified = VERIFY_TIMES                    # 只有自检通过才会存文件
+        g.verified = VERIFY_TIMES  # 只有自检通过才会存文件
         if "font" in z:
             g.font = {k: tuple(v) for k, v in json.loads(str(z["font"])).items()}
         return g
@@ -596,7 +712,9 @@ NEEDED_LINE = re.compile(r"Zone|player\s*location|CamDir|FPS|Planet", re.I)
 _state = {"glyphs": None, "h": None, "tried_load": False, "font_at": 0.0, "fails": 0}
 
 
-GLYPH_VERSION = 2            # 2026-10-27 起用字体画字模：旧版（1.0.2 测试版）学出来的文件可能被带坏，不再读
+GLYPH_VERSION = (
+    2  # 2026-10-27 起用字体画字模：旧版（1.0.2 测试版）学出来的文件可能被带坏，不再读
+)
 
 
 def _path(h):
@@ -633,7 +751,9 @@ def note(ok):
         return
     _state["fails"] += 1
     if _state["fails"] >= GRID_FAILS:
-        _state.update(glyphs=None, tried_load=True, font_at=0.0, fails=0)       # 不再读旧文件，下一帧就用字体重画
+        _state.update(
+            glyphs=None, tried_load=True, font_at=0.0, fails=0
+        )  # 不再读旧文件，下一帧就用字体重画
 
 
 def trusted(text):
@@ -664,7 +784,7 @@ def feed(piece_rgb, ocr_rows, screen_h):
         g.learn(tm, top, text, "fixed")
         good.append((text, top))
     g.finalize()
-    for text, top in good:                          # 第二遍：区域名里的字，和学会的字对照着收
+    for text, top in good:  # 第二遍：区域名里的字，和学会的字对照着收
         g.learn(tm, top, text, "name")
     g.finalize()
     if g.complete() and _verify(g, tm, good):
@@ -680,11 +800,13 @@ def feed(piece_rgb, ocr_rows, screen_h):
 def _verify(g, tm, rows):
     """自检：字模把坐标行重读一遍，解析出来的星系坐标、星球局部坐标都要和识别引擎的一样"""
     from .displayinfo import parse
+
     pos = [(t, top) for t, top in rows if TRUST_POS.match(re.sub(r"\s+", "", t))]
     if len(pos) < 2:
         return False
     exp = parse([t for t, _ in pos])
     from .displayinfo import grid_text
+
     got = parse([grid_text(g.read_row(tm, top)[0]) for _, top in pos])
     if not exp["global"] or got["global"] != exp["global"]:
         return False
@@ -718,8 +840,11 @@ def _try_font(h, tm):
 def _self_check(g, tm):
     from .displayinfo import parse
     from .displayinfo import grid_text
+
     texts = [grid_text(t) for _, t, _, _ in g.read(tm)]
-    return parse(texts, need_both=True)["global"] is not None          # 两行都完整读出来、而且一致
+    return (
+        parse(texts, need_both=True)["global"] is not None
+    )  # 两行都完整读出来、而且一致
 
 
 def read_rows(piece_rgb, screen_h, only=None):
@@ -737,7 +862,11 @@ def read_rows(piece_rgb, screen_h, only=None):
 
 def status():
     g = _state["glyphs"]
-    return {"h": _state["h"], "ready": bool(g and g.ready()), "verified": g.verified if g else 0,
-            "source": ("font" if g.font else "learned") if g else "",
-            "glyphs": {s: len(g.keys[s]) for s in SCALES} if g else {},
-            "missing": sorted(REQUIRED - set(g.keys["main"])) if g else sorted(REQUIRED)}
+    return {
+        "h": _state["h"],
+        "ready": bool(g and g.ready()),
+        "verified": g.verified if g else 0,
+        "source": ("font" if g.font else "learned") if g else "",
+        "glyphs": {s: len(g.keys[s]) for s in SCALES} if g else {},
+        "missing": sorted(REQUIRED - set(g.keys["main"])) if g else sorted(REQUIRED),
+    }

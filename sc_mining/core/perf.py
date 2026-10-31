@@ -6,6 +6,7 @@
 - 截图只截需要的那一块，不截整个屏幕
 - 你按 F8 这种「等着看结果」的识别插队、并临时用正常优先级跑完；后台的识别（扫描、驾驶位检查、读位置）照旧让着游戏
 """
+
 import contextlib
 import os
 import sys
@@ -14,10 +15,14 @@ import time
 
 # 默认占用不超过 6 个核心，既保证多核文字识别速度（比 2 线程快 2~3 倍），又避免吃满所有 CPU 核心导致游戏掉帧
 OCR_THREADS = max(2, min(6, (os.cpu_count() or 4)))
-USE_GPU = os.environ.get("DUBHE_OCR_CPU") != "1"   # 能用显卡（DirectML）就用；用不了自动用 CPU。环境变量 DUBHE_OCR_CPU=1 强制 CPU（对比测速用）
+USE_GPU = (
+    os.environ.get("DUBHE_OCR_CPU") != "1"
+)  # 能用显卡（DirectML）就用；用不了自动用 CPU。环境变量 DUBHE_OCR_CPU=1 强制 CPU（对比测速用）
 # 哪几步放显卡：det 找字（整块大图，显卡快 4 倍）、rec 认字（很多小块、每块尺寸不同，显卡反而慢一倍）。
 # 环境变量 DUBHE_OCR_DML=det,rec 可以改（对比测速用）
-GPU_PARTS = [p for p in os.environ.get("DUBHE_OCR_DML", "det").split(",") if p in ("det", "rec")]
+GPU_PARTS = [
+    p for p in os.environ.get("DUBHE_OCR_DML", "det").split(",") if p in ("det", "rec")
+]
 _engine = None
 
 
@@ -25,6 +30,7 @@ def gpu_available():
     """onnxruntime 里有 DirectML（装的是 onnxruntime-directml，Windows 10 以上）"""
     try:
         import onnxruntime
+
         return "DmlExecutionProvider" in onnxruntime.get_available_providers()
     except Exception:
         return False
@@ -42,6 +48,7 @@ def is_gpu_preferred():
         return False
     try:
         from . import settings
+
         cfg = settings.load()
         dev = cfg.get("ocr_device")
         if dev is not None:
@@ -51,14 +58,20 @@ def is_gpu_preferred():
         return True
 
 
-_cpu_fallback = False     # 显卡版认字出过错、已换成 CPU 版：之后一直用 CPU，直到玩家在设置里再切一次
+_cpu_fallback = (
+    False  # 显卡版认字出过错、已换成 CPU 版：之后一直用 CPU，直到玩家在设置里再切一次
+)
 
 
 def ocr_device():
     """识别现在实际在哪算：「显卡」/「CPU」"""
     try:
         eng = rapidocr().eng
-        sess = eng.text_det.infer.session if hasattr(eng.text_det, "infer") else eng.text_det.session
+        sess = (
+            eng.text_det.infer.session
+            if hasattr(eng.text_det, "infer")
+            else eng.text_det.session
+        )
         return "显卡" if "DmlExecutionProvider" in sess.get_providers() else "CPU"
     except Exception:
         return "CPU"
@@ -72,8 +85,11 @@ def lower_priority():
         return
     try:
         import ctypes
+
         k32 = ctypes.windll.kernel32
-        k32.SetPriorityClass(k32.GetCurrentProcess(), 0x00004000)      # BELOW_NORMAL_PRIORITY_CLASS
+        k32.SetPriorityClass(
+            k32.GetCurrentProcess(), 0x00004000
+        )  # BELOW_NORMAL_PRIORITY_CLASS
     except Exception:
         pass
 
@@ -89,18 +105,23 @@ def boost():
         yield
         return
     import ctypes
+
     k32 = ctypes.windll.kernel32
     with _boost["lock"]:
         _boost["n"] += 1
         if _boost["n"] == 1:
-            k32.SetPriorityClass(k32.GetCurrentProcess(), 0x00000020)      # NORMAL_PRIORITY_CLASS
+            k32.SetPriorityClass(
+                k32.GetCurrentProcess(), 0x00000020
+            )  # NORMAL_PRIORITY_CLASS
     try:
         yield
     finally:
         with _boost["lock"]:
             _boost["n"] -= 1
             if _boost["n"] == 0:
-                k32.SetPriorityClass(k32.GetCurrentProcess(), 0x00004000)  # BELOW_NORMAL_PRIORITY_CLASS
+                k32.SetPriorityClass(
+                    k32.GetCurrentProcess(), 0x00004000
+                )  # BELOW_NORMAL_PRIORITY_CLASS
 
 
 class _Locked:
@@ -110,14 +131,14 @@ class _Locked:
     def __init__(self, eng, gpu=False):
         self.eng = eng
         self.kind = type(eng).__module__
-        self.gpu = gpu                        # 这个引擎是不是按显卡（DirectML）建的
+        self.gpu = gpu  # 这个引擎是不是按显卡（DirectML）建的
         self.lock = threading.Lock()
         self.cv = threading.Condition()
-        self.waiting = 0                      # 正在排队的 F8 识别个数
+        self.waiting = 0  # 正在排队的 F8 识别个数
 
     def __call__(self, *a, **kw):
         with self.cv:
-            while self.waiting:               # 有 F8 在等：后台先让一让
+            while self.waiting:  # 有 F8 在等：后台先让一让
                 self.cv.wait(0.5)
         with self.lock:
             return self._run(a, kw)
@@ -167,20 +188,21 @@ class _Locked:
                 try:
                     eng, _gpu, _err = _new_engine(False)
                 except Exception:
-                    raise e                           # CPU 版建不起来：报原来显卡的错，引擎不动
-                self.eng = eng                        # 调用方已拿着 self.lock，直接换
+                    raise e  # CPU 版建不起来：报原来显卡的错，引擎不动
+                self.eng = eng  # 调用方已拿着 self.lock，直接换
                 try:
                     out = self._infer(a, kw, native)
                 except Exception:
-                    self.eng = old                    # CPU 版也认不了：多半不是显卡的问题，换回显卡版，报原来的错
+                    self.eng = old  # CPU 版也认不了：多半不是显卡的问题，换回显卡版，报原来的错
                     raise e
                 self.kind, self.gpu = type(eng).__module__, False
-                _cpu_fallback = True                  # CPU 版重试成功了才算「改用 CPU」
+                _cpu_fallback = True  # CPU 版重试成功了才算「改用 CPU」
                 _last_error = f"显卡识别出错，已改用 CPU：{e}"
                 return out
         finally:
-            try:                              # 记一笔：性能记录里看各功能识别花了多少时间
+            try:  # 记一笔：性能记录里看各功能识别花了多少时间
                 from .perfmon import note_ocr
+
                 note_ocr(time.perf_counter() - t0)
             except Exception:
                 pass
@@ -196,14 +218,26 @@ def _new_engine(gpu):
         from rapidocr_onnxruntime import RapidOCR
     except ImportError:
         from rapidocr import RapidOCR
-    opts = {"intra_op_num_threads": OCR_THREADS, "inter_op_num_threads": 1, "use_cls": False}
+    opts = {
+        "intra_op_num_threads": OCR_THREADS,
+        "inter_op_num_threads": 1,
+        "use_cls": False,
+    }
     if gpu:
         opts.update({f"{part}_use_dml": True for part in GPU_PARTS})
     try:
         return RapidOCR(**opts), bool(gpu), ""
     except Exception as e:
         try:
-            return RapidOCR(intra_op_num_threads=OCR_THREADS, inter_op_num_threads=1, use_cls=False), False, str(e)
+            return (
+                RapidOCR(
+                    intra_op_num_threads=OCR_THREADS,
+                    inter_op_num_threads=1,
+                    use_cls=False,
+                ),
+                False,
+                str(e),
+            )
         except Exception:
             return RapidOCR(), False, str(e)
 
@@ -212,11 +246,15 @@ def rapidocr():
     """全程序共用的一个 RapidOCR 实例（按用户设置在主进程直接加载 DirectML 或 CPU）。
     切显卡 / CPU 只换它里面的引擎，这个对象本身不换：各处缓存的引用一直有效"""
     global _engine, _last_error
-    if _engine is not None:                   # 建好以后不会再设回 None（切换只换里面的引擎）：不用排队等锁。
-        return _engine                        # 不然切显卡 / CPU 时等着正在跑的识别，每秒的状态查询（ocr_device）也跟着卡住
+    if (
+        _engine is not None
+    ):  # 建好以后不会再设回 None（切换只换里面的引擎）：不用排队等锁。
+        return _engine  # 不然切显卡 / CPU 时等着正在跑的识别，每秒的状态查询（ocr_device）也跟着卡住
     with _lock:
         if _engine is None:
-            eng, gpu, err = _new_engine(USE_GPU and not _cpu_fallback and is_gpu_preferred() and gpu_available())
+            eng, gpu, err = _new_engine(
+                USE_GPU and not _cpu_fallback and is_gpu_preferred() and gpu_available()
+            )
             if err:
                 _last_error = err
             _engine = _Locked(eng, gpu)
@@ -230,17 +268,20 @@ def set_ocr_device(target):
     with _lock:
         target = (target or "gpu").lower()
         from . import settings
+
         settings.update(ocr_device=target, always_use_gpu=(target == "gpu"))
         _last_error = ""
         if _engine is None:
             _cpu_fallback = False
             rapidocr()
         else:
-            eng, gpu, err = _new_engine(USE_GPU and is_gpu_preferred() and gpu_available())
+            eng, gpu, err = _new_engine(
+                USE_GPU and is_gpu_preferred() and gpu_available()
+            )
             if err:
                 _last_error = err
             _engine.swap(eng, gpu)
-            _cpu_fallback = False                 # 玩家自己切过：以前显卡出错改用 CPU 的那次不算了
+            _cpu_fallback = False  # 玩家自己切过：以前显卡出错改用 CPU 的那次不算了
         return ocr_device()
 
 
@@ -252,9 +293,12 @@ def overlay_rect():
         import ctypes
         from ctypes import wintypes
         from ..app import overlay
+
         HWND = overlay.HWND
         u32 = ctypes.windll.user32
-        if not HWND or not overlay.SHOWN or not u32.IsWindowVisible(HWND):     # 没内容时窗口全透明，不用涂
+        if (
+            not HWND or not overlay.SHOWN or not u32.IsWindowVisible(HWND)
+        ):  # 没内容时窗口全透明，不用涂
             return None
         r = wintypes.RECT()
         u32.GetWindowRect(HWND, ctypes.byref(r))
@@ -273,6 +317,7 @@ def own_window_rects():
         import os
         from ctypes import wintypes
         from ..app import overlay
+
         u32 = ctypes.windll.user32
         pid, fg, out = os.getpid(), u32.GetForegroundWindow(), []
 
@@ -280,14 +325,20 @@ def own_window_rects():
         def each(h, _):
             p = wintypes.DWORD()
             u32.GetWindowThreadProcessId(h, ctypes.byref(p))
-            if p.value == pid and h != overlay.HWND and u32.IsWindowVisible(h) and not u32.IsIconic(h):
-                top = u32.GetWindowLongW(h, -20) & 0x8                  # GWL_EXSTYLE / WS_EX_TOPMOST
+            if (
+                p.value == pid
+                and h != overlay.HWND
+                and u32.IsWindowVisible(h)
+                and not u32.IsIconic(h)
+            ):
+                top = u32.GetWindowLongW(h, -20) & 0x8  # GWL_EXSTYLE / WS_EX_TOPMOST
                 if h == fg or top:
                     r = wintypes.RECT()
                     u32.GetWindowRect(h, ctypes.byref(r))
                     if r.right - r.left > 50 and r.bottom - r.top > 50:
                         out.append((r.left, r.top, r.right, r.bottom))
             return True
+
         u32.EnumWindows(each, 0)
         return out
     except Exception:
@@ -296,8 +347,11 @@ def own_window_rects():
 
 def mask_overlay(img, left, top, rect=None, scale=1.0, own=None):
     """截图里悬浮窗（和盖在最前面的天枢主窗口）那块涂黑：img 是从屏幕 (left, top) 开始截的；scale = 截图像素 / 窗口坐标像素"""
-    rects = [rect or overlay_rect()] + (own_window_rects() if own is None else list(own))
+    rects = [rect or overlay_rect()] + (
+        own_window_rects() if own is None else list(own)
+    )
     from PIL import ImageDraw
+
     for rc in rects:
         if not rc:
             continue
@@ -305,7 +359,10 @@ def mask_overlay(img, left, top, rect=None, scale=1.0, own=None):
         l, t, r, b = l - left, t - top, r - left, b - top  # noqa: E741
         if r <= 0 or b <= 0 or l >= img.width or t >= img.height:
             continue
-        ImageDraw.Draw(img).rectangle((max(0, l), max(0, t), min(img.width, r) - 1, min(img.height, b) - 1), fill=(0, 0, 0))
+        ImageDraw.Draw(img).rectangle(
+            (max(0, l), max(0, t), min(img.width, r) - 1, min(img.height, b) - 1),
+            fill=(0, 0, 0),
+        )
     return img
 
 
@@ -313,6 +370,7 @@ def _scale(mon):
     """窗口坐标 → 截图像素的比例（天枢没开高 DPI 感知时，Windows 给的窗口坐标是缩放过的）"""
     try:
         import ctypes
+
         w = ctypes.windll.user32.GetSystemMetrics(0)
         return mon["width"] / w if w else 1.0
     except Exception:
@@ -327,15 +385,17 @@ def _sct():
     sct = getattr(_tls, "sct", None)
     if sct is None:
         import mss
+
         sct = _tls.sct = mss.mss()
     return sct
 
 
 def _shot(area):
     from PIL import Image
+
     try:
         shot = _sct().grab(area)
-    except Exception:                         # 显示器变了（改分辨率、插拔）：重建一次再截
+    except Exception:  # 显示器变了（改分辨率、插拔）：重建一次再截
         _tls.sct = None
         shot = _sct().grab(area)
     return Image.frombytes("RGB", shot.size, shot.rgb)
@@ -359,6 +419,7 @@ def game_area():
         import ctypes
         from ctypes import wintypes
         from ..system import showloc
+
         u32 = ctypes.windll.user32
         hwnd = showloc.find_game_window()
         if hwnd and not u32.IsIconic(hwnd):
@@ -369,7 +430,12 @@ def game_area():
             s = _scale(m)
             w, h = int(rc.right * s), int(rc.bottom * s)
             if w >= 640 and h >= 360:
-                area = {"left": int(pt.x * s), "top": int(pt.y * s), "width": w, "height": h}
+                area = {
+                    "left": int(pt.x * s),
+                    "top": int(pt.y * s),
+                    "width": w,
+                    "height": h,
+                }
                 found = True
     except Exception:
         pass
@@ -390,18 +456,28 @@ def grab_screen():
     """截游戏画面（找不到游戏窗口就整屏；悬浮窗那块已涂黑）"""
     a = game_area()
     img = _shot(a)
-    return mask_overlay(img, a["left"], a["top"], scale=_scale(_sct().monitors[1])) if sys.platform == "win32" else img
+    return (
+        mask_overlay(img, a["left"], a["top"], scale=_scale(_sct().monitors[1]))
+        if sys.platform == "win32"
+        else img
+    )
 
 
 def grab_region(box):
     """只截游戏画面的一块：box = (左, 上, 右, 下)，都是占画面的比例。返回 PIL 图片"""
     a = game_area()
     l, t, r, b = box  # noqa: E741
-    area = {"left": a["left"] + int(a["width"] * l), "top": a["top"] + int(a["height"] * t),
-            "width": max(1, int(a["width"] * (r - l))), "height": max(1, int(a["height"] * (b - t)))}
+    area = {
+        "left": a["left"] + int(a["width"] * l),
+        "top": a["top"] + int(a["height"] * t),
+        "width": max(1, int(a["width"] * (r - l))),
+        "height": max(1, int(a["height"] * (b - t))),
+    }
     img = _shot(area)
     if sys.platform == "win32":
-        img = mask_overlay(img, area["left"], area["top"], scale=_scale(_sct().monitors[1]))
+        img = mask_overlay(
+            img, area["left"], area["top"], scale=_scale(_sct().monitors[1])
+        )
     return img
 
 
@@ -409,8 +485,11 @@ def cursor_on_image(img):
     """鼠标位置换算成截图（游戏画面）里的像素坐标；鼠标不在画面里也照样换算（可能是负数或超出）"""
     import ctypes
     from ctypes import wintypes
+
     pt = wintypes.POINT()
     ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
     a = game_area()
     s = _scale(_sct().monitors[1])
-    return int(pt.x * s - a["left"]) * img.width // max(1, a["width"]), int(pt.y * s - a["top"]) * img.height // max(1, a["height"])
+    return int(pt.x * s - a["left"]) * img.width // max(1, a["width"]), int(
+        pt.y * s - a["top"]
+    ) * img.height // max(1, a["height"])

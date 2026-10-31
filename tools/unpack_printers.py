@@ -9,6 +9,7 @@
 输出 data/print_spots.json：{"items": {英文名: {"zh": 中文名, "class": 类名, "where": [地点…]}}}
 用法：python tools/unpack_printers.py [records 目录] [星系容器目录] [地点容器目录]
 """
+
 import collections
 import json
 import re
@@ -49,9 +50,15 @@ def _place_name(v):
 def printers(rec):
     """打印机名 → [物品记录文件]"""
     out = {}
-    for f in sorted((rec / "entities" / "scitem" / "gameplayinteractables").glob("gpi_itemspawner_printcooldown*.json")):
+    for f in sorted(
+        (rec / "entities" / "scitem" / "gameplayinteractables").glob(
+            "gpi_itemspawner_printcooldown*.json"
+        )
+    ):
         refs = sorted(set(REF.findall(f.read_text(encoding="utf-8"))))
-        out[f.stem.lower()] = [rec / r for r in refs if "gameplayinteractables" not in r]
+        out[f.stem.lower()] = [
+            rec / r for r in refs if "gameplayinteractables" not in r
+        ]
     return out
 
 
@@ -62,15 +69,31 @@ def item_name(f, en, zh):
         return None, None
     for c in d.get("Components") or []:
         if c and c.get("_Type_") == "SAttachableComponentParams":
-            k = (((c.get("AttachDef") or {}).get("Localization") or {}).get("Name") or "").lstrip("@").lower()
-            return (en.get(k) or "").split("\\n")[0].strip() or None, (zh.get(k) or "").split("\\n")[0].strip() or None
+            k = (
+                (
+                    ((c.get("AttachDef") or {}).get("Localization") or {}).get("Name")
+                    or ""
+                )
+                .lstrip("@")
+                .lower()
+            )
+            return (en.get(k) or "").split("\\n")[0].strip() or None, (
+                zh.get(k) or ""
+            ).split("\\n")[0].strip() or None
     return None, None
 
 
 def scan(roots):
     """(打印机 → {摆放容器}, 子容器 → {父容器})"""
-    files = [f for r in roots if r.exists() for f in r.rglob("*")
-             if f.is_file() and f.suffix.lower() in (".soc", ".xml") and not f.name.endswith("_editor.xml")]
+    files = [
+        f
+        for r in roots
+        if r.exists()
+        for f in r.rglob("*")
+        if f.is_file()
+        and f.suffix.lower() in (".soc", ".xml")
+        and not f.name.endswith("_editor.xml")
+    ]
 
     def one(f):
         try:
@@ -80,13 +103,22 @@ def scan(roots):
         hits = {m.group(0).decode().lower() for m in PRINTER.finditer(b)}
         kids = set()
         if f.suffix.lower() == ".xml":
-            kids = {PurePosixPath(m.group(1).decode(errors="replace").replace("\\", "/")).stem.lower() for m in CHILD.finditer(b)}
+            kids = {
+                PurePosixPath(
+                    m.group(1).decode(errors="replace").replace("\\", "/")
+                ).stem.lower()
+                for m in CHILD.finditer(b)
+            }
         return f, hits, kids
 
     placed, parents = collections.defaultdict(set), collections.defaultdict(set)
     with ThreadPoolExecutor(32) as ex:
         for f, hits, kids in ex.map(one, files):
-            cont = f.parent.name.lower().removesuffix(".socpak") if f.suffix.lower() == ".soc" else f.stem.lower()
+            cont = (
+                f.parent.name.lower().removesuffix(".socpak")
+                if f.suffix.lower() == ".soc"
+                else f.stem.lower()
+            )
             for k in kids:
                 parents[k].add(f.stem.lower())
             for h in hits:
@@ -108,7 +140,9 @@ def site(chain, zh, en):
     if "cz_rewards" in room:
         kind = " " + SELF["Contested Zone Rewards Room"]
     elif "contestedzone" in room or "opendungeon" in room:
-        kind = " " + _place_name(zh.get("contestedzone") or en.get("contestedzone") or "Contested Zone")
+        kind = " " + _place_name(
+            zh.get("contestedzone") or en.get("contestedzone") or "Contested Zone"
+        )
     asteroid = any(c.startswith("ab_") for c in chain)
     for c in chain:
         key = None
@@ -128,7 +162,11 @@ def site(chain, zh, en):
 
 
 def main():
-    rec = Path(sys.argv[1]) if len(sys.argv) > 1 else WORK / "dcb_json" / "libs" / "foundry" / "records"
+    rec = (
+        Path(sys.argv[1])
+        if len(sys.argv) > 1
+        else WORK / "dcb_json" / "libs" / "foundry" / "records"
+    )
     roots = [Path(a) for a in sys.argv[2:4]] or [WORK / "oc_x", WORK / "loc_x"]
     en, zh = _loc(EN_INI), _loc(ZH_INI)
     prn = printers(rec)
@@ -139,7 +177,7 @@ def main():
         for cont in placed.get(p, ()):
             for c in chains(cont, parents):
                 if c[-1] not in SYSTEMS:
-                    continue                       # 没摆进星系（没上线的）
+                    continue  # 没摆进星系（没上线的）
                 s = site(c, zh, en)
                 if s:
                     where.add(s)
@@ -153,8 +191,17 @@ def main():
                 continue
             it = items.setdefault(n_en, {"zh": n_zh, "class": f.stem, "where": []})
             it["where"] = sorted(set(it["where"]) | where)
-    OUT.write_text(json.dumps({"_说明": "打印机打印的物品 → 在哪打印（tools/unpack_printers.py 从解包生成）", "items": items},
-                              ensure_ascii=False, indent=1), encoding="utf-8")
+    OUT.write_text(
+        json.dumps(
+            {
+                "_说明": "打印机打印的物品 → 在哪打印（tools/unpack_printers.py 从解包生成）",
+                "items": items,
+            },
+            ensure_ascii=False,
+            indent=1,
+        ),
+        encoding="utf-8",
+    )
     for k, v in sorted(items.items()):
         print(f"  {v['zh'] or k}（{k}）：{'；'.join(v['where'])}")
     for o in sorted(set(odd)):

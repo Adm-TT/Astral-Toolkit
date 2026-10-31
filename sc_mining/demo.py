@@ -2,6 +2,7 @@
 
 python -m sc_mining.demo
 """
+
 from .mining import data
 from .mining.signals import describe
 from .mining.laser import recommend
@@ -36,11 +37,18 @@ def main():
 
     if input("\n破完了要记录结果用于校准吗？(y/N) ").strip().lower() == "y":
         from .mining.laser import record
-        heads = input("  用了哪些矿头（helix_ii,hofstede_s2,arbor_mh2 逗号分隔）：").strip()
-        gadget = input("  贴了什么工具（sabir/optimax/boremax/okunis/waveshift/stalwart，没有直接回车）：").strip()
+
+        heads = input(
+            "  用了哪些矿头（helix_ii,hofstede_s2,arbor_mh2 逗号分隔）："
+        ).strip()
+        gadget = input(
+            "  贴了什么工具（sabir/optimax/boremax/okunis/waveshift/stalwart，没有直接回车）："
+        ).strip()
         thr = ask("  功率开到多少 %：") / 100
         broke = input("  破开了吗？(y/n) ").strip().lower() == "y"
-        forecast = input("  游戏里的难度评级（简单/中等/困难/极难/地狱，可不填）：").strip()
+        forecast = input(
+            "  游戏里的难度评级（简单/中等/困难/极难/地狱，可不填）："
+        ).strip()
         record(mass, res, heads, gadget or None, thr, broke, forecast)
         print("  已记录")
 
@@ -54,7 +62,10 @@ def main():
         if unpriced(bag):
             print("  缺价格：" + "、".join(unpriced(bag)))
         print("精炼方式：" + " / ".join(m for m, _ in methods()))
-        print("卖到：" + "，".join(f"{m} → {c}（{p:,}）" for m, c, p in sell_plan(bag) if c))
+        print(
+            "卖到："
+            + "，".join(f"{m} → {c}（{p:,}）" for m, c, p in sell_plan(bag) if c)
+        )
 
 
 if __name__ == "__main__":

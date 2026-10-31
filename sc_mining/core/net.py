@@ -3,6 +3,7 @@
 几个数据源（scmdb、UEX、starmap、汉化盒子、scl）都支持 gzip，JSON 压缩后通常只剩 1/5~1/10，
 在中国大陆这种访问国外服务器慢的网络下，下载时间按比例缩短。
 """
+
 import gzip
 import urllib.request
 import zlib

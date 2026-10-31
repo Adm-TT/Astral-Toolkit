@@ -7,18 +7,21 @@
   ir_max  红外估算上限
 截面基本只看船体大小形状，最可靠；红外、电磁随开机状态/加速/开火变化很大，只用来排除「明显超出上限」的船。
 """
+
 import json
 from functools import lru_cache
 
 from ..core.paths import DATA
 
-TOL = 0.12          # 截面允许的误差（读数取整、装甲改装、角度不在三个主方向上）
-SLACK = 1.6         # 电磁/红外超过估算上限多少倍才算不可能（加速、开火时会冲高）
+TOL = 0.12  # 截面允许的误差（读数取整、装甲改装、角度不在三个主方向上）
+SLACK = 1.6  # 电磁/红外超过估算上限多少倍才算不可能（加速、开火时会冲高）
 
 
 @lru_cache(maxsize=1)
 def ships():
-    return json.loads((DATA / "ship_signatures.json").read_text(encoding="utf-8"))["ships"]
+    return json.loads((DATA / "ship_signatures.json").read_text(encoding="utf-8"))[
+        "ships"
+    ]
 
 
 def _cs_score(cs, axes):
@@ -26,7 +29,7 @@ def _cs_score(cs, axes):
     lo, hi = axes[0] * (1 - TOL), axes[-1] * (1 + TOL)
     if not lo <= cs <= hi:
         return None
-    return min(abs(cs - a) / a for a in axes)      # 离哪个主方向最近
+    return min(abs(cs - a) / a for a in axes)  # 离哪个主方向最近
 
 
 def match(cs, em=None, ir=None, limit=6):
@@ -47,7 +50,7 @@ def match(cs, em=None, ir=None, limit=6):
     out, seen = [], {}
     for s, sc in hits:
         key = tuple(s["cs"])
-        if key in seen:                 # 同一船体的变体：并到第一行
+        if key in seen:  # 同一船体的变体：并到第一行
             seen[key]["variants"].append(s.get("zh") or s["name"])
             continue
         row = dict(s, score=sc, variants=[])
@@ -63,6 +66,10 @@ def describe(cs, em=None, ir=None, limit=4):
     lines = []
     for r in rows:
         name = r.get("zh") or r["name"]
-        more = f"（同外形：{'、'.join(r['variants'][:3])}{'等' if len(r['variants']) > 3 else ''}）" if r["variants"] else ""
+        more = (
+            f"（同外形：{'、'.join(r['variants'][:3])}{'等' if len(r['variants']) > 3 else ''}）"
+            if r["variants"]
+            else ""
+        )
         lines.append(f"{name}{more}")
     return lines

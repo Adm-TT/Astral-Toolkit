@@ -6,6 +6,7 @@
 3. Wikelo 特殊兑换搜索与材料需求解析；
 4. 采矿/悬停识别等模块所需的目标材料缺口判定与标记 (_goal_for, _mark_goal_lines 等)。
 """
+
 from concurrent.futures import ThreadPoolExecutor
 import re
 import time
@@ -94,7 +95,10 @@ from .trade import trade
 
 
 def _place_for(location, bin=None):
-    from . import stock               # 在函数里 import：stock 也在函数里引用 goals，取模块属性，测试换掉的名字能打中
+    from . import (
+        stock,
+    )  # 在函数里 import：stock 也在函数里引用 goals，取模块属性，测试换掉的名字能打中
+
     return stock._place_for(location, bin)
 
 
@@ -113,6 +117,7 @@ def clear_caches():
 
 try:
     from ..update.data_pack import CACHE_HOOKS as _CACHE_HOOKS
+
     _CACHE_HOOKS.append(clear_caches)
 except Exception:
     pass
@@ -121,7 +126,9 @@ except Exception:
 # ---------------------------------------------------------------- 目标：库存联动维科洛兑换 / 制造 / 交易
 def _gkey(name):
     """目标材料和矿 / 物品对名字用：忽略大小写、空格和「(Ore)」「(Raw)」「原矿」这类后缀"""
-    n = re.sub(r"\s*[\(（](ore|raw|原矿|矿石)[\)）]\s*$", "", (name or "").strip(), flags=re.I)
+    n = re.sub(
+        r"\s*[\(（](ore|raw|原矿|矿石)[\)）]\s*$", "", (name or "").strip(), flags=re.I
+    )
     n = re.sub(r"(原矿|矿石)$", "", n)
     return re.sub(r"\s+", "", n.lower())
 
@@ -164,20 +171,32 @@ def _goal_text(t, q=None, lots=None):
         for r in sorted(known, key=lambda r: -r["q"]):
             good = r["q"] >= t["minq"]
             v = r.get("refined")
-            got = "" if not v else f"（精炼后 {v:.2f} SCU）" if v >= 1 else f"（精炼后 {v * 1e6:,.0f} uSCU）"
+            got = (
+                ""
+                if not v
+                else f"（精炼后 {v:.2f} SCU）"
+                if v >= 1
+                else f"（精炼后 {v * 1e6:,.0f} uSCU）"
+            )
             parts.append(f"品质 {r['q']}：" + ("已达标" + got if good else "未达标"))
         need_q += "：" + "，".join(parts)
     elif q is not None and need_q:
         need_q += f"，当前 {q} " + ("已达标" if q >= t["minq"] else "未达标")
-    return f"🎯 目标缺少 {t['zh'] or t['en']} {amt}" + (f"（{need_q}）" if need_q else "")
+    return f"🎯 目标缺少 {t['zh'] or t['en']} {amt}" + (
+        f"（{need_q}）" if need_q else ""
+    )
 
 
 def _mark_goal_lines(lines):
     """信号说明里有目标还缺的矿：行首加 🎯"""
     pats = []
     for t in goal_short().values():
-        if t.get("zh"):        # 整词匹配：目标要「金」，不能把「林登金」「艾格瑞金属」也标上
-            pats.append(re.compile(f"(?<![\u4e00-\u9fff]){re.escape(t['zh'])}(?![\u4e00-\u9fff])"))
+        if t.get("zh"):  # 整词匹配：目标要「金」，不能把「林登金」「艾格瑞金属」也标上
+            pats.append(
+                re.compile(
+                    f"(?<![\u4e00-\u9fff]){re.escape(t['zh'])}(?![\u4e00-\u9fff])"
+                )
+            )
         if t.get("en"):
             pats.append(re.compile(rf"\b{re.escape(t['en'])}\b", re.I))
     return [("🎯 " + l) if any(p.search(l) for p in pats) else l for l in lines]  # noqa: E741
@@ -210,11 +229,24 @@ def _goals_view():
         for idx, (slot, opts, mods) in enumerate(bp["slots"]):
             row = next((r for r in g["rows"] if r["slot"] == slot), None)
             qs[idx] = row.get("avg_q") if row else None
-        g["slots_q"] = [{"idx": i, "slot": slot_zh(sl), "has_mods": bool(m), "material": "/".join(crafting_zh(o) for o in opts),
-                         "q": qs[i], "minq": max([x[3] for x in opts] + [0])} for i, (sl, opts, m) in enumerate(bp["slots"])]
+        g["slots_q"] = [
+            {
+                "idx": i,
+                "slot": slot_zh(sl),
+                "has_mods": bool(m),
+                "material": "/".join(crafting_zh(o) for o in opts),
+                "q": qs[i],
+                "minq": max([x[3] for x in opts] + [0]),
+            }
+            for i, (sl, opts, m) in enumerate(bp["slots"])
+        ]
         g["effect"] = effect(bp, {i: q for i, q in qs.items() if q is not None})
-        g["effect_total"] = laser_total(bp, {i: q for i, q in qs.items() if q is not None}) if g["effect"] else None
-        st = _craft_struct(bp)                       # 1.6.47：目标页和制造页共用槽位卡片 + 属性统计
+        g["effect_total"] = (
+            laser_total(bp, {i: q for i, q in qs.items() if q is not None})
+            if g["effect"]
+            else None
+        )
+        st = _craft_struct(bp)  # 1.6.47：目标页和制造页共用槽位卡片 + 属性统计
         for sl in st["slots"]:
             sl["q"] = qs.get(sl["idx"])
         g["craft"] = {"head": st["head"], "slots": st["slots"]}
@@ -232,9 +264,21 @@ def goal_finish_preview(id=""):
     except ValueError as e:
         return {"error": str(e)}
     g = next((x for x in G.load() if x["id"] == id), {})
-    return {"title": g.get("title", ""), "times": g.get("times", 1), "short": short,
-            "takes": [{"name": x["zh"] or x["en"], "place": x["place"], "quality": x["quality"], "qty": x["qty"], "unit": x["unit"]}
-                      for x in (takes or [])]}
+    return {
+        "title": g.get("title", ""),
+        "times": g.get("times", 1),
+        "short": short,
+        "takes": [
+            {
+                "name": x["zh"] or x["en"],
+                "place": x["place"],
+                "quality": x["quality"],
+                "qty": x["qty"],
+                "unit": x["unit"],
+            }
+            for x in (takes or [])
+        ],
+    }
 
 
 def goal_finish(id=""):
@@ -261,7 +305,12 @@ def goal_add(kind="", ref="", times=1):
 def goal_update(id="", times=None, move=0, remove=False):
     _SHORT["t"] = 0.0
     try:
-        G.update(id, None if times in (None, "") else int(times), int(move or 0), bool(remove))
+        G.update(
+            id,
+            None if times in (None, "") else int(times),
+            int(move or 0),
+            bool(remove),
+        )
     except ValueError as e:
         return {"error": str(e)}
     return _goals_view()
@@ -271,7 +320,9 @@ def goal_stock_add(en="", zh="", qty=0, unit="", quality="", location=""):
     """目标页里直接入库（交易库里没有的材料自动建成本地物品）"""
     _SHORT["t"] = 0.0
     try:
-        G.add_stock(trade(), en, zh, qty, unit, quality, _place_for(location), source="目标")
+        G.add_stock(
+            trade(), en, zh, qty, unit, quality, _place_for(location), source="目标"
+        )
     except ValueError as e:
         return {"error": str(e)}
     return _goals_view()
@@ -285,9 +336,11 @@ def goal_prices():
     def one(x):
         try:
             iid = x["item"]
-            if not iid:                     # 交易库里还没有：按英文名去玩家市场搜一次，名字完全一样才算
+            if not iid:  # 交易库里还没有：按英文名去玩家市场搜一次，名字完全一样才算
                 items, _ = t.market.lookup(x["en"])
-                hit = next((i for i in items if i.name.casefold() == x["en"].casefold()), None)
+                hit = next(
+                    (i for i in items if i.name.casefold() == x["en"].casefold()), None
+                )
                 if not hit:
                     return x, None
                 if x["zh"]:
@@ -305,11 +358,28 @@ def goal_prices():
                 cost = float(price) * x["short"]
                 total += cost
                 priced += 1
-                rows.append({"en": x["en"], "minq": x["minq"], "unit": x["unit"], "price": float(price), "price_unit": unit,
-                             "currency": cur, "src": SOURCE_ZH.get(src, src), "cost": cost})
+                rows.append(
+                    {
+                        "en": x["en"],
+                        "minq": x["minq"],
+                        "unit": x["unit"],
+                        "price": float(price),
+                        "price_unit": unit,
+                        "currency": cur,
+                        "src": SOURCE_ZH.get(src, src),
+                        "cost": cost,
+                    }
+                )
             else:
-                rows.append({"en": x["en"], "minq": x["minq"], "unit": x["unit"], "price": None})
-    return {"rows": rows, "total": total, "priced": priced, "unpriced": len(rows) - priced}
+                rows.append(
+                    {"en": x["en"], "minq": x["minq"], "unit": x["unit"], "price": None}
+                )
+    return {
+        "rows": rows,
+        "total": total,
+        "priced": priced,
+        "unpriced": len(rows) - priced,
+    }
 
 
 # ---------------------------------------------------------------- 维科洛兑换
@@ -317,9 +387,16 @@ def wikelo_search(q=""):
     rows = wikelo.search(q or "")
     out = []
     for c in rows[:60]:
-        key = c["id"]                       # 兑换自己的 id 当 key：流水号会在清缓存后重号，指到别的兑换
+        key = c["id"]  # 兑换自己的 id 当 key：流水号会在清缓存后重号，指到别的兑换
         _wk_cache[key] = c
-        out.append({"key": key, "title": c["t"], "type": c["type"], "reward": c["rz"] or "、".join(c["rewards"][:2])})
+        out.append(
+            {
+                "key": key,
+                "title": c["t"],
+                "type": c["type"],
+                "reward": c["rz"] or "、".join(c["rewards"][:2]),
+            }
+        )
     return out
 
 
@@ -337,14 +414,32 @@ def wikelo_detail(key=""):
             groups.append((k, [r]))
     for _, rs in groups:
         r = rs[0]
-        name = f"{r['z']}（{'、'.join(x['n'] for x in rs)}）" if len(rs) > 1 else wikelo.req_label(r)
+        name = (
+            f"{r['z']}（{'、'.join(x['n'] for x in rs)}）"
+            if len(rs) > 1
+            else wikelo.req_label(r)
+        )
         try:
             tip = material_source(r["n"])
         except Exception:
             tip = ""
-        reqs.append({"name": name, "q": (f"{r['q']:g} {r['u']}" if r["q"] else "若干") + (" 各" if len(rs) > 1 else ""),
-                     "tip": tip, "en": r["n"], "zh": r["z"]})
-    return {"id": c["id"], "title": c["t"], "type": c["type"], "reward": c["rz"] or "、".join(c["rewards"][:4]) or c["te"], "req": reqs}
+        reqs.append(
+            {
+                "name": name,
+                "q": (f"{r['q']:g} {r['u']}" if r["q"] else "若干")
+                + (" 各" if len(rs) > 1 else ""),
+                "tip": tip,
+                "en": r["n"],
+                "zh": r["z"],
+            }
+        )
+    return {
+        "id": c["id"],
+        "title": c["t"],
+        "type": c["type"],
+        "reward": c["rz"] or "、".join(c["rewards"][:4]) or c["te"],
+        "req": reqs,
+    }
 
 
 # ---------------------------------------------------------------- 制造与蓝图
@@ -354,7 +449,10 @@ def craft_effect(key="", qualities=None):
     if not bp:
         return {"error": "未找到此蓝图"}
     slots = effect(bp, qualities or {})
-    return {"slots": slots, "total": laser_total(bp, qualities or {}) if slots else None}
+    return {
+        "slots": slots,
+        "total": laser_total(bp, qualities or {}) if slots else None,
+    }
 
 
 def craft_search(q=""):
@@ -364,12 +462,22 @@ def craft_search(q=""):
         _bp_cache[key] = bp
         note = variant_note(bp)
         zh, en = name_parts(bp)
-        out.append({"key": key, "name": display_name(bp) + (f"｜{note}" if note else ""), "zh": zh, "en": en, "note": note,
-                    "kind": GEAR_ZH.get((bp["g"], bp["t"]), bp["t"] or bp["g"])})
+        out.append(
+            {
+                "key": key,
+                "name": display_name(bp) + (f"｜{note}" if note else ""),
+                "zh": zh,
+                "en": en,
+                "note": note,
+                "kind": GEAR_ZH.get((bp["g"], bp["t"]), bp["t"] or bp["g"]),
+            }
+        )
     return out
 
 
-def craft_browse(cat="", sub="", part="", maker="", q="", unlocked=False, offset=0, mat="", mq=None):
+def craft_browse(
+    cat="", sub="", part="", maker="", q="", unlocked=False, offset=0, mat="", mq=None
+):
     """蓝图字典：分类筛选 + 分页；mat=只看用到这种矿的（mq=手上矿的品质，标出够不够做）"""
     r = browse(cat, sub, part, maker, q, bool(unlocked), int(offset or 0), mat=mat)
     try:
@@ -380,19 +488,40 @@ def craft_browse(cat="", sub="", part="", maker="", q="", unlocked=False, offset
     for bp in r["rows"]:
         key = bp_key(bp)
         _bp_cache[key] = bp
-        tags = [t for t in (part_of(bp), SUB_ZH.get(bp["s"] or "", bp["s"] or ""), variant_note(bp)) if t]
-        row = {"key": key, "name": display_name(bp), "kind": category_zh(bp), "tags": " · ".join(tags),
-               "maker": bp["m"] or "", "unlocked": bool(bp["d"])}
+        tags = [
+            t
+            for t in (
+                part_of(bp),
+                SUB_ZH.get(bp["s"] or "", bp["s"] or ""),
+                variant_note(bp),
+            )
+            if t
+        ]
+        row = {
+            "key": key,
+            "name": display_name(bp),
+            "kind": category_zh(bp),
+            "tags": " · ".join(tags),
+            "maker": bp["m"] or "",
+            "unlocked": bool(bp["d"]),
+        }
         if mat:
             n = needs(bp, mat)
             minq = max(m for _, m in n)
-            row["need"] = f"{material_zh(mat)} {sum(x for x, _ in n):g} SCU" + (f"（品质 ≥{minq}）" if minq > 1 else "")
-            if mq is not None and minq > 1:          # 只有带品质门槛的才标够不够
+            row["need"] = f"{material_zh(mat)} {sum(x for x, _ in n):g} SCU" + (
+                f"（品质 ≥{minq}）" if minq > 1 else ""
+            )
+            if mq is not None and minq > 1:  # 只有带品质门槛的才标够不够
                 row["ok"] = mq >= minq
         rows.append(row)
     out = {**r, "rows": rows}
     if mat:
-        out["mat"] = {"en": mat, "zh": material_zh(mat), "q": mq, **mat_summary(mat, mq)}
+        out["mat"] = {
+            "en": mat,
+            "zh": material_zh(mat),
+            "q": mq,
+            **mat_summary(mat, mq),
+        }
     return out
 
 
@@ -402,20 +531,59 @@ def _craft_struct(bp, note=""):
     h["note"] = note
     slots, minerals = [], []
     for idx, (slot, opts, mods) in enumerate(bp["slots"]):
-        mats = [{"kind": k, "en": name, "zh": material_zh(name), "qty": qty, "unit": "SCU" if k == "r" else "个", "minq": minq}
-                for k, name, qty, minq in opts]
+        mats = [
+            {
+                "kind": k,
+                "en": name,
+                "zh": material_zh(name),
+                "qty": qty,
+                "unit": "SCU" if k == "r" else "个",
+                "minq": minq,
+            }
+            for k, name, qty, minq in opts
+        ]
         gm = group_mods(mods)
-        curves = [{"prop": pz, "name": prop_zh(pz, bp), "key": PROP_KEY.get(pz, ""), "add": segs[0][4], "lower": pz in LOWER_BETTER,
-                   "segs": [list(x[:4]) for x in segs], "text": curve_text(pz, segs, prop_zh(pz, bp))} for pz, segs in gm.items()]
-        slots.append({"idx": idx, "slot": slot_zh(slot), "mats": mats, "minq": max([m["minq"] for m in mats] + [0]), "curves": curves})
+        curves = [
+            {
+                "prop": pz,
+                "name": prop_zh(pz, bp),
+                "key": PROP_KEY.get(pz, ""),
+                "add": segs[0][4],
+                "lower": pz in LOWER_BETTER,
+                "segs": [list(x[:4]) for x in segs],
+                "text": curve_text(pz, segs, prop_zh(pz, bp)),
+            }
+            for pz, segs in gm.items()
+        ]
+        slots.append(
+            {
+                "idx": idx,
+                "slot": slot_zh(slot),
+                "mats": mats,
+                "minq": max([m["minq"] for m in mats] + [0]),
+                "curves": curves,
+            }
+        )
         minerals += [name for k, name, *_ in opts if k == "r"]
     mine = []
     for m in dict.fromkeys(minerals):
         rows = where(m)[:2]
         price, city = best_price(m)
-        mine.append({"en": m, "zh": material_zh(m), "spots": [{"loc": zh_name(loc), "pct": round(pct)} for pct, loc in rows],
-                     "price": price, "city": city or ""})
-    src = [{"title": _clean_title(t), "who": w, "kind": k, "systems": sy, "chance": ch} for t, w, k, sy, ch in bp["src"]]
+        mine.append(
+            {
+                "en": m,
+                "zh": material_zh(m),
+                "spots": [
+                    {"loc": zh_name(loc), "pct": round(pct)} for pct, loc in rows
+                ],
+                "price": price,
+                "city": city or "",
+            }
+        )
+    src = [
+        {"title": _clean_title(t), "who": w, "kind": k, "systems": sy, "chance": ch}
+        for t, w, k, sy, ch in bp["src"]
+    ]
     return {"head": h, "slots": slots, "mine": mine, "sources": src, "nsrc": bp["nsrc"]}
 
 
@@ -428,10 +596,15 @@ def craft_detail(key=""):
         return {"error": "未找到此蓝图"}
     note = variant_note(bp)
     text = describe(bp)
-    if note:                                   # 同名多份配方：标题行后面注明是哪一份
+    if note:  # 同名多份配方：标题行后面注明是哪一份
         first, _, rest = text.partition("\n")
         text = f"{first}｜{note}\n{rest}" if rest else f"{first}｜{note}"
-    return {"key": bp_key(bp), "text": text, "mix": mix_targets(bp), **_craft_struct(bp, note)}
+    return {
+        "key": bp_key(bp),
+        "text": text,
+        "mix": mix_targets(bp),
+        **_craft_struct(bp, note),
+    }
 
 
 def craft_stats(key="", qualities=None):
@@ -446,7 +619,9 @@ def craft_stats(key="", qualities=None):
 def craft_mix(need=0, target=0, margin=2, boxes=()):
     """混料计算器：boxes = [[品质, SCU], …]"""
     try:
-        rows = [(float(q), float(s)) for q, s in boxes if str(q).strip() and str(s).strip()]
+        rows = [
+            (float(q), float(s)) for q, s in boxes if str(q).strip() and str(s).strip()
+        ]
     except (TypeError, ValueError):
         return {"ok": False, "msg": "品质和数量需为数字"}
     return mix_plan(float(need or 0), float(target or 0), rows, float(margin or 0))

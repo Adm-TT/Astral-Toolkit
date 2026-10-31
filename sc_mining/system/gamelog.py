@@ -12,23 +12,37 @@
 - 游戏重启会新建 Game.log，从头读
 只读日志，不碰游戏文件。
 """
+
 import re
 from pathlib import Path
 
-JOIN = re.compile(r"Added notification \"(?:你已加入 频道|You have joined channel|Joined channel) '([^']+ : [^']+)'")
-LEAVE = re.compile(r"Added notification \"(?:你退出了 频道|You have left channel|Left channel) '([^']+ : [^']+)'")
+JOIN = re.compile(
+    r"Added notification \"(?:你已加入 频道|You have joined channel|Joined channel) '([^']+ : [^']+)'"
+)
+LEAVE = re.compile(
+    r"Added notification \"(?:你退出了 频道|You have left channel|Left channel) '([^']+ : [^']+)'"
+)
 SPAWN = "OnClientSpawned] Spawned!"
-SEAT = re.compile(r"\[ItemNavigation\]\[CL\]\[\d+\]\s*\|[^|]*\|\s*([A-Za-z][A-Za-z0-9_]+?)_\d+\[\d+\]\|")
-UNSEAT = re.compile(r"ClearDriver: Local client node .*?releasing control token for '([^']+)'")
-COMMON = [r"C:\Program Files\Roberts Space Industries\StarCitizen\LIVE",
-          r"D:\Roberts Space Industries\StarCitizen\LIVE", r"D:\StarCitizen\LIVE", r"E:\StarCitizen\LIVE",
-          r"C:\StarCitizen\LIVE"]
+SEAT = re.compile(
+    r"\[ItemNavigation\]\[CL\]\[\d+\]\s*\|[^|]*\|\s*([A-Za-z][A-Za-z0-9_]+?)_\d+\[\d+\]\|"
+)
+UNSEAT = re.compile(
+    r"ClearDriver: Local client node .*?releasing control token for '([^']+)'"
+)
+COMMON = [
+    r"C:\Program Files\Roberts Space Industries\StarCitizen\LIVE",
+    r"D:\Roberts Space Industries\StarCitizen\LIVE",
+    r"D:\StarCitizen\LIVE",
+    r"E:\StarCitizen\LIVE",
+    r"C:\StarCitizen\LIVE",
+]
 
 
 def find_log():
     """找 Game.log：先看设置里记住的，再从正在运行的游戏进程位置推，最后试常见安装位置"""
     from ..core import settings
     from . import showloc
+
     cfg = settings.load()
     p = cfg.get("game_log")
     if p and Path(p).exists():
@@ -37,7 +51,9 @@ def find_log():
         hwnd = showloc.find_game_window()
         exe = showloc._exe_path(hwnd) if hwnd else ""
         if exe:
-            cand = Path(exe).parent.parent / "Game.log"          # ...\LIVE\Bin64\StarCitizen.exe
+            cand = (
+                Path(exe).parent.parent / "Game.log"
+            )  # ...\LIVE\Bin64\StarCitizen.exe
             if cand.exists():
                 settings.update(game_log=str(cand))
                 return cand
@@ -56,9 +72,11 @@ class GameLog:
         self.path = Path(path) if path else None
         self.pos = 0
         self.buf = b""
-        self.vehicle = None          # 正坐在驾驶位的载具，None = 没在开（走路、在大船里走动都算 None）
-        self.channel = None          # 登上的载具（语音频道名），只做记录
-        self.events = []             # 最近的状态变化 [(时间, 说明)]
+        self.vehicle = (
+            None  # 正坐在驾驶位的载具，None = 没在开（走路、在大船里走动都算 None）
+        )
+        self.channel = None  # 登上的载具（语音频道名），只做记录
+        self.events = []  # 最近的状态变化 [(时间, 说明)]
 
     @property
     def aboard(self):
@@ -76,11 +94,13 @@ class GameLog:
         before = self.vehicle
         try:
             size = self.path.stat().st_size
-            if size < self.pos:                      # 游戏重启，新日志
+            if size < self.pos:  # 游戏重启，新日志
                 self._reset()
             if size == self.pos:
                 return False
-            with open(self.path, "rb") as f:         # 分块读（每次 1 MB）：第一次接上时日志可能几百 MB，别整个读进内存（二审 2026-10-28）
+            with (
+                open(self.path, "rb") as f
+            ):  # 分块读（每次 1 MB）：第一次接上时日志可能几百 MB，别整个读进内存（二审 2026-10-28）
                 f.seek(self.pos)
                 while self.pos < size:
                     chunk = f.read(min(1 << 20, size - self.pos))
@@ -95,16 +115,20 @@ class GameLog:
     def _feed(self, data):
         data = self.buf + data
         lines = data.split(b"\n")
-        self.buf = lines.pop()                       # 最后一行可能还没写完
+        self.buf = lines.pop()  # 最后一行可能还没写完
         for raw in lines:
-            if not (b"Added notification" in raw or b"Spawned!" in raw or b"[ItemNavigation][CL]" in raw
-                    or b"ClearDriver" in raw):
+            if not (
+                b"Added notification" in raw
+                or b"Spawned!" in raw
+                or b"[ItemNavigation][CL]" in raw
+                or b"ClearDriver" in raw
+            ):
                 continue
             self.line(raw.decode("utf-8", "replace"))
 
     def line(self, text):
         m = JOIN.search(text)
-        if m:                                        # 登船（含在大船里走动）：只记下来，不算在开
+        if m:  # 登船（含在大船里走动）：只记下来，不算在开
             self.channel = m.group(1)
             self.events.append((text[1:25], f"登上 {m.group(1)}（走动不算开船）"))
             return
@@ -153,8 +177,13 @@ MON_OUT = ("已离开监管区域", "Left Monitored Space")
 def _ts(text):
     """<2026-10-24T10:46:36.173Z> → 时间戳（秒）；没有就 None"""
     from datetime import datetime, timezone
+
     try:
-        return datetime.strptime(text[1:24], "%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=timezone.utc).timestamp()
+        return (
+            datetime.strptime(text[1:24], "%Y-%m-%dT%H:%M:%S.%f")
+            .replace(tzinfo=timezone.utc)
+            .timestamp()
+        )
     except Exception:
         return None
 
@@ -202,8 +231,8 @@ class EventTail:
 
     def __init__(self, path=None):
         self.path = Path(path) if path else None
-        self.pos = None                          # None = 还没接上过：接上时从末尾开始（打开 AT 之前的不算）
-        self.ident = None                        # 文件身份（编号 + 创建时间）：游戏重开会新建 Game.log
+        self.pos = None  # None = 还没接上过：接上时从末尾开始（打开 AT 之前的不算）
+        self.ident = None  # 文件身份（编号 + 创建时间）：游戏重开会新建 Game.log
         self.buf = b""
         self.ev = GameEvents()
 
@@ -214,15 +243,17 @@ class EventTail:
                 return []
         try:
             st = self.path.stat()
-        except OSError:                          # 游戏重开那一下文件暂时不在：等它回来，不当成第一次
+        except OSError:  # 游戏重开那一下文件暂时不在：等它回来，不当成第一次
             return []
         ident = (st.st_ino, getattr(st, "st_birthtime", st.st_ctime))
         try:
             size = st.st_size
-            if self.pos is None:                 # 第一次：从末尾开始
+            if self.pos is None:  # 第一次：从末尾开始
                 self.pos, self.ident = size, ident
                 return []
-            if ident != self.ident or size < self.pos:   # 换了文件（游戏重开）：从头读新日志（Codex 2026-10-27）
+            if (
+                ident != self.ident or size < self.pos
+            ):  # 换了文件（游戏重开）：从头读新日志（Codex 2026-10-27）
                 self.pos, self.buf, self.ident = 0, b"", ident
             if size == self.pos:
                 return []
@@ -236,6 +267,10 @@ class EventTail:
         self.buf = lines.pop()
         out = []
         for raw in lines:
-            if b"QuantumTravel" in raw or b"Added notification" in raw or b"Spawned!" in raw:
+            if (
+                b"QuantumTravel" in raw
+                or b"Added notification" in raw
+                or b"Spawned!" in raw
+            ):
                 out += self.ev.feed(raw.decode("utf-8", "replace"))
         return out

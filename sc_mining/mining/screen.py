@@ -6,6 +6,7 @@ python -m sc_mining.screen 截图.png   用截图测试识别效果
 读取区域按屏幕比例定位，1080p / 1440p / 4K 都适用；区域故意取得比面板大，
 面板位置有点偏移也没关系，真正定位靠标签文字（见 parse.py）。
 """
+
 import re
 import sys
 import time
@@ -16,9 +17,11 @@ import time
 # 以前只找到 92% 宽，质量、抗性、不稳定性的数字正好在外面，只读到标签（2026-10-23 用户反馈）
 SEARCH = (0.55, 0.33, 1.0, 0.80)
 REGIONS = {"hud": SEARCH}
-SEG_TARGET_PX = 16  # 切块识别时把字放大到约这么高（实测 2K 下 7px 字放大到 14px 效果最好）
-INTERVAL = 1.0     # 读屏间隔（秒）：1 秒一帧，少占资源，同一块石头两帧读稳就出结果
-VOTE_FRAMES = 5    # 同一块石头取最近几帧投票
+SEG_TARGET_PX = (
+    16  # 切块识别时把字放大到约这么高（实测 2K 下 7px 字放大到 14px 效果最好）
+)
+INTERVAL = 1.0  # 读屏间隔（秒）：1 秒一帧，少占资源，同一块石头两帧读稳就出结果
+VOTE_FRAMES = 5  # 同一块石头取最近几帧投票
 
 _engine = None
 
@@ -29,15 +32,18 @@ def _ocr():
     global _engine
     if _engine is None:
         from ..core.perf import rapidocr
+
         eng = rapidocr()
         if eng.kind.startswith("rapidocr_onnxruntime"):
             _engine = lambda arr: eng(arr)[0] or []  # noqa: E731
         else:
+
             def run(arr):
                 r = eng(arr)
                 if r.boxes is None:
                     return []
                 return list(zip(r.boxes.tolist(), r.txts, r.scores))
+
             _engine = run
     return _engine
 
@@ -50,20 +56,24 @@ def _recognize():
     global _rec
     if _rec is None:
         from ..core.perf import rapidocr
+
         eng = rapidocr()
         if eng.kind.startswith("rapidocr_onnxruntime"):
+
             def run(arr):
                 res, _ = eng(arr, use_det=False, use_cls=False, use_rec=True)
                 return (res[0][0], float(res[0][1])) if res else ("", 0.0)
         else:
+
             def run(arr):
                 r = eng(arr, use_det=False, use_cls=False, use_rec=True)
                 return (r.txts[0], float(r.scores[0])) if r.txts else ("", 0.0)
+
         _rec = run
     return _rec
 
 
-WHITE_TEXT = True   # 勘探者驾驶舱的扫描面板是白字（MOLE 炮塔是橙/绿字），两种都要认
+WHITE_TEXT = True  # 勘探者驾驶舱的扫描面板是白字（MOLE 炮塔是橙/绿字），两种都要认
 
 
 def deflood(mask, score, k, d, frac=0.5):
@@ -72,6 +82,7 @@ def deflood(mask, score, k, d, frac=0.5):
     2026-10-23 Calliope 浓雾实测：雾是 (210,222,232) 的亮灰，HUD 白字只比雾亮 20~40，以前整片雾都当成字"""
     import numpy as np
     import cv2
+
     h, w = mask.shape
     sw, sh = max(1, w // 4), max(1, h // 4)
     small = cv2.resize(mask.astype(np.float32), (sw, sh), interpolation=cv2.INTER_AREA)
@@ -79,7 +90,9 @@ def deflood(mask, score, k, d, frac=0.5):
     flood = cv2.blur(small, (ks, ks)) > frac
     if not flood.any():
         return mask
-    flood = cv2.resize(flood.astype(np.uint8), (w, h), interpolation=cv2.INTER_NEAREST).astype(bool)
+    flood = cv2.resize(
+        flood.astype(np.uint8), (w, h), interpolation=cv2.INTER_NEAREST
+    ).astype(bool)
     sc = np.asarray(score, dtype=np.float32)
     bg = cv2.blur(sc, (k, k))
     return mask & (~flood | (sc - bg > d))
@@ -89,6 +102,7 @@ def _text_mask(a, thr=40):
     """HUD 文字像素：橙色/淡绿色字（MOLE 炮塔），或者亮白字（勘探者驾驶舱）。
     小行星是暗的蓝灰色，会被排除；背景本身很亮（雪地、雾）或很暖（沙地）的地方，只要比周围更突出的字"""
     import numpy as np
+
     R, G, B = a[..., 0], a[..., 1], a[..., 2]
     k = max(15, (min(a.shape[0], a.shape[1]) // 12) | 1)
     # 1.6.71：字的笔画很细，只要「比周围细细一条更亮 / 更暖」的像素（顶帽变换）。雪地边上、座舱立柱旁边那一大片亮雪
@@ -108,8 +122,12 @@ def _text_mask(a, thr=40):
 def _tophat(x, se):
     import numpy as np
     import cv2
-    return cv2.morphologyEx(np.asarray(x, dtype=np.float32), cv2.MORPH_TOPHAT,
-                            cv2.getStructuringElement(cv2.MORPH_RECT, (se, se)))
+
+    return cv2.morphologyEx(
+        np.asarray(x, dtype=np.float32),
+        cv2.MORPH_TOPHAT,
+        cv2.getStructuringElement(cv2.MORPH_RECT, (se, se)),
+    )
 
 
 def _runs(profile, min_val, min_gap):
@@ -135,10 +153,18 @@ def segment(crop, screen_h=None):
     """按文字颜色找出一个个词块（连通域），过滤掉 HUD 的弧线、进度条等大图形。返回 [(x0,y0,x1,y1)]"""
     import numpy as np
     import cv2
+
     screen_h = screen_h or crop.height
     m = _text_mask(np.asarray(crop).astype(float)).astype("uint8")
     # 1.6.71：长直线（采矿激光的引导线斜穿过面板、面板上的分隔线）先擦掉，不然会把好几行字连成一块被扔掉（沙漠样本）
-    lines = cv2.HoughLinesP(m * 255, 1, np.pi / 180, threshold=60, minLineLength=int(screen_h * 0.06), maxLineGap=4)
+    lines = cv2.HoughLinesP(
+        m * 255,
+        1,
+        np.pi / 180,
+        threshold=60,
+        minLineLength=int(screen_h * 0.06),
+        maxLineGap=4,
+    )
     if lines is not None:
         for x0, y0, x1, y1 in lines.reshape(-1, 4):
             cv2.line(m, (int(x0), int(y0)), (int(x1), int(y1)), 0, 3)
@@ -151,8 +177,8 @@ def segment(crop, screen_h=None):
     for i, (x, y, w, h, area) in enumerate(stats[1:], 1):
         if hmin <= h <= hmax and w >= 3 and area >= 0.15 * w * h:
             boxes.append((int(x), int(y), int(x + w), int(y + h)))
-        elif hmax < h <= 10 * hmax and w >= 3:          # 几行字被竖线、边框连成了一块：按行切开
-            sub = m[y:y + h, x:x + w] * (lab[y:y + h, x:x + w] == i)
+        elif hmax < h <= 10 * hmax and w >= 3:  # 几行字被竖线、边框连成了一块：按行切开
+            sub = m[y : y + h, x : x + w] * (lab[y : y + h, x : x + w] == i)
             boxes += _split_rows(sub, x, y, hmin, hmax)
     return sorted(boxes, key=lambda b: (b[1], b[0]))
 
@@ -160,6 +186,7 @@ def segment(crop, screen_h=None):
 def _split_rows(sub, x0, y0, hmin, hmax):
     """一块太高的连通域按横向投影的空隙切成一行一行（每行再按有笔画的列定左右）"""
     import numpy as np
+
     prof = sub.sum(axis=1).astype(float)
     if prof.max() <= 0:
         return []
@@ -169,7 +196,9 @@ def _split_rows(sub, x0, y0, hmin, hmax):
             continue
         cols = np.nonzero(sub[a:b].sum(axis=0) > 0)[0]
         if len(cols):
-            out.append((int(x0 + cols[0]), int(y0 + a), int(x0 + cols[-1] + 1), int(y0 + b)))
+            out.append(
+                (int(x0 + cols[0]), int(y0 + a), int(x0 + cols[-1] + 1), int(y0 + b))
+            )
     return out
 
 
@@ -177,6 +206,7 @@ def read_region_seg(img, region, upscale=None, pad=3, variants=("raw", "inv")):
     """切块 + 逐块识别（比整块检测稳定得多）。返回 [(文字, (x, y), 字高)]"""
     import numpy as np
     from PIL import Image
+
     W, H = img.size
     l, t, r, b = region  # noqa: E741
     crop = img.crop((int(l * W), int(t * H), int(r * W), int(b * H)))
@@ -184,13 +214,21 @@ def read_region_seg(img, region, upscale=None, pad=3, variants=("raw", "inv")):
     out = []
     for x0, y0, x1, y1 in segment(crop, H):
         up = upscale or max(1, round(SEG_TARGET_PX / max(1, y1 - y0)))
-        piece = crop.crop((max(0, x0 - pad), max(0, y0 - pad),
-                           min(crop.width, x1 + pad), min(crop.height, y1 + pad)))
+        piece = crop.crop(
+            (
+                max(0, x0 - pad),
+                max(0, y0 - pad),
+                min(crop.width, x1 + pad),
+                min(crop.height, y1 + pad),
+            )
+        )
         piece = piece.resize((piece.width * up, piece.height * up), Image.LANCZOS)
         best = ("", 0.0)
         vs = list(variants)
         if np.median(np.asarray(piece)) > 170 and "stretch" not in vs:
-            vs.append("stretch")          # 亮背景（雪地）上的白字：把比背景亮的部分拉开对比度，转成白底黑字
+            vs.append(
+                "stretch"
+            )  # 亮背景（雪地）上的白字：把比背景亮的部分拉开对比度，转成白底黑字
         for v in vs:
             arr = np.asarray(piece)
             if v == "stretch":
@@ -206,9 +244,11 @@ def read_region_seg(img, region, upscale=None, pad=3, variants=("raw", "inv")):
             if sc > best[1]:
                 best = (txt, sc)
             if sc >= LAZY_SCORE and txt.strip():
-                break                     # 1.6.71：原图就认得很有把握，不用再换底色认一遍（省一半时间）
+                break  # 1.6.71：原图就认得很有把握，不用再换底色认一遍（省一半时间）
         if best[0].strip():
-            out.append((best[0], ((x0 + x1) / 2, (y0 + y1) / 2), y1 - y0, (x0, y0, x1, y1)))
+            out.append(
+                (best[0], ((x0 + x1) / 2, (y0 + y1) / 2), y1 - y0, (x0, y0, x1, y1))
+            )
     return out
 
 
@@ -223,6 +263,7 @@ def read_box(img, box, up=2):
     import numpy as np
     from PIL import Image
     from .parse import rows, parse_scan  # noqa: F401
+
     x0, y0, x1, y1 = box
     crop = img.crop(box)
     c = crop.resize((crop.width * up, crop.height * up), Image.LANCZOS)
@@ -233,7 +274,9 @@ def read_box(img, box, up=2):
         lines = _det_rows(items)
         s = parse_scan(lines)
         reads.append((lines, s, items))
-        for r in reads:                       # 先读的优先；缺品质的行用别的预处理读到的同一行（百分比一样）补上
+        for (
+            r
+        ) in reads:  # 先读的优先；缺品质的行用别的预处理读到的同一行（百分比一样）补上
             _fill_quality(r[1], [o[1] for o in reads if o is not r])
             if r[1].valid:
                 return r
@@ -268,17 +311,21 @@ def _det_rows(items):
         for g in groups:
             if len(g) >= 2:
                 sc += 1
-            for a_ in range(len(g)):                         # 同一列上下两个字被并进一行：扣分
+            for a_ in range(len(g)):  # 同一列上下两个字被并进一行：扣分
                 for b_ in range(a_ + 1, len(g)):
                     A, B = g[a_][3], g[b_][3]
-                    if min(A[2], B[2]) - max(A[0], B[0]) > 0.3 * min(A[2] - A[0], B[2] - B[0]):
+                    if min(A[2], B[2]) - max(A[0], B[0]) > 0.3 * min(
+                        A[2] - A[0], B[2] - B[0]
+                    ):
                         sc -= 2
         return sc
 
     from .parse import parse_scan, _tiers
 
     def lines_of(groups):
-        return [" ".join(t[0] for t in sorted(g, key=lambda t: t[1][0])) for g in groups]
+        return [
+            " ".join(t[0] for t in sorted(g, key=lambda t: t[1][0])) for g in groups
+        ]
 
     def meaning(lines):
         """按这个斜率分行后读得通的程度：成分行的品质正好是这种矿的一档（行没错位）最要紧"""
@@ -290,13 +337,18 @@ def _det_rows(items):
     for k in range(-20, 21):
         g = group(k / 100)
         cands[k] = (score(g), g)
-    top = sorted(cands, key=lambda k: (cands[k][0], -abs(k)), reverse=True)[:8]   # 结构上像样的几个斜率里，挑读得通的
-    best = max(top, key=lambda k: (meaning(lines_of(cands[k][1])), cands[k][0], -abs(k)))
+    top = sorted(cands, key=lambda k: (cands[k][0], -abs(k)), reverse=True)[
+        :8
+    ]  # 结构上像样的几个斜率里，挑读得通的
+    best = max(
+        top, key=lambda k: (meaning(lines_of(cands[k][1])), cands[k][0], -abs(k))
+    )
     return lines_of(cands[best][1])
 
 
 def _variant(arr, mode, up):
     import numpy as np
+
     if mode == "raw":
         return arr
     a = arr.astype(np.float32)
@@ -305,7 +357,11 @@ def _variant(arr, mode, up):
         lo_, hi_ = np.percentile(g, 50), np.percentile(g, 99.5)
         g = np.clip((g - lo_) / max(1.0, hi_ - lo_) * 255, 0, 255)
         return np.stack([255 - g] * 3, axis=2).astype("uint8")
-    R, G, B = a[..., 0], a[..., 1], a[..., 2]                  # 顶帽：只留比周围亮 / 暖的细笔画，转成白底黑字
+    R, G, B = (
+        a[..., 0],
+        a[..., 1],
+        a[..., 2],
+    )  # 顶帽：只留比周围亮 / 暖的细笔画，转成白底黑字
     se = 7 * up // 2 * 2 + 1
     lo = np.minimum(np.minimum(R, G), B)
     warm = np.maximum(R - B, (G - B) * 2.5)
@@ -318,6 +374,7 @@ def _left_trim(items):
     """面板的标签和成分百分比都从同一列开始：整个落在这一列左边的字（勘探者驾驶舱的「光强度」读数）不是面板上的，
     混进来会把成分行拼坏（「光强度 30.79% 原矿 298」）"""
     import statistics
+
     col = [i for i in items if _LABEL.search(i[0]) or _PCT.search(i[0])]
     if len(col) < 3:
         return items
@@ -335,23 +392,50 @@ def _fill_quality(s, others):
         for n, p, q in o.composition:
             if q is not None:
                 got.setdefault(round(p, 2), set()).add(q)
-    s.composition = [(n, p, q if q is not None or not n or n == "Inert Materials" or len(got.get(round(p, 2), ())) != 1
-                      else next(iter(got[round(p, 2)]))) for n, p, q in s.composition]
+    s.composition = [
+        (
+            n,
+            p,
+            q
+            if q is not None
+            or not n
+            or n == "Inert Materials"
+            or len(got.get(round(p, 2), ())) != 1
+            else next(iter(got[round(p, 2)])),
+        )
+        for n, p, q in s.composition
+    ]
 
 
 def _merge(scans):
     """同一帧换几种预处理读到的结果拼起来：每一项取最先读到的；成分取加起来接近 100% 的那次（都不是就取最长的）"""
     from .parse import Scan
+
     out = Scan()
     for f in ("rock", "mass", "resistance", "instability", "total_scu", "difficulty"):
         vals = [getattr(s, f) for s in scans]
         # 原图读到的直接用；换了预处理才读到的，要两种预处理读得一样才算（宁可这帧不出，也不拼一个错的数）
-        v = vals[0] if vals[0] is not None else next((x for x in vals[1:] if x is not None and vals[1:].count(x) >= 2), None)
+        v = (
+            vals[0]
+            if vals[0] is not None
+            else next(
+                (x for x in vals[1:] if x is not None and vals[1:].count(x) >= 2), None
+            )
+        )
         setattr(out, f, v)
-    good = [s.composition for s in scans if s.composition and abs(sum(p for _, p, _ in s.composition) - 100) <= 2]
-    out.composition = good[0] if good else max((s.composition for s in scans), key=len, default=[])
+    good = [
+        s.composition
+        for s in scans
+        if s.composition and abs(sum(p for _, p, _ in s.composition) - 100) <= 2
+    ]
+    out.composition = (
+        good[0] if good else max((s.composition for s in scans), key=len, default=[])
+    )
     from .parse import _fix_by_tiers
-    out.composition = _fix_by_tiers(out.composition, out.rock)     # 和单次读一样，按品质档位补矿名
+
+    out.composition = _fix_by_tiers(
+        out.composition, out.rock
+    )  # 和单次读一样，按品质档位补矿名
     return out
 
 
@@ -359,14 +443,24 @@ def _det_items(res, up, ox, oy):
     """OCR 检测结果 → [(文字, 中心, 字高, 框)]，整屏坐标。驾驶位转头看时面板是斜的（每行右边比左边低一截），
     按检测框上沿的斜率把中心的 y 摆正，同一行的字才分得到一起"""
     import statistics
+
     raw = []
     for quad, text, conf in res:
         xs = [p[0] / up for p in quad]
         ys = [p[1] / up for p in quad]
         w = max(xs) - min(xs)
         slope = (quad[1][1] - quad[0][1]) / max(1e-6, quad[1][0] - quad[0][0])
-        raw.append((text, sum(xs) / 4, sum(ys) / 4, max(ys) - min(ys), w, slope,
-                    (min(xs) + ox, min(ys) + oy, max(xs) + ox, max(ys) + oy)))
+        raw.append(
+            (
+                text,
+                sum(xs) / 4,
+                sum(ys) / 4,
+                max(ys) - min(ys),
+                w,
+                slope,
+                (min(xs) + ox, min(ys) + oy, max(xs) + ox, max(ys) + oy),
+            )
+        )
     wide = [r[5] for r in raw if r[4] > 3 * max(1.0, r[3])]
     k = statistics.median(wide) if len(wide) >= 3 else 0.0
     if abs(k) < 0.02:
@@ -381,6 +475,7 @@ def _det_items(res, up, ox, oy):
 def clusters(items):
     """把文字块按距离聚成面板：横向间隔 < 9 个字高、纵向间隔 < 3 个字高算同一面板"""
     import statistics
+
     if not items:
         return []
     h = statistics.median(it[2] for it in items) or 10
@@ -410,11 +505,18 @@ def clusters(items):
 def grab():
     """整屏截图；悬浮窗盖住的那块涂黑，不会读到悬浮窗自己的字"""
     from ..core.perf import grab_screen
+
     img = grab_screen()
     try:
         import threading
         from ..app import bus
-        threading.Thread(target=bus.update_preview, args=(img,), kwargs={"source": "live"}, daemon=True).start()
+
+        threading.Thread(
+            target=bus.update_preview,
+            args=(img,),
+            kwargs={"source": "live"},
+            daemon=True,
+        ).start()
     except Exception:
         pass
     return img
@@ -426,21 +528,36 @@ def find_panels(img):
     import re
     import statistics
     from .parse import rows
+
     LAST_PANEL.clear()
     items = read_region_seg(img, SEARCH)
     if not items:
         return [], []
     h = statistics.median(it[2] for it in items) or 10
+
     def describe(g):
         text = " ".join(rows(g))
-        box = (min(i[3][0] for i in g), min(i[3][1] for i in g),
-               max(i[3][2] for i in g), max(i[3][3] for i in g))
+        box = (
+            min(i[3][0] for i in g),
+            min(i[3][1] for i in g),
+            max(i[3][2] for i in g),
+            max(i[3][3] for i in g),
+        )
         labs = [i[3][0] for i in g if re.search(r"扫描|质量|抗性|稳定|定性|组成", i[0])]
         return dict(
-            items=g, text=text, box=box, left=min(labs) if labs else box[0],    # 标签那一列的左边（不算左边挨着的速度表）
-            bag=(bool(re.search(r"\d[.,]\d+\s*/\s*\S*\d", text)) or "货舱" in text) and "SC" in text.upper(),
-            comp=len(re.findall(r"\d{1,3}[.,]\d{2}\s*%?", text)) + 2 * ("组成" in text or "SCU" in text.upper()),
-            top=sum(k in text for k in ("质", "抗", "稳定", "扫描")))
+            items=g,
+            text=text,
+            box=box,
+            left=min(labs)
+            if labs
+            else box[0],  # 标签那一列的左边（不算左边挨着的速度表）
+            bag=(bool(re.search(r"\d[.,]\d+\s*/\s*\S*\d", text)) or "货舱" in text)
+            and "SC" in text.upper(),
+            comp=len(re.findall(r"\d{1,3}[.,]\d{2}\s*%?", text))
+            + 2 * ("组成" in text or "SCU" in text.upper()),
+            top=sum(k in text for k in ("质", "抗", "稳定", "扫描")),
+        )
+
     info = [describe(g) for g in clusters(items)]
     bag = next((c for c in info if c["bag"]), None)
     if bag is not None and bag["top"] >= 2 and bag["comp"] >= 2:
@@ -462,11 +579,18 @@ def find_panels(img):
     if comp is None:
         return [], rows(bag["items"]) if bag else []
     chosen = comp["items"]
-    if comp["top"] < 2:      # 上半部分（质量/抗性/不稳定性）在另一个聚类里，找左边对齐、紧挨在上面的那块
+    if (
+        comp["top"] < 2
+    ):  # 上半部分（质量/抗性/不稳定性）在另一个聚类里，找左边对齐、紧挨在上面的那块
         # 按标签列对齐（下半截常把左边的速度表「0.00 SCU/S」也聚进来，整块的左边就不准了）
-        cands = [c for c in rest if c is not comp and c["top"] >= 2
-                 and abs(c["left"] - comp["left"]) < 4 * h
-                 and 0 <= comp["box"][1] - c["box"][3] < 15 * h]
+        cands = [
+            c
+            for c in rest
+            if c is not comp
+            and c["top"] >= 2
+            and abs(c["left"] - comp["left"]) < 4 * h
+            and 0 <= comp["box"][1] - c["box"][3] < 15 * h
+        ]
         if cands:
             chosen = max(cands, key=lambda c: c["top"])["items"] + chosen
     chosen = _panel_only(chosen, h)
@@ -474,12 +598,13 @@ def find_panels(img):
     return rows(chosen), rows(bag["items"]) if bag else []
 
 
-LAST_PANEL = {}       # 最近一帧认到的扫描面板在屏幕上的位置：{box, cut（顶着屏幕右边）, h（字高）}
+LAST_PANEL = {}  # 最近一帧认到的扫描面板在屏幕上的位置：{box, cut（顶着屏幕右边）, h（字高）}
 
 
 def _note_panel(img, items):
     """记下面板在哪：读不全时用来判断原因（被屏幕右边挡住、字有色差重影）"""
     import statistics
+
     if not items:
         return
     W, H = img.size
@@ -488,19 +613,23 @@ def _note_panel(img, items):
     y0 = oy + min(i[3][1] for i in items)
     x1 = ox + max(i[3][2] for i in items)
     y1 = oy + max(i[3][3] for i in items)
-    LAST_PANEL.update(box=(x0, y0, x1, y1), cut=x1 >= W - max(4, round(W * 0.004)),
-                      h=statistics.median(i[2] for i in items))
+    LAST_PANEL.update(
+        box=(x0, y0, x1, y1),
+        cut=x1 >= W - max(4, round(W * 0.004)),
+        h=statistics.median(i[2] for i in items),
+    )
 
 
 def chroma_shift(img, box, r=2):
     """这块画面里红、蓝通道相对绿色错开几个像素（游戏开着「色差」时字边上有红蓝重影，小字就认不准）。
     2026-10-23 用户反馈：1080p 勘探者驾驶舱，红、蓝各错开 1 像素，「贝沙电气石原矿」认成「贝莎电气有#」"""
     import numpy as np
+
     a = np.asarray(img.crop(box).convert("RGB")).astype(np.float32)
     h, w = a.shape[:2]
     if h < 2 * r + 8 or w < 2 * r + 8:
         return 0
-    G = a[r:h - r, r:w - r, 1]
+    G = a[r : h - r, r : w - r, 1]
     G = G - G.mean()
     ng = float(np.sqrt((G * G).sum())) or 1.0
     worst = 0
@@ -508,7 +637,7 @@ def chroma_shift(img, box, r=2):
         best = (-2.0, 0)
         for dy in range(-r, r + 1):
             for dx in range(-r, r + 1):
-                X = a[r + dy:h - r + dy, r + dx:w - r + dx, ch]
+                X = a[r + dy : h - r + dy, r + dx : w - r + dx, ch]
                 X = X - X.mean()
                 c = float((X * G).sum()) / ((float(np.sqrt((X * X).sum())) or 1.0) * ng)
                 if c > best[0]:
@@ -535,6 +664,7 @@ def _panel_only(items, h):
     """去掉面板左边挨着的别的 HUD 读数（勘探者驾驶舱里 "质量" 左边就是速度/距离表的 "0.0"、"28.2"）：
     面板的字都从标签那一列开始，整个落在标签列左边的块不要"""
     import re
+
     labels = [i for i in items if re.search(r"扫描|质量|抗性|稳定|组成", i[0])]
     if not labels:
         return items
@@ -542,17 +672,30 @@ def _panel_only(items, h):
     return [i for i in items if i[3][2] > left + 0.5 * h]
 
 
-LAST_RAW = {"t": 0.0, "scan": [], "bag": []}      # 最近一帧 OCR 出来的原文（问题反馈时一起打包）
+LAST_RAW = {
+    "t": 0.0,
+    "scan": [],
+    "bag": [],
+}  # 最近一帧 OCR 出来的原文（问题反馈时一起打包）
 
 
 PANEL_CACHE = {"win": None, "t": 0.0, "size": None}
-CACHE_SECONDS = 30      # 上一次读全的面板位置记这么久：下一帧先只读那一块（约 0.3 秒），读不全再整片找
+CACHE_SECONDS = (
+    30  # 上一次读全的面板位置记这么久：下一帧先只读那一块（约 0.3 秒），读不全再整片找
+)
 
 
 def _panel_items(items):
     """检测结果里属于扫描面板 / 货舱的字（标签、百分比、SCU、数字），用来定面板的框"""
     import re
-    return [i for i in items if re.search(r"扫描|结果|质量|抗性|稳定|定性|组成|货舱|\d[.,]\d{2}|SCU|\d{3,}|%", i[0])]
+
+    return [
+        i
+        for i in items
+        if re.search(
+            r"扫描|结果|质量|抗性|稳定|定性|组成|货舱|\d[.,]\d{2}|SCU|\d{3,}|%", i[0]
+        )
+    ]
 
 
 def _window(img, box, h, below=10):
@@ -560,8 +703,12 @@ def _window(img, box, h, below=10):
     W, H = img.size
     x0, y0, x1, y1 = box
     h = h or H * 0.009
-    return (max(int(SEARCH[0] * W), int(x0 - 3 * h)), max(int(SEARCH[1] * H), int(y0 - 3 * h)),
-            min(W, int(x1 + 3 * h)), min(int(SEARCH[3] * H), int(y1 + below * h)))
+    return (
+        max(int(SEARCH[0] * W), int(x0 - 3 * h)),
+        max(int(SEARCH[1] * H), int(y0 - 3 * h)),
+        min(W, int(x1 + 3 * h)),
+        min(int(SEARCH[3] * H), int(y1 + below * h)),
+    )
 
 
 def _guess_window(img):
@@ -569,11 +716,15 @@ def _guess_window(img):
     W, H = img.size
     x0, y0, x1, y1 = LAST_PANEL["box"]
     h = LAST_PANEL.get("h") or H * 0.009
-    return (max(int(SEARCH[0] * W), int(x0 - 3 * h)), max(int(SEARCH[1] * H), int(y0 - 14 * h)),
-            min(W, int(max(x1, x0 + 20 * h) + 3 * h)), min(int(SEARCH[3] * H), int(y1 + 14 * h)))
+    return (
+        max(int(SEARCH[0] * W), int(x0 - 3 * h)),
+        max(int(SEARCH[1] * H), int(y0 - 14 * h)),
+        min(W, int(max(x1, x0 + 20 * h) + 3 * h)),
+        min(int(SEARCH[3] * H), int(y1 + 14 * h)),
+    )
 
 
-LOCATE_UP = 1.5     # 整片找面板时放大多少：1.5 倍时驾驶位的小字（地表、远一点的面板）也找得到，约 0.45 秒
+LOCATE_UP = 1.5  # 整片找面板时放大多少：1.5 倍时驾驶位的小字（地表、远一点的面板）也找得到，约 0.45 秒
 _LABEL = re.compile(r"扫描|结果|质量|抗性|稳定|定性|组成|货舱")
 _PCT = re.compile(r"\d[.,]\d{2}\s*%")
 
@@ -585,6 +736,7 @@ def _locate(img, up=1.0):
     import numpy as np
     import statistics
     from PIL import Image
+
     W, H = img.size
     l, t, r, b = SEARCH  # noqa: E741
     ox, oy, bottom_lim = int(l * W), int(t * H), int(b * H)
@@ -602,8 +754,11 @@ def _locate(img, up=1.0):
     h = statistics.median(i[2] for i in cand + scu) or H * 0.009
     xs = [i[3][0] for i in cand]
     L = max(xs, key=lambda x: sum(abs(x - y) < 3 * h for y in xs))
-    col = sorted([i for i in cand if abs(i[3][0] - L) < 3 * h] +
-                 [i for i in scu if L < i[3][0] < L + 26 * h], key=lambda i: i[3][1])
+    col = sorted(
+        [i for i in cand if abs(i[3][0] - L) < 3 * h]
+        + [i for i in scu if L < i[3][0] < L + 26 * h],
+        key=lambda i: i[3][1],
+    )
     # 同一块面板上下挨着（间隔不到 10 个字高）；取字最多的那一段
     runs, cur = [], [col[0]]
     for a, b2 in zip(col, col[1:]):
@@ -622,13 +777,19 @@ def _locate(img, up=1.0):
     y1 = max(i[3][3] for i in g)
     top = min(i[3][1] for i in title) - 2 * h if title else y0 - 12 * h
     bot = max(i[3][3] for i in cargo) + 2 * h if cargo else y1 + 14 * h
-    win = (max(ox, int(L - 3 * h)), max(oy, int(top)), min(W, int(L + 25 * h)), min(bottom_lim, int(bot)))
+    win = (
+        max(ox, int(L - 3 * h)),
+        max(oy, int(top)),
+        min(W, int(L + 25 * h)),
+        min(bottom_lim, int(bot)),
+    )
     return win, seen
 
 
 def _split_bag(lines):
     """整块读出来的行 → (扫描面板的行, 货舱的行)：从「货舱 / 0.00/96.00 SCU」那行起算货舱"""
     import re
+
     for i, ln in enumerate(lines):
         if "货舱" in ln or re.search(r"\d[.,]\d{2}\s*/\s*\d", ln):
             return lines[:i], lines[i:]
@@ -639,17 +800,25 @@ def _use_det(img, r, cache=True):
     """整块读的结果记下来：面板位置（LAST_PANEL、下一帧的读取范围；没读全的 cache=False，只记位置）"""
     import statistics
     import time as _t
+
     lines, scan, items = r
     pi = _panel_items(items) or items
     col = [i for i in items if _LABEL.search(i[0]) or _PCT.search(i[0])]
-    if col:                                   # 只算标签那一列往右的字（左边别的 HUD 读数不算进面板的框）
+    if col:  # 只算标签那一列往右的字（左边别的 HUD 读数不算进面板的框）
         hh = statistics.median(i[2] for i in col)
         left = statistics.median(i[3][0] for i in col) - 3 * hh
         pi = [i for i in pi if i[3][0] >= left] or pi
     W, H = img.size
-    box = (min(i[3][0] for i in pi), min(i[3][1] for i in pi), max(i[3][2] for i in pi), max(i[3][3] for i in pi))
+    box = (
+        min(i[3][0] for i in pi),
+        min(i[3][1] for i in pi),
+        max(i[3][2] for i in pi),
+        max(i[3][3] for i in pi),
+    )
     h = statistics.median(i[2] for i in pi)
-    LAST_PANEL.update(box=tuple(int(v) for v in box), cut=box[2] >= W - max(4, round(W * 0.004)), h=h)
+    LAST_PANEL.update(
+        box=tuple(int(v) for v in box), cut=box[2] >= W - max(4, round(W * 0.004)), h=h
+    )
     if cache:
         PANEL_CACHE.update(win=_window(img, box, h), t=_t.time(), size=img.size)
     return _split_bag(lines)
@@ -660,11 +829,15 @@ def _wider(img, win):
     W, H = img.size
     x0, y0, x1, y1 = win
     w, h = x1 - x0, y1 - y0
-    return (max(int(SEARCH[0] * W), int(x0 - 0.1 * w)), max(int(SEARCH[1] * H), int(y0 - 0.25 * h)),
-            min(W, int(x1 + 0.8 * w)), min(int(SEARCH[3] * H), int(y1 + 0.05 * h)))
+    return (
+        max(int(SEARCH[0] * W), int(x0 - 0.1 * w)),
+        max(int(SEARCH[1] * H), int(y0 - 0.25 * h)),
+        min(W, int(x1 + 0.8 * w)),
+        min(int(SEARCH[3] * H), int(y1 + 0.05 * h)),
+    )
 
 
-LAST_PATH = {"path": None}    # 这一帧是哪条路读出来的（调试 / 打分用）
+LAST_PATH = {"path": None}  # 这一帧是哪条路读出来的（调试 / 打分用）
 
 
 def analyse(img):
@@ -672,6 +845,7 @@ def analyse(img):
     但找到了面板的一部分（雪地、雾里常见），再把那一块交给整块检测读一遍"""
     import time as _t
     from .parse import parse_scan, parse_bag
+
     scan_lines = bag_lines = None
     det_scan = None
     LAST_PATH["path"] = "none"
@@ -718,7 +892,11 @@ def analyse(img):
         s = parse_scan(scan_lines)
         LAST_PATH["path"] = "seg" if s.valid else "none"
         if s.valid and LAST_PANEL.get("box"):
-            PANEL_CACHE.update(win=_window(img, LAST_PANEL["box"], LAST_PANEL.get("h")), t=_t.time(), size=img.size)
+            PANEL_CACHE.update(
+                win=_window(img, LAST_PANEL["box"], LAST_PANEL.get("h")),
+                t=_t.time(),
+                size=img.size,
+            )
         elif LAST_PANEL.get("box") and (scan_lines or bag_lines):
             r = read_box(img, _guess_window(img))
             if r and r[1].valid:
@@ -727,9 +905,10 @@ def analyse(img):
                 LAST_PATH["path"] = "guess"
     if scan_lines or bag_lines:
         LAST_RAW.update(t=_t.time(), scan=list(scan_lines), bag=list(bag_lines))
-    try:                                    # 矿袋容量按现在选的船（MOLE 96、勘探者和魔像 32）
+    try:  # 矿袋容量按现在选的船（MOLE 96、勘探者和魔像 32）
         from .laser import current_ship
         from .data import SHIPS
+
         cap = float(SHIPS[current_ship()]["bag"])
     except Exception:
         cap = 96.0
@@ -742,9 +921,13 @@ def panel_seen(scan, raw=None):
     只有字没有数字也不算：屏幕上别的窗口（聊天、文档）里的「扫描」「稳定性测试」（2026-10-23 自动留图里看到的）。
     以前这两种都会被当成面板开着：信号识别整段暂停、画面不动也不停地识别"""
     import re
+
     if scan.valid:
         return True
-    labeled = any(re.search(r"(质量|抗性|稳定性|定性)[:：]?\d", x.replace(" ", "")) for x in (raw or ()))
+    labeled = any(
+        re.search(r"(质量|抗性|稳定性|定性)[:：]?\d", x.replace(" ", ""))
+        for x in (raw or ())
+    )
     named = sum(1 for n, *_ in scan.composition if n)
     return labeled or named >= 2
 
@@ -754,28 +937,50 @@ def report(scan, bag):
     from ..core.i18n import mineral_zh
     from .laser import recommend
     from .data import best_price
+
     print("\n" + "=" * 60)
     rock = mineral_zh(scan.main_mineral) if scan.main_mineral else "?"
     diff = f"｜游戏评级：{scan.difficulty}" if scan.difficulty else ""
-    print(f"{rock}｜质量 {scan.mass:,.0f} kg｜抗性 {scan.resistance:g}%｜不稳定性 {scan.instability:g}{diff}")
-    hud = [f"{rock}｜{scan.mass:,.0f} kg｜抗性 {scan.resistance:g}%｜不稳定 {scan.instability:g}"]
+    print(
+        f"{rock}｜质量 {scan.mass:,.0f} kg｜抗性 {scan.resistance:g}%｜不稳定性 {scan.instability:g}{diff}"
+    )
+    hud = [
+        f"{rock}｜{scan.mass:,.0f} kg｜抗性 {scan.resistance:g}%｜不稳定 {scan.instability:g}"
+    ]
     from .refinery import refined_plan
     from ..core.i18n import method_zh, station_zh
-    minerals = {k: v for k, v in scan.minerals_scu().items() if k not in ("Inert Materials", "?")}
+
+    minerals = {
+        k: v
+        for k, v in scan.minerals_scu().items()
+        if k not in ("Inert Materials", "?")
+    }
     if minerals:
-        print("  成分：" + "，".join(f"{mineral_zh(k)} {v:.2f} SCU" for k, v in minerals.items()))
-        for n_, (method, station, value, rscu, fee, hours) in enumerate(refined_plan(minerals)):
+        print(
+            "  成分："
+            + "，".join(f"{mineral_zh(k)} {v:.2f} SCU" for k, v in minerals.items())
+        )
+        for n_, (method, station, value, rscu, fee, hours) in enumerate(
+            refined_plan(minerals)
+        ):
             if n_ == 0:
-                hud.append(f"精炼后值 {value:,.0f} aUEC（建议：{method_zh(method)}，{station_zh(station)}精炼）")
-            print(f"  精炼后净值 ≈ {value:,.0f} aUEC｜{method_zh(method)} @ {station_zh(station)}"
-                  f"｜得 {rscu:.2f} SCU，精炼费 {fee:,.0f}，约 {hours:.1f} 小时")
-        sells = "，".join(f"{mineral_zh(k)}→{best_price(k)[1] or '无收购'}" for k in minerals)
+                hud.append(
+                    f"精炼后值 {value:,.0f} aUEC（建议：{method_zh(method)}，{station_zh(station)}精炼）"
+                )
+            print(
+                f"  精炼后净值 ≈ {value:,.0f} aUEC｜{method_zh(method)} @ {station_zh(station)}"
+                f"｜得 {rscu:.2f} SCU，精炼费 {fee:,.0f}，约 {hours:.1f} 小时"
+            )
+        sells = "，".join(
+            f"{mineral_zh(k)}→{best_price(k)[1] or '无收购'}" for k in minerals
+        )
         print(f"  卖到：{sells}")
         try:
             from ..crafting.crafting import quality_hints
+
             for h in quality_hints(scan.composition):
                 print("  制造：" + h)
-        except Exception as e:        # 制造数据缺失不影响读屏
+        except Exception as e:  # 制造数据缺失不影响读屏
             print(f"  （制造提示出错：{e}）")
     plans = recommend(scan.mass, scan.resistance, scan.instability)
     for i, p in enumerate(plans, 1):
@@ -785,8 +990,13 @@ def report(scan, bag):
     contents, used, cap = bag
     bag_text = ""
     if used is not None:
-        print(f"矿袋 {used:g}/{cap:g} SCU：" + "，".join(f"{mineral_zh(k)} {v:g}" for k, v in contents.items()))
-        bag_text = f"{used:g}/{cap:g} SCU\n" + "，".join(f"{mineral_zh(k)} {v:g}" for k, v in contents.items())
+        print(
+            f"矿袋 {used:g}/{cap:g} SCU："
+            + "，".join(f"{mineral_zh(k)} {v:g}" for k, v in contents.items())
+        )
+        bag_text = f"{used:g}/{cap:g} SCU\n" + "，".join(
+            f"{mineral_zh(k)} {v:g}" for k, v in contents.items()
+        )
     return "\n".join(hud), bag_text
 
 
@@ -794,6 +1004,7 @@ def main():
     if len(sys.argv) > 1:
         from PIL import Image
         from .parse import rows  # noqa: F401
+
         img = Image.open(sys.argv[1]).convert("RGB")
         print(f"截图尺寸 {img.size}")
         scan_lines, bag_lines = find_panels(img)
@@ -806,7 +1017,14 @@ def main():
         scan, bag = analyse(img)
         print("--- 解析结果 ---")
         print(scan, bag, sep="\n")
-        print("自检：" + ("通过" if scan.valid else f"不通过（成分合计 {sum(p for _, p, _ in scan.composition):.2f}%）"))
+        print(
+            "自检："
+            + (
+                "通过"
+                if scan.valid
+                else f"不通过（成分合计 {sum(p for _, p, _ in scan.composition):.2f}%）"
+            )
+        )
         if scan.complete:
             report(scan, bag)
         return
@@ -817,7 +1035,11 @@ def _same_rock(a, b):
     """是不是同一块石头：质量差 1% 以内，抗性也对得上（只看质量的话，两块差不多重的石头会混进同一个投票队列）"""
     if not (a.mass and b.mass and abs(a.mass - b.mass) / b.mass < 0.01):
         return False
-    if a.resistance is not None and b.resistance is not None and abs(a.resistance - b.resistance) > 2:
+    if (
+        a.resistance is not None
+        and b.resistance is not None
+        and abs(a.resistance - b.resistance) > 2
+    ):
         return False
     return True
 
@@ -828,15 +1050,19 @@ def live():
     import collections
     from pathlib import Path  # noqa: F401
     from ..core import paths
+
     root = paths.ROOT
     shots = paths.shots("live")
     log = open(paths.log("live_log.txt"), "a", encoding="utf-8")
     recent = collections.deque(maxlen=VOTE_FRAMES)
     from ..app.overlay import hud
+
     ov = hud()
     print("读屏中… 在采矿模式下扫描石头即可。按 Ctrl+C 退出")
     if ov.ok:
-        print("结果也会显示在右上角悬浮窗（游戏要用无边框窗口模式；按住可拖动，双击暂时隐藏）")
+        print(
+            "结果也会显示在右上角悬浮窗（游戏要用无边框窗口模式；按住可拖动，双击暂时隐藏）"
+        )
     try:
         _live_loop(root, shots, log, recent, ov)
     finally:
@@ -848,6 +1074,7 @@ def _live_loop(root, shots, log, recent, ov):
     last_key = None
     sig_prev, sig_shown = None, None
     from ..system.showloc import game_front
+
     while True:
         # 和采矿助手引擎（app/engines/live.py）一样：游戏不在最前面不认（别的窗口里的「质量: 12431」会被当成面板）；
         # 扫描面板开着时不认信号（石头质量会被当成信号）。2026-10-31 审查：命令行版以前没跟上这两条
@@ -861,14 +1088,24 @@ def _live_loop(root, shots, log, recent, ov):
         # 雷达信号：连续两帧看到同一组信号才输出，变了再输出
         try:
             from .signals import find_signatures, describe_all
-            sigs = frozenset() if panel_seen(scan, raw) else frozenset(v for v, *_ in find_signatures(img))
+
+            sigs = (
+                frozenset()
+                if panel_seen(scan, raw)
+                else frozenset(v for v, *_ in find_signatures(img))
+            )
             if sigs and sigs == sig_prev and sigs != sig_shown:
                 sig_shown = sigs
                 print("\n" + "-" * 60)
                 lines = describe_all(find_signatures(img))
                 for line in lines:
                     print("  " + line)
-                ov.set("信号", "\n".join(l.split("｜精炼后")[0].replace("信号 ", "") for l in lines[:4]))  # noqa: E741
+                ov.set(
+                    "信号",
+                    "\n".join(
+                        l.split("｜精炼后")[0].replace("信号 ", "") for l in lines[:4]
+                    ),
+                )  # noqa: E741
                 log.write(f"{time.strftime('%F %T')} SIG {sorted(sigs)}\n")
                 log.flush()
             sig_prev = sigs
@@ -894,7 +1131,7 @@ def _live_loop(root, shots, log, recent, ov):
             log.flush()
             try:
                 img.save(shots / f"{stamp}.png")
-                old = sorted(shots.glob("*.png"))[:-20]   # 只留最近 20 张
+                old = sorted(shots.glob("*.png"))[:-20]  # 只留最近 20 张
                 for f in old:
                     f.unlink()
             except OSError:
@@ -902,11 +1139,10 @@ def _live_loop(root, shots, log, recent, ov):
         ov.sleep(INTERVAL)
 
 
-
-
 def _mode(vals):
     """出现次数最多的值（忽略 None）。返回 (值, 次数)"""
     import collections
+
     c = collections.Counter(v for v in vals if v is not None)
     return c.most_common(1)[0] if c else (None, 0)
 
@@ -915,6 +1151,7 @@ def _pick(vals):
     """一簇读数的代表值：簇里出现最多的那个实际读数，并列时取离中位数最近的（再并列取小的）。
     不取平均：抗性两帧 20 / 21 平均成 20.5、百分比 45.22 / 45.27 平均成 45.245，面板上根本没有这个数（1.6.43）"""
     import collections
+
     vals = sorted(vals)
     mid = len(vals) // 2
     med = vals[mid] if len(vals) % 2 else (vals[mid - 1] + vals[mid]) / 2
@@ -953,7 +1190,12 @@ def _row_consensus(cands):
     for name, pct, _q in pool:
         group = [c for c in pool if c[0] == name and abs(c[1] - pct) <= 0.35]
         if len(group) > best[3]:
-            best = (name, _pick([c[1] for c in group]), _mode(c[2] for c in group)[0], len(group))
+            best = (
+                name,
+                _pick([c[1] for c in group]),
+                _mode(c[2] for c in group)[0],
+                len(group),
+            )
     return best
 
 
@@ -1012,7 +1254,11 @@ def vote_partial(scans):
             break
         comp.append((name, pct, quality))
     out.composition = comp
-    if not out.complete or (out.mass or 0) < 500 or not 0 <= (out.resistance or 0) <= 100:
+    if (
+        not out.complete
+        or (out.mass or 0) < 500
+        or not 0 <= (out.resistance or 0) <= 100
+    ):
         stable = False
     return out, stable
 
@@ -1020,6 +1266,7 @@ def vote_partial(scans):
 def _rock_consensus(scans):
     """质量/抗性/不稳定性的容差共识：三样都至少两帧聚成一簇才可信。返回 Scan 或 None"""
     from .parse import Scan
+
     mass, n1 = _consensus((s.mass for s in scans), rel=0.008)
     res, n2 = _consensus((s.resistance for s in scans), abs_=1.2)
     ins, n3 = _consensus((s.instability for s in scans), abs_=0.3)
@@ -1028,7 +1275,7 @@ def _rock_consensus(scans):
     return Scan(mass=mass, resistance=res, instability=ins)
 
 
-_reject = {}          # id(队列) → (队列的弱引用, 最近一帧和队列共识对不上的扫描)（在观察是不是换了石头）
+_reject = {}  # id(队列) → (队列的弱引用, 最近一帧和队列共识对不上的扫描)（在观察是不是换了石头）
 
 
 def _pending(queue):
@@ -1040,8 +1287,9 @@ def _pending(queue):
 
 def _set_pending(queue, scan):
     import weakref
+
     for k in [k for k, (ref, _s) in _reject.items() if ref() is None]:
-        del _reject[k]                        # 顺手清掉已经不在了的队列
+        del _reject[k]  # 顺手清掉已经不在了的队列
     _reject[id(queue)] = (weakref.ref(queue), scan)
 
 
@@ -1060,18 +1308,18 @@ def enqueue_rock(queue, scan, bag=None):
     ref = _rock_consensus([x[0] for x in queue]) if len(queue) >= 3 else None
     if ref is not None:
         if _same_rock(scan, ref):
-            queue.pop()                       # 上一帧是离群误读，弹掉
+            queue.pop()  # 上一帧是离群误读，弹掉
             _reject.pop(key, None)
         else:
             prev = _pending(queue)
             if prev is not None and _same_rock(scan, prev):
-                queue.clear()                 # 连续两帧一致的新石头：确认换石头
+                queue.clear()  # 连续两帧一致的新石头：确认换石头
                 _reject.pop(key, None)
                 cleared = True
             else:
-                _set_pending(queue, scan)     # 先观察一帧
+                _set_pending(queue, scan)  # 先观察一帧
                 return False
-    else:                                     # 队列太薄投不出共识：维持老行为，清空重来
+    else:  # 队列太薄投不出共识：维持老行为，清空重来
         _reject.pop(key, None)
         queue.clear()
         cleared = True

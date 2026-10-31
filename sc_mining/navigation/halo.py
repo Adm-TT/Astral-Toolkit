@@ -9,6 +9,7 @@
 安全窗口：航线在带「核心」（中心 85% 厚度）里走的长度。这样算出的 5 条路线和 SCMiner 的 margin 相差 3% 以内
 （SCMiner 没公开公式，这个比例是对着它的数反推的）。反应时间 = 安全窗口 ÷ 量子引擎速度。
 """
+
 import math
 
 # 带号, 内径 Gm, 外径 Gm, 厚度 Mm, 相对密度 %, 主要矿物, 评级
@@ -17,20 +18,42 @@ BANDS = [
     (2, 19.82, 19.91, 99, 24, ("Titanium", "Tungsten", "Beryl", "Diamond"), "普通"),
     (3, 19.91, 20.00, 81, 35, ("Titanium", "Tungsten", "Beryl", "Diamond"), "普通"),
     (4, 20.07, 20.18, 108, 23, ("Titanium", "Tungsten", "Beryl", "Diamond"), "普通"),
-    (5, 20.23, 20.41, 177, 100, ("Quantainium", "Bexalite", "Gold", "Taranite"), "★ 最密热点"),
+    (
+        5,
+        20.23,
+        20.41,
+        177,
+        100,
+        ("Quantainium", "Bexalite", "Gold", "Taranite"),
+        "★ 最密热点",
+    ),
     (6, 20.41, 20.54, 133, 33, ("Titanium", "Tungsten", "Beryl", "Diamond"), "普通"),
-    (7, 20.54, 20.88, 341, 36, ("Quantainium", "Agricium", "Laranite", "Hephaestanite"), "★ 高价矿带"),
+    (
+        7,
+        20.54,
+        20.88,
+        341,
+        36,
+        ("Quantainium", "Agricium", "Laranite", "Hephaestanite"),
+        "★ 高价矿带",
+    ),
     (8, 20.88, 21.05, 165, 26, ("Titanium", "Tungsten", "Beryl", "Diamond"), "普通"),
     (9, 21.05, 21.13, 86, 25, ("Titanium", "Tungsten", "Beryl", "Diamond"), "普通"),
     (10, 21.13, 21.30, 166, 33, ("Titanium", "Tungsten", "Beryl", "Diamond"), "普通"),
 ]
 # 量子引擎：名字, 尺寸, 速度 Mm/s（SCMiner 的选项）
-QDS = [("Atlas", "S1", 103), ("Hemera", "S2", 95), ("Beacon", "S1", 90), ("Expedition", "S1", 86),
-       ("Voyage", "S2", 79), ("Odyssey", "S3", 74)]
-CORE = 0.85          # 安全窗口只算带中心 85% 的厚度
-WIDE_MM = 250        # 安全窗口超过这么多算「宽」，好断
+QDS = [
+    ("Atlas", "S1", 103),
+    ("Hemera", "S2", 95),
+    ("Beacon", "S1", 90),
+    ("Expedition", "S1", 86),
+    ("Voyage", "S2", 79),
+    ("Odyssey", "S3", 74),
+]
+CORE = 0.85  # 安全窗口只算带中心 85% 的厚度
+WIDE_MM = 250  # 安全窗口超过这么多算「宽」，好断
 PLANETS = ("Hurston", "Crusader", "ArcCorp", "microTech")
-STAR_GM = 1.0        # 航线离恒星中心这么近，游戏里量子跳多半会被恒星挡住（SCMiner 没过滤这种，我们标出来）
+STAR_GM = 1.0  # 航线离恒星中心这么近，游戏里量子跳多半会被恒星挡住（SCMiner 没过滤这种，我们标出来）
 
 
 def band(b):
@@ -42,9 +65,18 @@ def band(b):
 
 def band_row(row):
     from ..core.i18n import mineral_zh
+
     b, lo, hi, thick, dens, ores, rate = row
-    return {"band": b, "lo": lo, "hi": hi, "thick": thick, "density": dens, "rating": rate,
-            "ores": [mineral_zh(o) or o for o in ores], "ores_en": list(ores)}
+    return {
+        "band": b,
+        "lo": lo,
+        "hi": hi,
+        "thick": thick,
+        "density": dens,
+        "rating": rate,
+        "ores": [mineral_zh(o) or o for o in ores],
+        "ores_en": list(ores),
+    }
 
 
 def qd_speed(qd):
@@ -60,6 +92,7 @@ def qd_speed(qd):
 def points(data=None):
     """可以出发 / 跳过去的点：斯坦顿的拉格朗日点（ARC-L1 这种叫法）和四颗行星，坐标 Gm"""
     from . import navigate as n
+
     data = data or n.load()
     out = {}
     for p in data.get("points", []):
@@ -75,6 +108,7 @@ def points(data=None):
 
 def point_zh(name):
     from .navigate import BODY_ZH
+
     zh = next((v for k, v in BODY_ZH.items() if k.lower() == name.lower()), None)
     return f"{zh}（{name}）" if zh else name
 
@@ -114,24 +148,37 @@ def route(frm, to, b, speed=103, pts=None):
     ts = _roots(A, D, mid)
     if not ts:
         return None
-    t = min(ts)                                   # 先碰到的那一次
+    t = min(ts)  # 先碰到的那一次
     half = (hi - lo) / 2
     c1, c2 = _inside(A, D, t, mid - half * CORE, mid + half * CORE)
     f1, f2 = _inside(A, D, t, lo, hi)
-    margin = (c2 - c1) * L * 1000                 # Mm
+    margin = (c2 - c1) * L * 1000  # Mm
     if margin <= 0:
         return None
     out_r = math.sqrt(sum(x * x for x in A))
     tc = max(0.0, min(1.0, -sum(A[i] * D[i] for i in range(3)) / (L * L)))
-    star = math.sqrt(sum((A[i] + tc * D[i]) ** 2 for i in range(3)))    # 航线离恒星最近多少 Gm
-    return {"from": frm, "to": to, "band": int(b), "to_zh": point_zh(to), "from_zh": point_zh(frm),
-            "dropout": round((1 - t) * L, 3),                     # Gm：HUD 到目标剩这么多时断开
-            "early": round((1 - c1) * L, 3),       # 安全窗口：HUD 剩这么多时进核心
-            "late": round((1 - c2) * L, 3),        # 剩这么多时就出核心了
-            "margin": round(margin), "chord": round((f2 - f1) * L * 1000),
-            "wide": margin >= WIDE_MM, "window": round(margin / speed, 1),
-            "flight": round(t * L * 1000 / speed), "total": round(L, 3),
-            "inward": out_r > mid, "star": round(star, 2), "blocked": star < STAR_GM}
+    star = math.sqrt(
+        sum((A[i] + tc * D[i]) ** 2 for i in range(3))
+    )  # 航线离恒星最近多少 Gm
+    return {
+        "from": frm,
+        "to": to,
+        "band": int(b),
+        "to_zh": point_zh(to),
+        "from_zh": point_zh(frm),
+        "dropout": round((1 - t) * L, 3),  # Gm：HUD 到目标剩这么多时断开
+        "early": round((1 - c1) * L, 3),  # 安全窗口：HUD 剩这么多时进核心
+        "late": round((1 - c2) * L, 3),  # 剩这么多时就出核心了
+        "margin": round(margin),
+        "chord": round((f2 - f1) * L * 1000),
+        "wide": margin >= WIDE_MM,
+        "window": round(margin / speed, 1),
+        "flight": round(t * L * 1000 / speed),
+        "total": round(L, 3),
+        "inward": out_r > mid,
+        "star": round(star, 2),
+        "blocked": star < STAR_GM,
+    }
 
 
 def routes(frm, b, speed=103, pts=None):
@@ -147,19 +194,23 @@ def gm(v):
 
 def plan_text(r):
     """悬浮窗上显示的步骤"""
-    return (f"小行星带 第{r['band']}带：从 {r['from_zh']} 量子跳向 {r['to_zh']}\n"
-            f"HUD 到 {r['to_zh']} 剩 {r['dropout']:.1f} Gm 左右按 U 断开\n"
-            f"剩 {r['early']:.1f}–{r['late']:.1f} Gm 之间断开都在带里")
+    return (
+        f"小行星带 第{r['band']}带：从 {r['from_zh']} 量子跳向 {r['to_zh']}\n"
+        f"HUD 到 {r['to_zh']} 剩 {r['dropout']:.1f} Gm 左右按 U 断开\n"
+        f"剩 {r['early']:.1f}–{r['late']:.1f} Gm 之间断开都在带里"
+    )
 
 
 def where(g):
     """/showlocation 坐标（米）→ 离恒星多远、在第几带"""
-    r = math.sqrt(sum(float(v) ** 2 for v in g)) / 1e9       # 不四舍五入：判带、算方向都用原值，只在文字里格式化
+    r = (
+        math.sqrt(sum(float(v) ** 2 for v in g)) / 1e9
+    )  # 不四舍五入：判带、算方向都用原值，只在文字里格式化
     for row in BANDS:
         if row[1] <= r <= row[2]:
             return {"r": r, "band": row[0], "off": 0.0}
     near = min(BANDS, key=lambda row: min(abs(r - row[1]), abs(r - row[2])))
-    off = (near[1] - r) if r < near[1] else (near[2] - r)     # 正数：要往外飞
+    off = (near[1] - r) if r < near[1] else (near[2] - r)  # 正数：要往外飞
     return {"r": r, "band": None, "near": near[0], "off": off * 1000}
 
 

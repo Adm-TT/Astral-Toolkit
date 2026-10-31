@@ -4,6 +4,7 @@
 property_key 是 scmdb 蓝图里各槽「品质影响」用的键（health_maxhealth、weapon_damage …），这里把它对到解包数据的字段。
 数据里没有的属性返回 None：页面上只显示倍率，不显示绝对值。
 """
+
 import json
 from functools import lru_cache
 
@@ -40,8 +41,11 @@ def _first(*vals):
 
 # property_key → (取值函数, 单位)。取值函数拿到数据段 s 返回数值或 None。字段名按 2026-10-24 拉下来的数据核对过
 def _damage(s):
-    return _first(_get(s, "mining_laser", "laser_power", "max"), _get(s, "vehicle_weapon", "damage_per_shot"),
-                  _get(s, "personal_weapon", "damage_per_shot"))
+    return _first(
+        _get(s, "mining_laser", "laser_power", "max"),
+        _get(s, "vehicle_weapon", "damage_per_shot"),
+        _get(s, "personal_weapon", "damage_per_shot"),
+    )
 
 
 def _firerate(s):
@@ -51,7 +55,11 @@ def _firerate(s):
 def _dmgmit(s):
     """护甲的伤害减免：各伤害类型的 multiplier（0.85 = 挡掉 15%），取平均；impact 是另一回事，不算"""
     dr = (s.get("suit_armor") or s.get("clothing") or {}).get("damage_resistance") or {}
-    vals = [v.get("multiplier") for k, v in dr.items() if isinstance(v, dict) and isinstance(v.get("multiplier"), (int, float))]
+    vals = [
+        v.get("multiplier")
+        for k, v in dr.items()
+        if isinstance(v, dict) and isinstance(v.get("multiplier"), (int, float))
+    ]
     return round(sum(vals) / len(vals), 4) if vals else None
 
 
@@ -67,20 +75,59 @@ PROPS = {
     "armor_damagemitigation": (_dmgmit, ""),
     "armor_temperaturemin": (lambda s: _get(s, "temperature_resistance", "min"), " ºC"),
     "armor_temperaturemax": (lambda s: _get(s, "temperature_resistance", "max"), " ºC"),
-    "armor_radiationdissipation": (lambda s: _get(s, "radiation_resistance", "radiation_dissipation_rate"), " mRem/s"),
-    "itemresource_coolantgeneration": (lambda s: _first(_get(s, "cooler", "coolant_segment_generation"), _get(s, "cooler", "cooling_rate")), ""),
-    "itemresource_powergeneration": (lambda s: _first(_get(s, "power_plant", "power_segment_generation"), _get(s, "power_plant", "power_output")), ""),
+    "armor_radiationdissipation": (
+        lambda s: _get(s, "radiation_resistance", "radiation_dissipation_rate"),
+        " mRem/s",
+    ),
+    "itemresource_coolantgeneration": (
+        lambda s: _first(
+            _get(s, "cooler", "coolant_segment_generation"),
+            _get(s, "cooler", "cooling_rate"),
+        ),
+        "",
+    ),
+    "itemresource_powergeneration": (
+        lambda s: _first(
+            _get(s, "power_plant", "power_segment_generation"),
+            _get(s, "power_plant", "power_output"),
+        ),
+        "",
+    ),
     "quantum_speed": (_qspeed, " m/s"),
-    "quantum_fuelrequirement": (lambda s: _get(s, "quantum_drive", "quantum_fuel_requirement"), ""),
-    "radar_minaimassistdistance": (lambda s: _get(s, "radar", "aim_assist", "distance_min_assignment"), " m"),
-    "radar_maxaimassistdistance": (lambda s: _get(s, "radar", "aim_assist", "distance_max_assignment"), " m"),
+    "quantum_fuelrequirement": (
+        lambda s: _get(s, "quantum_drive", "quantum_fuel_requirement"),
+        "",
+    ),
+    "radar_minaimassistdistance": (
+        lambda s: _get(s, "radar", "aim_assist", "distance_min_assignment"),
+        " m",
+    ),
+    "radar_maxaimassistdistance": (
+        lambda s: _get(s, "radar", "aim_assist", "distance_max_assignment"),
+        " m",
+    ),
     "weapon_tractor_force": (lambda s: _get(s, "tractor_beam", "force", "max"), ""),
     "weapon_tractor_maxdist": (lambda s: _get(s, "tractor_beam", "range", "max"), " m"),
-    "weapon_tractor_fullstrengthdist": (lambda s: _get(s, "tractor_beam", "range", "full_strength_distance"), " m"),
-    "weapon_tractor_maxvolume": (lambda s: _get(s, "tractor_beam", "force", "max_volume"), ""),
-    "weapon_hullscraping_speed": (lambda s: _get(s, "weapon_modifier", "salvage", "salvage_speed_multiplier"), ""),
-    "weapon_hullscraping_efficiency": (lambda s: _get(s, "weapon_modifier", "salvage", "extraction_efficiency"), ""),
-    "weapon_hullscraping_radius": (lambda s: _get(s, "weapon_modifier", "salvage", "radius_multiplier"), ""),
+    "weapon_tractor_fullstrengthdist": (
+        lambda s: _get(s, "tractor_beam", "range", "full_strength_distance"),
+        " m",
+    ),
+    "weapon_tractor_maxvolume": (
+        lambda s: _get(s, "tractor_beam", "force", "max_volume"),
+        "",
+    ),
+    "weapon_hullscraping_speed": (
+        lambda s: _get(s, "weapon_modifier", "salvage", "salvage_speed_multiplier"),
+        "",
+    ),
+    "weapon_hullscraping_efficiency": (
+        lambda s: _get(s, "weapon_modifier", "salvage", "extraction_efficiency"),
+        "",
+    ),
+    "weapon_hullscraping_radius": (
+        lambda s: _get(s, "weapon_modifier", "salvage", "radius_multiplier"),
+        "",
+    ),
     # 后坐力三项、装填速度、散布：解包数据里没有对应的基础值，只显示倍率
 }
 
@@ -105,4 +152,10 @@ def tags(uuid):
     it = item(uuid)
     if not it:
         return {}
-    return {"size": it.get("size"), "grade": it.get("grade"), "cls": it.get("cls"), "mfr": it.get("mfr"), "type": it.get("type")}
+    return {
+        "size": it.get("size"),
+        "grade": it.get("grade"),
+        "cls": it.get("cls"),
+        "mfr": it.get("mfr"),
+        "type": it.get("type"),
+    }

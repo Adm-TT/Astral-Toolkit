@@ -4,6 +4,7 @@
 - subscribe() / unsubscribe(q)：窗口每个连接一个队列
 - 后台任务里的 print() 也会转成 log 消息，显示在窗口里（按线程区分属于哪个任务）
 """
+
 import collections
 import io
 import json
@@ -14,8 +15,19 @@ import time
 
 _subs = []
 _lock = threading.Lock()
-_last = {}                    # 每类消息最后一条（窗口刷新/新打开时补发）
-STICKY = {"hud", "status", "scan", "scan_hint", "signals", "nav", "hover", "live", "task", "runtime_preview"}
+_last = {}  # 每类消息最后一条（窗口刷新/新打开时补发）
+STICKY = {
+    "hud",
+    "status",
+    "scan",
+    "scan_hint",
+    "signals",
+    "nav",
+    "hover",
+    "live",
+    "task",
+    "runtime_preview",
+}
 
 # ---------------------------------------------------------------- 运行时日志与实时截图缓存
 _runtime_logs = collections.deque(maxlen=300)
@@ -95,15 +107,25 @@ def update_preview(img, source="live", force=False):
 def get_preview_bytes(full=False):
     """获取最新截图的二进制数据与元数据"""
     with _preview_lock:
-        return (_preview_full_bytes if full else _preview_thumb_bytes), dict(_preview_meta)
+        return (_preview_full_bytes if full else _preview_thumb_bytes), dict(
+            _preview_meta
+        )
 
 
 def publish(kind, data):
     msg = {"kind": kind, "data": data, "t": time.time()}
     with _lock:
         if kind in STICKY:
-            key = kind + (":" + str(data.get("section", "")) if kind == "hud" and isinstance(data, dict) else "")
-            key += (":" + str(data.get("id", "")) if kind == "task" and isinstance(data, dict) else "")
+            key = kind + (
+                ":" + str(data.get("section", ""))
+                if kind == "hud" and isinstance(data, dict)
+                else ""
+            )
+            key += (
+                ":" + str(data.get("id", ""))
+                if kind == "task" and isinstance(data, dict)
+                else ""
+            )
             _last[key] = msg
         subs = list(_subs)
     for q in subs:
@@ -118,7 +140,9 @@ def subscribe():
     with _lock:
         _subs.append(q)
         for msg in _last.values():
-            q.put_nowait({**msg, "replay": True})     # 补发的旧消息：前端只恢复状态，不跳页、不弹提示（2026-10-28 审查）
+            q.put_nowait(
+                {**msg, "replay": True}
+            )  # 补发的旧消息：前端只恢复状态，不跳页、不弹提示（2026-10-28 审查）
         for entry in _runtime_logs:
             q.put_nowait({"kind": "runtime_log", "data": entry, "replay": True})
     return q
@@ -172,7 +196,10 @@ class _Router(io.TextIOBase):
                 finally:
                     _router_guard.active = False
             return res
-        key = (tid, threading.get_ident())      # 同一个任务可能有几个线程一起输出：各攒各的半行，别拼错
+        key = (
+            tid,
+            threading.get_ident(),
+        )  # 同一个任务可能有几个线程一起输出：各攒各的半行，别拼错
         text = self.buf.get(key, "") + s
         *lines, rest = text.split("\n")
         self.buf[key] = rest
@@ -180,7 +207,9 @@ class _Router(io.TextIOBase):
             publish("log", {"task": tid, "line": line})
             runtime_log(line, tag=tid.upper(), level="INFO")
             try:
-                self.real.write(f"[{tid}] {line}\n")       # 也进 app_log.txt（2026-10-28 整体审查：以前只发窗口，导出的日志里没有）
+                self.real.write(
+                    f"[{tid}] {line}\n"
+                )  # 也进 app_log.txt（2026-10-28 整体审查：以前只发窗口，导出的日志里没有）
             except Exception:
                 pass
         return len(s)
@@ -234,13 +263,26 @@ def run_task(task_id, fn, *args, title="", **kw):
         runtime_log(f"任务开始: {title or task_id}", tag=task_id.upper(), level="INFO")
         try:
             result = fn(*args, **kw)
-            publish("task", {"id": task_id, "title": title, "state": "done", "result": result})
-            runtime_log(f"任务结束: {title or task_id}", tag=task_id.upper(), level="INFO")
+            publish(
+                "task",
+                {"id": task_id, "title": title, "state": "done", "result": result},
+            )
+            runtime_log(
+                f"任务结束: {title or task_id}", tag=task_id.upper(), level="INFO"
+            )
         except Exception as e:
             import traceback
+
             traceback.print_exc(file=sys.stdout)
-            publish("task", {"id": task_id, "title": title, "state": "error", "error": str(e)})
-            runtime_log(f"任务出错: {title or task_id} - {e}", tag=task_id.upper(), level="ERROR")
+            publish(
+                "task",
+                {"id": task_id, "title": title, "state": "error", "error": str(e)},
+            )
+            runtime_log(
+                f"任务出错: {title or task_id} - {e}",
+                tag=task_id.upper(),
+                level="ERROR",
+            )
         finally:
             r = sys.stdout
             if isinstance(r, _Router):

@@ -4,6 +4,7 @@
 要先用 StarBreaker 取出、解开城市的 socpak（unpack_all.py 里的 _unzip）。只发整理出的坐标和名字，不发游戏文件。
 做法：容器 xml 里子容器的 pos / rot（四元数 w,x,y,z）一层层合起来；容器里的小物件（终端、柜台）位置在 .soc 的字符串表里：
 「名字、半径、x,y,z」挨着写"""
+
 import json
 import math
 import re
@@ -11,13 +12,22 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-CHILD = re.compile(r'<Child [^>]*?name="([^"]+)"[^>]*?entityName="([^"]*)"[^>]*?pos="([^"]+)" rot="([^"]+)"')
-ENT = re.compile(rb"([A-Za-z][A-Za-z0-9_\-\.]{3,120})[\x00-\x1f]{1,8}(\d+(?:\.\d+)?)[\x00-\x1f]{1,8}"
-                 rb"(-?\d+(?:\.\d+)?(?:e-?\d+)?,-?\d+(?:\.\d+)?(?:e-?\d+)?,-?\d+(?:\.\d+)?(?:e-?\d+)?)[\x00-\x1f]")
+CHILD = re.compile(
+    r'<Child [^>]*?name="([^"]+)"[^>]*?entityName="([^"]*)"[^>]*?pos="([^"]+)" rot="([^"]+)"'
+)
+ENT = re.compile(
+    rb"([A-Za-z][A-Za-z0-9_\-\.]{3,120})[\x00-\x1f]{1,8}(\d+(?:\.\d+)?)[\x00-\x1f]{1,8}"
+    rb"(-?\d+(?:\.\d+)?(?:e-?\d+)?,-?\d+(?:\.\d+)?(?:e-?\d+)?,-?\d+(?:\.\d+)?(?:e-?\d+)?)[\x00-\x1f]"
+)
 
-CITIES = {   # 城市 → (挂在哪个星球的容器里, 城市总容器, 星图里的星球名, 地点中文名)
+CITIES = {  # 城市 → (挂在哪个星球的容器里, 城市总容器, 星图里的星球名, 地点中文名)
     "NewBabbage": ("stanton4", "newbab_all", "Microtech", "新巴贝奇"),
-    "Lorville": ("stanton1", "lorville", "Hurston", "罗威尔"),          # 2026-10-27 老大：四个主城都做
+    "Lorville": (
+        "stanton1",
+        "lorville",
+        "Hurston",
+        "罗威尔",
+    ),  # 2026-10-27 老大：四个主城都做
     "Area18": ("stanton3", "a18_city", "ArcCorp", "18区"),
     "Orison": ("stanton2", "orison_all", "Crusader", "奥里森"),
     # 现在的列夫斯基挂在冰川环带的区段上；以前用的 delamar/levski 是旧版，星系里已经不引用了，坐标差 70 多 km（玩家反馈 2026-10-30）
@@ -34,8 +44,16 @@ CONTAINERS = [
     (r"^lorville_hosp_int$", "医院", "Maria Pure of Heart Hospital"),
     (r"^a18_hospital_int$", "医院", "Area18 Hospital"),
     (r"^orison_hospital_int$", "医院", "Orison General Hospital"),
-    (r"^levski_hosp(?:_lobby)?$", "医院", "Mercy Hospital"),     # 新版列夫斯基叫 levski_hosp（星图记录 Delemar_Levski_Hospital = 仁慈医院）
-    (r"^(mpoh_pharmacy|area_18_pharmacy|pharmacy_orison|levski_pharmacy)$", "医院", "Pharmacy"),
+    (
+        r"^levski_hosp(?:_lobby)?$",
+        "医院",
+        "Mercy Hospital",
+    ),  # 新版列夫斯基叫 levski_hosp（星图记录 Delemar_Levski_Hospital = 仁慈医院）
+    (
+        r"^(mpoh_pharmacy|area_18_pharmacy|pharmacy_orison|levski_pharmacy)$",
+        "医院",
+        "Pharmacy",
+    ),
     (r"^health_insurance_mpoh$", "医院", "Health Insurance"),
     (r"^astroarmada_area18_int$", "买船", "Astro Armada"),
     (r"^crusader_showroom_int$", "买船", "Crusader Showroom"),
@@ -56,20 +74,34 @@ CONTAINERS = [
     (r"^health_insurance_newbab", "医院", "Health Insurance"),
     (r"^newbab_hosp$", "医院", "Hospital"),
     (r"^tran_plat_newbab_(\w+?)_line", "地铁", "Metro {0} Line"),
-    (r"^tran_plat_lorville_(perim_line_[ab]|sp_line|com_line|cen_line)_([a-z]+\d?)(?:_\d+)?$", "地铁", "Lorville Metro {0} {1}"),
+    (
+        r"^tran_plat_lorville_(perim_line_[ab]|sp_line|com_line|cen_line)_([a-z]+\d?)(?:_\d+)?$",
+        "地铁",
+        "Lorville Metro {0} {1}",
+    ),
     (r"^newbab_hab_tower_lobby_int$", "公寓", "Hab Tower Lobby"),
     (r"^security_newbab", "其他", "Security Checkpoint"),
     (r"^refin_levski", "精炼", "Refinery"),
 ]
 # 容器里的小物件 → (类别, 英文名[, 只认哪个容器里的])；同一种挨得近（20 米内）的合成一个点
 ENTITIES = [
-    (r"^VehicleShoppingPedestal", "买船", "New Deal", r"^lorville_sp_int$"),      # 罗威尔的全新交易在空港楼里，没有单独的容器
+    (
+        r"^VehicleShoppingPedestal",
+        "买船",
+        "New Deal",
+        r"^lorville_sp_int$",
+    ),  # 罗威尔的全新交易在空港楼里，没有单独的容器
     (r"^ShipSelectorKiosk", "空港", "Fleet Manager Terminal"),
     (r"FreightElevatorKiosk", "货梯", "Freight Elevator"),
     (r"FineTerminal$|FineTerminal_", "罚款", "Fine Terminal"),
     (r"^ShopKiosk_Rentals", "租船", "Rentals"),
     (r"CommodityKiosk_kiosk_tdd", "交易", "Commodity Terminal"),
-    (r"^Counter_Admin", "交易", "Admin Counter", r"admin"),        # 商店里的柜台也叫 Counter_Admin_*（卡莎巴…），只认行政中心里的
+    (
+        r"^Counter_Admin",
+        "交易",
+        "Admin Counter",
+        r"admin",
+    ),  # 商店里的柜台也叫 Counter_Admin_*（卡莎巴…），只认行政中心里的
     (r"HospitalCheckIn", "医院", "Hospital Check-In"),
     (r"^Console_Standing_Angled_console_info", "其他", "Info Console"),
     (r"ShoppingKiosk", "商店", "Shopping Kiosk"),
@@ -78,33 +110,76 @@ ENTITIES = [
 MERGE_M = 20
 # 房间类的目的地（店、柜台所在的房间）：房间原点可能在墙里（2026-10-27 实测「健康保险」指到墙上），
 # 改指向房间里离原点最近的能交互的东西：柜台、终端、登记台
-SNAP = (r"Counter_Reception|counter_welcome|Counter_Admin|HospitalCheckIn|CommodityKiosk|ShoppingKiosk|ShipSelectorKiosk|Console_Standing|Terminal"
-        r"|^ShopKiosk|VehicleShoppingPedestal|Counter_Shop")              # 买船：店里的购买终端 / 展台
+SNAP = (
+    r"Counter_Reception|counter_welcome|Counter_Admin|HospitalCheckIn|CommodityKiosk|ShoppingKiosk|ShipSelectorKiosk|Console_Standing|Terminal"
+    r"|^ShopKiosk|VehicleShoppingPedestal|Counter_Shop"
+)  # 买船：店里的购买终端 / 展台
 SNAP_M = 80
 # 容器名 → 所在区域，用汉化组的区域名（global_zh.ini 的 Stanton4_NewBab_*）
 AREAS = {
     "NewBabbage": [
-        ("sp_surface_entrance", "NBIS 航站楼 · 地面出入口"), ("surfaceentrance", "地面出入口"), ("newbab_sp", "NBIS 航站楼"),
-        ("atc_newbab", "NBIS 航站楼"), ("hab_tower", "志远大厦"), ("promenade", "市民广场"), ("commons", "市民广场"),
-        ("tran_plat_elev", "地铁站"), ("tran_plat", "地铁站"), ("admin_newbab", "市民广场"),
-        ("health_insurance", "布伦特沃斯医护中心"), ("pharmacy", "布伦特沃斯医护中心"), ("hosp", "布伦特沃斯医护中心"),
-        ("tdd_newbab", "市民广场"), ("security_newbab", "NBIS 航站楼")],
-    "Lorville": [("lorville_sp", "蒂莎空港"), ("lorville_atc", "蒂莎空港"), ("lorville_hosp", "玛利亚纯洁之心医院"),
-                 ("mpoh", "玛利亚纯洁之心医院"), ("tran_plat", "地铁站")],
-    "Area18": [("a18_sp", "里克纪念空港"), ("a18_hospital", "帝国医疗服务医疗站"), ("area_18_pharmacy", "帝国医疗服务医疗站")],
-    "Orison": [("orison_sp", "奥古斯特·顿洛 空港"), ("orison_hospital", "奥里森综合医院"), ("pharmacy_orison", "奥里森综合医院")],
+        ("sp_surface_entrance", "NBIS 航站楼 · 地面出入口"),
+        ("surfaceentrance", "地面出入口"),
+        ("newbab_sp", "NBIS 航站楼"),
+        ("atc_newbab", "NBIS 航站楼"),
+        ("hab_tower", "志远大厦"),
+        ("promenade", "市民广场"),
+        ("commons", "市民广场"),
+        ("tran_plat_elev", "地铁站"),
+        ("tran_plat", "地铁站"),
+        ("admin_newbab", "市民广场"),
+        ("health_insurance", "布伦特沃斯医护中心"),
+        ("pharmacy", "布伦特沃斯医护中心"),
+        ("hosp", "布伦特沃斯医护中心"),
+        ("tdd_newbab", "市民广场"),
+        ("security_newbab", "NBIS 航站楼"),
+    ],
+    "Lorville": [
+        ("lorville_sp", "蒂莎空港"),
+        ("lorville_atc", "蒂莎空港"),
+        ("lorville_hosp", "玛利亚纯洁之心医院"),
+        ("mpoh", "玛利亚纯洁之心医院"),
+        ("tran_plat", "地铁站"),
+    ],
+    "Area18": [
+        ("a18_sp", "里克纪念空港"),
+        ("a18_hospital", "帝国医疗服务医疗站"),
+        ("area_18_pharmacy", "帝国医疗服务医疗站"),
+    ],
+    "Orison": [
+        ("orison_sp", "奥古斯特·顿洛 空港"),
+        ("orison_hospital", "奥里森综合医院"),
+        ("pharmacy_orison", "奥里森综合医院"),
+    ],
     "Levski": [("levski_hosp", "仁慈医院"), ("levski_pharmacy", "仁慈医院")],
 }
 # 地铁站台：哪条线、哪个站（分段路线用，2026-10-27）。新巴贝奇是一条环线（微科地铁环线），罗威尔几条线在地铁中心换乘
-LINE_ZH = {"loop": ("MetroLoop", "微科地铁环线", "汉化组"), "perim_line_a": ("Perimeter Line A", "外环 A 线", "自译"),
-           "perim_line_b": ("Perimeter Line B", "外环 B 线", "自译"), "sp_line": ("Spaceport Line", "空港线", "自译"),
-           "com_line": ("Commerce Line", "商业线", "自译"), "cen_line": ("Central Line", "中央线", "自译")}
-STOP_ZH = {"gate1": ("City Gates 01", "城市大门 01"), "gate2": ("City Gates 02", "城市大门 02"), "gate3": ("City Gates 03", "城市大门 03"),
-           "gate4": ("City Gates 04", "城市大门 04"), "gate5": ("City Gates 05", "城市大门 05"), "gate6": ("City Gates 06", "城市大门 06"),
-           "mc": ("Metro Center", "地铁中心"), "sp": ("Teasa Spaceport", "蒂莎空港"), "lvsdn": ("Leavsden Station", "列维斯登站")}
+LINE_ZH = {
+    "loop": ("MetroLoop", "微科地铁环线", "汉化组"),
+    "perim_line_a": ("Perimeter Line A", "外环 A 线", "自译"),
+    "perim_line_b": ("Perimeter Line B", "外环 B 线", "自译"),
+    "sp_line": ("Spaceport Line", "空港线", "自译"),
+    "com_line": ("Commerce Line", "商业线", "自译"),
+    "cen_line": ("Central Line", "中央线", "自译"),
+}
+STOP_ZH = {
+    "gate1": ("City Gates 01", "城市大门 01"),
+    "gate2": ("City Gates 02", "城市大门 02"),
+    "gate3": ("City Gates 03", "城市大门 03"),
+    "gate4": ("City Gates 04", "城市大门 04"),
+    "gate5": ("City Gates 05", "城市大门 05"),
+    "gate6": ("City Gates 06", "城市大门 06"),
+    "mc": ("Metro Center", "地铁中心"),
+    "sp": ("Teasa Spaceport", "蒂莎空港"),
+    "lvsdn": ("Leavsden Station", "列维斯登站"),
+}
 # 新巴贝奇环线的站（汉化组：ui_interactor_ST4_Transit_*、area_map_pu_newbab_*）；以前自译成「空港线」「广场线」，其实是站名
-NB_STOP_ZH = {"sp": ("Spaceport", "主要空港"), "expo": ("Tobin Expo", "托宾中心"), "commons": ("Commons", "市民广场"),
-              "ag": ("Aspire Grand", "志远大厦")}
+NB_STOP_ZH = {
+    "sp": ("Spaceport", "主要空港"),
+    "expo": ("Tobin Expo", "托宾中心"),
+    "commons": ("Commons", "市民广场"),
+    "ag": ("Aspire Grand", "志远大厦"),
+}
 
 
 def metro_info(stem):
@@ -112,25 +187,34 @@ def metro_info(stem):
     m = re.match(r"^tran_plat_newbab_(\w+?)_line", stem, re.I)
     if m:
         return "loop", m[1].lower()
-    m = re.match(r"^tran_plat_lorville_(perim_line_[ab]|sp_line|com_line|cen_line)_([a-z]+\d?)(?:_\d+)?$", stem, re.I)
+    m = re.match(
+        r"^tran_plat_lorville_(perim_line_[ab]|sp_line|com_line|cen_line)_([a-z]+\d?)(?:_\d+)?$",
+        stem,
+        re.I,
+    )
     if m:
         return m[1].lower(), m[2].lower()
     return None
 
 
-SKIP_CATS = {"引导"}           # 游戏自己的新手引导点（TagPoint_FTUE_*）：先不当目的地，留着以后做路线用
+SKIP_CATS = {
+    "引导"
+}  # 游戏自己的新手引导点（TagPoint_FTUE_*）：先不当目的地，留着以后做路线用
 
 # 中文名：(中文, 来源)。来源「汉化组」= global_zh.ini 里有（Maps_Amenities_*、物品名里的店名、提示里的「登记处」）；
 # 「自译」= 汉化组没有，写进 翻译对照\自译对照_词表.csv 给老大改；品牌名汉化组没翻的保持英文
 ZH = {
     "Spaceport": ("空港", "自译"),
     "Spaceport ATC": ("空港调度台", "自译"),
-    "Fleet Manager Terminal": ("舰队管理器终端", "汉化组"),          # 汉化组 tut03_part02_hint01_toasop_title（以前叫 ASOP 终端）
+    "Fleet Manager Terminal": (
+        "舰队管理器终端",
+        "汉化组",
+    ),  # 汉化组 tut03_part02_hint01_toasop_title（以前叫 ASOP 终端）
     "Trade & Development Division": ("TDD 贸易发展部", "自译"),
     "Commodity Terminal": ("商品交易终端", "自译"),
-    "Freight Elevator": ("货运电梯", "汉化组"),                      # area_name_freightelevator
+    "Freight Elevator": ("货运电梯", "汉化组"),  # area_name_freightelevator
     "Fine Terminal": ("罚款终端", "自译"),
-    "Refinery": ("精炼厂", "汉化组"),                                 # ui_interactor_generic_refinery
+    "Refinery": ("精炼厂", "汉化组"),  # ui_interactor_generic_refinery
     "Rentals": ("租赁柜台", "自译"),
     "Clinic Check-In": ("诊所登记处", "自译"),
     "Admin Office": ("行政中心", "自译"),
@@ -142,7 +226,10 @@ ZH = {
     "Wally's Bar": ("沃利酒吧", "汉化组"),
     "Whammer's": ("重锤汉堡", "汉化组"),
     "Kel-To": ("凯尔托", "汉化组"),
-    "Pharmacy": ("药店", "汉化组"),           # 汉化组 shop_name_pharmacy（2026-10-27 以前自译「药房」）
+    "Pharmacy": (
+        "药店",
+        "汉化组",
+    ),  # 汉化组 shop_name_pharmacy（2026-10-27 以前自译「药房」）
     "Health Insurance": ("健康保险", "自译"),
     "Hospital": ("布伦特沃斯医护中心", "汉化组"),
     "Hospital Check-In": ("医院登记处", "汉化组"),
@@ -171,8 +258,12 @@ ZH = {
 def qmul(a, b):
     w1, x1, y1, z1 = a
     w2, x2, y2, z2 = b
-    return (w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2, w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
-            w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2, w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2)
+    return (
+        w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
+        w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
+        w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
+        w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
+    )
 
 
 def rot(q, v):
@@ -193,7 +284,12 @@ def index(dirs):
 
 def parent_q(idx, stem):
     """星球容器在星系根容器（xxxsystem.xml）里的朝向；找不到 = 这个容器没被星系引用（多半是旧版，用了会算错）"""
-    pat = re.compile(r'<Child [^>]*?name="[^"]*/' + re.escape(stem) + r'\.socpak"[^>]*?rot="([^"]+)"', re.I)
+    pat = re.compile(
+        r'<Child [^>]*?name="[^"]*/'
+        + re.escape(stem)
+        + r'\.socpak"[^>]*?rot="([^"]+)"',
+        re.I,
+    )
     for k, f in idx.items():
         if k.endswith("system"):
             m = pat.search(f.read_text(encoding="utf-8", errors="ignore"))
@@ -202,9 +298,9 @@ def parent_q(idx, stem):
     return None
 
 
-BODIES = {}                   # 星图里的天体（build 时读）
-CITY_UP = {}                  # 不自转天体上的城 → 城自己的「上」（单位向量）
-PARENTS = {}                  # 容器名 → 外面那层容器名（找区域用：店在哪个大区里）
+BODIES = {}  # 星图里的天体（build 时读）
+CITY_UP = {}  # 不自转天体上的城 → 城自己的「上」（单位向量）
+PARENTS = {}  # 容器名 → 外面那层容器名（找区域用：店在哪个大区里）
 
 
 def walk(idx, stem, pos, q, depth=0, out=None, anc=()):
@@ -214,7 +310,9 @@ def walk(idx, stem, pos, q, depth=0, out=None, anc=()):
     f = idx.get(stem.lower())
     if not f or depth > 8:
         return out
-    for name, ent, p, r in CHILD.findall(f.read_text(encoding="utf-8", errors="ignore")):
+    for name, ent, p, r in CHILD.findall(
+        f.read_text(encoding="utf-8", errors="ignore")
+    ):
         s = Path(name.replace("\\", "/")).stem
         lp = tuple(float(v) for v in p.split(","))
         lq = tuple(float(v) for v in r.split(","))
@@ -236,7 +334,12 @@ def soc_entities(idx, stem):
     out = []
     for m in ENT.finditer(soc.read_bytes()):
         try:
-            out.append((m.group(1).decode(), tuple(float(v) for v in m.group(3).decode().split(","))))
+            out.append(
+                (
+                    m.group(1).decode(),
+                    tuple(float(v) for v in m.group(3).decode().split(",")),
+                )
+            )
         except ValueError:
             pass
     return out
@@ -250,10 +353,18 @@ def loc():
     if not _LOC:
         sys.path.insert(0, str(ROOT))
         from sc_mining.update.localization import read_ini
-        for lang, f in (("zh", ROOT / "data" / "loc" / "global_zh.ini"),
-                        ("en", Path(r"E:\Game3\unpack\p4k_out\Data\Localization\english\global.ini"))):
+
+        for lang, f in (
+            ("zh", ROOT / "data" / "loc" / "global_zh.ini"),
+            (
+                "en",
+                Path(r"E:\Game3\unpack\p4k_out\Data\Localization\english\global.ini"),
+            ),
+        ):
             try:
-                _LOC[lang] = {k.lower(): v.split("\\n")[0].strip() for k, v in read_ini(f).items()}
+                _LOC[lang] = {
+                    k.lower(): v.split("\\n")[0].strip() for k, v in read_ini(f).items()
+                }
             except OSError:
                 _LOC[lang] = {}
     return _LOC
@@ -267,7 +378,12 @@ def shop_of(stem):
     for k, en in L["en"].items():
         if k.startswith("shop_name_"):
             key = re.sub(r"[^a-z]", "", k[10:])
-            if len(key) >= 4 and key in flat and L["zh"].get(k) and (best is None or len(key) > len(best[0])):
+            if (
+                len(key) >= 4
+                and key in flat
+                and L["zh"].get(k)
+                and (best is None or len(key) > len(best[0]))
+            ):
                 best = (key, en, L["zh"][k])
     return best[1:] if best else None
 
@@ -308,7 +424,9 @@ def snap(idx, stem, gp, gq):
 def build(dirs, only=None):
     idx = index(dirs)
     global BODIES
-    BODIES = json.loads((ROOT / "data" / "starmap.json").read_text(encoding="utf-8"))["bodies"]
+    BODIES = json.loads((ROOT / "data" / "starmap.json").read_text(encoding="utf-8"))[
+        "bodies"
+    ]
     places = []
     for city, (planet_stem, top, body, city_zh) in CITIES.items():
         if only and city != only:
@@ -317,7 +435,13 @@ def build(dirs, only=None):
             print(f"⚠ 找不到 {planet_stem} 的星球容器，{city} 跳过")
             continue
         t = idx[planet_stem].read_text(encoding="utf-8", errors="ignore")
-        m = re.search(r'<Child [^>]*?name="[^"]*/' + top + r'\.socpak"[^>]*?pos="([^"]+)" rot="([^"]+)"', t, re.I)
+        m = re.search(
+            r'<Child [^>]*?name="[^"]*/'
+            + top
+            + r'\.socpak"[^>]*?pos="([^"]+)" rot="([^"]+)"',
+            t,
+            re.I,
+        )
         if not m:
             print(f"⚠ {planet_stem} 里找不到 {top}，{city} 跳过")
             continue
@@ -325,11 +449,15 @@ def build(dirs, only=None):
         Q = tuple(float(v) for v in m.group(2).split(","))
         qp = parent_q(idx, planet_stem)
         bd = BODIES.get(body)
-        if bd is None:                     # 查不到星球就别猜它转不转（猜错整城的点都会错，审查 2026-10-30）
+        if (
+            bd is None
+        ):  # 查不到星球就别猜它转不转（猜错整城的点都会错，审查 2026-10-30）
             print(f"⚠ 星图里没有 {body}，{city} 跳过")
             continue
         if qp is None:
-            print(f"⚠ {planet_stem} 没被任何星系根容器引用（可能是旧版容器），{city} 的坐标可能不对")
+            print(
+                f"⚠ {planet_stem} 没被任何星系根容器引用（可能是旧版容器），{city} 的坐标可能不对"
+            )
         elif bd.get("rot") == 0:
             # 不自转的天体（Delamar）：星图里的局部坐标不转，城里的点要先乘上星球容器自己的朝向
             # （区段绕 z 转了约 49°，不乘差 6.6 km；会自转的星球朝向已经算进相位，不能再乘）
@@ -344,10 +472,21 @@ def build(dirs, only=None):
                 if mm:
                     en2 = en.format(*(g.capitalize() for g in mm.groups()))
                     key = (cat, en2)
-                    if key not in seen:       # 同名容器只要第一个（城市里同一家店只有一个；有多个的按实体合并）
+                    if (
+                        key not in seen
+                    ):  # 同名容器只要第一个（城市里同一家店只有一个；有多个的按实体合并）
                         seen[key] = True
-                        places.append({"city": city, "body": body, "cat": cat, "en": en2, "src": stem, "m": snap(idx, stem, gp, gq),
-                                       "_anc": anc})
+                        places.append(
+                            {
+                                "city": city,
+                                "body": body,
+                                "cat": cat,
+                                "en": en2,
+                                "src": stem,
+                                "m": snap(idx, stem, gp, gq),
+                                "_anc": anc,
+                            }
+                        )
                     break
             for name, lp in soc_entities(idx, stem):
                 base = re.sub(r"[-_]\d{2,}$", "", name)
@@ -356,16 +495,37 @@ def build(dirs, only=None):
                         continue
                     if re.search(pat, base):
                         g = tuple(a + b for a, b in zip(gp, rot(gq, lp)))
-                        label = en.format(name=re.sub(r"^TagPoint_FTUE_", "", base).replace("_", " "))
-                        near = next((p for p in places if p["en"] == label and p["city"] == city and
-                                     math.dist(p["m"], g) <= MERGE_M), None)
+                        label = en.format(
+                            name=re.sub(r"^TagPoint_FTUE_", "", base).replace("_", " ")
+                        )
+                        near = next(
+                            (
+                                p
+                                for p in places
+                                if p["en"] == label
+                                and p["city"] == city
+                                and math.dist(p["m"], g) <= MERGE_M
+                            ),
+                            None,
+                        )
                         if near:
                             near.setdefault("_pts", [near["m"]]).append(g)
                             k = len(near["_pts"])
-                            near["m"] = tuple(sum(v[i] for v in near["_pts"]) / k for i in range(3))
+                            near["m"] = tuple(
+                                sum(v[i] for v in near["_pts"]) / k for i in range(3)
+                            )
                         else:
-                            places.append({"city": city, "body": body, "cat": cat, "en": label, "src": f"{stem}/{base}", "m": g,
-                                           "_anc": anc})
+                            places.append(
+                                {
+                                    "city": city,
+                                    "body": body,
+                                    "cat": cat,
+                                    "en": label,
+                                    "src": f"{stem}/{base}",
+                                    "m": g,
+                                    "_anc": anc,
+                                }
+                            )
                         break
     for p in places:
         if p["city"] in CITY_UP:
@@ -375,11 +535,20 @@ def build(dirs, only=None):
         if p["cat"] in SKIP_CATS:
             continue
         p.pop("_pts", None)
-        x, y, z = (round(v / 1000, 5) for v in p.pop("m"))           # 米 → 千米（星图的单位）
+        x, y, z = (round(v / 1000, 5) for v in p.pop("m"))  # 米 → 千米（星图的单位）
         zh, src = ZH.get(p["en"], (p["en"], "英文"))
-        if p["en"] == "Shopping Kiosk":                               # 购物终端：前面带上是哪家店的
-            shop = next((q for q in places if q["cat"] == "商店" and q["src"] == p["src"].split("/")[0]), None)
-            named = None if shop else shop_of(p["src"].split("/")[0])     # 没列在 CONTAINERS 里的店：按汉化包的店名表认
+        if p["en"] == "Shopping Kiosk":  # 购物终端：前面带上是哪家店的
+            shop = next(
+                (
+                    q
+                    for q in places
+                    if q["cat"] == "商店" and q["src"] == p["src"].split("/")[0]
+                ),
+                None,
+            )
+            named = (
+                None if shop else shop_of(p["src"].split("/")[0])
+            )  # 没列在 CONTAINERS 里的店：按汉化包的店名表认
             if shop:
                 zh = f"{ZH.get(shop['en'], (shop['en'],))[0].split('（')[0]} 购物终端"
                 p["en"] = f"{shop['en']} Shopping Kiosk"
@@ -395,30 +564,92 @@ def build(dirs, only=None):
             stops = NB_STOP_ZH if p["city"] == "NewBabbage" else STOP_ZH
             if mi[1] in stops:
                 se, sz = stops[mi[1]]
-                p["en"], zh, src = f"Metro {le} - {se}", f"地铁站台 · {sz}（{lz}）", lsrc
-        if zh == "购物终端" and area:                                 # 认不出是哪家店：至少写上在哪个区
+                p["en"], zh, src = (
+                    f"Metro {le} - {se}",
+                    f"地铁站台 · {sz}（{lz}）",
+                    lsrc,
+                )
+        if zh == "购物终端" and area:  # 认不出是哪家店：至少写上在哪个区
             zh = f"购物终端 · {area}"
         out.append({**p, "zh": zh, "zh_src": src, "area": area, "x": x, "y": y, "z": z})
     from collections import Counter
+
     dup = Counter((q["city"], q["zh"]) for q in out)
-    for q in out:                                  # 同一个城里重名的加上区域：「ASOP 终端（取船）· 空港」
+    for q in out:  # 同一个城里重名的加上区域：「ASOP 终端（取船）· 空港」
         if dup[(q["city"], q["zh"])] > 1 and q["area"]:
             q["zh"] = f"{q['zh']} · {q['area']}"
     return out
 
 
 # 导航分类（2026-10-27：在主城 / 空间站里点一下去最近的）。店按 data/shops.json（UEX）里卖的东西分
-KIND_ORDER = ["取船", "交易", "货梯", "医院", "武器", "护甲", "服装", "部件", "吃喝", "精炼", "行政", "罚款", "租船", "买船", "地铁"]
-CAT_KINDS = {"交易": ["交易"], "医院": ["医院"], "买船": ["买船"], "地铁": ["地铁"], "货梯": ["货梯"], "罚款": ["罚款"],
-             "精炼": ["精炼"], "租船": ["租船"], "行政": ["行政"]}
-GROUP = {"武器": {"Guns", "Personal Weapons", "Attachments", "Gadgets", "Throwables", "Grenades"},
-         "护甲": {"Arms", "Legs", "Torso", "Helmets", "Undersuits", "Backpacks"},
-         "服装": {"Jackets", "Footwear", "Legwear", "Shirts", "Hats", "Gloves", "Eyewear"},
-         "吃喝": {"Foods", "Drinks"},
-         "部件": {"Radar", "Coolers", "Missiles", "Quantum Drives", "Power Plants", "Shield Generators", "Missile Racks", "Turrets",
-                "Bomb Racks", "External Fuel Tanks", "Tractor Beams", "Flight Blade", "Module", "Mining Modules", "Mining Laser Heads",
-                "Scraper Beams", "Jump Modules", "Docking Collars"}}
-CITY_EN = {"NewBabbage": "New Babbage", "Lorville": "Lorville", "Area18": "Area 18", "Orison": "Orison", "Levski": "Levski"}
+KIND_ORDER = [
+    "取船",
+    "交易",
+    "货梯",
+    "医院",
+    "武器",
+    "护甲",
+    "服装",
+    "部件",
+    "吃喝",
+    "精炼",
+    "行政",
+    "罚款",
+    "租船",
+    "买船",
+    "地铁",
+]
+CAT_KINDS = {
+    "交易": ["交易"],
+    "医院": ["医院"],
+    "买船": ["买船"],
+    "地铁": ["地铁"],
+    "货梯": ["货梯"],
+    "罚款": ["罚款"],
+    "精炼": ["精炼"],
+    "租船": ["租船"],
+    "行政": ["行政"],
+}
+GROUP = {
+    "武器": {
+        "Guns",
+        "Personal Weapons",
+        "Attachments",
+        "Gadgets",
+        "Throwables",
+        "Grenades",
+    },
+    "护甲": {"Arms", "Legs", "Torso", "Helmets", "Undersuits", "Backpacks"},
+    "服装": {"Jackets", "Footwear", "Legwear", "Shirts", "Hats", "Gloves", "Eyewear"},
+    "吃喝": {"Foods", "Drinks"},
+    "部件": {
+        "Radar",
+        "Coolers",
+        "Missiles",
+        "Quantum Drives",
+        "Power Plants",
+        "Shield Generators",
+        "Missile Racks",
+        "Turrets",
+        "Bomb Racks",
+        "External Fuel Tanks",
+        "Tractor Beams",
+        "Flight Blade",
+        "Module",
+        "Mining Modules",
+        "Mining Laser Heads",
+        "Scraper Beams",
+        "Jump Modules",
+        "Docking Collars",
+    },
+}
+CITY_EN = {
+    "NewBabbage": "New Babbage",
+    "Lorville": "Lorville",
+    "Area18": "Area 18",
+    "Orison": "Orison",
+    "Levski": "Levski",
+}
 
 
 def _brand(s):
@@ -433,6 +664,7 @@ def brand_kinds():
         return {}
     cat_of = {c: g for g, cs in GROUP.items() for c in cs}
     from collections import Counter
+
     cnt = {}
     for r in d.get("rows") or []:
         try:
@@ -440,7 +672,9 @@ def brand_kinds():
             c = (d["items"].get(str(r[0])) or ["", ""])[1]
         except (IndexError, KeyError, TypeError):
             continue
-        cnt.setdefault(b, Counter())[cat_of.get(c, "药" if c == "Consumables" else "")] += 1
+        cnt.setdefault(b, Counter())[
+            cat_of.get(c, "药" if c == "Consumables" else "")
+        ] += 1
     out = {}
     for b, c in cnt.items():
         tot = sum(c.values())
@@ -473,39 +707,64 @@ def add_kinds(places, bk):
 
 
 def main():
-    dirs = sys.argv[1:] or [d for d in (r"E:\Game3\unpack\city_x", r"E:\Game3\unpack\oc_x", r"E:\Game3\unpack\loc_x",
-                                        r"E:\Game3\unpack\stn_x") if Path(d).exists()]
+    dirs = sys.argv[1:] or [
+        d
+        for d in (
+            r"E:\Game3\unpack\city_x",
+            r"E:\Game3\unpack\oc_x",
+            r"E:\Game3\unpack\loc_x",
+            r"E:\Game3\unpack\stn_x",
+        )
+        if Path(d).exists()
+    ]
     bk = brand_kinds()
     places = add_kinds(build(dirs), bk)
-    try:                                           # 空间站里的点（tools/unpack_stations.py）
+    try:  # 空间站里的点（tools/unpack_stations.py）
         import unpack_stations as S
+
         sys.path.insert(0, str(ROOT))
         from sc_mining.navigation import navigate as N
+
         data = N.load()
-        st = S.build(index(dirs), data["bodies"], bk, S.station_names(), data.get("points") or ())
+        st = S.build(
+            index(dirs), data["bodies"], bk, S.station_names(), data.get("points") or ()
+        )
         for p in st:
             p["kinds"] = [k for k in KIND_ORDER if k in p["kinds"]]
         print(f"空间站里的点 {len(st)} 个")
         places += st
-    except Exception as e:                         # 站没解出来：不写（缺空间站的结果会盖掉旧文件、被打进数据包发出去）
+    except (
+        Exception
+    ) as e:  # 站没解出来：不写（缺空间站的结果会盖掉旧文件、被打进数据包发出去）
         import traceback
+
         traceback.print_exc()
         sys.exit(f"❌ 空间站没做成：{e}；data/city_places.json 没动")
     dst = ROOT / "data" / "city_places.json"
     dst.write_text(json.dumps(places, ensure_ascii=False, indent=1), encoding="utf-8")
     from collections import Counter
-    print(f"✅ 城里目的地 {len(places)} 个 → {dst}：{dict(Counter((p['city'], p['cat']) for p in places))}")
+
+    print(
+        f"✅ 城里目的地 {len(places)} 个 → {dst}：{dict(Counter((p['city'], p['cat']) for p in places))}"
+    )
     for p in places:
         print(f"  {p['cat']}  {p['zh']:<28} {p['en']:<40} {p['src']}")
     # 自译的词写进对照表（已经有的不重复写），老大在「改成」列改
     csv = ROOT / "翻译对照" / "自译对照_词表.csv"
     if csv.exists():
         import csv as _csv
+
         rows = list(_csv.reader(csv.open(encoding="utf-8-sig")))
         have = {r[0] for r in rows[1:] if r}
-        new = sorted({(p["en"], p["zh"]) for p in places if p["zh_src"] == "自译" and p["en"] not in have})
+        new = sorted(
+            {
+                (p["en"], p["zh"])
+                for p in places
+                if p["zh_src"] == "自译" and p["en"] not in have
+            }
+        )
         if new:
-            with csv.open("a", encoding="utf-8", newline="") as f:          # 追加不能再写 BOM
+            with csv.open("a", encoding="utf-8", newline="") as f:  # 追加不能再写 BOM
                 w = _csv.writer(f)
                 for en, zh in new:
                     w.writerow([en, zh, "自译（城里导航）", 1, ""])

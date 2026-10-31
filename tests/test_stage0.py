@@ -1,4 +1,5 @@
 """重构阶段 0（2026-10-30）：接口路由、引擎管理器、悬浮窗状态；窗口只走 ATShell → Edge（2026-10-31 去掉 PyWebview）"""
+
 import sys
 import threading
 from decimal import Decimal
@@ -6,12 +7,14 @@ from decimal import Decimal
 
 def test_router_ok_envelope():
     from sc_mining.app.api import router
+
     r = router.call("about_info")
     assert r["ok"] is True and isinstance(r["data"], dict)
 
 
 def test_router_unknown():
     from sc_mining.app.api import router
+
     assert router.call("没有这个") == {"ok": False, "error": "没有 没有这个"}
 
 
@@ -20,6 +23,7 @@ def test_router_error_envelope():
 
     def bad():
         raise ValueError("坏了")
+
     try:
         router.routes()["x_bad"] = bad
         assert router.call("x_bad") == {"ok": False, "error": "坏了"}
@@ -33,13 +37,18 @@ def test_router_collects_controller_routes(monkeypatch, tmp_path):
     import sys
     from sc_mining.app import api
     from sc_mining.app.api import router
-    (tmp_path / "x_stage0_ctl.py").write_text('ROUTES = {"x_test": lambda: 1}\n', encoding="utf-8")
+
+    (tmp_path / "x_stage0_ctl.py").write_text(
+        'ROUTES = {"x_test": lambda: 1}\n', encoding="utf-8"
+    )
     monkeypatch.setattr(api, "__path__", list(api.__path__) + [str(tmp_path)])
     try:
         router.reset()
         assert router.routes()["x_test"]() == 1
         assert router.call("x_test") == {"ok": True, "data": 1}
-        assert "about_info" in router.routes()                  # 原有的 Controller 照样在（阶段 4 起没有 services.API 兜底）
+        assert (
+            "about_info" in router.routes()
+        )  # 原有的 Controller 照样在（阶段 4 起没有 services.API 兜底）
     finally:
         sys.modules.pop("sc_mining.app.api.x_stage0_ctl", None)
         monkeypatch.restore()
@@ -49,6 +58,7 @@ def test_router_collects_controller_routes(monkeypatch, tmp_path):
 
 def test_router_json_safe():
     from sc_mining.app.api import router
+
     try:
         router.routes()["x_dec"] = lambda: Decimal("1.5")
         assert router.call("x_dec") == {"ok": True, "data": "1.5"}
@@ -62,11 +72,15 @@ def test_router_same_as_http():
     from http.server import ThreadingHTTPServer
     from sc_mining.app.server import Handler, TOKEN
     from sc_mining.app.api import router
+
     srv = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     try:
-        req = urllib.request.Request(f"http://127.0.0.1:{srv.server_address[1]}/api/about_info", data=b"{}",
-                                     headers={"Content-Type": "application/json", "X-Token": TOKEN})
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{srv.server_address[1]}/api/about_info",
+            data=b"{}",
+            headers={"Content-Type": "application/json", "X-Token": TOKEN},
+        )
         http = json.loads(urllib.request.urlopen(req).read())
     finally:
         srv.shutdown()
@@ -77,10 +91,14 @@ def test_router_same_as_http():
 def _raw_post(port, headers, body=b""):
     """手写一个 POST，返回状态行；5 秒没答复抛 socket.timeout（以前不带令牌也会先等着读完请求体）"""
     import socket
+
     s = socket.create_connection(("127.0.0.1", port), timeout=5)
     try:
         h = "".join(f"{k}: {v}\r\n" for k, v in headers.items())
-        s.sendall(f"POST /api/about_info HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{h}\r\n".encode() + body)
+        s.sendall(
+            f"POST /api/about_info HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{h}\r\n".encode()
+            + body
+        )
         return s.recv(4096).split(b"\r\n", 1)[0]
     finally:
         s.close()
@@ -90,16 +108,29 @@ def test_post_rejects_before_reading_body():
     """不带令牌、请求体太大、Content-Length 不对：不读请求体直接拒绝（S5 审查 2026-10-31：以前先按 Content-Length
     把请求体整个读进内存再验令牌，本机任何程序不带令牌就能让 AT 吃掉上 GB 内存）"""
     from sc_mining.app.server import Server, Handler, TOKEN
+
     srv = Server(("127.0.0.1", 0), Handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     port = srv.server_address[1]
     try:
-        assert b" 403 " in _raw_post(port, {"Content-Length": str(10 ** 9)})
-        assert b" 403 " in _raw_post(port, {"Content-Length": str(10 ** 9), "X-Token": "guess"})
-        assert b" 413 " in _raw_post(port, {"Content-Length": str(10 ** 9), "X-Token": TOKEN})
+        assert b" 403 " in _raw_post(port, {"Content-Length": str(10**9)})
+        assert b" 403 " in _raw_post(
+            port, {"Content-Length": str(10**9), "X-Token": "guess"}
+        )
+        assert b" 413 " in _raw_post(
+            port, {"Content-Length": str(10**9), "X-Token": TOKEN}
+        )
         assert b" 400 " in _raw_post(port, {"Content-Length": "-1", "X-Token": TOKEN})
         assert b" 400 " in _raw_post(port, {"Content-Length": "abc", "X-Token": TOKEN})
-        assert b" 200 " in _raw_post(port, {"Content-Length": "2", "X-Token": TOKEN, "Content-Type": "application/json"}, b"{}")
+        assert b" 200 " in _raw_post(
+            port,
+            {
+                "Content-Length": "2",
+                "X-Token": TOKEN,
+                "Content-Type": "application/json",
+            },
+            b"{}",
+        )
     finally:
         srv.shutdown()
 
@@ -110,6 +141,7 @@ def test_no_synthetic_input():
     import re
     from sc_mining.core import paths
     from sc_mining.system import helpers as H
+
     bad = re.compile(r"SendInput|keybd_event|mouse_event|KEYEVENTF|_KEYBDINPUT")
     hits = {}
     for p in paths.CODE.rglob("*.py"):
@@ -125,29 +157,53 @@ def test_settings_drop_autorun(monkeypatch, tmp_path):
     """1.1.2 删掉自动跑：没有 autorun / autorun_sprint 默认值；老设置文件里的读出来也没有，文件里也清掉（回滚旧版不会自动开）"""
     import json
     from sc_mining.core import settings
+
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
-    assert "autorun" not in settings.DEFAULTS and "autorun_sprint" not in settings.DEFAULTS
-    settings.FILE.write_text(json.dumps({"agreed": True, "keys_v5": True, "autorun": True, "autorun_sprint": True}), encoding="utf-8")
+    assert (
+        "autorun" not in settings.DEFAULTS and "autorun_sprint" not in settings.DEFAULTS
+    )
+    settings.FILE.write_text(
+        json.dumps(
+            {"agreed": True, "keys_v5": True, "autorun": True, "autorun_sprint": True}
+        ),
+        encoding="utf-8",
+    )
     c = settings.load()
     assert "autorun" not in c and "autorun_sprint" not in c and c["agreed"] is True
     saved = json.loads(settings.FILE.read_text(encoding="utf-8"))
-    assert "autorun" not in saved and "autorun_sprint" not in saved and saved["agreed"] is True
+    assert (
+        "autorun" not in saved
+        and "autorun_sprint" not in saved
+        and saved["agreed"] is True
+    )
 
 
-ENGINES = ("game_events", "nav", "live", "pos", "count", "hover", "cam_filter", "steady", "logwatch")
+ENGINES = (
+    "game_events",
+    "nav",
+    "live",
+    "pos",
+    "count",
+    "hover",
+    "cam_filter",
+    "steady",
+    "logwatch",
+)
 
 
 def test_engine_manager_singleton():
     from sc_mining.app.engines.manager import EngineManager
+
     m = EngineManager.get_instance()
     assert m is EngineManager.get_instance()
-    for n in ENGINES:                                    # 阶段 4：services.py 删了，不再对 services._xxx 是同一个
+    for n in ENGINES:  # 阶段 4：services.py 删了，不再对 services._xxx 是同一个
         assert getattr(m, n) is not None, n
 
 
 def test_start_all_needs_agreed(monkeypatch):
     from sc_mining.core import settings
     from sc_mining.app.engines.manager import EngineManager
+
     m = EngineManager.get_instance()
     monkeypatch.setattr(settings, "load", lambda: {"agreed": False, "live_on": True})
     called = []
@@ -161,8 +217,11 @@ def test_start_all_needs_agreed(monkeypatch):
 def test_stop_all_sets_events(monkeypatch):
     from sc_mining.app.engines.manager import EngineManager
     from sc_mining.system import gpu_ocr
+
     m = EngineManager.get_instance()
-    monkeypatch.setattr(m.live, "stop_ev", threading.Event())        # 用新的，测完换回原来的（别把真引擎停了）
+    monkeypatch.setattr(
+        m.live, "stop_ev", threading.Event()
+    )  # 用新的，测完换回原来的（别把真引擎停了）
     monkeypatch.setattr(m.nav, "stop_ev", threading.Event())
     monkeypatch.setattr(gpu_ocr, "shutdown", lambda: None)
     m.stop_all()
@@ -172,10 +231,20 @@ def test_stop_all_sets_events(monkeypatch):
 def _run_main(monkeypatch, tmp_path, shell):
     """server.main(open_ui=True) 跑一遍：网页服务、托盘、引擎、子进程都换成假的。
     shell：假的 ATShell.exe 路径（None = 没有外壳）。返回 (子进程命令行列表, 其它调用)"""
-    from sc_mining.app import server, bus, overlay, tray, winid, launcher, instance, http_server
+    from sc_mining.app import (
+        server,
+        bus,
+        overlay,
+        tray,
+        winid,
+        launcher,
+        instance,
+        http_server,
+    )
     from sc_mining.tasks import system as t_sys
     from sc_mining.app.engines.manager import EngineManager
     from sc_mining.core import paths, perf
+
     calls, popen = [], []
 
     class FakeServer:
@@ -211,15 +280,18 @@ def _run_main(monkeypatch, tmp_path, shell):
         def __init__(self, args, **k):
             self.args = args
             popen.append([str(a) for a in args])
-            server.QUIT.set()                                   # 窗口一开就退出，main 走完收尾
+            server.QUIT.set()  # 窗口一开就退出，main 走完收尾
 
         def wait(self, timeout=None):
-            return 0                                            # 外壳正常退出：不触发换 Edge
+            return 0  # 外壳正常退出：不触发换 Edge
 
         def terminate(self):
             pass
+
     monkeypatch.setattr(server.subprocess, "Popen", FakeProc)
-    monkeypatch.setattr(launcher, "shell_exe", lambda: shell)        # server.py 按职责拆开后，开窗口在 launcher（2026-10-31）
+    monkeypatch.setattr(
+        launcher, "shell_exe", lambda: shell
+    )  # server.py 按职责拆开后，开窗口在 launcher（2026-10-31）
     monkeypatch.setattr(launcher, "_browser", lambda: "msedge.exe")
     monkeypatch.setattr(winid, "brand_window", lambda *a, **k: None)
     monkeypatch.setattr(winid, "close_windows", lambda *a, **k: None)
@@ -229,11 +301,17 @@ def _run_main(monkeypatch, tmp_path, shell):
     monkeypatch.setattr(bus, "install_router", lambda: None)
     monkeypatch.setattr(perf, "lower_priority", lambda: None)
     monkeypatch.setattr(overlay, "hud", lambda: None)
-    monkeypatch.setattr(t_sys, "start_background", lambda: None)            # server.main 调的是 tasks.system 的（阶段 4）
+    monkeypatch.setattr(
+        t_sys, "start_background", lambda: None
+    )  # server.main 调的是 tasks.system 的（阶段 4）
     monkeypatch.setattr(tray, "Tray", FakeTray)
     monkeypatch.setattr(paths, "USER", tmp_path)
-    monkeypatch.setattr(launcher, "STATE", {"url": "", "tray": None, "told_tray": False})  # 别留下假托盘给后面的测试
-    monkeypatch.setattr(EngineManager.get_instance(), "stop_all", lambda: calls.append("stop_all"))
+    monkeypatch.setattr(
+        launcher, "STATE", {"url": "", "tray": None, "told_tray": False}
+    )  # 别留下假托盘给后面的测试
+    monkeypatch.setattr(
+        EngineManager.get_instance(), "stop_all", lambda: calls.append("stop_all")
+    )
     try:
         server.main()
     finally:
@@ -245,6 +323,7 @@ def test_main_opens_shell_or_edge(monkeypatch, tmp_path):
     """open_ui 时窗口只走 ATShell，没有外壳才开 Edge 应用窗口；PyWebview 窗口已删（2026-10-31）"""
     import importlib.util
     from sc_mining.app import server
+
     url = "http://127.0.0.1:12345/#t=" + server.TOKEN
     assert importlib.util.find_spec("sc_mining.app.window") is None
     assert importlib.util.find_spec("sc_mining.app.api.bridge") is None
@@ -266,10 +345,13 @@ def test_main_opens_shell_or_edge(monkeypatch, tmp_path):
 def test_appjs_no_pywebview():
     """app.js 不再有 PyWebview 分支：api() 只走 fetch，shellSync 只看 ATShell 的 chrome.webview"""
     from pathlib import Path
-    js = (Path(__file__).resolve().parent.parent / "sc_mining" / "app" / "web" / "app.js").read_text(encoding="utf-8")
+
+    js = (
+        Path(__file__).resolve().parent.parent / "sc_mining" / "app" / "web" / "app.js"
+    ).read_text(encoding="utf-8")
     assert "pywebview" not in js.lower()
-    body = js[js.index("function shellSync()"):]
-    body = body[:body.index("\n}\n")]
+    body = js[js.index("function shellSync()") :]
+    body = body[: body.index("\n}\n")]
     assert "if (!wv) return;" in body
 
 
@@ -277,9 +359,21 @@ def test_server_split_keeps_old_names():
     """server.py 按职责拆成 http_server / launcher / instance（控制台指令第 1 批，2026-10-31）：
     外面用的旧名字从 server 照样拿得到，是同一个对象；令牌、监听地址的检查只在 http_server 一处"""
     from sc_mining.app import server, http_server, launcher, instance
-    for name, mod in (("Server", http_server), ("Handler", http_server), ("TOKEN", http_server), ("MAX_BODY", http_server),
-                      ("QUIT", launcher), ("STATE", launcher), ("_browser", launcher), ("show_window", launcher),
-                      ("open_window", launcher), ("_try_lock", instance), ("_single_instance", instance), ("release_instance", instance)):
+
+    for name, mod in (
+        ("Server", http_server),
+        ("Handler", http_server),
+        ("TOKEN", http_server),
+        ("MAX_BODY", http_server),
+        ("QUIT", launcher),
+        ("STATE", launcher),
+        ("_browser", launcher),
+        ("show_window", launcher),
+        ("open_window", launcher),
+        ("_try_lock", instance),
+        ("_single_instance", instance),
+        ("release_instance", instance),
+    ):
         assert getattr(server, name) is getattr(mod, name), name
     assert callable(server.main) and callable(server._relaunch)
 
@@ -288,14 +382,18 @@ def test_startup_drops_stale_restart_request(monkeypatch, tmp_path):
     """AT 刚启动时留下的重启请求直接删掉，不再拉起 restart 进程（S5 第 4 批审查 2026-10-31：那个进程拿旧的
     window_url.txt 叫不动这个 AT，空等 60 秒后弹「上一个 AT 还没退出」）；运行中收到的重启请求照旧处理"""
     from sc_mining.system import helpers as H
+
     started = []
     monkeypatch.setattr(H, "RESTART_REQUEST", tmp_path / "restart_request")
     monkeypatch.setattr(H, "FLAG", tmp_path / ".autorun_on")
-    monkeypatch.setattr(H.subprocess if hasattr(H, "subprocess") else __import__("subprocess"), "Popen",
-                        lambda *a, **k: started.append(a))
+    monkeypatch.setattr(
+        H.subprocess if hasattr(H, "subprocess") else __import__("subprocess"),
+        "Popen",
+        lambda *a, **k: started.append(a),
+    )
     H.RESTART_REQUEST.write_text("")
     H.FLAG.write_text("")
     H.clear_startup()
     assert not H.RESTART_REQUEST.exists() and not H.FLAG.exists() and started == []
-    H.RESTART_REQUEST.write_text("")                    # 运行中（同意声明、改管理员设置时）：照旧重启
+    H.RESTART_REQUEST.write_text("")  # 运行中（同意声明、改管理员设置时）：照旧重启
     assert H.start() is False and not H.RESTART_REQUEST.exists() and len(started) == 1

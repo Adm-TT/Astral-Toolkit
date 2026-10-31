@@ -7,6 +7,7 @@ Controller 写法（阶段 1–3）：sc_mining/app/api/<领域>.py 里写接口
     ROUTES = {"接口名": 函数, …}
 不用改 router。
 """
+
 import importlib
 import json
 import pkgutil
@@ -26,6 +27,7 @@ def routes():
     with _lock:
         if _cache is None:
             from .. import api as _pkg
+
             table = {}
             for m in sorted(pkgutil.iter_modules(_pkg.__path__), key=lambda m: m.name):
                 if m.name in _SKIP:
@@ -50,7 +52,9 @@ def call(name, args=None):
         return {"ok": False, "error": f"没有 {name}"}
     try:
         result = fn(**(args or {}))
-        data = json.loads(json.dumps(result, ensure_ascii=False, default=str))   # Decimal、Path 变字符串，和 HTTP 一样
+        data = json.loads(
+            json.dumps(result, ensure_ascii=False, default=str)
+        )  # Decimal、Path 变字符串，和 HTTP 一样
         return {"ok": True, "data": data}
     except Exception as e:
         traceback.print_exc()

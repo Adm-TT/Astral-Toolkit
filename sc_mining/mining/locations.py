@@ -3,6 +3,7 @@
 百分比是 SCMiner 页面上的原值，含义是该矿在这个地点的出现概率（用户确认）；
 各矿独立计算，所以同一地点加起来不等于 100%。
 """
+
 import re
 
 # 地点|母星|星系|类型|矿物 百分比;…（SCMiner 原文，Aluminium 统一写成 Aluminum）
@@ -62,23 +63,51 @@ Yela Asteroid Belt|Stanton Star|Stanton|Belt|Agricium 29;Aslarite 29;Titanium 29
 
 # 中文名（来自用户的汉化包）
 _ZH = {
-    "Hurston": "赫斯顿", "Arial": "艾瑞尔", "Aberdeen": "阿伯丁", "Magda": "玛格达", "Ita": "依塔",
-    "Crusader": "十字军", "Cellin": "赛琳", "Daymar": "戴玛尔", "Yela": "耶拉",
-    "ArcCorp": "弧光星", "Lyria": "莉瑞雅", "Wala": "瓦菈",
-    "microTech": "微科星", "Calliope": "卡利俄佩", "Clio": "克利俄", "Euterpe": "欧忒耳佩",
-    "Aaron Halo": "亚伦环", "Yela Asteroid Belt": "耶拉小行星带",
-    "Pyro I": "派罗 I", "Pyro II (Monox)": "殁氧星（派罗 II）", "Pyro III (Bloom)": "盛放星（派罗 III）",
-    "Pyro IV": "派罗 IV", "Pyro VI (Terminus)": "端点星（派罗 VI）",
-    "Pyro V-a (Ignis)": "伊格尼斯（派罗 V-a）", "Pyro V-b (Vatra)": "瓦塔拉（派罗 V-b）",
-    "Pyro V-c (Adir)": "阿迪尔（派罗 V-c）", "Pyro V-d (Fairo)": "法伊罗（派罗 V-d）",
-    "Pyro V-e (Fuego)": "弗果（派罗 V-e）", "Pyro V-f (Vuur)": "伏尔（派罗 V-f）",
-    "Akiro Cluster": "阿克罗团", "Glaciem Ring": "冰川环带", "Keeger Belt": "基格小行星带",
+    "Hurston": "赫斯顿",
+    "Arial": "艾瑞尔",
+    "Aberdeen": "阿伯丁",
+    "Magda": "玛格达",
+    "Ita": "依塔",
+    "Crusader": "十字军",
+    "Cellin": "赛琳",
+    "Daymar": "戴玛尔",
+    "Yela": "耶拉",
+    "ArcCorp": "弧光星",
+    "Lyria": "莉瑞雅",
+    "Wala": "瓦菈",
+    "microTech": "微科星",
+    "Calliope": "卡利俄佩",
+    "Clio": "克利俄",
+    "Euterpe": "欧忒耳佩",
+    "Aaron Halo": "亚伦环",
+    "Yela Asteroid Belt": "耶拉小行星带",
+    "Pyro I": "派罗 I",
+    "Pyro II (Monox)": "殁氧星（派罗 II）",
+    "Pyro III (Bloom)": "盛放星（派罗 III）",
+    "Pyro IV": "派罗 IV",
+    "Pyro VI (Terminus)": "端点星（派罗 VI）",
+    "Pyro V-a (Ignis)": "伊格尼斯（派罗 V-a）",
+    "Pyro V-b (Vatra)": "瓦塔拉（派罗 V-b）",
+    "Pyro V-c (Adir)": "阿迪尔（派罗 V-c）",
+    "Pyro V-d (Fairo)": "法伊罗（派罗 V-d）",
+    "Pyro V-e (Fuego)": "弗果（派罗 V-e）",
+    "Pyro V-f (Vuur)": "伏尔（派罗 V-f）",
+    "Akiro Cluster": "阿克罗团",
+    "Glaciem Ring": "冰川环带",
+    "Keeger Belt": "基格小行星带",
     "Breaker Stations Large Geode": "Breaker 站大晶洞",
-    "Hathor Caves": "校准站矿洞", "Breaker Stations Interior": "Breaker 站内部",
+    "Hathor Caves": "校准站矿洞",
+    "Breaker Stations Interior": "Breaker 站内部",
 }
-_NO_EN = {"Hathor Caves"}          # 只写中文（用户 2026-10-25：Hathor 矿洞写成「校准站矿洞」）
+_NO_EN = {"Hathor Caves"}  # 只写中文（用户 2026-10-25：Hathor 矿洞写成「校准站矿洞」）
 _SYS_ZH = {"Stanton": "斯坦顿", "Pyro": "派罗", "Nyx": "尼克斯"}
-_TYPE_ZH = {"Belt": "小行星带", "Moon": "卫星地表", "Planet": "行星地表", "Cave": "矿洞", "Interior": "空间站内部"}
+_TYPE_ZH = {
+    "Belt": "小行星带",
+    "Moon": "卫星地表",
+    "Planet": "行星地表",
+    "Cave": "矿洞",
+    "Interior": "空间站内部",
+}
 
 
 def _parse():
@@ -89,7 +118,9 @@ def _parse():
         for item in ores.split(";"):
             m, pct = item.rsplit(" ", 1)
             minerals[m] = float(pct)
-        out.append(dict(name=name, parent=parent, system=system, kind=kind, minerals=minerals))
+        out.append(
+            dict(name=name, parent=parent, system=system, kind=kind, minerals=minerals)
+        )
     return out
 
 
@@ -99,7 +130,9 @@ LOCATIONS = _parse()
 def zh_name(loc) -> str:
     name = loc["name"]
     if m := re.fullmatch(r"(ARC|CRU|HUR|MIC)-(L\d)", name):
-        return f"{_ZH.get(loc['parent'], loc['parent'])} {m.group(2)} 拉格朗日点（{name}）"
+        return (
+            f"{_ZH.get(loc['parent'], loc['parent'])} {m.group(2)} 拉格朗日点（{name}）"
+        )
     zh = _ZH.get(name)
     if name in _NO_EN:
         return zh
@@ -109,6 +142,7 @@ def zh_name(loc) -> str:
 def _gem_rows(mineral, system=None):
     """地面小矿（gems.py）的地点，做成和飞船矿一样的地点 dict；矿洞、空间站内部不在飞船矿地点表里"""
     from .gems import GEMS
+
     by_name = {loc["name"]: loc for loc in LOCATIONS}
     rows = []
     for name, sys_, pct in GEMS[mineral]["locs"]:
@@ -116,13 +150,25 @@ def _gem_rows(mineral, system=None):
             continue
         base = by_name.get(name)
         kind = base["kind"] if base else ("Cave" if "Cave" in name else "Interior")
-        rows.append((pct, dict(name=name, parent=base["parent"] if base else "", system=sys_, kind=kind, minerals={})))
+        rows.append(
+            (
+                pct,
+                dict(
+                    name=name,
+                    parent=base["parent"] if base else "",
+                    system=sys_,
+                    kind=kind,
+                    minerals={},
+                ),
+            )
+        )
     return rows
 
 
 def where(mineral: str, system: str | None = None):
     """返回 [(百分比, 地点dict)]，按百分比从高到低；同百分比时，同场竞争矿物少的排前"""
     from .gems import GEMS
+
     if mineral in GEMS:
         return _gem_rows(mineral, system)
     rows = []
@@ -141,30 +187,47 @@ def report(mineral: str, top: int = 8) -> str:
     from .data import best_price, REFINERIES, RARITY
     from ..core.i18n import station_zh
     from ..core.i18n import mineral_zh
+
     rows = where(mineral)
     zh = mineral_zh(mineral)
     if not rows:
         return f"{zh}：SCMiner 的船挖地点数据里没有这种矿。"
     price, city = best_price(mineral)
-    lines = [f"【{zh}】{RARITY.get(mineral, '')}｜精炼后 {price:,}/SCU（{city or '无收购'}）",
-             f"共 {len(rows)} 个地点有，按出现概率排序："]
+    lines = [
+        f"【{zh}】{RARITY.get(mineral, '')}｜精炼后 {price:,}/SCU（{city or '无收购'}）",
+        f"共 {len(rows)} 个地点有，按出现概率排序：",
+    ]
     for pct, loc in rows[:top]:
-        others = sorted(((best_price(m)[0], m) for m in loc["minerals"] if m != mineral), reverse=True)[:3]
+        others = sorted(
+            ((best_price(m)[0], m) for m in loc["minerals"] if m != mineral),
+            reverse=True,
+        )[:3]
         extra = "、".join(mineral_zh(m) for p, m in others if p)
-        lines.append(f"  {pct:>4.0f}%  {zh_name(loc)}｜{_SYS_ZH[loc['system']]} · {_TYPE_ZH[loc['kind']]}"
-                     + (f"｜同场值钱的：{extra}" if extra else ""))
+        lines.append(
+            f"  {pct:>4.0f}%  {zh_name(loc)}｜{_SYS_ZH[loc['system']]} · {_TYPE_ZH[loc['kind']]}"
+            + (f"｜同场值钱的：{extra}" if extra else "")
+        )
     if len(rows) > top:
         lines.append(f"  …另有 {len(rows) - top} 个地点概率更低")
-    bonus = sorted(((b.get(mineral, 0), st, sys_) for st, (sys_, b) in REFINERIES.items()), reverse=True)
+    bonus = sorted(
+        ((b.get(mineral, 0), st, sys_) for st, (sys_, b) in REFINERIES.items()),
+        reverse=True,
+    )
     best = [f"{station_zh(st)} {b:+.0f}%" for b, st, _ in bonus[:3] if b > 0]
     lines.append("精炼加成最高：" + "，".join(best) if best else "无可用精炼加成")
     try:
         from ..crafting.crafting import uses, GEAR_ZH
         from collections import Counter
-        kinds = Counter(GEAR_ZH.get((bp["g"], bp["t"]), bp["t"]) for bp, _, _ in uses(mineral))
+
+        kinds = Counter(
+            GEAR_ZH.get((bp["g"], bp["t"]), bp["t"]) for bp, _, _ in uses(mineral)
+        )
         if kinds:
-            lines.append(f"制造用途：{sum(kinds.values())} 份蓝图（"
-                         + "、".join(f"{k} {n}" for k, n in kinds.most_common(4)) + "），菜单 3 可查详情")
+            lines.append(
+                f"制造用途：{sum(kinds.values())} 份蓝图（"
+                + "、".join(f"{k} {n}" for k, n in kinds.most_common(4))
+                + "），菜单 3 可查详情"
+            )
     except Exception:
         pass
     return "\n".join(lines)
@@ -174,8 +237,11 @@ def ask():
     """交互：输入矿名（中文或英文，可一次输入多个，用空格或逗号分开）"""
     from .data import SIGNATURES
     from ..core.i18n import mineral_en  # noqa: F401
+
     en_names = {k.lower(): k for k in SIGNATURES}
-    print("输入想挖的矿（中文或英文，可多个，用空格分开），直接回车退出。例：量子 金 钨\n")
+    print(
+        "输入想挖的矿（中文或英文，可多个，用空格分开），直接回车退出。例：量子 金 钨\n"
+    )
     while True:
         try:
             raw = input("> ").strip()
@@ -191,6 +257,7 @@ def ask():
 def _match_zh(token):
     """中文矿名：先精确/模糊匹配，再按"包含"匹配（如 "量子" → 量子矿物）"""
     from ..core.i18n import mineral_en, _tables
+
     hit = mineral_en(token)
     if hit:
         return hit

@@ -4,6 +4,7 @@
 python -m sc_mining.run            打开主菜单（AT）
 python -m sc_mining.run install | live | demo | update | where | craft | nav
 """
+
 import subprocess
 import sys
 import traceback
@@ -13,13 +14,15 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 # 下载组件的地方：官方源在中国大陆很慢（识别组件一共两百多 MB），所以装之前先比一下哪个快
-INDEXES = [("官方源", "https://pypi.org/simple"),
-           ("清华镜像", "https://pypi.tuna.tsinghua.edu.cn/simple"),
-           ("阿里云镜像", "https://mirrors.aliyun.com/pypi/simple")]
+INDEXES = [
+    ("官方源", "https://pypi.org/simple"),
+    ("清华镜像", "https://pypi.tuna.tsinghua.edu.cn/simple"),
+    ("阿里云镜像", "https://mirrors.aliyun.com/pypi/simple"),
+]
 _index = None
 
 
-SAMPLE = 400_000          # 测速时真的下载多少字节
+SAMPLE = 400_000  # 测速时真的下载多少字节
 
 
 def _speed(url, timeout=8.0):
@@ -30,9 +33,14 @@ def _speed(url, timeout=8.0):
     import time
     import urllib.parse
     import urllib.request
+
     try:
-        with urllib.request.urlopen(urllib.request.Request(url + "/onnxruntime/", headers={"User-Agent": "pip"}),
-                                    timeout=timeout) as r:
+        with urllib.request.urlopen(
+            urllib.request.Request(
+                url + "/onnxruntime/", headers={"User-Agent": "pip"}
+            ),
+            timeout=timeout,
+        ) as r:
             page = r.read(2_000_000).decode("utf-8", "replace")
         links = _re.findall(r'href="([^"]+?\.whl)[^"]*"', page)
         if not links:
@@ -40,7 +48,9 @@ def _speed(url, timeout=8.0):
         link = urllib.parse.urljoin(url + "/onnxruntime/", links[-1])
         t = time.time()
         got = 0
-        with urllib.request.urlopen(urllib.request.Request(link, headers={"User-Agent": "pip"}), timeout=timeout) as r:
+        with urllib.request.urlopen(
+            urllib.request.Request(link, headers={"User-Agent": "pip"}), timeout=timeout
+        ) as r:
             while got < SAMPLE and time.time() - t < timeout:
                 chunk = r.read(65536)
                 if not chunk:
@@ -54,6 +64,7 @@ def _speed(url, timeout=8.0):
 def pick_index():
     """(名字, 地址)：几个下载源里实际下载最快的那个（同时测，最多十来秒）"""
     from concurrent.futures import ThreadPoolExecutor
+
     print("测各个下载源的速度…")
     with ThreadPoolExecutor(len(INDEXES)) as ex:
         speeds = list(ex.map(lambda x: _speed(x[1]), INDEXES))
@@ -67,26 +78,50 @@ def pick_index():
 
 def _pip(*pkgs):
     from .core.paths import FROZEN
-    if FROZEN:                              # 独立打包版自带全部组件，不用也不能 pip 安装
+
+    if FROZEN:  # 独立打包版自带全部组件，不用也不能 pip 安装
         print("独立版自带全部组件，无需安装")
         return True
     global _index
     if _index is None:
         _index = pick_index()
         print(f"下载源：{_index[0]}")
-    return subprocess.call([sys.executable, "-m", "pip", "install", "-i", _index[1], "--timeout", "60",
-                            "--retries", "5", *pkgs]) == 0
+    return (
+        subprocess.call(
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "-i",
+                _index[1],
+                "--timeout",
+                "60",
+                "--retries",
+                "5",
+                *pkgs,
+            ]
+        )
+        == 0
+    )
 
 
 def _pip_uninstall(*pkgs):
-    return subprocess.call([sys.executable, "-m", "pip", "uninstall", "-y", *pkgs],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0
+    return (
+        subprocess.call(
+            [sys.executable, "-m", "pip", "uninstall", "-y", *pkgs],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        == 0
+    )
 
 
 def _has_directml():
     """现在装着显卡版识别组件 onnxruntime-directml"""
     try:
         from importlib import metadata
+
         metadata.version("onnxruntime-directml")
         return True
     except Exception:
@@ -98,7 +133,8 @@ def use_directml():
     再强制重装一遍显卡版（两个包装在同一个 onnxruntime 目录里，卸 CPU 版会把显卡版的文件一起删掉）。
     显卡版装不上就留着 CPU 版、不卸（以前先卸再装，装失败就两个都没有，识别用不了）"""
     from .core.paths import FROZEN
-    if FROZEN:                              # 独立打包版自带全部组件
+
+    if FROZEN:  # 独立打包版自带全部组件
         return True
     if not _pip("onnxruntime-directml"):
         print("显卡加速组件没装上，继续用 CPU 识别")
@@ -106,15 +142,23 @@ def use_directml():
     _pip_uninstall("onnxruntime")
     if _pip("--force-reinstall", "--no-deps", "onnxruntime-directml"):
         return True
-    print("显卡加速组件没装好，装回 CPU 版识别组件…")        # CPU 版已经卸了：不装回来就一个都没有
+    print(
+        "显卡加速组件没装好，装回 CPU 版识别组件…"
+    )  # CPU 版已经卸了：不装回来就一个都没有
     _pip("onnxruntime")
     return False
 
 
 def _onnx_ok():
     """识别组件真的能用：另开一个 Python 试 import onnxruntime（包装上了、文件却缺了也算不能用）"""
-    return subprocess.call([sys.executable, "-c", "import onnxruntime"],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0
+    return (
+        subprocess.call(
+            [sys.executable, "-c", "import onnxruntime"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        == 0
+    )
 
 
 def install():
@@ -130,9 +174,12 @@ def install():
     exe = None
     try:
         from .app.build_exe import build
+
         exe = build()
     except Exception as e:
-        print(f"（生成 Dubhe.exe 没成功：{e}，可以用 .venv\\Scripts\\python.exe -m sc_mining.run console）")
+        print(
+            f"（生成 Dubhe.exe 没成功：{e}，可以用 .venv\\Scripts\\python.exe -m sc_mining.run console）"
+        )
     if ocr and not _onnx_ok():
         ocr = False
         print("❌ 文字识别组件（onnxruntime）装了但加载不了")
@@ -145,22 +192,26 @@ def install():
 def live():
     print("进游戏后在采矿模式下扫描石头，结果会显示在这里。按 Ctrl+C 退出\n")
     from .mining import screen
+
     sys.argv = ["screen"]
     screen.main()
 
 
 def demo():
     from . import demo as d
+
     d.main()
 
 
 def where():
     from .mining.locations import ask
+
     ask()
 
 
 def craft():
     from .crafting.crafting import ask
+
     ask()
 
 
@@ -170,34 +221,40 @@ class Relaunched(Exception):
 
 def nav():
     from .navigation.navigate import ask
+
     ask()
 
 
 def trade():
     from .trade.console import ask
+
     ask()
 
 
 def assist():
     from .system.helpers import menu as m
+
     m()
 
 
 def run_entry(name):
     """管理员窗口用：直接进某个功能，结束后等回车再关窗口"""
     import os
+
     os.environ.setdefault("PYTHONUTF8", "1")
-    silent = _no_console()              # 从 exe 启动、用 pythonw 重开的管理员窗口：没有命令行
+    silent = _no_console()  # 从 exe 启动、用 pythonw 重开的管理员窗口：没有命令行
     try:
         ENTRIES[name]()
         if name == "menu" or silent:
-            return                      # 助手窗口关了就直接退出
+            return  # 助手窗口关了就直接退出
     except KeyboardInterrupt:
         pass
     except Exception:
         traceback.print_exc()
         if silent:
-            _error_box("助手出错了。错误已记进日志（设置页可导出），发给作者（游戏 ID：Adm_TT）看看。")
+            _error_box(
+                "助手出错了。错误已记进日志（设置页可导出），发给作者（游戏 ID：Adm_TT）看看。"
+            )
             return
         print("出错了，把这个窗口截图发给作者（游戏 ID：Adm_TT）")
     input("\n按回车关闭这个窗口")
@@ -207,14 +264,26 @@ def _is_unpack(fn):
     """这项更新对应的本地文件是不是我们自己解包的版本（source == "unpack"）：是就不用网站版覆盖"""
     import json as _j
     from .core import paths
+
     mod = getattr(fn, "__module__", "") or ""
-    if mod == "sc_mining.crafting.build_crafting":          # 别名表返回的是真模块，__module__ 永远是新路径
+    if (
+        mod == "sc_mining.crafting.build_crafting"
+    ):  # 别名表返回的是真模块，__module__ 永远是新路径
         from .crafting import build_crafting
-        if build_crafting.unpacked() is not None:          # 本机有解包原文件：交给它自己按解包版重编（不会去 scmdb），游戏更新后新蓝图才进得来（二十一审）
+
+        if (
+            build_crafting.unpacked() is not None
+        ):  # 本机有解包原文件：交给它自己按解包版重编（不会去 scmdb），游戏更新后新蓝图才进得来（二十一审）
             return False
-    for f in {"sc_mining.navigation.navigate": ["starmap.json"], "sc_mining.crafting.build_crafting": ["crafting.json"]}.get(mod, []):
+    for f in {
+        "sc_mining.navigation.navigate": ["starmap.json"],
+        "sc_mining.crafting.build_crafting": ["crafting.json"],
+    }.get(mod, []):
         try:
-            if _j.loads(paths.data(f).read_text(encoding="utf-8")).get("source") == "unpack":
+            if (
+                _j.loads(paths.data(f).read_text(encoding="utf-8")).get("source")
+                == "unpack"
+            ):
                 return True
         except Exception:
             pass
@@ -229,34 +298,49 @@ def update(direct=False, web_ok=()):
     from .crafting import build_crafting, loot, shops
     from .navigation import navigate
     from .update import data_pack, localization, uex
-    sources = (("矿价和精炼站加成（UEX）", uex.refresh), ("制造蓝图 + 维科洛兑换（scmdb）", build_crafting.update),
-               ("星图导航数据（starmap.space）", navigate.update), ("商店售卖地点（UEX）", shops.update),
-               ("掉落数据（scl.miao.network）", loot.update))
+
+    sources = (
+        ("矿价和精炼站加成（UEX）", uex.refresh),
+        ("制造蓝图 + 维科洛兑换（scmdb）", build_crafting.update),
+        ("星图导航数据（starmap.space）", navigate.update),
+        ("商店售卖地点（UEX）", shops.update),
+        ("掉落数据（scl.miao.network）", loot.update),
+    )
     pack = {"ok": None}
 
     def from_pack():
         try:
             r = data_pack.update()
         except Exception as e:
-            pack["ok"] = False                    # 下载到了但装的时候出错：是真失败，不要再去各网站直连盖掉半新半旧的文件
+            pack["ok"] = (
+                False  # 下载到了但装的时候出错：是真失败，不要再去各网站直连盖掉半新半旧的文件
+            )
             raise ValueError(f"数据包安装出错：{e}")
         pack["ok"] = r
         if r is None:
             raise ValueError("数据包无法下载")
 
     from_pack_fn = from_pack
-    own = [s for s in sources if getattr(s[1], "__module__", "") not in web_ok and _is_unpack(s[1])]   # 本机已是自己解包的（星图、制造 + 维科洛）：网站版不再盖掉（2026-10-28 老大定：自己解包的优先）
+    own = [
+        s
+        for s in sources
+        if getattr(s[1], "__module__", "") not in web_ok and _is_unpack(s[1])
+    ]  # 本机已是自己解包的（星图、制造 + 维科洛）：网站版不再盖掉（2026-10-28 老大定：自己解包的优先）
     sources = tuple(s for s in sources if s not in own)
 
     def say_own():
         for s in own:
             print(f"跳过{s[0]}：用自己解包的数据")
+
     if direct:
         say_own()
-    jobs = (("最新汉化包（SC汉化盒子）", localization.update),) + (sources if direct else (("数据包", from_pack),))
+    jobs = (("最新汉化包（SC汉化盒子）", localization.update),) + (
+        sources if direct else (("数据包", from_pack),)
+    )
 
-    try:                                    # 在天枢窗口里点「更新」时：几个下载线程的输出都要进窗口的更新记录
+    try:  # 在天枢窗口里点「更新」时：几个下载线程的输出都要进窗口的更新记录
         from .app import bus
+
         task = bus.current_task()
     except Exception:
         bus, task = None, None
@@ -271,28 +355,37 @@ def update(direct=False, web_ok=()):
             print(f"✅ {title} 更新完成")
             return {"title": title, "ok": True}
         except Exception as e:
-            if fn is from_pack_fn and pack["ok"] is None:      # 数据包下不到：不算失败，下面改从各数据网站更新
+            if (
+                fn is from_pack_fn and pack["ok"] is None
+            ):  # 数据包下不到：不算失败，下面改从各数据网站更新
                 return {"title": title, "ok": False, "error": str(e)}
             print(f"❌ {title} 更新失败：{e}（不影响使用，继续用旧数据）")
             return {"title": title, "ok": False, "error": str(e)}
 
     # 几个数据源互不相关，同时下载：总时间≈最慢的那一个，而不是全部加起来（访问国外慢的网络下差别很大）
     from concurrent.futures import ThreadPoolExecutor
+
     with ThreadPoolExecutor(len(jobs)) as ex:
         results = list(ex.map(run, jobs))
-    if not direct and pack["ok"] is None:          # 数据包连不上：改从各数据网站直接下载（和 2026-10-26 以前一样）
+    if (
+        not direct and pack["ok"] is None
+    ):  # 数据包连不上：改从各数据网站直接下载（和 2026-10-26 以前一样）
         print("—— 改从各数据网站直接更新 ——")
         results = [r for r in results if r["title"] != "数据包"]
         say_own()
-        with ThreadPoolExecutor(len(sources)) as ex:          # 解包版的上面已经去掉了
+        with ThreadPoolExecutor(len(sources)) as ex:  # 解包版的上面已经去掉了
             results += list(ex.map(run, sources))
     print("全部更新完成")
     try:
-        data_pack.clear_caches()                   # 不管走哪条路，换了文件就清缓存，不用重启
+        data_pack.clear_caches()  # 不管走哪条路，换了文件就清缓存，不用重启
     except Exception:
         pass
     # 每一项成没成功（巡检和窗口都能直接看，不用从文字里找 ❌）
-    return {"results": results, "ok": sum(r["ok"] for r in results), "total": len(results)}
+    return {
+        "results": results,
+        "ok": sum(r["ok"] for r in results),
+        "total": len(results),
+    }
 
 
 MENU = [
@@ -310,13 +403,15 @@ MENU = [
 
 def menu(console=False, restart=False):
     from .core import paths
+
     try:
-        paths.migrate()                 # 旧版本散落的文件搬到 data/ 和 userdata/
+        paths.migrate()  # 旧版本散落的文件搬到 data/ 和 userdata/
     except Exception:
         traceback.print_exc()
     from .core import settings
     from .system import helpers, showloc
     from .app.server import _single_instance, release_instance
+
     # 只允许开一个天枢：已经开着就把它的窗口叫出来，这次直接退出（不再弹管理员确认框、不再重复挂热键）
     if not _single_instance(restart):
         return
@@ -325,19 +420,20 @@ def menu(console=False, restart=False):
         # 否则 Windows 不让读游戏里的按键。默认直接用管理员身份重开。
         print("正在用管理员身份重新打开助手（Windows 会弹确认框，点「是」）…")
         print("（不想这样的话：在窗口「设置与更新」里关掉「以管理员身份运行」）")
-        release_instance()                          # 让管理员身份的新天枢拿到「只开一个」的锁
+        release_instance()  # 让管理员身份的新天枢拿到「只开一个」的锁
         if showloc.relaunch_as_admin("menu"):
             settings.update(admin=True)
             return
         print("没能用管理员身份打开（可能点了「否」）。热键在游戏里会失效。")
-        if not _single_instance():                  # 没换成功：把锁拿回来，继续用普通身份
+        if not _single_instance():  # 没换成功：把锁拿回来，继续用普通身份
             return
-    helpers.clear_startup()                        # 启动时只清老标记和留下的重启请求，不再拉起 restart 进程
+    helpers.clear_startup()  # 启动时只清老标记和留下的重启请求，不再拉起 restart 进程
     try:
         if console:
             _menu_loop()
         else:
             from .app.server import main as window
+
             window(restart=restart)
     except Relaunched:
         pass
@@ -353,6 +449,7 @@ def console_menu():
 def _menu_loop():
     from .mining.data import GAME_VERSION
     from .system.helpers import status_line
+
     while True:
         print("\n" + "=" * 50)
         print(f"  AT · 游戏数据 {GAME_VERSION}")
@@ -379,12 +476,25 @@ def _menu_loop():
             print("出错了，把这个窗口截图发给作者（游戏 ID：Adm_TT）")
 
 
-ENTRIES = {"menu": menu, "restart": lambda: menu(restart=True), "console": console_menu, "install": install, "live": live, "demo": demo, "update": update,
-           "prices": update, "where": where, "craft": craft, "trade": trade, "nav": lambda: __import__(
-               "sc_mining.navigation.navigate", fromlist=["ask"]).ask()}
+ENTRIES = {
+    "menu": menu,
+    "restart": lambda: menu(restart=True),
+    "console": console_menu,
+    "install": install,
+    "live": live,
+    "demo": demo,
+    "update": update,
+    "prices": update,
+    "where": where,
+    "craft": craft,
+    "trade": trade,
+    "nav": lambda: __import__("sc_mining.navigation.navigate", fromlist=["ask"]).ask(),
+}
+
 
 def _crash_log():
     from .core import paths
+
     paths.crash_log()
 
 
@@ -394,6 +504,7 @@ def _no_console():
     if sys.stdout is not None:
         return False
     from .core import paths
+
     f = open(paths.log("app_log.txt"), "a", encoding="utf-8", buffering=1)
     sys.stdout = sys.stderr = f
     print(f"\n==== {__import__('time').strftime('%F %T')} 启动 ====")
@@ -403,6 +514,7 @@ def _no_console():
 def _error_box(msg):
     try:
         import ctypes
+
         ctypes.windll.user32.MessageBoxW(None, msg, "AT", 0x10)
     except Exception:
         pass
@@ -416,6 +528,8 @@ if __name__ == "__main__":
             (nav if cmd == "nav" else ENTRIES[cmd])()
         except Exception:
             traceback.print_exc()
-            _error_box("助手出错了。错误已记进日志（设置页可导出），发给作者（游戏 ID：Adm_TT）看看。")
+            _error_box(
+                "助手出错了。错误已记进日志（设置页可导出），发给作者（游戏 ID：Adm_TT）看看。"
+            )
         sys.exit(0)
     (nav if cmd == "nav" else ENTRIES[cmd])()

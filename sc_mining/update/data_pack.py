@@ -11,6 +11,7 @@ data.json：{"version": "2026.10.26-1310", "date": "2026-10-26", "game": "4.10.2
             "urls": ["https://gitee.com/…/AT_data_….zip", "https://github.com/…/AT_data_….zip"],
             "loot": {"version": "4.10.2LIVE", "file": "AT_loot_4.10.2LIVE.zip", "size": …, "sha256": "…", "urls": […]}}
 """
+
 import hashlib
 import json
 import re
@@ -24,14 +25,33 @@ from ..core.paths import DATA
 from . import update_check as U
 
 # 数据包里的文件（都在 data/ 下）：都是从国外网站下载或用它们生成的
-FILES = ("prices.json", "shops.json", "crafting.json", "wikelo.json", "starmap.json", "loot_index.json",
-         "item_stats.json", "wiki_items.json", "ship_signatures.json", "mining_rocks.json", "mining_spots.json", "starmap_fixes.json", "city_places.json",
-         "zh_only_names.json", "ship_items.json", "print_spots.json", "place_amenities.json", "places_extra_zh.json",
-         "station_lifts.json")   # 解包：雷达石头表、挖矿点、星图改正、城里目的地（2026-10-27）
-STAMP = DATA / "data_pack.json"            # 本地数据包版本（随数据一起，升级装回安装包里的数据时也一起装回）
+FILES = (
+    "prices.json",
+    "shops.json",
+    "crafting.json",
+    "wikelo.json",
+    "starmap.json",
+    "loot_index.json",
+    "item_stats.json",
+    "wiki_items.json",
+    "ship_signatures.json",
+    "mining_rocks.json",
+    "mining_spots.json",
+    "starmap_fixes.json",
+    "city_places.json",
+    "zh_only_names.json",
+    "ship_items.json",
+    "print_spots.json",
+    "place_amenities.json",
+    "places_extra_zh.json",
+    "station_lifts.json",
+)  # 解包：雷达石头表、挖矿点、星图改正、城里目的地（2026-10-27）
+STAMP = (
+    DATA / "data_pack.json"
+)  # 本地数据包版本（随数据一起，升级装回安装包里的数据时也一起装回）
 NAME = re.compile(r"^AT_data_[\w.-]+\.zip$")
 LOOT_NAME = re.compile(r"^AT_loot_[\w.-]+\.zip$")
-MAX_BYTES = 120 * 2 ** 20
+MAX_BYTES = 120 * 2**20
 
 
 def manifest_urls():
@@ -43,7 +63,9 @@ def manifest_urls():
     if U.GITEE:
         out.append(("Gitee", f"https://gitee.com/{U.GITEE}/raw/master/data.json"))
     if U.GITHUB:
-        out.append(("GitHub", f"https://raw.githubusercontent.com/{U.GITHUB}/main/data.json"))
+        out.append(
+            ("GitHub", f"https://raw.githubusercontent.com/{U.GITHUB}/main/data.json")
+        )
     return out
 
 
@@ -56,21 +78,49 @@ def local_version():
 
 def parse(raw):
     d = json.loads(raw)
-    v, name, sha = str(d.get("version") or ""), str(d.get("file") or ""), str(d.get("sha256") or "").lower()
-    if not re.fullmatch(r"\d{4}\.\d{2}\.\d{2}(-\d{4})?", v) or not NAME.match(name) or not re.fullmatch(r"[0-9a-f]{64}", sha):
+    v, name, sha = (
+        str(d.get("version") or ""),
+        str(d.get("file") or ""),
+        str(d.get("sha256") or "").lower(),
+    )
+    if (
+        not re.fullmatch(r"\d{4}\.\d{2}\.\d{2}(-\d{4})?", v)
+        or not NAME.match(name)
+        or not re.fullmatch(r"[0-9a-f]{64}", sha)
+    ):
         raise ValueError("数据包信息不完整")
     urls = [u for u in d.get("urls") or [] if isinstance(u, str) and U._host_ok(u)]
     if not urls:
         raise ValueError("没有可用的下载地址")
-    out = {"version": v, "date": str(d.get("date") or ""), "game": str(d.get("game") or ""), "file": name,
-           "size": int(d.get("size") or 0), "sha256": sha, "urls": urls, "loot": None}
-    lt = d.get("loot")                      # 掉落明细整包（可选，单独一个文件：只在游戏版本变了才需要重下）
+    out = {
+        "version": v,
+        "date": str(d.get("date") or ""),
+        "game": str(d.get("game") or ""),
+        "file": name,
+        "size": int(d.get("size") or 0),
+        "sha256": sha,
+        "urls": urls,
+        "loot": None,
+    }
+    lt = d.get("loot")  # 掉落明细整包（可选，单独一个文件：只在游戏版本变了才需要重下）
     if isinstance(lt, dict):
         lname, lsha = str(lt.get("file") or ""), str(lt.get("sha256") or "").lower()
-        lurls = [u for u in lt.get("urls") or [] if isinstance(u, str) and U._host_ok(u)]
-        if LOOT_NAME.match(lname) and re.fullmatch(r"[0-9a-f]{64}", lsha) and lurls and lt.get("version"):
-            out["loot"] = {"version": str(lt["version"]), "file": lname, "size": int(lt.get("size") or 0),
-                           "sha256": lsha, "urls": lurls}
+        lurls = [
+            u for u in lt.get("urls") or [] if isinstance(u, str) and U._host_ok(u)
+        ]
+        if (
+            LOOT_NAME.match(lname)
+            and re.fullmatch(r"[0-9a-f]{64}", lsha)
+            and lurls
+            and lt.get("version")
+        ):
+            out["loot"] = {
+                "version": str(lt["version"]),
+                "file": lname,
+                "size": int(lt.get("size") or 0),
+                "sha256": lsha,
+                "urls": lurls,
+            }
     return out
 
 
@@ -120,11 +170,12 @@ def _download(info, dest, progress):
     raise ValueError("；".join(errs))
 
 
-CACHE_HOOKS = []          # 别的模块（tasks.goals、tasks.navigation，import 时）登记自己的清缓存函数：data_pack.CACHE_HOOKS.append(fn)
+CACHE_HOOKS = []  # 别的模块（tasks.goals、tasks.navigation，import 时）登记自己的清缓存函数：data_pack.CACHE_HOOKS.append(fn)
 
 
 def clear_caches():
     """数据文件换了之后把各模块的内存缓存清掉（2026-10-28 审查：更新数据后制造 / 维科洛 / 库存地点 / 物品属性重启前都是旧的）"""
+
     def _clear(mod, *names):
         try:
             m = __import__(f"sc_mining.{mod}", fromlist=names)
@@ -134,10 +185,14 @@ def clear_caches():
                     f.cache_clear()
         except Exception:
             pass
+
     from ..core import paths
+
     paths.clear_json_cache()
     _clear("trade.names", "table", "_index")
-    _clear("crafting.crafting", "data", "_keys")       # crafting 成了包，_keys 在 crafting.crafting 里，包上清不到（同名配方编号会乱）
+    _clear(
+        "crafting.crafting", "data", "_keys"
+    )  # crafting 成了包，_keys 在 crafting.crafting 里，包上清不到（同名配方编号会乱）
     _clear("crafting.wikelo", "load")
     _clear("crafting.stockplaces", "places", "_index")
     _clear("mining.laser", "head_blueprint", "craft_slots")
@@ -145,20 +200,25 @@ def clear_caches():
     _clear("mining.shipsig", "ships")
     try:
         from ..crafting import loot
-        loot._index = None                        # 掉落索引
+
+        loot._index = None  # 掉落索引
         loot._folded.update(of=None, rows=[])
     except Exception:
         pass
     try:
         from ..mining import data
         from . import uex
-        uex.apply_live(data)                      # 矿价 / 精炼站加成（prices.json）→ 内置表（2026-10-28 整体审查：以前窗口从没读过它）
+
+        uex.apply_live(
+            data
+        )  # 矿价 / 精炼站加成（prices.json）→ 内置表（2026-10-28 整体审查：以前窗口从没读过它）
     except Exception:
         pass
     _clear("crafting.goals", "where_to_get")
     try:
         from ..crafting import shops
-        shops._data = None                        # 商店表（shops.load 只在 _data 为 None 时读文件）
+
+        shops._data = None  # 商店表（shops.load 只在 _data 为 None 时读文件）
     except Exception:
         pass
     for fn in list(CACHE_HOOKS):
@@ -182,11 +242,15 @@ def install(zip_path, info=None):
                 raise ValueError("数据包里没有数据文件")
             for f in got:
                 (tmp / f).write_bytes(z.read(names[f]))
-                json.loads((tmp / f).read_text(encoding="utf-8"))      # 坏文件不装
+                json.loads((tmp / f).read_text(encoding="utf-8"))  # 坏文件不装
         DATA.mkdir(parents=True, exist_ok=True)
         from ..crafting.build_crafting import BUILD_LOCK
-        with BUILD_LOCK:                          # 和汉化包重建制造表不同时写同一批文件（二审 2026-10-28）
-            table = {f: {"existed": (DATA / f).exists(), "backup": None, "replaced": False} for f in got}
+
+        with BUILD_LOCK:  # 和汉化包重建制造表不同时写同一批文件（二审 2026-10-28）
+            table = {
+                f: {"existed": (DATA / f).exists(), "backup": None, "replaced": False}
+                for f in got
+            }
             try:
                 for f in got:
                     row = table[f]
@@ -199,17 +263,25 @@ def install(zip_path, info=None):
             except Exception as e:
                 failed = _restore(table, got)
                 try:
-                    clear_caches()                # 换回去的也要让程序重读
+                    clear_caches()  # 换回去的也要让程序重读
                 except Exception:
                     pass
                 if failed:
-                    keep = True                   # 没换回去的文件，备份留着别删
-                    raise ValueError(f"数据装到一半出错（{e}），其中 {len(failed)} 个文件没能换回旧的（{'、'.join(failed[:3])}），"
-                                     f"旧文件留在 {tmp}，再点一次「更新数据」通常能修好") from e
+                    keep = True  # 没换回去的文件，备份留着别删
+                    raise ValueError(
+                        f"数据装到一半出错（{e}），其中 {len(failed)} 个文件没能换回旧的（{'、'.join(failed[:3])}），"
+                        f"旧文件留在 {tmp}，再点一次「更新数据」通常能修好"
+                    ) from e
                 raise
         if info:
-            STAMP.write_text(json.dumps({k: info.get(k) for k in ("version", "date", "game")}, ensure_ascii=False), encoding="utf-8")
-        clear_caches()                          # 新数据马上生效，不用重启（2026-10-28 审查：以前只清了中英对照表）
+            STAMP.write_text(
+                json.dumps(
+                    {k: info.get(k) for k in ("version", "date", "game")},
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+        clear_caches()  # 新数据马上生效，不用重启（2026-10-28 审查：以前只清了中英对照表）
         return len(got)
     finally:
         if not keep:
@@ -219,6 +291,7 @@ def install(zip_path, info=None):
 def _replace_retry(src, dst):
     """换名：被别的线程读着时会失败，稍等再试（和 paths.write_json 一样）"""
     import time as _t
+
     for i in range(6):
         try:
             src.replace(dst)
@@ -246,7 +319,7 @@ def _restore(table, order):
                 (DATA / f).unlink()
         except OSError:
             failed.append(f)
-    for f in order:                               # 没换上的 .new / .back 半成品：清掉
+    for f in order:  # 没换上的 .new / .back 半成品：清掉
         for tail in (".new", ".back"):
             try:
                 (DATA / f".{f}{tail}").unlink()
@@ -258,6 +331,7 @@ def _restore(table, order):
 def _update_loot(info, progress):
     """掉落明细整包：本地版本和数据包里的不一样才下载（约 25 MB），下载后检查是压缩包、版本对得上再替换"""
     from ..crafting import loot
+
     lt = info.get("loot")
     if not lt:
         return
@@ -272,7 +346,7 @@ def _update_loot(info, progress):
             raise ValueError("掉落明细整包版本不符")
         DATA.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(z, DATA / ".loot_details.zip.new")
-        loot.close_bundle()                     # Windows：正在读的文件不能替换
+        loot.close_bundle()  # Windows：正在读的文件不能替换
         (DATA / ".loot_details.zip.new").replace(loot.DETAILS)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -287,7 +361,9 @@ def update(progress=print):
         progress(f"⚠️ 数据包无法下载（{err}），改从各数据网站更新")
         return None
     cur = local_version()
-    if cur and cur > info["version"]:                # 网上的比本地还旧：掉落整包也别跟着退回去（Codex 2026-10-27）
+    if (
+        cur and cur > info["version"]
+    ):  # 网上的比本地还旧：掉落整包也别跟着退回去（Codex 2026-10-27）
         progress(f"数据已是最新（数据包 {cur}）")
         return True
     if cur and cur == info["version"]:
@@ -298,16 +374,18 @@ def update(progress=print):
             z = tmp / info["file"]
             try:
                 _download(info, z, progress)
-            except Exception as e:                # 附件下不到（国内连 GitHub 附件常失败）：和 data.json 读不到一样，退回各网站直连
+            except Exception as e:  # 附件下不到（国内连 GitHub 附件常失败）：和 data.json 读不到一样，退回各网站直连
                 progress(f"⚠️ 数据包下载失败（{e}），改从各数据网站更新")
                 return None
             n = install(z, info)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
-        progress(f"数据包已更新：{cur or '无'} → {info['version']}（{n} 个文件{('，游戏版本 ' + info['game']) if info['game'] else ''}）")
+        progress(
+            f"数据包已更新：{cur or '无'} → {info['version']}（{n} 个文件{('，游戏版本 ' + info['game']) if info['game'] else ''}）"
+        )
     try:
         _update_loot(info, progress)
-    except Exception as e:                      # 掉落明细没下成：查看掉落时照旧现查，不算数据包失败
+    except Exception as e:  # 掉落明细没下成：查看掉落时照旧现查，不算数据包失败
         progress(f"掉落明细未更新：{e}（查看掉落时改为联网查询）")
     return True
 
@@ -331,15 +409,31 @@ def make(out_dir, date=None):
         GAME_VERSION = ""
     tag = f"data-{stamp}"
     urls = U.release_urls(tag, name)
-    m = {"version": stamp, "date": stamp[:10].replace(".", "-"), "game": GAME_VERSION, "file": name,
-         "size": zp.stat().st_size, "sha256": U._sha256(zp), "urls": urls}
+    m = {
+        "version": stamp,
+        "date": stamp[:10].replace(".", "-"),
+        "game": GAME_VERSION,
+        "file": name,
+        "size": zp.stat().st_size,
+        "sha256": U._sha256(zp),
+        "urls": urls,
+    }
     from ..crafting import loot
+
     lv = loot.details_version()
-    if lv:                                      # 掉落明细整包：单独一个文件，和数据包放在同一个发行版里
+    if lv:  # 掉落明细整包：单独一个文件，和数据包放在同一个发行版里
         lname = f"AT_loot_{lv}.zip"
         shutil.copyfile(loot.DETAILS, out_dir / lname)
-        m["loot"] = {"version": lv, "file": lname, "size": (out_dir / lname).stat().st_size,
-                     "sha256": U._sha256(out_dir / lname), "urls": [u.rsplit("/", 1)[0] + "/" + lname for u in urls]}
+        m["loot"] = {
+            "version": lv,
+            "file": lname,
+            "size": (out_dir / lname).stat().st_size,
+            "sha256": U._sha256(out_dir / lname),
+            "urls": [u.rsplit("/", 1)[0] + "/" + lname for u in urls],
+        }
     parse(json.dumps(m))
-    STAMP.write_text(json.dumps({k: m[k] for k in ("version", "date", "game")}, ensure_ascii=False), encoding="utf-8")
+    STAMP.write_text(
+        json.dumps({k: m[k] for k in ("version", "date", "game")}, ensure_ascii=False),
+        encoding="utf-8",
+    )
     return zp, m

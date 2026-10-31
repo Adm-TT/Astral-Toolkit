@@ -1,5 +1,6 @@
 """原矿记录（1.6.70，用户要求）：采矿助手里点「记录」或游戏里按热键，把这块矿的读数、成分、品质、价格和坐标存下来。
 存在 userdata/ore_log.json（升级不动、不打包）。坐标只用 /showlocation 的（和路标同一个规矩），读不到就空着"""
+
 import json
 import threading
 import time
@@ -8,7 +9,7 @@ import uuid
 from ..core.paths import USER
 
 FILE = USER / "ore_log.json"
-MAX = 2000                      # 最多留这么多条，再多删最旧的
+MAX = 2000  # 最多留这么多条，再多删最旧的
 _LOCK = threading.Lock()
 
 
@@ -43,14 +44,31 @@ def _save(rows):
 def from_view(view):
     """采矿助手的结果（tasks.mining.scan_view）→ 一条记录（不含坐标）"""
     ref = (view.get("refine") or [{}])[0] if view.get("refine") else {}
-    lots = [{"zh": r.get("zh"), "en": r.get("en"), "pct": r.get("pct"), "q": r.get("q"), "scu": r.get("scu"),
-             "inert": bool(r.get("inert"))} for r in view.get("lots") or []]
-    return {"rock": view.get("rock") or "?", "mass": view.get("mass"), "resistance": view.get("resistance"),
-            "instability": view.get("instability"), "difficulty": view.get("difficulty") or "",
-            "total_scu": view.get("total_scu"), "lots": lots, "cut": bool(view.get("cut")),
-            "refined_scu": ref.get("scu"), "value": ref.get("value"),
-            "plan": f"{ref['method']} · {ref['station']}" if ref.get("method") else "",
-            "scanned": view.get("at") or ""}
+    lots = [
+        {
+            "zh": r.get("zh"),
+            "en": r.get("en"),
+            "pct": r.get("pct"),
+            "q": r.get("q"),
+            "scu": r.get("scu"),
+            "inert": bool(r.get("inert")),
+        }
+        for r in view.get("lots") or []
+    ]
+    return {
+        "rock": view.get("rock") or "?",
+        "mass": view.get("mass"),
+        "resistance": view.get("resistance"),
+        "instability": view.get("instability"),
+        "difficulty": view.get("difficulty") or "",
+        "total_scu": view.get("total_scu"),
+        "lots": lots,
+        "cut": bool(view.get("cut")),
+        "refined_scu": ref.get("scu"),
+        "value": ref.get("value"),
+        "plan": f"{ref['method']} · {ref['station']}" if ref.get("method") else "",
+        "scanned": view.get("at") or "",
+    }
 
 
 def add(rec):

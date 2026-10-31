@@ -3,6 +3,7 @@
 数据：starcitizen.tools「Ore quality」页（矿石为实测，矿物为 4.9 拆包；2026-10-23 抄录）。
 4.8 之前挖的矿品质是 245~1000 之间的随机数，所以对不上档位的品质照常可用，只是标不出第几档。
 """
+
 LETTERS = ("F", "E", "D", "C", "B", "A", "S")
 PERFECT = 1000
 
@@ -59,7 +60,9 @@ def _key(material):
     for suffix in (" (ore)", " (raw)", " ore", " raw"):
         if low.endswith(suffix):
             low = low[: -len(suffix)]
-    low = {"ice": "pressurized ice"}.get(low, low)     # 制造表里叫 Ice（老大审查 2026-10-28）
+    low = {"ice": "pressurized ice"}.get(
+        low, low
+    )  # 制造表里叫 Ice（老大审查 2026-10-28）
     return _LOWER.get(low)
 
 
@@ -68,7 +71,9 @@ def tiers(material):
     k = _key(material)
     if not k:
         return []
-    return [(f"{l} 档", q) for l, q in zip(LETTERS, TIERS[k]) if q] + [("完美", PERFECT)]  # noqa: E741
+    return [(f"{l} 档", q) for l, q in zip(LETTERS, TIERS[k]) if q] + [
+        ("完美", PERFECT)
+    ]  # noqa: E741
 
 
 def tier_of(material, q):

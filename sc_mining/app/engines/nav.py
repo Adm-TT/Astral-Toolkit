@@ -5,6 +5,7 @@
 _T("mining").xxx = tasks/mining.py，_H().xxx = app/hud_state.py，_E().live / .nav / .pos / .cam_filter = 引擎实例。
 用到：DI_HELP, LIVE_STALE, WIN, _cam_filter, _hud, _mark_hud, _marker_tick, _nav, _nav_log, _nav_view, _off, _place_row, _pos, _space_view, _station_view, _wp_log, fix_key_hint, settings_key, status
 """
+
 import importlib
 import sys
 import threading
@@ -22,12 +23,14 @@ def _T(name):
 
 def _H():
     from .. import hud_state
+
     return hud_state
 
 
 def _E():
     """后台引擎（EngineManager 单例：.live、.nav、.pos、.cam_filter …）"""
     from .manager import EngineManager
+
     return EngineManager.get_instance()
 
 
@@ -39,20 +42,30 @@ def nav_tip(on, last_ok, now, has_shown, di_help):
         return "右上角调试信息：实时识别位置", ""
     if last_ok and now - last_ok < 30:
         if has_shown:
-            return "右上角位置暂时认不出，显示的是上次结果", "\n位置暂停更新，以上是上次结果"
+            return (
+                "右上角位置暂时认不出，显示的是上次结果",
+                "\n位置暂停更新，以上是上次结果",
+            )
         return "等待右上角位置信息…", ""
-    return di_help + "（或在聊天框输入 /showlocation）", "\n读不到位置：控制台输入 r_DisplayInfo 2，或聊天框输入 /showlocation"
+    return (
+        di_help + "（或在聊天框输入 /showlocation）",
+        "\n读不到位置：控制台输入 r_DisplayInfo 2，或聊天框输入 /showlocation",
+    )
 
 
 class _Steady:
     """显示的方位角防抖：真实方位角变了 2° 以上才换显示，免得数字在 359/000/001 之间来回跳"""
+
     DEADBAND = 2.0
 
     def __init__(self):
         self.shown = None
 
     def __call__(self, brg):
-        if self.shown is None or abs((brg - self.shown + 180) % 360 - 180) >= self.DEADBAND:
+        if (
+            self.shown is None
+            or abs((brg - self.shown + 180) % 360 - 180) >= self.DEADBAND
+        ):
             self.shown = brg
         return self.shown
 
@@ -61,7 +74,7 @@ class _CamFilter:
     """CamDir 防误读：OCR 偶尔把负号漏掉（-142 认成 142），指的方向就完全反了。
     跟上一次比：某个角度绝对值差不多、正负号却反了（而且不小），多半是漏了负号，这次不用"""
 
-    AGREE = 3           # 被拒的读数连着这么多帧都差不多：是真转过去了（俯仰 +30 → -30 停住不动），收下
+    AGREE = 3  # 被拒的读数连着这么多帧都差不多：是真转过去了（俯仰 +30 → -30 停住不动），收下
 
     def __init__(self):
         self.last = None
@@ -74,14 +87,24 @@ class _CamFilter:
             return None
         prev, self.last = self.last, cam
         # 绕过 ±180°（比如偏航 178 → -178）是真的转过去了，不算
-        if prev and any(10 < abs(a) < 170 and a * b < 0 and abs(abs(a) - abs(b)) <= 4 for a, b in zip(cam, prev)):
+        if prev and any(
+            10 < abs(a) < 170 and a * b < 0 and abs(abs(a) - abs(b)) <= 4
+            for a, b in zip(cam, prev)
+        ):
             same = self.held and all(abs(a - b) <= 4 for a, b in zip(cam, self.held))
-            self.held, self.count = cam, (self.count + 1 if same and fast else 1 if fast else 0)
+            self.held, self.count = (
+                cam,
+                (self.count + 1 if same and fast else 1 if fast else 0),
+            )
             if self.count < self.AGREE:
-                self.last = prev             # 不信这次，下次还跟上一次比
+                self.last = prev  # 不信这次，下次还跟上一次比
                 return None
-        if self.count >= self.AGREE:         # 以前拒了一次就永远跟旧值比，姿态真变成镜像会一直卡住（S2 审查 2026-10-31）
-            _T("navigation")._wp_log(f"镜头朝向：连着 {self.AGREE} 帧字模读数一致，收下 {cam}（之前是 {prev}）")
+        if (
+            self.count >= self.AGREE
+        ):  # 以前拒了一次就永远跟旧值比，姿态真变成镜像会一直卡住（S2 审查 2026-10-31）
+            _T("navigation")._wp_log(
+                f"镜头朝向：连着 {self.AGREE} 帧字模读数一致，收下 {cam}（之前是 {prev}）"
+            )
         self.held, self.count = None, 0
         return cam
 
@@ -94,30 +117,33 @@ class _Nav:
         self.stop_ev = threading.Event()
         self.thread = None
         self.last_here = None
-        self.fixes = []                     # 太空导航：一键定位（/showlocation）拿到的 [(时间, 星系坐标米)]
+        self.fixes = []  # 太空导航：一键定位（/showlocation）拿到的 [(时间, 星系坐标米)]
         self.space_mode = False
         self.fix_lock = threading.Lock()
         self.clip_seen = None
-        self.session = 0                    # 每次开始 / 结束导航 +1：旧线程、旧的一键定位结果对不上就丢掉
+        self.session = 0  # 每次开始 / 结束导航 +1：旧线程、旧的一键定位结果对不上就丢掉
         self.last_view = None
-        self.ref = None                     # 最近一次算位置用的 (星系坐标, locate 结果, 时间)：记号、转向和罗盘同一个基准
+        self.ref = None  # 最近一次算位置用的 (星系坐标, locate 结果, 时间)：记号、转向和罗盘同一个基准
 
     def target_label(self):
         if not self.target:
             return ""
         from ...navigation.navigate import label
+
         return label(self.target)
 
     def use_space(self, target):
         """「手动定位」（只用 /showlocation 的坐标）还是「实时定位」（读右上角）：玩家在导航页自己切，默认实时。
         太空路标在实时定位下按星系坐标给距离和机头转向（_space_view + steer）"""
         mode = _T("navigation").settings_key("nav_mode", "auto")
-        return mode == "space"      # 2026-10-27：太空路标默认也读右上角（实时），玩家选「手动定位」才只用 /showlocation
+        return (
+            mode == "space"
+        )  # 2026-10-27：太空路标默认也读右上角（实时），玩家选「手动定位」才只用 /showlocation
 
     def start(self, target):
         self.stop()
         space = self.use_space(target)
-        ev = threading.Event()                   # 每次导航自己的停止开关，旧线程拿不到新的
+        ev = threading.Event()  # 每次导航自己的停止开关，旧线程拿不到新的
         with self.fix_lock:
             self.session += 1
             sess = self.session
@@ -127,7 +153,9 @@ class _Nav:
             self.last_view = None
             self.ref = None
             self.stop_ev = ev
-        self.thread = threading.Thread(target=self._guard, args=(ev, sess), daemon=True, name="nav")
+        self.thread = threading.Thread(
+            target=self._guard, args=(ev, sess), daemon=True, name="nav"
+        )
         self.thread.start()
 
     def _guard(self, ev, sess):
@@ -138,15 +166,27 @@ class _Nav:
                 return
             except Exception as e:
                 import traceback
+
                 msg = f"导航出错（第 {attempt + 1} 次）：{e!r}"
                 _T("navigation")._wp_log(msg + "\n" + traceback.format_exc())
                 print(msg)
                 if ev.is_set() or sess != self.session:
                     return
                 if attempt == 2:
-                    self._commit(sess, state={"active": True, "target": _T("navigation")._place_row(self.target) if self.target else None,
-                                              "here": None, "msgs": [], "status": f"导航出错：{e}（重新开始导航试试）", "help": ""},
-                                 hud=f"导航出错：{e}")
+                    self._commit(
+                        sess,
+                        state={
+                            "active": True,
+                            "target": _T("navigation")._place_row(self.target)
+                            if self.target
+                            else None,
+                            "here": None,
+                            "msgs": [],
+                            "status": f"导航出错：{e}（重新开始导航试试）",
+                            "help": "",
+                        },
+                        hud=f"导航出错：{e}",
+                    )
                     return
                 ev.wait(1)
 
@@ -165,7 +205,9 @@ class _Nav:
             mk = None
             if marker is not None:
                 target, data, st, mk_seen = marker
-                mk = _T("mining")._marker_tick(target, data, st, mk_seen, ref if ref is not None else self.ref)
+                mk = _T("mining")._marker_tick(
+                    target, data, st, mk_seen, ref if ref is not None else self.ref
+                )
             if state is not None:
                 bus.publish("nav", dict(state))
             if hud is not None:
@@ -173,10 +215,12 @@ class _Nav:
             return True, mk
 
     def stop(self):
-        with self.fix_lock:                      # 跟 add_fix、_commit 互斥：停了以后旧的定位结果不会再发出来
+        with (
+            self.fix_lock
+        ):  # 跟 add_fix、_commit 互斥：停了以后旧的定位结果不会再发出来
             self.session += 1
             self.target = None
-            self.ref = None                      # 停了基准也清掉：下次开始前记号 / 转向不会拿旧位置算
+            self.ref = None  # 停了基准也清掉：下次开始前记号 / 转向不会拿旧位置算
             self.stop_ev.set()
         if self.thread:
             self.thread.join(2)
@@ -194,14 +238,17 @@ class _Nav:
         """太空路标：拿到一次 /showlocation 坐标 → 距离、近了多少、偏离角、多久到，推给窗口和悬浮窗。
         剪贴板监听和 F9 可能拿到同一份坐标：查重、记录、发布都在同一把锁里做，同一份只算一次"""
         from ...navigation import navigate as n
+
         g = tuple(g)
         with self.fix_lock:
             if session is not None and session != self.session:
-                return None                          # 导航已经结束或换了目标
+                return None  # 导航已经结束或换了目标
             target = self.target
             if not target or not self.space_mode:
                 return None
-            dup = (clip is not None and clip == self.clip_seen) or (self.fixes and self.fixes[-1][1] == g)
+            dup = (clip is not None and clip == self.clip_seen) or (
+                self.fixes and self.fixes[-1][1] == g
+            )
             if clip is not None:
                 self.clip_seen = clip
             if dup:
@@ -209,34 +256,80 @@ class _Nav:
             self.fixes = (self.fixes + [(time.time(), g)])[-10:]
             fixes = list(self.fixes)
             key, hint = _T("navigation").fix_key_hint()
-            f = n.fix_guide(fixes, target, prev_arrived=bool(self.last_view and self.last_view.get("arrived")))
+            f = n.fix_guide(
+                fixes,
+                target,
+                prev_arrived=bool(self.last_view and self.last_view.get("arrived")),
+            )
             text = n.fix_text(f, key)
-            view = {"space": True, "fix": True, "text": text, "direct": f.get("direct"), "arrived": f.get("arrived"),
-                    "city": f.get("city"), "close": f.get("close"),
-                    "deviation": f.get("deviation"), "delta": f.get("delta"), "eta": f.get("eta"), "qt": f.get("qt"),
-                    "aim": f.get("aim"), "fixes": len(fixes)}
+            view = {
+                "space": True,
+                "fix": True,
+                "text": text,
+                "direct": f.get("direct"),
+                "arrived": f.get("arrived"),
+                "city": f.get("city"),
+                "close": f.get("close"),
+                "deviation": f.get("deviation"),
+                "delta": f.get("delta"),
+                "eta": f.get("eta"),
+                "qt": f.get("qt"),
+                "aim": f.get("aim"),
+                "fixes": len(fixes),
+            }
             if not f["same_system"]:
                 view["far"] = text
             self.last_view = view
-            bus.publish("nav", {"active": True, "target": _T("navigation")._place_row(target), "here": view, "msgs": [],
-                                "status": f"一键定位：按 {key}（或输入 /showlocation）更新" if hint.startswith("一键定位") else hint,
-                                "help": "", "at": time.strftime("%H:%M:%S")})
+            bus.publish(
+                "nav",
+                {
+                    "active": True,
+                    "target": _T("navigation")._place_row(target),
+                    "here": view,
+                    "msgs": [],
+                    "status": f"一键定位：按 {key}（或输入 /showlocation）更新"
+                    if hint.startswith("一键定位")
+                    else hint,
+                    "help": "",
+                    "at": time.strftime("%H:%M:%S"),
+                },
+            )
             _H()._hud().set("导航", f"→ {n.label(target)}\n{text}")
-        _T("navigation")._wp_log(f"太空导航定位：{tuple(round(v / 1000, 3) for v in g)} km → {text.splitlines()[0]}")
+        _T("navigation")._wp_log(
+            f"太空导航定位：{tuple(round(v / 1000, 3) for v in g)} km → {text.splitlines()[0]}"
+        )
         return view
 
     def _run_space(self, target, ev, sess):
         """去太空路标：只用 /showlocation 的坐标（玩家社区的通用做法），不读右上角、不靠机头朝向。
         玩家自己在聊天框输 /showlocation（盯着剪贴板；AT 不替你输入）"""
         from ...navigation import navigate as n
+
         key, hint = _T("navigation").fix_key_hint()
         with self.fix_lock:
             if sess != self.session:
                 return
-            bus.publish("nav", {"active": True, "target": _T("navigation")._place_row(target), "here": None, "msgs": [],
-                                "status": hint, "help": ""})
-            _H()._hud().set("导航", f"→ {n.label(target)}\n" + (f"按 {key} 后输入 /showlocation 定位" if hint.startswith("一键定位") else hint))
-            self.clip_seen = n.read_clipboard()       # 开始前剪贴板里的旧坐标不算
+            bus.publish(
+                "nav",
+                {
+                    "active": True,
+                    "target": _T("navigation")._place_row(target),
+                    "here": None,
+                    "msgs": [],
+                    "status": hint,
+                    "help": "",
+                },
+            )
+            _H()._hud().set(
+                "导航",
+                f"→ {n.label(target)}\n"
+                + (
+                    f"按 {key} 后输入 /showlocation 定位"
+                    if hint.startswith("一键定位")
+                    else hint
+                ),
+            )
+            self.clip_seen = n.read_clipboard()  # 开始前剪贴板里的旧坐标不算
         while not ev.is_set():
             clip = n.read_clipboard()
             g = n.parse_clip(clip)
@@ -246,6 +339,7 @@ class _Nav:
 
     def _run(self, ev=None, sess=None):
         from ...navigation import navigate as n
+
         ev = ev or self.stop_ev
         sess = self.session if sess is None else sess
         target = self.target
@@ -255,24 +349,37 @@ class _Nav:
             return self._run_space(target, ev, sess)
         data = n.load()
         head = f"→ {n.label(target)}"
-        state = {"active": True, "target": _T("navigation")._place_row(target), "status": "等待右上角位置信息…", "help": _T("navigation").DI_HELP,
-                 "msgs": [], "here": None}
+        state = {
+            "active": True,
+            "target": _T("navigation")._place_row(target),
+            "status": "等待右上角位置信息…",
+            "help": _T("navigation").DI_HELP,
+            "msgs": [],
+            "here": None,
+        }
         if not self._commit(sess, state=state, hud=f"{head}\n等待位置信息…")[0]:
             return
         shown = ""
         seen = _E().pos.latest[0]
         steady = _Steady()
         self.refresh()
-        clip_seen, tick = n.read_clipboard(), 0       # 读不到右上角时，玩家自己输的 /showlocation 也接住（只在必要时用）
-        prev_goal = None                              # 城里分段路线：当前这一段指向的点（站台 / 目的地）
-        plan = {}                                     # 城里分段路线：定下来的路线和走到第几段
+        clip_seen, tick = (
+            n.read_clipboard(),
+            0,
+        )  # 读不到右上角时，玩家自己输的 /showlocation 也接住（只在必要时用）
+        prev_goal = None  # 城里分段路线：当前这一段指向的点（站台 / 目的地）
+        plan = {}  # 城里分段路线：定下来的路线和走到第几段
         mk_seen = None
         here = ref = None
         while not ev.is_set():
             fresh = False
             got = None
             cur = _E().pos.current
-            if state["here"] is None and cur[1] and time.time() - cur[0] < _T("navigation").LIVE_STALE:
+            if (
+                state["here"] is None
+                and cur[1]
+                and time.time() - cur[0] < _T("navigation").LIVE_STALE
+            ):
                 # 还没算出位置（停着开始导航、或在 AT 里选完目标才切回游戏）：latest 只在坐标变了才换，
                 # 用最近一次读到的完整一份马上算（Codex 2026-10-27）
                 got = (cur[1], cur[2] or {}, False)
@@ -282,58 +389,117 @@ class _Nav:
             elif tick % 3 == 0:
                 clip = n.read_clipboard()
                 g_clip = n.parse_clip(clip)
-                live_ok = time.time() - _E().pos.read_at < _T("navigation").LIVE_STALE        # 右上角读得到：剪贴板的坐标只记下不用（Codex 2026-10-27）
+                live_ok = (
+                    time.time() - _E().pos.read_at < _T("navigation").LIVE_STALE
+                )  # 右上角读得到：剪贴板的坐标只记下不用（Codex 2026-10-27）
                 if g_clip and clip != clip_seen and not live_ok:
                     got = (tuple(g_clip), {"t": time.time()}, True)
                 clip_seen = clip if g_clip else clip_seen
             tick += 1
             if got:
                 g_di, info, by_clip = got
-                if by_clip:                               # /showlocation 的坐标：不掺右上角学来的偏差
-                    here = n.locate(g_di, when=info.get("t"), data=data, use_offset=False)
+                if by_clip:  # /showlocation 的坐标：不掺右上角学来的偏差
+                    here = n.locate(
+                        g_di, when=info.get("t"), data=data, use_offset=False
+                    )
                 else:
-                    here = n.locate(g_di, when=info.get("t"), data=data, local=info.get("local"),
-                                    zone=info.get("zone"), local_ok=info.get("local_ok"))
-                ref = (g_di, here, info.get("t"))         # 这轮的基准：落账（_commit）时才写进 self.ref
-                if n.is_city(target) and n.is_space(target):      # 拉格朗日点 / 跳跃点空间站里（2026-10-27）
+                    here = n.locate(
+                        g_di,
+                        when=info.get("t"),
+                        data=data,
+                        local=info.get("local"),
+                        zone=info.get("zone"),
+                        local_ok=info.get("local_ok"),
+                    )
+                ref = (
+                    g_di,
+                    here,
+                    info.get("t"),
+                )  # 这轮的基准：落账（_commit）时才写进 self.ref
+                if n.is_city(target) and n.is_space(
+                    target
+                ):  # 拉格朗日点 / 跳跃点空间站里（2026-10-27）
                     # 不在同一个区域：按区域坐电梯分段，指向这一段的电梯门（2026-10-28）
-                    goal, steps = n.station_leg(tuple(v / 1000 for v in g_di), target, plan, info.get("inner_zone") or "")
+                    goal, steps = n.station_leg(
+                        tuple(v / 1000 for v in g_di),
+                        target,
+                        plan,
+                        info.get("inner_zone") or "",
+                    )
                     prev_goal = goal
-                    state["here"] = _T("mining")._station_view(g_di, goal, data, info.get("t"), prev=state.get("here"), info=info)
-                    if goal is not target:                # 分段路线：到电梯门不算到达
+                    state["here"] = _T("mining")._station_view(
+                        g_di,
+                        goal,
+                        data,
+                        info.get("t"),
+                        prev=state.get("here"),
+                        info=info,
+                    )
+                    if goal is not target:  # 分段路线：到电梯门不算到达
                         state["here"]["arrived"] = False
                     if steps and not state["here"].get("far"):
                         state["here"]["steps"] = steps
                     else:
                         state["here"].pop("steps", None)
-                    shown = state["here"].get("far") or n.station_text(g_di, goal, data, info.get("t"), state["here"].get("arrived"))
+                    shown = state["here"].get("far") or n.station_text(
+                        g_di, goal, data, info.get("t"), state["here"].get("arrived")
+                    )
                     if state["here"].get("steps"):
                         shown += "\n" + "\n".join(steps)
                 elif n.is_space(target):
                     state["here"] = _T("mining")._space_view(g_di, target, data)
                     shown = n.space_text(g_di, target, data)
                 else:
-                    goal, steps = (n.city_leg(here, target, plan, info.get("inner_zone") or "") if n.is_city(target) else (target, []))
+                    goal, steps = (
+                        n.city_leg(here, target, plan, info.get("inner_zone") or "")
+                        if n.is_city(target)
+                        else (target, [])
+                    )
                     if goal is not target and prev_goal is not goal:
-                        steady = _Steady()                # 换了一段：方位重新防抖
+                        steady = _Steady()  # 换了一段：方位重新防抖
                     prev_goal = goal
-                    state["here"] = _T("mining")._nav_view(here, goal, data, steady, prev=state.get("here"))
-                    if goal is not target:                # 分段路线：到站台不算到达，到没到看最终目的地
+                    state["here"] = _T("mining")._nav_view(
+                        here, goal, data, steady, prev=state.get("here")
+                    )
+                    if (
+                        goal is not target
+                    ):  # 分段路线：到站台不算到达，到没到看最终目的地
                         state["here"]["arrived"] = False
-                    if steps:                             # 最后一段（出站步行）也留着步骤，标在最后一步
+                    if steps:  # 最后一段（出站步行）也留着步骤，标在最后一步
                         state["here"]["steps"] = steps
                     else:
                         state["here"].pop("steps", None)
                     near = n.near_text(here, data)
-                    shown = n._short(here, goal, state["here"].get("bearing"), state["here"].get("arrived")) + (f"\n{near}" if near else "")
+                    shown = n._short(
+                        here,
+                        goal,
+                        state["here"].get("bearing"),
+                        state["here"].get("arrived"),
+                    ) + (f"\n{near}" if near else "")
                     if steps:
                         shown += "\n" + "\n".join(steps)
                     _T("mining")._nav_log(here, info, state["here"])
-                cam = _E().cam_filter.check(info.get("camdir"), fast=bool(info.get("fast")))
-                close = state["here"].get("city") and (state["here"].get("direct_m") or 0) < n.CITY_NEAR_M
-                if cam and not state["here"].get("arrived") and not state["here"].get("far") and not close:
-                    try:                                  # 机头要怎么转（太空里没有南北，靠这个）
-                        st = n.steer(g_di, cam, n.target_global(prev_goal or target, data, info.get("t"), ref))
+                cam = _E().cam_filter.check(
+                    info.get("camdir"), fast=bool(info.get("fast"))
+                )
+                close = (
+                    state["here"].get("city")
+                    and (state["here"].get("direct_m") or 0) < n.CITY_NEAR_M
+                )
+                if (
+                    cam
+                    and not state["here"].get("arrived")
+                    and not state["here"].get("far")
+                    and not close
+                ):
+                    try:  # 机头要怎么转（太空里没有南北，靠这个）
+                        st = n.steer(
+                            g_di,
+                            cam,
+                            n.target_global(
+                                prev_goal or target, data, info.get("t"), ref
+                            ),
+                        )
                         stx = n.steer_text(st, walk=n.is_city(target))
                         state["here"]["steer"] = {**st, "text": stx}
                         shown = stx + "\n" + shown
@@ -343,17 +509,28 @@ class _Nav:
             if ev.is_set():
                 return
             rd = _E().pos.reader
-            stat_text, tip = nav_tip(rd.active, getattr(rd, "ok_at", 0.0), time.time(), bool(shown), _T("navigation").DI_HELP)
+            stat_text, tip = nav_tip(
+                rd.active,
+                getattr(rd, "ok_at", 0.0),
+                time.time(),
+                bool(shown),
+                _T("navigation").DI_HELP,
+            )
             pub = None
             if fresh or state["status"] != stat_text:
                 state["status"] = stat_text
-                if fresh:                         # 只有真读到新位置才改「几点更新」（以前状态文字一变就改，看着像刚更新过）
+                if fresh:  # 只有真读到新位置才改「几点更新」（以前状态文字一变就改，看着像刚更新过）
                     state["at"] = time.strftime("%H:%M:%S")
                 pub = state
             # 算的时候被停掉 / 换了目标：_commit 在锁里核对 session，不对就什么都不发、记号不画（老大审查 2026-10-28）
-            ok, mk_seen = self._commit(sess, here=here if fresh else None, ref=ref if fresh else None, state=pub,
-                                       hud=f"{head}\n{shown or '等待位置信息…'}" + tip,
-                                       marker=(prev_goal or target, data, state, mk_seen))
+            ok, mk_seen = self._commit(
+                sess,
+                here=here if fresh else None,
+                ref=ref if fresh else None,
+                state=pub,
+                hud=f"{head}\n{shown or '等待位置信息…'}" + tip,
+                marker=(prev_goal or target, data, state, mk_seen),
+            )
             if not ok:
                 return
             time.sleep(0.1)
@@ -364,16 +541,19 @@ class _GameEvents:
 
     def __init__(self):
         self.thread = None
-        self.last = {}               # 种类 → (时间, 内容)
-        self.arrived_at = 0.0        # 最后一次量子到达（本机时间）
+        self.last = {}  # 种类 → (时间, 内容)
+        self.arrived_at = 0.0  # 最后一次量子到达（本机时间）
 
     def start(self):
         if WIN and not self.thread:
-            self.thread = threading.Thread(target=self._run, daemon=True, name="game-events")
+            self.thread = threading.Thread(
+                target=self._run, daemon=True, name="game-events"
+            )
             self.thread.start()
 
     def _run(self):
         from ...system.gamelog import EventTail
+
         tail = EventTail()
         while True:
             if _H()._off("game_events"):
@@ -384,7 +564,7 @@ class _GameEvents:
                     self.last[k] = (t, v)
                     if k == "qt_arrived":
                         self.arrived_at = time.time()
-                        _E().nav.refresh()                     # 马上读一次位置
+                        _E().nav.refresh()  # 马上读一次位置
                     bus.publish("gamelog", {"kind": k, "value": v, "t": t})
             except Exception:
                 pass

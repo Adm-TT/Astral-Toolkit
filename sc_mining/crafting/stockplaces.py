@@ -6,6 +6,7 @@
 - 以前手打的位置：中文名、英文名、去掉空格大小写后对得上的算这个地点；对不上的归「未归类」
 - 游戏里最后打开库存的地方（游戏日志）就是入库默认的地点
 """
+
 import re
 from collections import Counter
 from functools import lru_cache
@@ -15,7 +16,10 @@ SYS_ZH = {"Stanton": "斯坦顿", "Pyro": "派罗", "Nyx": "尼克斯"}
 KIND_ORDER = ("城市", "空间站", "休息站", "星门")
 
 # 汉化包里叫法不一样、或者玩家常用别的叫法的
-_NAME_ZH = {"Checkmate Station": "死局空间站", "Green Imperial Housing Exchange": "六角湾"}
+_NAME_ZH = {
+    "Checkmate Station": "死局空间站",
+    "Green Imperial Housing Exchange": "六角湾",
+}
 _ALIASES = {
     "Green Imperial Housing Exchange": ("Grim HEX", "GrimHEX", "Grim Hex Station"),
     "Area 18": ("A18", "Area18 仓库"),
@@ -27,18 +31,28 @@ _ALIASES = {
 }
 # 商店数据读不到时的保底（星系, 星球, 卫星, 名字, 城市?）
 _FALLBACK = (
-    ("Stanton", "ArcCorp", "", "Area 18", True), ("Stanton", "ArcCorp", "", "Baijini Point", False),
-    ("Stanton", "Crusader", "", "Orison", True), ("Stanton", "Crusader", "", "Seraphim Station", False),
+    ("Stanton", "ArcCorp", "", "Area 18", True),
+    ("Stanton", "ArcCorp", "", "Baijini Point", False),
+    ("Stanton", "Crusader", "", "Orison", True),
+    ("Stanton", "Crusader", "", "Seraphim Station", False),
     ("Stanton", "Crusader", "Yela", "Green Imperial Housing Exchange", False),
-    ("Stanton", "Hurston", "", "Lorville", True), ("Stanton", "Hurston", "", "Everus Harbor", False),
-    ("Stanton", "MicroTech", "", "New Babbage", True), ("Stanton", "MicroTech", "", "Port Tressler", False),
-    ("Stanton", "", "", "Pyro Gateway (Stanton)", False), ("Stanton", "", "", "Nyx Gateway (Stanton)", False),
+    ("Stanton", "Hurston", "", "Lorville", True),
+    ("Stanton", "Hurston", "", "Everus Harbor", False),
+    ("Stanton", "MicroTech", "", "New Babbage", True),
+    ("Stanton", "MicroTech", "", "Port Tressler", False),
+    ("Stanton", "", "", "Pyro Gateway (Stanton)", False),
+    ("Stanton", "", "", "Nyx Gateway (Stanton)", False),
     ("Stanton", "", "", "Terra Gateway (Stanton)", False),
-    ("Pyro", "Monox", "", "Checkmate Station", False), ("Pyro", "Bloom", "", "Orbituary", False),
-    ("Pyro", "Terminus", "", "Ruin Station", False), ("Pyro", "Pyro V", "", "Gaslight", False),
-    ("Pyro", "Pyro V", "", "Rat's Nest", False), ("Pyro", "Pyro IV", "", "Endgame", False),
-    ("Pyro", "Terminus", "", "Dudley & Daughters", False), ("Pyro", "", "", "Stanton Gateway (Pyro)", False),
-    ("Nyx", "Delamar", "", "Levski", True), ("Nyx", "", "", "Stanton Gateway (Nyx)", False),
+    ("Pyro", "Monox", "", "Checkmate Station", False),
+    ("Pyro", "Bloom", "", "Orbituary", False),
+    ("Pyro", "Terminus", "", "Ruin Station", False),
+    ("Pyro", "Pyro V", "", "Gaslight", False),
+    ("Pyro", "Pyro V", "", "Rat's Nest", False),
+    ("Pyro", "Pyro IV", "", "Endgame", False),
+    ("Pyro", "Terminus", "", "Dudley & Daughters", False),
+    ("Pyro", "", "", "Stanton Gateway (Pyro)", False),
+    ("Nyx", "Delamar", "", "Levski", True),
+    ("Nyx", "", "", "Stanton Gateway (Nyx)", False),
 )
 
 
@@ -52,6 +66,7 @@ def body_zh(name):
     if not name:
         return ""
     from ..navigation.navigate import BODY_ZH
+
     if name in BODY_ZH:
         return BODY_ZH[name]
     low = {k.lower(): v for k, v in BODY_ZH.items()}
@@ -76,6 +91,7 @@ def _raw_places():
     """[(星系, 星球, 卫星, 英文名, 是城市)]：商店终端所在的空间站和城市"""
     try:
         from . import shops
+
         rows = shops.load(auto_update=False).get("rows") or []
     except Exception:
         rows = []
@@ -89,8 +105,14 @@ def _raw_places():
         if not name or system not in SYS_ZH or (system, name) in seen:
             continue
         seen.add((system, name))
-        if not planet and orbit and orbit != name and "gateway" not in orbit.lower() and "lagrange" not in orbit.lower():
-            planet = orbit                                        # 列夫斯基：挂在德拉玛（Delamar）上
+        if (
+            not planet
+            and orbit
+            and orbit != name
+            and "gateway" not in orbit.lower()
+            and "lagrange" not in orbit.lower()
+        ):
+            planet = orbit  # 列夫斯基：挂在德拉玛（Delamar）上
         out.append((system, planet or "", moon or "", name, bool(city)))
     return out or list(_FALLBACK)
 
@@ -99,25 +121,53 @@ def _raw_places():
 def places():
     """所有地点：[{label, zh, en, sys, sys_zh, planet_zh, moon_zh, path, kind, keys}]，按星系、星球排好"""
     from ..navigation.navigate import poi_zh
+
     items = []
     for system, planet, moon, en, city in _raw_places():
         zh = _NAME_ZH.get(en) or poi_zh(en) or en
-        items.append({"en": en, "zh": zh, "sys": system, "sys_zh": SYS_ZH[system], "planet": planet,
-                      "planet_zh": body_zh(planet), "moon_zh": body_zh(moon), "kind": _kind(en, city)})
+        items.append(
+            {
+                "en": en,
+                "zh": zh,
+                "sys": system,
+                "sys_zh": SYS_ZH[system],
+                "planet": planet,
+                "planet_zh": body_zh(planet),
+                "moon_zh": body_zh(moon),
+                "kind": _kind(en, city),
+            }
+        )
     dup = Counter(p["zh"] for p in items)
     for p in items:
         p["label"] = p["zh"] if dup[p["zh"]] == 1 else f"{p['zh']}（{p['sys_zh']}）"
-        p["path"] = " / ".join(x for x in (p["sys_zh"], p["planet_zh"], p["moon_zh"], p["zh"]) if x)
+        p["path"] = " / ".join(
+            x for x in (p["sys_zh"], p["planet_zh"], p["moon_zh"], p["zh"]) if x
+        )
         base = re.sub(r"\s*\(.*?\)\s*", " ", p["en"]).strip()
-        keys = {p["label"], p["zh"], p["en"], base, re.sub(r"(?i)\s+station$", "", base), *_ALIASES.get(p["en"], ())}
+        keys = {
+            p["label"],
+            p["zh"],
+            p["en"],
+            base,
+            re.sub(r"(?i)\s+station$", "", base),
+            *_ALIASES.get(p["en"], ()),
+        }
         m = re.match(r"(?i)((?:ARC|CRU|HUR|MIC)-L\d)", p["en"])
         if m:
-            keys.add(m.group(1))                                  # ARC-L1
-            keys.add(re.sub(r"\s*\S+站$", "", p["zh"]))           # 弧 L1
+            keys.add(m.group(1))  # ARC-L1
+            keys.add(re.sub(r"\s*\S+站$", "", p["zh"]))  # 弧 L1
         p["keys"] = sorted(norm(k) for k in keys if k)
     order = {s: i for i, s in enumerate(SYS_ORDER)}
-    items.sort(key=lambda p: (order.get(p["sys"], 9), not p["planet"], p["planet"].lower(), p["moon_zh"],
-                              KIND_ORDER.index(p["kind"]), p["en"].lower()))
+    items.sort(
+        key=lambda p: (
+            order.get(p["sys"], 9),
+            not p["planet"],
+            p["planet"].lower(),
+            p["moon_zh"],
+            KIND_ORDER.index(p["kind"]),
+            p["en"].lower(),
+        )
+    )
     return tuple(items)
 
 
@@ -152,14 +202,25 @@ def current_place():
     """游戏里最后打开库存的地方：{label, path, kind, minutes, custom}；在列表外的地方（前哨等）custom=True；不知道返回 None"""
     try:
         from ..navigation.position import current
+
         here = current()
     except Exception:
         here = None
     if not here or not here.get("label"):
         return None
     p = match(here["label"], here.get("sys"))
-    out = public(p) if p else {"label": here["label"], "zh": here["label"], "en": "", "sys_zh": SYS_ZH.get(here.get("sys"), ""),
-                                "path": here["label"], "kind": "其他"}
+    out = (
+        public(p)
+        if p
+        else {
+            "label": here["label"],
+            "zh": here["label"],
+            "en": "",
+            "sys_zh": SYS_ZH.get(here.get("sys"), ""),
+            "path": here["label"],
+            "kind": "其他",
+        }
+    )
     out.update(minutes=int(here.get("age", 0) // 60), custom=not p)
     return out
 
@@ -181,7 +242,7 @@ def check_name(name):
 # ---------------------------------------------------------------- 仓位（1.6.40）：一个地点下面自己分的格子，库存里记成「地点｜仓位」
 
 BIN_SEP = "｜"
-MAIN_BIN = "总仓"          # 不分仓位的就在总仓（库存里只记地点名）
+MAIN_BIN = "总仓"  # 不分仓位的就在总仓（库存里只记地点名）
 
 
 def split_loc(location):

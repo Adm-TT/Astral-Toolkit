@@ -2,27 +2,31 @@
 
 UEX 只认英文名；游戏是中文界面，截图识别和手动搜索得到的是中文名，这里负责换成英文再去查。
 """
+
 import json
 import re
 from functools import lru_cache
 from pathlib import Path  # noqa: F401
 
-CJK = re.compile(r'[一-鿿]')
-_PAREN = re.compile(r'\s*[（(][^）)]*[）)]\s*')
+CJK = re.compile(r"[一-鿿]")
+_PAREN = re.compile(r"\s*[（(][^）)]*[）)]\s*")
 
 
 @lru_cache(maxsize=1)
 def table():
     from ..core.paths import DATA
-    path = DATA / 'zh_names.json'
+
+    path = DATA / "zh_names.json"
     try:
-        raw = json.loads(path.read_text(encoding='utf-8'))
+        raw = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
     known = _known_names()
     out = {zh: en for zh, en in raw.items() if not _junk(en, known)}
-    try:                                   # 汉化包只写了中文名的物品（勋章、计算板…）：解包补的英文名（2026-10-27）
-        for zh, en in json.loads((DATA / 'zh_only_names.json').read_text(encoding='utf-8')).items():
+    try:  # 汉化包只写了中文名的物品（勋章、计算板…）：解包补的英文名（2026-10-27）
+        for zh, en in json.loads(
+            (DATA / "zh_only_names.json").read_text(encoding="utf-8")
+        ).items():
             if not _junk(en, known) and len(_norm_zh(zh)) >= 3:
                 out.setdefault(zh, en)
     except (OSError, ValueError):
@@ -33,7 +37,7 @@ def table():
 # 汉化包里物品「简称」带出来的假英文名（1.6.41）：简称后面跟的是尺寸、型号代码，不是英文名，
 # 比如「视差步枪HD」拆成 视差步枪 → HD、「制空-3 Omnisky-3 S1」→ S1、导弹简称「[红外]灾星 XII-IR」、「刀轴Arbor S00」。
 # 以前的对照表里有两百多条这种，「视差步枪」搜出来是 HD。真有这个名字的物品（锡 Tin、墨水 INK）照留。
-_CODE = re.compile(r'(?:[GIVX]+-[A-Z]{1,3}|\d+\s?SCU|.+\sS\d{1,2})')
+_CODE = re.compile(r"(?:[GIVX]+-[A-Z]{1,3}|\d+\s?SCU|.+\sS\d{1,2})")
 
 
 def _junk(en, known):
@@ -47,23 +51,30 @@ def _known_names():
     out = set()
     try:
         from ..crafting import shops
-        out |= {_fold_en(v[0]) for v in shops.load(auto_update=False).get('items', {}).values()}
+
+        out |= {
+            _fold_en(v[0])
+            for v in shops.load(auto_update=False).get("items", {}).values()
+        }
     except Exception:
         pass
     try:
         from ..crafting import loot
-        out |= {_fold_en(r[1]) for r in (loot.load_index(False) or {}).get('rows') or []}
+
+        out |= {
+            _fold_en(r[1]) for r in (loot.load_index(False) or {}).get("rows") or []
+        }
     except Exception:
         pass
     return out
 
 
 def has_chinese(text: str) -> bool:
-    return bool(CJK.search(text or ''))
+    return bool(CJK.search(text or ""))
 
 
 def _norm(text):
-    return re.sub(r'\s+', '', text or '')
+    return re.sub(r"\s+", "", text or "")
 
 
 def to_english(query: str, limit: int = 8) -> list[str]:
@@ -73,7 +84,7 @@ def to_english(query: str, limit: int = 8) -> list[str]:
     t = table()
     q = _norm(query)
     norm = {_norm(k): v for k, v in t.items()}
-    for key in (q, _norm(_PAREN.sub('', query))):
+    for key in (q, _norm(_PAREN.sub("", query))):
         if key in norm:
             return [norm[key]]
     hits = []
@@ -89,12 +100,20 @@ def to_english(query: str, limit: int = 8) -> list[str]:
 # F8 认说明框时常有个别字认错或认丢：「冷冻舱（剜度）」认成「冷冻舱（刻度）」「冷冻舱（度）」，「巅峰期」认成「峰期」。
 # 名字以玩家游戏里的汉化包为准：先用英文名对（英文很少认错），对不上再找最接近的中文名。
 
+
 def _fold_en(text):
-    return re.sub(r'[^a-z0-9]', '', (text or '').lower())
+    return re.sub(r"[^a-z0-9]", "", (text or "").lower())
 
 
 def _norm_zh(text):
-    return (text or '').replace('(', '（').replace(')', '）').replace(' ', '').replace('　', '').strip()
+    return (
+        (text or "")
+        .replace("(", "（")
+        .replace(")", "）")
+        .replace(" ", "")
+        .replace("　", "")
+        .strip()
+    )
 
 
 @lru_cache(maxsize=1)
@@ -112,8 +131,8 @@ _BILINGUAL = re.compile(r'^(.*[一-鿿）)])\s*([A-Za-z][A-Za-z0-9 \-\'".()/&]*)
 
 def split_bilingual(text):
     """「塔兰导电石Taranite」「铁 Iron」这种中英连在一起的 → (中文, 英文)；不是这种的返回 (原文, "")"""
-    m = _BILINGUAL.match((text or '').strip())
-    return (m.group(1).strip(), m.group(2).strip()) if m else ((text or '').strip(), '')
+    m = _BILINGUAL.match((text or "").strip())
+    return (m.group(1).strip(), m.group(2).strip()) if m else ((text or "").strip(), "")
 
 
 def _mineral(zh, en):
@@ -127,9 +146,13 @@ def _mineral(zh, en):
         return None
     by_en = {k.lower(): k for k in SIGNATURES}
     by_en.update({k.lower(): k for k in _tables(False)[1]})
-    m = by_en.get((en or '').strip().lower())
+    m = by_en.get((en or "").strip().lower())
     if not m and zh and not en:
-        m = mineral_en(zh, fuzzy=False, ship_only=False) if len(_norm_zh(zh)) <= 6 else None
+        m = (
+            mineral_en(zh, fuzzy=False, ship_only=False)
+            if len(_norm_zh(zh)) <= 6
+            else None
+        )
     return (mineral_zh(m), m) if m else None
 
 
@@ -142,8 +165,11 @@ def _mineral_near(zh):
     z = _norm_zh(zh)
     if len(z) < 4:
         return None
-    hits = {en for k, en in _tables(False)[0].items()
-            if len(k) == len(z) and sum(a != b for a, b in zip(k, z)) == 1}
+    hits = {
+        en
+        for k, en in _tables(False)[0].items()
+        if len(k) == len(z) and sum(a != b for a, b in zip(k, z)) == 1
+    }
     if len(hits) == 1:
         en = hits.pop()
         return mineral_zh(en), en
@@ -153,24 +179,28 @@ def _mineral_near(zh):
 def _closest(keys, target, floor):
     """keys 里和 target 最像的（相似度 ≥ floor，而且明显比第二名像）；没有返回 None"""
     import difflib
+
     scored = []
     tset = set(target)
     for k in keys:
-        if abs(len(k) - len(target)) > max(2, len(target) // 3) or len(tset & set(k)) < len(tset) * 0.5:
+        if (
+            abs(len(k) - len(target)) > max(2, len(target) // 3)
+            or len(tset & set(k)) < len(tset) * 0.5
+        ):
             continue
         scored.append((difflib.SequenceMatcher(None, k, target).ratio(), k))
     scored.sort(reverse=True)
     if not scored or scored[0][0] < floor:
         return None
     if len(scored) > 1 and scored[0][0] - scored[1][0] < 0.04 and scored[0][0] < 0.95:
-        return None                                   # 两个一样像：不猜
+        return None  # 两个一样像：不猜
     return scored[0][1]
 
 
-def canonical(zh='', en=''):
+def canonical(zh="", en=""):
     """OCR 认出的名字 → 汉化包里的标准 (中文名, 英文名)；对不上返回 None。
     顺序：拆开中英连写 → 矿物（精确）→ 英文名精确 → 中文名精确 → 英文名近似 → 矿名错一个字 → 中文名近似（错一两个字、丢一个字）"""
-    zh, en = (zh or '').strip(), (en or '').strip()
+    zh, en = (zh or "").strip(), (en or "").strip()
     if zh and not en:
         zh, en = split_bilingual(zh)
     hit = _mineral(zh, en)
@@ -198,14 +228,15 @@ def canonical(zh='', en=''):
 
 def zh_for(en):
     """英文名 → 汉化包里的中文名（只认精确的，忽略大小写、空格、标点）"""
-    hit = _mineral('', en) or _index()[1].get(_fold_en(en))
+    hit = _mineral("", en) or _index()[1].get(_fold_en(en))
     return hit[0] if hit else None
 
 
 def suggest(query, limit=8):
     """手动入库的联想：中文 / 英文 / 名字的一部分 / 错一两个字都能找到。返回 [(中文, 英文)]，最像的在前"""
     import difflib
-    q = (query or '').strip()
+
+    q = (query or "").strip()
     if not q:
         return []
     zq, eq = _norm_zh(q), _fold_en(q)
@@ -215,13 +246,29 @@ def suggest(query, limit=8):
         if has_chinese(q):
             if not (set(zq) & set(z)):
                 continue
-            s = 1.0 if z == zq else 0.9 if z.startswith(zq) else 0.8 if zq in z else \
-                difflib.SequenceMatcher(None, z, zq).ratio() * 0.75
+            s = (
+                1.0
+                if z == zq
+                else 0.9
+                if z.startswith(zq)
+                else 0.8
+                if zq in z
+                else difflib.SequenceMatcher(None, z, zq).ratio() * 0.75
+            )
         else:
             if not eq or eq[0] not in e:
                 continue
-            s = 1.0 if e == eq else 0.9 if e.startswith(eq) else 0.8 if eq in e else \
-                difflib.SequenceMatcher(None, e, eq).ratio() * 0.75
+            s = (
+                1.0
+                if e == eq
+                else 0.9
+                if e.startswith(eq)
+                else 0.8
+                if eq in e
+                else difflib.SequenceMatcher(None, e, eq).ratio() * 0.75
+            )
         if s >= 0.5:
-            scored[(zh, en)] = max(s - len(z) * 0.002, scored.get((zh, en), 0))     # 一样像时短的（更通用的）在前
+            scored[(zh, en)] = max(
+                s - len(z) * 0.002, scored.get((zh, en), 0)
+            )  # 一样像时短的（更通用的）在前
     return [k for k, _ in sorted(scored.items(), key=lambda kv: -kv[1])[:limit]]

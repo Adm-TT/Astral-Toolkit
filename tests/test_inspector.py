@@ -1,4 +1,5 @@
 """物品视觉识别组件 (Item Inspector) 独立测试"""
+
 import unittest
 from unittest.mock import patch, MagicMock  # noqa: F401
 
@@ -28,6 +29,7 @@ class TestItemInspector(unittest.TestCase):
             tooltip_row,
             _is_mineral,
         )
+
         # 测试区域切分
         regions = get_hover_regions((800, 500), 1000)
         self.assertEqual(regions[0][4], "50-70%")
@@ -44,7 +46,9 @@ class TestItemInspector(unittest.TestCase):
         tok_q = OcrToken(text="品质：650", confidence=0.99, box=(100, 50, 80, 20))
         self.assertEqual(tooltip_quality([tok_q]), 650)
 
-        tok_row_zh = OcrToken(text="塔兰导电石", confidence=0.99, box=(100, 50, 100, 20))
+        tok_row_zh = OcrToken(
+            text="塔兰导电石", confidence=0.99, box=(100, 50, 100, 20)
+        )
         tok_row_q = OcrToken(text="925", confidence=0.99, box=(210, 50, 40, 20))
         tok_row_amt = OcrToken(text="0.495 SCU", confidence=0.99, box=(260, 50, 80, 20))
         q, amt = tooltip_row([tok_row_zh, tok_row_q, tok_row_amt])
@@ -58,6 +62,7 @@ class TestItemInspector(unittest.TestCase):
     @patch("sc_mining.trade.inspector._read_tooltip")
     def test_inspect_item_miss(self, mock_read):
         from sc_mining.trade.inspector import inspect_item
+
         mock_read.return_value = ([], None, "整屏")
         res = inspect_item(MockImage(), (500, 500))
         self.assertIsNone(res)
@@ -65,6 +70,7 @@ class TestItemInspector(unittest.TestCase):
     @patch("sc_mining.trade.inspector._read_tooltip")
     def test_inspect_item_mineral(self, mock_read):
         from sc_mining.trade.inspector import inspect_item
+
         toks = [
             OcrToken(text="塔兰导电石", confidence=0.99, box=(100, 50, 100, 20)),
             OcrToken(text="925", confidence=0.99, box=(210, 50, 40, 20)),
@@ -84,6 +90,7 @@ class TestItemInspector(unittest.TestCase):
     @patch("sc_mining.trade.inspector._read_tooltip")
     def test_inspect_item_normal_with_cell(self, mock_read, mock_cell):
         from sc_mining.trade.inspector import inspect_item
+
         toks = [
             OcrToken(text="医疗笔", confidence=0.99, box=(100, 50, 80, 20)),
         ]
@@ -101,6 +108,7 @@ class TestItemInspector(unittest.TestCase):
     @patch("sc_mining.trade.inspector.inspect_item")
     def test_count_read_item(self, mock_inspect):
         from sc_mining.tasks.count import _read_item
+
         mock_inspect.return_value = {
             "zh": "测试物品",
             "en": "Test Item",
@@ -141,7 +149,9 @@ class TestItemInspector(unittest.TestCase):
         self.assertFalse(plausible_name("聊天：你好", "Hello: World"))  # 含冒号
 
         # 测试说明框标题与中英对提取
-        T = lambda text, x, y: OcrToken(text=text, confidence=0.9, box=(x, y, max(20, len(text) * 9), 18))  # noqa: E731
+        T = lambda text, x, y: OcrToken(
+            text=text, confidence=0.9, box=(x, y, max(20, len(text) * 9), 18)
+        )  # noqa: E731
         toks = [
             T("实准枪口补偿器2", 900, 300),
             T("VeraCompensator2", 900, 324),
@@ -150,7 +160,9 @@ class TestItemInspector(unittest.TestCase):
         name, sure = tooltip_pick(toks, (960, 540))
         self.assertEqual(name, ("实准枪口补偿器2", "VeraCompensator2"))
         self.assertTrue(sure)
-        self.assertEqual(tooltip_name(toks, (960, 540)), ("实准枪口补偿器2", "VeraCompensator2"))
+        self.assertEqual(
+            tooltip_name(toks, (960, 540)), ("实准枪口补偿器2", "VeraCompensator2")
+        )
 
         # 聊天和非说明框杂字应被排除
         chat = [
@@ -164,25 +176,40 @@ class TestItemInspector(unittest.TestCase):
         # 比较 OCR 认出的名字和市场名字时要当成一样（1.1.1 的行为）；所以和 _fold_en 不再完全相同
         from sc_mining.trade.console import _fold as console_fold
         from sc_mining.trade.names import _fold_en
-        self.assertEqual(console_fold("P4-AR Rifle (Custom)"), _fold_en("P4-AR Rifle (Custom)").replace("l", "i"))
+
+        self.assertEqual(
+            console_fold("P4-AR Rifle (Custom)"),
+            _fold_en("P4-AR Rifle (Custom)").replace("l", "i"),
+        )
         self.assertEqual(console_fold("Omnisky II"), "omniskyii")
         self.assertEqual(console_fold("Omnisky ll"), console_fold("Omnisky II"))
-        self.assertEqual(_fold_en("Omnisky ll"), "omniskyll")          # names._fold_en 本身不变
+        self.assertEqual(_fold_en("Omnisky ll"), "omniskyll")  # names._fold_en 本身不变
 
 
 def test_inspect_item_raw_and_canon(monkeypatch):
     """返回里带纠正前的名字 raw 和汉化包标准名 canon；没对上时 canon 为 None"""
     from sc_mining.trade import inspector, names
+
     toks = [OcrToken("医疗芼", 90, (100, 50, 80, 20))]
-    monkeypatch.setattr(inspector, "_read_tooltip", lambda img, cur: (toks, ("医疗芼", "MedPenn"), "30-50%"))
+    monkeypatch.setattr(
+        inspector,
+        "_read_tooltip",
+        lambda img, cur: (toks, ("医疗芼", "MedPenn"), "30-50%"),
+    )
     monkeypatch.setattr(inspector, "cell_labels", lambda *a, **k: (None, 1))
     monkeypatch.setattr(names, "canonical", lambda zh, en: ("医疗笔", "MedPen"))
     res = inspector.inspect_item(MockImage(), (200, 500))
-    assert res["raw"] == ("医疗芼", "MedPenn") and res["canon"] == ("医疗笔", "MedPen") and res["sure"]
+    assert (
+        res["raw"] == ("医疗芼", "MedPenn")
+        and res["canon"] == ("医疗笔", "MedPen")
+        and res["sure"]
+    )
     assert (res["zh"], res["en"]) == ("医疗笔", "MedPen")
     monkeypatch.setattr(names, "canonical", lambda zh, en: None)
     res = inspector.inspect_item(MockImage(), (200, 500))
-    assert res["raw"] == ("医疗芼", "MedPenn") and res["canon"] is None and not res["sure"]
+    assert (
+        res["raw"] == ("医疗芼", "MedPenn") and res["canon"] is None and not res["sure"]
+    )
 
 
 def test_hover_sends_raw_and_canon_to_train_data(monkeypatch):
@@ -190,9 +217,21 @@ def test_hover_sends_raw_and_canon_to_train_data(monkeypatch):
     import types
     from sc_mining.tasks import hover as Hv
     from sc_mining.system import train_data
+
     toks = [OcrToken("医疗芼", 90, (100, 50, 80, 20))]
-    res = {"zh": "医疗笔", "en": "MedPen", "quality": 0, "qty": 1, "unit": "个", "sure": True, "craft": None,
-           "tokens": toks, "where": "30-50%", "raw": ("医疗芼", "MedPenn"), "canon": ("医疗笔", "MedPen")}
+    res = {
+        "zh": "医疗笔",
+        "en": "MedPen",
+        "quality": 0,
+        "qty": 1,
+        "unit": "个",
+        "sure": True,
+        "craft": None,
+        "tokens": toks,
+        "where": "30-50%",
+        "raw": ("医疗芼", "MedPenn"),
+        "canon": ("医疗笔", "MedPen"),
+    }
     started = []
 
     class FakeThread:
@@ -201,20 +240,28 @@ def test_hover_sends_raw_and_canon_to_train_data(monkeypatch):
 
         def start(self):
             started.append((self.target, self.args))
+
     monkeypatch.setattr(Hv, "WIN", False)
     monkeypatch.setattr(Hv, "_off", lambda k: None)
     monkeypatch.setattr(Hv, "inspect_item", lambda img, cur: dict(res))
     monkeypatch.setattr(Hv, "item_info", lambda *a, **k: {})
     monkeypatch.setattr(Hv, "_item_hud", lambda *a, **k: None)
     monkeypatch.setattr(Hv, "_hover_lines", lambda *a, **k: [])
-    monkeypatch.setattr(Hv, "bus", types.SimpleNamespace(publish=lambda *a, **k: None, runtime_log=lambda *a, **k: None,
-                                                         update_preview=lambda *a, **k: None))
+    monkeypatch.setattr(
+        Hv,
+        "bus",
+        types.SimpleNamespace(
+            publish=lambda *a, **k: None,
+            runtime_log=lambda *a, **k: None,
+            update_preview=lambda *a, **k: None,
+        ),
+    )
     monkeypatch.setattr(Hv.threading, "Thread", FakeThread)
     img = MockImage()
     assert Hv.hover_once(img)["ok"]
     sent = [a for t, a in started if t is train_data.from_tooltip]
     assert sent == [(img, toks, ("医疗芼", "MedPenn"), ("医疗笔", "MedPen"))]
-    res.update(canon=None, sure=False)                    # 汉化包里没对上：不收
+    res.update(canon=None, sure=False)  # 汉化包里没对上：不收
     started.clear()
     Hv.hover_once(img)
     assert not [a for t, a in started if t is train_data.from_tooltip]
@@ -224,27 +271,43 @@ def test_craft_override_for_count(monkeypatch):
     """F6 盘点（craft_override=True）：加成和蓝图完全对上就用倒推的品质和各槽品质；F8 默认格子上读到品质就不倒推"""
     from sc_mining.trade import inspector
     from sc_mining.crafting import crafting
+
     toks = [OcrToken("能量突击步枪", 90, (100, 50, 80, 20))]
     slots = [{"slot": "Frame", "q": 700}]
-    monkeypatch.setattr(inspector, "_read_tooltip", lambda img, cur: (toks, ("能量突击步枪", "P4-AR Rifle"), "30-50%"))
+    monkeypatch.setattr(
+        inspector,
+        "_read_tooltip",
+        lambda img, cur: (toks, ("能量突击步枪", "P4-AR Rifle"), "30-50%"),
+    )
     monkeypatch.setattr(inspector, "cell_labels", lambda *a, **k: (500, 1))
     monkeypatch.setattr(crafting, "parse_mods", lambda t: ["mod"])
     monkeypatch.setattr(crafting, "for_item", lambda en, zh: "bp")
-    monkeypatch.setattr(crafting, "solve_slots", lambda bp, mods: {"exact": True, "avg": 700, "slots": slots})
+    monkeypatch.setattr(
+        crafting,
+        "solve_slots",
+        lambda bp, mods: {"exact": True, "avg": 700, "slots": slots},
+    )
     f8 = inspector.inspect_item(MockImage(), (200, 500))
     assert f8["quality"] == 500 and f8["craft"] is None
     f6 = inspector.inspect_item(MockImage(), (200, 500), craft_override=True)
     assert f6["quality"] == 700 and f6["craft"] == slots
-    monkeypatch.setattr(crafting, "solve_slots", lambda bp, mods: {"exact": False, "avg": 600, "slots": slots})
+    monkeypatch.setattr(
+        crafting,
+        "solve_slots",
+        lambda bp, mods: {"exact": False, "avg": 600, "slots": slots},
+    )
     f6 = inspector.inspect_item(MockImage(), (200, 500), craft_override=True)
-    assert f6["quality"] == 500 and f6["craft"] is None      # 对不上蓝图：格子上的品质照用
+    assert f6["quality"] == 500 and f6["craft"] is None  # 对不上蓝图：格子上的品质照用
 
 
 def test_count_read_item_uses_craft_override(monkeypatch):
     from sc_mining.trade import inspector
     from sc_mining.tasks.count import _read_item
+
     seen = {}
-    monkeypatch.setattr(inspector, "inspect_item", lambda img, cur, **kw: seen.update(kw) or {"zh": "x"})
+    monkeypatch.setattr(
+        inspector, "inspect_item", lambda img, cur, **kw: seen.update(kw) or {"zh": "x"}
+    )
     _read_item(MockImage(), (1, 1))
     assert seen == {"craft_override": True}
 

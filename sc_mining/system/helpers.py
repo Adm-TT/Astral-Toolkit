@@ -2,10 +2,11 @@
 双击 W 自动跑、防挂机都删了，AT 不再替玩家按任何键。这里只留几个名字，旧代码、旧设置调用时什么也不做；
 老版本留下的「自动跑中」标记和还在跑的辅助进程会被清掉。远程重启请求（userdata/restart_request）照旧处理。
 """
+
 from ..core.paths import LOGS, USER, ROOT, self_cmd
 
 LOG = LOGS / "helpers_log.txt"
-FLAG = USER / ".autorun_on"          # 老版本的「自动跑中」标记：启动时删掉
+FLAG = USER / ".autorun_on"  # 老版本的「自动跑中」标记：启动时删掉
 RESTART_REQUEST = USER / "restart_request"
 _proc = None
 
@@ -24,8 +25,12 @@ def _restart_requested():
         return False
     import subprocess
     import sys
-    subprocess.Popen(self_cmd("restart"), cwd=str(ROOT),
-                     creationflags=0x08000000 if sys.platform == "win32" else 0)
+
+    subprocess.Popen(
+        self_cmd("restart"),
+        cwd=str(ROOT),
+        creationflags=0x08000000 if sys.platform == "win32" else 0,
+    )
     return True
 
 

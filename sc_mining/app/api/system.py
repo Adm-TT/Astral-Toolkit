@@ -5,6 +5,7 @@
 runtime_capture_now、runtime_clear_logs（实时监控页的手动截图、清日志）原来写在 services.py，原样挪到这里。
 router 自动收集文件末尾的 ROUTES。
 """
+
 from ...tasks import system as _t
 from .. import bus
 
@@ -120,6 +121,7 @@ def quit(**kw):
 def runtime_capture_now():
     """手动立即截取一帧画面，更新实时监控"""
     from ...core.perf import grab_screen
+
     img = grab_screen()
     bus.update_preview(img, source="manual", force=True)
     bus.runtime_log("手动截取屏幕画面", tag="SCREEN", level="INFO")

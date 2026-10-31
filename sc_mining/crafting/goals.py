@@ -6,6 +6,7 @@
 - 制造的品质门槛：库存里品质够的才算；品质「未知」的单独提示，不算进已有
 - 制造的某个部件有几种材料可选时，挑「还差得最少」的那种
 """
+
 import json
 import time
 import uuid
@@ -16,10 +17,20 @@ from ..core.paths import USER
 FILE = USER / "goals.json"
 MAX_TIMES = 99
 # 交易模块的品质档 → 这一档最低品质（qN 只知道在哪一档，按下限算才不会高估）
-GROUP_FLOOR = {"q0": 0, "q1": 1, "q2": 500, "q3": 600, "q4": 700, "q5": 800, "q6": 900, "q7": 950}
+GROUP_FLOOR = {
+    "q0": 0,
+    "q1": 1,
+    "q2": 500,
+    "q3": 600,
+    "q4": 700,
+    "q5": 800,
+    "q6": 900,
+    "q7": 950,
+}
 
 
 # ---------------------------------------------------------------- 存取
+
 
 def load():
     """目标表（查询用：读不到就当没有）"""
@@ -39,11 +50,20 @@ def _load_strict():
         raise RuntimeError(f"目标文件暂时读不到：{e}")
     except ValueError as e:
         raise RuntimeError(f"目标文件损坏（userdata 里的 goals.json）：{e}")
-    return [g for g in data if isinstance(g, dict) and g.get("kind") in ("wikelo", "craft")] if isinstance(data, list) else []
+    return (
+        [
+            g
+            for g in data
+            if isinstance(g, dict) and g.get("kind") in ("wikelo", "craft")
+        ]
+        if isinstance(data, list)
+        else []
+    )
 
 
 def save(goals):
     from ..core.paths import write_json
+
     write_json(FILE, goals, indent=1)
 
 
@@ -59,18 +79,28 @@ def add(kind, ref, times=1):
 
 def _add(kind, ref, times, src):
     goals = _load_strict()
-    for g in goals:                      # 同一个目标再加一次：次数 +1
+    for g in goals:  # 同一个目标再加一次：次数 +1
         if g["kind"] == kind and g["ref"] == ref:
             g["times"] = min(MAX_TIMES, g["times"] + max(1, int(times)))
             save(goals)
             return goals
-    goals.append({"id": uuid.uuid4().hex[:10], "kind": kind, "ref": ref,
-                  "times": max(1, min(MAX_TIMES, int(times))), "title": _title(kind, src), "at": time.time()})
+    goals.append(
+        {
+            "id": uuid.uuid4().hex[:10],
+            "kind": kind,
+            "ref": ref,
+            "times": max(1, min(MAX_TIMES, int(times))),
+            "title": _title(kind, src),
+            "at": time.time(),
+        }
+    )
     save(goals)
     return goals
 
 
-_LOCK = __import__("threading").RLock()      # 读-改-写连在一起（老大审查 2026-10-28：两个请求同时改会丢一个）
+_LOCK = __import__(
+    "threading"
+).RLock()  # 读-改-写连在一起（老大审查 2026-10-28：两个请求同时改会丢一个）
 
 
 def update(gid, times=None, move=0, remove=False):
@@ -97,11 +127,14 @@ def _update(gid, times=None, move=0, remove=False):
 
 # ---------------------------------------------------------------- 目标要什么
 
+
 def _source(kind, ref):
     if kind == "wikelo":
         from . import wikelo
+
         return next((c for c in wikelo.load() if c["id"] == ref), None)
     from .crafting import by_key
+
     return by_key(ref)
 
 
@@ -110,6 +143,7 @@ def _title(kind, src):
         reward = src["rz"] or "、".join(src["rewards"][:2]) or src["te"]
         return f"维科洛：{src['t']}（换 {reward}）"
     from .crafting import display_name
+
     return f"制造：{display_name(src)}"
 
 
@@ -122,19 +156,41 @@ def requirements(goal):
     out = []
     if goal["kind"] == "wikelo":
         for r in src["req"]:
-            out.append({"slot": "", "alts": [{"en": r["n"], "zh": r["z"], "qty": (r["q"] or 1) * n,
-                                              "unit": r["u"], "minq": 0}]})
+            out.append(
+                {
+                    "slot": "",
+                    "alts": [
+                        {
+                            "en": r["n"],
+                            "zh": r["z"],
+                            "qty": (r["q"] or 1) * n,
+                            "unit": r["u"],
+                            "minq": 0,
+                        }
+                    ],
+                }
+            )
     else:
         from .crafting import material_zh
+
         for slot, opts, _mods in src["slots"]:
-            alts = [{"en": name, "zh": material_zh(name), "qty": qty * n, "unit": "SCU" if k == "r" else "个",
-                     "minq": minq if minq > 1 else 0} for k, name, qty, minq in opts]
+            alts = [
+                {
+                    "en": name,
+                    "zh": material_zh(name),
+                    "qty": qty * n,
+                    "unit": "SCU" if k == "r" else "个",
+                    "minq": minq if minq > 1 else 0,
+                }
+                for k, name, qty, minq in opts
+            ]
             if alts:
                 out.append({"slot": slot, "alts": alts})
     return out
 
 
 # ---------------------------------------------------------------- 库存
+
 
 def _quality_floor(q):
     """库存里的品质 → 至少多少；未知返回 None"""
@@ -146,11 +202,11 @@ def _quality_floor(q):
     return GROUP_FLOOR.get(q)
 
 
-CSCU = "cSCU"      # 1.6.36 以前：矿、材料按 0.01 SCU 记（启动时会换算成 uSCU，这里只为读没换算的旧记录）
-USCU = "uSCU"      # 矿、材料按百万分之一 SCU 记（库存数量只能是整数，0.495 SCU 记成 495000 uSCU；游戏里显示到 0.001 SCU）
+CSCU = "cSCU"  # 1.6.36 以前：矿、材料按 0.01 SCU 记（启动时会换算成 uSCU，这里只为读没换算的旧记录）
+USCU = "uSCU"  # 矿、材料按百万分之一 SCU 记（库存数量只能是整数，0.495 SCU 记成 495000 uSCU；游戏里显示到 0.001 SCU）
 
 
-RESERVED = "stock_reserved"     # 库存页标了「不给目标用」的行（物品|品质|位置|单位），目标不算它们
+RESERVED = "stock_reserved"  # 库存页标了「不给目标用」的行（物品|品质|位置|单位），目标不算它们
 
 
 def lot_key(item_id, quality, location, unit):
@@ -174,10 +230,21 @@ def stock_lots(trade, include_reserved=False):
         if lot_key(k.item_id, k.quality, k.location, k.unit) in skip:
             continue
         f = _quality_floor(k.quality)
-        label = k.quality.replace("exact:", "品质 ") if k.quality.startswith("exact:") else (
-            "品质未知" if f is None else k.quality.upper())
-        qty = line.quantity / 1e6 if k.unit == USCU else line.quantity / 100 if k.unit == CSCU else line.quantity
-        lots.setdefault(k.item_id, []).append([f, label, k.location, qty, k.unit, k.quality, k.item_id])
+        label = (
+            k.quality.replace("exact:", "品质 ")
+            if k.quality.startswith("exact:")
+            else ("品质未知" if f is None else k.quality.upper())
+        )
+        qty = (
+            line.quantity / 1e6
+            if k.unit == USCU
+            else line.quantity / 100
+            if k.unit == CSCU
+            else line.quantity
+        )
+        lots.setdefault(k.item_id, []).append(
+            [f, label, k.location, qty, k.unit, k.quality, k.item_id]
+        )
     return lots
 
 
@@ -194,7 +261,11 @@ def resolve_all(trade, en, zh=""):
         item = trade.catalog.by_alias(name)
         if item:
             ids.append(item.id)
-        ids += [i.id for i in trade.catalog.search(name) if i.name.casefold() == name.casefold()]
+        ids += [
+            i.id
+            for i in trade.catalog.search(name)
+            if i.name.casefold() == name.casefold()
+        ]
     if trade.catalog.get(local_id(en)):
         ids.append(local_id(en))
     ids = list(dict.fromkeys(ids))
@@ -214,6 +285,7 @@ def ensure_item(trade, en, zh=""):
     if iid:
         return iid
     from ..trade.models import Item
+
     item = Item(local_id(en), en)
     trade.catalog.upsert([item])
     if zh:
@@ -234,24 +306,41 @@ def other_unit(lots, unit):
     n = sum(l[3] for l in lots if l[3] > 0 and not unit_fits(l, unit))  # noqa: E741
     if n <= 0:
         return ""
-    if unit == "SCU":                                   # 对不上的是按个记的
+    if unit == "SCU":  # 对不上的是按个记的
         return f"{round(n):d} 个"
-    return f"{n:.6f}".rstrip("0").rstrip(".") + " SCU"   # 到 1 uSCU，不出「0 SCU」和科学计数法
+    return (
+        f"{n:.6f}".rstrip("0").rstrip(".") + " SCU"
+    )  # 到 1 uSCU，不出「0 SCU」和科学计数法
 
 
 def _take(lots, need, minq):
     """从库存里拿 need：先拿品质刚好够的（高品质留给更挑的目标）。返回 (拿到多少, [(位置, 品质, 数量)], 品质未知的有多少)"""
     got, used, unknown = 0.0, [], 0
     # 没有品质要求时，品质未知的也能用（而且先用它们，把知道品质的留给有门槛的目标）
-    usable = sorted((l for l in lots if l[3] > 0 and (l[0] is not None and l[0] >= minq or (l[0] is None and not minq))),  # noqa: E741
-                    key=lambda l: -1 if l[0] is None else l[0])  # noqa: E741
+    usable = sorted(
+        (
+            l
+            for l in lots
+            if l[3] > 0
+            and (l[0] is not None and l[0] >= minq or (l[0] is None and not minq))
+        ),  # noqa: E741
+        key=lambda l: -1 if l[0] is None else l[0],
+    )  # noqa: E741
     for lot in usable:
         if got >= need - 1e-9:
             break
         take = min(lot[3], need - got)
         lot[3] -= take
         got += take
-        used.append((lot[2], lot[1], take, lot[0], (lot[6], lot[5], lot[2], lot[4]) if len(lot) > 6 else None))
+        used.append(
+            (
+                lot[2],
+                lot[1],
+                take,
+                lot[0],
+                (lot[6], lot[5], lot[2], lot[4]) if len(lot) > 6 else None,
+            )
+        )
     if got < need - 1e-9 and minq:
         unknown = sum(l[3] for l in lots if l[0] is None and l[3] > 0)  # noqa: E741
     return got, used, unknown
@@ -259,6 +348,7 @@ def _take(lots, need, minq):
 
 def _slot_zh(slot):
     from .crafting import slot_zh
+
     return slot_zh(slot) if slot else ""
 
 
@@ -274,9 +364,11 @@ def plan(trade=None, goals=None):
     if trade is None:
         try:
             from ..tasks.trade import trade as _t
+
             trade = _t()
         except Exception:
             from ..trade.console import Trade
+
             trade = Trade()
     goals = load() if goals is None else goals
     pool = stock_lots(trade)
@@ -297,8 +389,15 @@ def plan(trade=None, goals=None):
         rows = []
         for req in reqs:
             best = None
-            for n, alt in enumerate(req["alts"]):   # 几种材料可选：每种都试拿一下，挑还差最少的
-                own = [lot for i in ids_of(alt) for lot in pool.get(i, []) if unit_fits(lot, alt["unit"])]
+            for n, alt in enumerate(
+                req["alts"]
+            ):  # 几种材料可选：每种都试拿一下，挑还差最少的
+                own = [
+                    lot
+                    for i in ids_of(alt)
+                    for lot in pool.get(i, [])
+                    if unit_fits(lot, alt["unit"])
+                ]
                 trial = [lot[:] for lot in own]
                 got, used, unknown = _take(trial, alt["qty"], alt["minq"])
                 short = max(0.0, alt["qty"] - got)
@@ -308,30 +407,79 @@ def plan(trade=None, goals=None):
             _, alt, got, used, unknown, own, trial = best
             for lot, after in zip(own, trial):  # 真的拿走
                 lot[3] = after[3]
-            for _loc, _q, qty, _f, key in used:  # 库存页「目标占用」：每行分给了哪些目标、多少
+            for (
+                _loc,
+                _q,
+                qty,
+                _f,
+                key,
+            ) in used:  # 库存页「目标占用」：每行分给了哪些目标、多少
                 if key and qty > 0:
                     a = alloc.setdefault(lot_key(*key), {"qty": 0.0, "goals": []})
                     a["qty"] = round(a["qty"] + qty, 6)
                     if g["title"] not in a["goals"]:
                         a["goals"].append(g["title"])
             iid = (ids_of(alt) or [None])[0]
-            wrong = other_unit([lot for i in ids_of(alt) for lot in pool.get(i, [])], alt["unit"])
+            wrong = other_unit(
+                [lot for i in ids_of(alt) for lot in pool.get(i, [])], alt["unit"]
+            )
             short = round(max(0.0, alt["qty"] - got), 4)
-            rows.append({"slot": req["slot"], "slot_zh": _slot_zh(req["slot"]), "en": alt["en"], "zh": alt["zh"], "item": iid, "local": bool(iid and iid.startswith("local:")),
-                         "need": round(alt["qty"], 4), "have": round(got, 4), "short": short, "unit": alt["unit"],
-                         "minq": alt["minq"], "from": [f"{loc}（{q}）{round(qty, 3):g}" for loc, q, qty, *_ in used],
-                         "avg_q": _avg_quality(used),
-                         "unknown": unknown, "other_unit": wrong, "others": [a["zh"] or a["en"] for a in req["alts"] if a is not alt]})
+            rows.append(
+                {
+                    "slot": req["slot"],
+                    "slot_zh": _slot_zh(req["slot"]),
+                    "en": alt["en"],
+                    "zh": alt["zh"],
+                    "item": iid,
+                    "local": bool(iid and iid.startswith("local:")),
+                    "need": round(alt["qty"], 4),
+                    "have": round(got, 4),
+                    "short": short,
+                    "unit": alt["unit"],
+                    "minq": alt["minq"],
+                    "from": [
+                        f"{loc}（{q}）{round(qty, 3):g}" for loc, q, qty, *_ in used
+                    ],
+                    "avg_q": _avg_quality(used),
+                    "unknown": unknown,
+                    "other_unit": wrong,
+                    "others": [a["zh"] or a["en"] for a in req["alts"] if a is not alt],
+                }
+            )
             if short > 0:
-                t = total.setdefault((alt["en"], alt["minq"], alt["unit"]),
-                                     {"en": alt["en"], "zh": alt["zh"], "item": iid if iid and not iid.startswith("local:") else None,
-                                      "unit": alt["unit"],
-                                      "minq": alt["minq"], "short": 0.0, "goals": []})
+                t = total.setdefault(
+                    (alt["en"], alt["minq"], alt["unit"]),
+                    {
+                        "en": alt["en"],
+                        "zh": alt["zh"],
+                        "item": iid if iid and not iid.startswith("local:") else None,
+                        "unit": alt["unit"],
+                        "minq": alt["minq"],
+                        "short": 0.0,
+                        "goals": [],
+                    },
+                )
                 t["short"] = round(t["short"] + short, 4)
                 t["goals"].append(g["title"])
-        progress = sum(min(1.0, r["have"] / r["need"]) if r["need"] else 1.0 for r in rows) / len(rows) if rows else 1.0
-        out.append({**g, "rows": rows, "progress": progress, "done": all(r["short"] <= 0 for r in rows)})
-    return {"goals": out, "shortfall": sorted(total.values(), key=lambda t: (t["zh"] or t["en"])), "alloc": alloc}
+        progress = (
+            sum(min(1.0, r["have"] / r["need"]) if r["need"] else 1.0 for r in rows)
+            / len(rows)
+            if rows
+            else 1.0
+        )
+        out.append(
+            {
+                **g,
+                "rows": rows,
+                "progress": progress,
+                "done": all(r["short"] <= 0 for r in rows),
+            }
+        )
+    return {
+        "goals": out,
+        "shortfall": sorted(total.values(), key=lambda t: t["zh"] or t["en"]),
+        "alloc": alloc,
+    }
 
 
 def finish_takes(trade, gid):
@@ -348,63 +496,114 @@ def finish_takes(trade, gid):
     for req in reqs:
         best = None
         for alt in req["alts"]:
-            own = [lot for i in resolve_all(trade, alt["en"], alt["zh"]) for lot in pool.get(i, []) if unit_fits(lot, alt["unit"])]
+            own = [
+                lot
+                for i in resolve_all(trade, alt["en"], alt["zh"])
+                for lot in pool.get(i, [])
+                if unit_fits(lot, alt["unit"])
+            ]
             trial = [lot[:] for lot in own]
             got, used, _unknown = _take(trial, alt["qty"], alt["minq"])
             if got >= alt["qty"] - 1e-9 and best is None:
                 best = (alt, used, own, trial)
         if best is None:
             a0 = req["alts"][0]
-            wrong = other_unit([lot for i in resolve_all(trade, a0["en"], a0["zh"]) for lot in pool.get(i, [])], a0["unit"])
-            short.append((a0["zh"] or a0["en"]) + (f"（库存另有 {wrong}，单位对不上，未计入）" if wrong else ""))
+            wrong = other_unit(
+                [
+                    lot
+                    for i in resolve_all(trade, a0["en"], a0["zh"])
+                    for lot in pool.get(i, [])
+                ],
+                a0["unit"],
+            )
+            short.append(
+                (a0["zh"] or a0["en"])
+                + (f"（库存另有 {wrong}，单位对不上，未计入）" if wrong else "")
+            )
             continue
         alt, used, own, trial = best
         for lot, after in zip(own, trial):
             lot[3] = after[3]
         for loc, qlabel, qty, _f, key in used:
             item_id, quality, _loc, unit = key
-            raw = int(round(qty * 1_000_000)) if unit == USCU else int(round(qty * 100)) if unit == CSCU else int(round(qty))
+            raw = (
+                int(round(qty * 1_000_000))
+                if unit == USCU
+                else int(round(qty * 100))
+                if unit == CSCU
+                else int(round(qty))
+            )
             if raw > 0:
-                out.append({"key": key, "raw": raw, "en": alt["en"], "zh": alt["zh"], "qty": round(qty, 6),
-                            "unit": "个" if unit == "unit" else "SCU", "place": loc, "quality": qlabel})
+                out.append(
+                    {
+                        "key": key,
+                        "raw": raw,
+                        "en": alt["en"],
+                        "zh": alt["zh"],
+                        "qty": round(qty, 6),
+                        "unit": "个" if unit == "unit" else "SCU",
+                        "place": loc,
+                        "quality": qlabel,
+                    }
+                )
     return (None, short) if short else (out, [])
 
 
 def finish(trade, gid):
     """目标「做完了」：从库存扣掉做一次用掉的材料（一笔出库，原因「用于制造」，能撤销），次数 -1（做完最后一次就删掉这个目标）"""
     from ..trade.models import StockKey
+
     takes, short = finish_takes(trade, gid)
     if takes is None:
         raise ValueError("材料不足，无法扣除：" + "、".join(short))
     with _LOCK:
-        g = next((x for x in _load_strict() if x["id"] == gid), None)      # 目标文件现在读得到，等下才敢扣库存
+        g = next(
+            (x for x in _load_strict() if x["id"] == gid), None
+        )  # 目标文件现在读得到，等下才敢扣库存
         if g is None:
             raise ValueError("未找到此目标")
-        batch = trade.inventory.out_many([(StockKey(*t["key"]), t["raw"]) for t in takes], reason="用于制造",
-                                         note=g["title"], source="目标") if takes else None
+        batch = (
+            trade.inventory.out_many(
+                [(StockKey(*t["key"]), t["raw"]) for t in takes],
+                reason="用于制造",
+                note=g["title"],
+                source="目标",
+            )
+            if takes
+            else None
+        )
         try:
             if g["times"] > 1:
                 _update(gid, times=g["times"] - 1)
             else:
                 _update(gid, remove=True)
         except Exception as e:
-            if batch:                            # 目标没记下来：把刚扣的材料退回去，别再点一次就重复扣（老大审查 2026-10-28）
+            if batch:  # 目标没记下来：把刚扣的材料退回去，别再点一次就重复扣（老大审查 2026-10-28）
                 try:
                     trade.inventory.undo(batch)
-                except Exception as u:           # 退也没退成：不能吞掉，不然玩家以为什么都没发生、再点一次就扣两遍
-                    raise ValueError(f"目标次数没记上（{e}），刚扣的材料也没能退回（{u}）。"
-                                     f"请到库存页的记录里核对「{g['title']}」这笔「用于制造」的出库，需要时手动撤销") from e
+                except Exception as u:  # 退也没退成：不能吞掉，不然玩家以为什么都没发生、再点一次就扣两遍
+                    raise ValueError(
+                        f"目标次数没记上（{e}），刚扣的材料也没能退回（{u}）。"
+                        f"请到库存页的记录里核对「{g['title']}」这笔「用于制造」的出库，需要时手动撤销"
+                    ) from e
             raise
-    return {"batch": batch, "taken": takes, "title": g["title"], "left": max(0, g["times"] - 1)}
+    return {
+        "batch": batch,
+        "taken": takes,
+        "title": g["title"],
+        "left": max(0, g["times"] - 1),
+    }
 
 
 # ---------------------------------------------------------------- 去哪弄、多少钱
+
 
 @lru_cache(maxsize=512)
 def where_to_get(en):
     """一句话：商店最便宜在哪 / 去哪挖 / 维科洛特殊材料说明"""
     try:
         from ..trade.console import material_source
+
         return material_source(en) or ""
     except Exception:
         return ""
@@ -419,6 +618,7 @@ def market_price(trade, item_id, minq=0, unit=None):
     unit 是需求的单位（「SCU」「个」）：给了就只比单位对得上的挂牌，并换算成每 SCU / 每个的价（单位对不上的不猜）"""
     from decimal import Decimal
     from ..trade.providers.http import quality_group
+
     item = trade.catalog.get(item_id)
     if not item:
         return None
@@ -448,9 +648,11 @@ def stock_line(trade, en, zh, qty, unit, quality, location, item_id=None):
     数量、单位、位置不对就抛 ValueError（盘点确认也用它，老大审查 2026-10-28 第 8 条）"""
     from ..trade.console import _quality
     from ..trade.models import StockKey
+
     qty = float(qty)
     import math
-    if not math.isfinite(qty):                  # inf、nan：比大小全是 False，会一路混过下面的校验
+
+    if not math.isfinite(qty):  # inf、nan：比大小全是 False，会一路混过下面的校验
         raise ValueError("数量不对")
     if qty <= 0 or not str(location).strip():
         raise ValueError("数量要大于 0，位置不能空")
@@ -464,25 +666,46 @@ def stock_line(trade, en, zh, qty, unit, quality, location, item_id=None):
         if qty != int(qty):
             raise ValueError("这个按「个」记，数量要是整数")
         n, u = int(qty), "unit"
-    qs = "" if quality is None else str(quality).strip()            # 品质 0 是「没有品质」，不是没填
+    qs = (
+        "" if quality is None else str(quality).strip()
+    )  # 品质 0 是「没有品质」，不是没填
     q = _quality(qs) if qs else "unknown"
-    iid = item_id if item_id and trade.catalog.get(item_id) else ensure_item(trade, en, zh)   # 全校验过了再建本地物品，被拒的不留下空物品
+    iid = (
+        item_id
+        if item_id and trade.catalog.get(item_id)
+        else ensure_item(trade, en, zh)
+    )  # 全校验过了再建本地物品，被拒的不留下空物品
     return StockKey(iid, q, location.strip(), u), n
 
 
-def add_stock(trade, en, zh, qty, unit, quality, location, item_id=None, note="", source="", craft=None):
+def add_stock(
+    trade,
+    en,
+    zh,
+    qty,
+    unit,
+    quality,
+    location,
+    item_id=None,
+    note="",
+    source="",
+    craft=None,
+):
     """入库：unit 是「个」「SCU」「uSCU」。SCU 和 uSCU 都按 uSCU 存（1 SCU = 1,000,000 uSCU）。
     item_id：已经知道是交易库里哪个物品（物品查询里查过价的）就直接用它，不再按名字找。
     note / source：这笔记录的备注、从哪录的（库存页 / F8 / 物品查询 / 目标），仓储记录里显示"""
     from ..trade.models import StockLine
+
     key, n = stock_line(trade, en, zh, qty, unit, quality, location, item_id=item_id)
     iid, q = key.item_id, key.quality
-    with trade.db.connection():                 # 预览、确认、备注放进同一个事务：中间别的线程写一笔，这笔入库不会白白报「库存已经变化」（同 S3 15cfbde）
+    with trade.db.connection():  # 预览、确认、备注放进同一个事务：中间别的线程写一笔，这笔入库不会白白报「库存已经变化」（同 S3 15cfbde）
         preview = trade.inventory.prepare([StockLine(key, n)], "add")
         batch = trade.inventory.commit(preview, allow_duplicate=True)
         if note or source:
             trade.inventory.set_note(batch, note=note, source=source)
-        if craft:                               # 制造出来的东西：各材料槽的品质（1.6.67）
+        if craft:  # 制造出来的东西：各材料槽的品质（1.6.67）
             trade.inventory.set_craft(iid, q, craft)
-        trade.db.set("last_location", key.location)     # 入库成了才记「上次位置」，失败一起回滚
+        trade.db.set(
+            "last_location", key.location
+        )  # 入库成了才记「上次位置」，失败一起回滚
     return iid

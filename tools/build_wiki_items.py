@@ -5,6 +5,7 @@
 描述 d（游戏官方中文说明，没有中文的用英文；去掉占位符）。同名多件只留一条，其余类名记在 alt 里。
 中文名不从这里取（wiki 的中文字段是说明 / 占位，靠不住），中文名只信汉化包。
 """
+
 import json
 import re
 import sys  # noqa: F401
@@ -15,13 +16,18 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "data" / "wiki_items.json"
 API = "https://api.star-citizen.wiki/api/v2/items"
-HEADERS = {"Accept": "application/json", "User-Agent": "Dubhe/1.0 (+star citizen mining assistant)"}
+HEADERS = {
+    "Accept": "application/json",
+    "User-Agent": "Dubhe/1.0 (+star citizen mining assistant)",
+}
 
 
 def get(url, tries=4):
     for i in range(tries):
         try:
-            with urllib.request.urlopen(urllib.request.Request(url, headers=HEADERS), timeout=40) as r:
+            with urllib.request.urlopen(
+                urllib.request.Request(url, headers=HEADERS), timeout=40
+            ) as r:
                 return json.load(r)
         except Exception:
             if i == tries - 1:
@@ -42,12 +48,19 @@ def main():
         for x in d["data"]:
             n = (x.get("name") or "").strip()
             ver = ver or x.get("version") or ""
-            if not n or (re.fullmatch(r"[a-z0-9_]+", n) and "_" in n):      # 内部占位名：mount_gimbal_mining_golem
+            if not n or (
+                re.fullmatch(r"[a-z0-9_]+", n) and "_" in n
+            ):  # 内部占位名：mount_gimbal_mining_golem
                 continue
             desc = x.get("description") or {}
-            e = {"n": n, "t": x.get("type") or x.get("classification") or "", "s": x.get("size"),
-                 "mfr": (x.get("manufacturer") or {}).get("name") or "", "cls": (x.get("class_name") or "").lower(),
-                 "d": clean(desc.get("zh_CN")) or clean(desc.get("en_EN"))}
+            e = {
+                "n": n,
+                "t": x.get("type") or x.get("classification") or "",
+                "s": x.get("size"),
+                "mfr": (x.get("manufacturer") or {}).get("name") or "",
+                "cls": (x.get("class_name") or "").lower(),
+                "d": clean(desc.get("zh_CN")) or clean(desc.get("en_EN")),
+            }
             k = n.lower()
             if k in seen:
                 seen[k].setdefault("alt", []).append(e["cls"])
@@ -60,10 +73,25 @@ def main():
             break
         page += 1
         if page % 20 == 0:
-            print(f"{page}/{d['meta']['last_page']} {time.time() - t0:.0f}s", flush=True)
-    OUT.write_text(json.dumps({"version": ver, "source": "star-citizen.wiki", "fetched": time.strftime("%Y-%m-%d"), "items": out},
-                              ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    print(f"写入 {OUT}：{len(out)} 个物品，{sum(1 for e in out if e['d'])} 个有描述，版本 {ver}，用时 {time.time() - t0:.0f}s")
+            print(
+                f"{page}/{d['meta']['last_page']} {time.time() - t0:.0f}s", flush=True
+            )
+    OUT.write_text(
+        json.dumps(
+            {
+                "version": ver,
+                "source": "star-citizen.wiki",
+                "fetched": time.strftime("%Y-%m-%d"),
+                "items": out,
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ),
+        encoding="utf-8",
+    )
+    print(
+        f"写入 {OUT}：{len(out)} 个物品，{sum(1 for e in out if e['d'])} 个有描述，版本 {ver}，用时 {time.time() - t0:.0f}s"
+    )
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@
 比 OCR 右上角调试信息可靠（不会认错数字）。AT 不模拟任何键盘 / 鼠标输入（老大定，1.1.2 起；控制台指令第 4 批）。
 导航实时方位仍然读右上角
 """
+
 import sys
 import threading
 import time
@@ -29,13 +30,14 @@ if WIN:
 
 # ---------------------------------------------------------------- /showlocation（只读剪贴板，不按键）
 
-TYPE_WAIT = 60              # 等玩家自己输入 /showlocation 最多多少秒
-_WAITING = threading.Lock()     # 同一时间只等一份（连按热键不会记重复的路标）
+TYPE_WAIT = 60  # 等玩家自己输入 /showlocation 最多多少秒
+_WAITING = threading.Lock()  # 同一时间只等一份（连按热键不会记重复的路标）
 
 
 def wait_new_coords(old, timeout):
     """等剪贴板里出现和 old 不同的新坐标；返回 (星系坐标, 原文) 或 (None, None)"""
     from ..navigation.navigate import read_clipboard, parse_clip
+
     end = time.time() + timeout
     while time.time() < end:
         clip = read_clipboard()
@@ -50,6 +52,7 @@ def showlocation(log=None):
     """等玩家自己在聊天框输入 /showlocation，读回剪贴板里的坐标。返回 (星系坐标米, 原文)；失败返回 (None, 原因)。
     AT 不替玩家按键"""
     from ..navigation.navigate import read_clipboard
+
     log = log or (lambda m: None)
     if not _WAITING.acquire(blocking=False):
         return None, "已经在等你输入 /showlocation 了"
@@ -62,8 +65,10 @@ def showlocation(log=None):
     log(f"等玩家输入 /showlocation → {clip!r}")
     if g:
         return g, clip
-    return None, (f"{TYPE_WAIT} 秒内没读到新坐标：请在游戏聊天框输入 /showlocation 后回车"
-                  "（停着不动时坐标和上次一模一样也读不到，动一下再输）")
+    return None, (
+        f"{TYPE_WAIT} 秒内没读到新坐标：请在游戏聊天框输入 /showlocation 后回车"
+        "（停着不动时坐标和上次一模一样也读不到，动一下再输）"
+    )
 
 
 def _window_text(hwnd, fn):
@@ -91,7 +96,7 @@ def _exe_path(hwnd):
     """窗口所属程序的完整路径（读不到返回空字符串）"""
     pid = wintypes.DWORD()
     _u32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-    h = _k32.OpenProcess(0x1000, False, pid.value)          # PROCESS_QUERY_LIMITED_INFORMATION
+    h = _k32.OpenProcess(0x1000, False, pid.value)  # PROCESS_QUERY_LIMITED_INFORMATION
     if not h:
         return ""
     try:
@@ -116,7 +121,9 @@ def game_foreground():
         if not hwnd:
             return False
         if _fg_cache["hwnd"] != hwnd:
-            _fg_cache.update(hwnd=hwnd, ok=_is_game_window(hwnd) or _exe_of(hwnd) == GAME_EXE)
+            _fg_cache.update(
+                hwnd=hwnd, ok=_is_game_window(hwnd) or _exe_of(hwnd) == GAME_EXE
+            )
         return _fg_cache["ok"]
     except Exception:
         return False
@@ -132,7 +139,9 @@ def game_front():
         if not hwnd:
             return None
         if _fg_cache["hwnd"] != hwnd:
-            _fg_cache.update(hwnd=hwnd, ok=_is_game_window(hwnd) or _exe_of(hwnd) == GAME_EXE)
+            _fg_cache.update(
+                hwnd=hwnd, ok=_is_game_window(hwnd) or _exe_of(hwnd) == GAME_EXE
+            )
         return _fg_cache["ok"]
     except Exception:
         return None
@@ -145,11 +154,14 @@ def find_game_window():
 
     def cb(hwnd, _):
         # 先按标题/类名认；认不出再看是不是 StarCitizen.exe 的窗口
-        if _u32.IsWindowVisible(hwnd) and (_is_game_window(hwnd) or
-                                           (_u32.GetWindowTextLengthW(hwnd) and _exe_of(hwnd) == GAME_EXE)):
+        if _u32.IsWindowVisible(hwnd) and (
+            _is_game_window(hwnd)
+            or (_u32.GetWindowTextLengthW(hwnd) and _exe_of(hwnd) == GAME_EXE)
+        ):
             found.append(hwnd)
             return False
         return True
+
     try:
         _u32.EnumWindows(_WNDENUMPROC(cb), 0)
     except Exception:
@@ -181,10 +193,12 @@ def game_elevated():
             return None
         tok = wintypes.HANDLE()
         try:
-            if not _adv.OpenProcessToken(h, 0x0008, ctypes.byref(tok)):     # TOKEN_QUERY
+            if not _adv.OpenProcessToken(h, 0x0008, ctypes.byref(tok)):  # TOKEN_QUERY
                 return None
             elev, n = wintypes.DWORD(), wintypes.DWORD()
-            ok = _adv.GetTokenInformation(tok, 20, ctypes.byref(elev), 4, ctypes.byref(n))   # TokenElevation
+            ok = _adv.GetTokenInformation(
+                tok, 20, ctypes.byref(elev), 4, ctypes.byref(n)
+            )  # TokenElevation
             _k32.CloseHandle(tok)
             return bool(elev.value) if ok else None
         finally:
@@ -201,18 +215,24 @@ def blocked_by_admin():
 def relaunch_as_admin(entry="nav"):
     """用管理员身份另开一个窗口直接进某个功能（会弹出 Windows 的确认框）"""
     from ..core.paths import FROZEN, ROOT
+
     root = str(ROOT)
-    if FROZEN:                                    # 独立打包版：AT.exe admin <入口>
+    if FROZEN:  # 独立打包版：AT.exe admin <入口>
         params = f"admin {entry}"
     else:
-        code = (f"import os,sys; os.chdir(r'{root}'); sys.path.insert(0, r'{root}'); "
-                f"from sc_mining import run; run.run_entry('{entry}')")
+        code = (
+            f"import os,sys; os.chdir(r'{root}'); sys.path.insert(0, r'{root}'); "
+            f"from sc_mining import run; run.run_entry('{entry}')"
+        )
         params = f'-X utf8 -c "{code}"'
-    r = ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, params, root, 1)
+    r = ctypes.windll.shell32.ShellExecuteW(
+        None, "runas", sys.executable, params, root, 1
+    )
     return r > 32
 
 
 # ---------------------------------------------------------------- 键盘状态
+
 
 def _down(vk):
     return bool(_u32.GetAsyncKeyState(vk) & 0x8000)

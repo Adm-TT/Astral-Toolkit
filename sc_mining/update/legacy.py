@@ -7,6 +7,7 @@
 只在常见位置找（下载、桌面、文档、用户目录、各盘根目录），往下最多 3 层，限时 3 秒。
 认旧版的标志：文件夹里有 Dubhe.exe、sc_mining\\version.py、userdata\\settings.json
 """
+
 import json
 import os
 import re
@@ -18,17 +19,44 @@ from pathlib import Path
 from ..core import paths
 
 # 要导入的东西：设置（同意免责声明那一项不带）、路标、目标、原矿记录、悬浮窗位置、地点记录、问题反馈
-FILES = ("settings.json", "waypoints.json", "goals.json", "ore_log.json", "observations.csv", "overlay_pos.json",
-         "location_ids.json", "last_position.json", "showloc_method.txt", "showlocation_method.txt")
+FILES = (
+    "settings.json",
+    "waypoints.json",
+    "goals.json",
+    "ore_log.json",
+    "observations.csv",
+    "overlay_pos.json",
+    "location_ids.json",
+    "last_position.json",
+    "showloc_method.txt",
+    "showlocation_method.txt",
+)
 DIRS = ("feedback",)
-KEEP_NEW = ("agreed",)          # 这些设置保留 AT 自己的（免责声明要在新版里重新同意）
-SKIP_DIRS = {"windows", "program files", "program files (x86)", "programdata", "$recycle.bin", "appdata",
-             "system volume information", "node_modules", ".venv", "_internal", "steam", "steamapps"}
+KEEP_NEW = ("agreed",)  # 这些设置保留 AT 自己的（免责声明要在新版里重新同意）
+SKIP_DIRS = {
+    "windows",
+    "program files",
+    "program files (x86)",
+    "programdata",
+    "$recycle.bin",
+    "appdata",
+    "system volume information",
+    "node_modules",
+    ".venv",
+    "_internal",
+    "steam",
+    "steamapps",
+}
 
 
 def _roots():
     home = Path.home()
-    out = [(home / "Downloads", 3), (home / "Desktop", 3), (home / "Documents", 3), (home, 1)]
+    out = [
+        (home / "Downloads", 3),
+        (home / "Desktop", 3),
+        (home / "Documents", 3),
+        (home, 1),
+    ]
     if os.name == "nt":
         for d in string.ascii_uppercase:
             p = Path(f"{d}:\\")
@@ -38,8 +66,14 @@ def _roots():
 
 
 def _is_old(d):
-    has_ver = (d / "sc_mining" / "core" / "version.py").is_file() or (d / "sc_mining" / "version.py").is_file()
-    return (d / "Dubhe.exe").is_file() and has_ver and (d / "userdata" / "settings.json").is_file()
+    has_ver = (d / "sc_mining" / "core" / "version.py").is_file() or (
+        d / "sc_mining" / "version.py"
+    ).is_file()
+    return (
+        (d / "Dubhe.exe").is_file()
+        and has_ver
+        and (d / "userdata" / "settings.json").is_file()
+    )
 
 
 def _version(d):
@@ -85,16 +119,23 @@ def find(limit_s=3.0, roots=None):
             if e.name.lower() not in SKIP_DIRS and not e.name.startswith("."):
                 walk(Path(e.path), depth - 1)
 
-    for root, depth in (roots if roots is not None else _roots()):
+    for root, depth in roots if roots is not None else _roots():
         if root.exists():
             walk(root, depth)
     rows = []
     for d in out:
         u = d / "userdata"
         used = max((p.stat().st_mtime for p in u.iterdir() if p.is_file()), default=0)
-        rows.append({"path": str(d), "version": _version(d), "waypoints": _count(u / "waypoints.json"),
-                     "goals": _count(u / "goals.json"), "used": time.strftime("%Y-%m-%d %H:%M", time.localtime(used)),
-                     "_t": used})
+        rows.append(
+            {
+                "path": str(d),
+                "version": _version(d),
+                "waypoints": _count(u / "waypoints.json"),
+                "goals": _count(u / "goals.json"),
+                "used": time.strftime("%Y-%m-%d %H:%M", time.localtime(used)),
+                "_t": used,
+            }
+        )
     rows.sort(key=lambda r: r["_t"], reverse=True)
     for r in rows:
         r.pop("_t")
@@ -120,10 +161,17 @@ def import_from(path):
             shutil.copy2(d, bak / name)
         if name == "settings.json":
             from ..core import settings
-            old = json.loads(s.read_text(encoding="utf-8-sig"))      # 手改过的文件可能带 BOM（记事本另存）
-            with settings._LOCK:                                      # AT 开着，别的线程也在改设置：读-改-写连着做，写原子的（S5 审查 2026-10-31）
+
+            old = json.loads(
+                s.read_text(encoding="utf-8-sig")
+            )  # 手改过的文件可能带 BOM（记事本另存）
+            with settings._LOCK:  # AT 开着，别的线程也在改设置：读-改-写连着做，写原子的（S5 审查 2026-10-31）
                 try:
-                    cur = json.loads(d.read_text(encoding="utf-8-sig")) if d.exists() else {}
+                    cur = (
+                        json.loads(d.read_text(encoding="utf-8-sig"))
+                        if d.exists()
+                        else {}
+                    )
                 except Exception:
                     cur = {}
                 for k in KEEP_NEW:
@@ -133,7 +181,9 @@ def import_from(path):
                         old.pop(k, None)
                 paths.write_json(d, old, indent=1)
         elif s.suffix in (".json", ".txt", ".csv"):
-            d.write_text(s.read_text(encoding="utf-8-sig"), encoding="utf-8")   # 去掉 BOM，AT 按 UTF-8 读
+            d.write_text(
+                s.read_text(encoding="utf-8-sig"), encoding="utf-8"
+            )  # 去掉 BOM，AT 按 UTF-8 读
         else:
             shutil.copy2(s, d)
         done.append(name)
@@ -148,19 +198,30 @@ def import_from(path):
 def window_url(path):
     """旧版正在运行时它写的窗口地址（不一定还活着）"""
     try:
-        return (Path(path) / "userdata" / "window_url.txt").read_text(encoding="utf-8").strip()
+        return (
+            (Path(path) / "userdata" / "window_url.txt")
+            .read_text(encoding="utf-8")
+            .strip()
+        )
     except OSError:
         return ""
 
 
 def _call(url, name, timeout=2.0):
     import urllib.request
+
     m = re.match(r"^(http://127\.0\.0\.1:\d+)/.*[#?&]t=([\w-]+)", url or "")
     if not m:
         raise ValueError("地址不对")
-    req = urllib.request.Request(f"{m.group(1)}/api/{name}", data=b"{}", method="POST",
-                                 headers={"Content-Type": "application/json", "X-Token": m.group(2)})
-    return json.loads(urllib.request.urlopen(req, timeout=timeout).read().decode("utf-8"))
+    req = urllib.request.Request(
+        f"{m.group(1)}/api/{name}",
+        data=b"{}",
+        method="POST",
+        headers={"Content-Type": "application/json", "X-Token": m.group(2)},
+    )
+    return json.loads(
+        urllib.request.urlopen(req, timeout=timeout).read().decode("utf-8")
+    )
 
 
 def running(rows):

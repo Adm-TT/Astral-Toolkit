@@ -7,6 +7,7 @@ tests/              自检用（tests/samples 里是测试截图）
 
 旧版本的文件散在外层和 sc_mining 里，migrate() 会在启动时自动搬到新位置。
 """
+
 import os
 import shutil
 import sys
@@ -19,13 +20,19 @@ ROOT = Path(sys.executable).resolve().parent if FROZEN else CODE.parent
 # Velopack 安装版（2026-10-27）：程序在 %LOCALAPPDATA%\AT\current\，每次升级整个换掉，所以数据和设置放在外面：
 #   data      → %LOCALAPPDATA%\AT\data（升级不动；卸载时随 AT 一起删，可以重新下载）
 #   userdata  → %LOCALAPPDATA%\AT_userdata（升级、卸载都不动，和以前卸载时默认保留一样）
-VELOPACK = FROZEN and ROOT.name.lower() == "current" and (ROOT.parent / "Update.exe").exists()
-BUNDLED_DATA = ROOT / "data"                     # 安装包自带的数据
+VELOPACK = (
+    FROZEN and ROOT.name.lower() == "current" and (ROOT.parent / "Update.exe").exists()
+)
+BUNDLED_DATA = ROOT / "data"  # 安装包自带的数据
 DATA = ROOT.parent / "data" if VELOPACK else BUNDLED_DATA
 # USER 按程序位置推（current → AT → Local），不读 LOCALAPPDATA：用另一个管理员账号提权时那个变量是别人的目录（二审 2026-10-27）
 USER = ROOT.parent.parent / "AT_userdata" if VELOPACK else ROOT / "userdata"
-INNO_USER = ROOT.parent.parent / "Programs" / "AT" / "userdata" if VELOPACK else None   # 老的 Inno 安装版的 userdata
-MIGRATED = USER / ".migrated_from_inno"            # 老 Inno 版的设置和记录已经搬过来了（桥接安装程序或 import_inno 写）
+INNO_USER = (
+    ROOT.parent.parent / "Programs" / "AT" / "userdata" if VELOPACK else None
+)  # 老的 Inno 安装版的 userdata
+MIGRATED = (
+    USER / ".migrated_from_inno"
+)  # 老 Inno 版的设置和记录已经搬过来了（桥接安装程序或 import_inno 写）
 LOGS = USER / "logs"
 SHOTS = USER / "shots"
 SAMPLES = ROOT / "tests" / "samples"
@@ -65,7 +72,7 @@ def cached_json(path, transform=None, default=None):
         raw = _json.loads(path.read_text(encoding="utf-8"))
         val = transform(raw) if transform else raw
     except Exception:
-        val = _BAD                                  # 坏文件：也按修改时间记住，文件没变就不再反复读（二审 2026-10-28）
+        val = _BAD  # 坏文件：也按修改时间记住，文件没变就不再反复读（二审 2026-10-28）
     with _json_lock:
         _json_cache[path] = (mt, val)
     return default if val is _BAD else val
@@ -74,13 +81,16 @@ def cached_json(path, transform=None, default=None):
 def write_json(path, obj, **kw):
     """把 obj 写成 JSON：先写临时文件再换名，进程中途被结束也不会留下半个文件（2026-10-28 整体审查）。kw 传给 json.dumps"""
     import os
+
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     kw.setdefault("ensure_ascii", False)
     tmp = path.with_name(f".{path.name}.{os.getpid()}.{_threading.get_ident()}.tmp")
     try:
         tmp.write_text(_json.dumps(obj, **kw), encoding="utf-8")
-        for i in range(6):                        # Windows：目标正被别的线程 / 进程读着、杀毒软件在扫时换名会失败，稍等再试
+        for i in range(
+            6
+        ):  # Windows：目标正被别的线程 / 进程读着、杀毒软件在扫时换名会失败，稍等再试
             try:
                 tmp.replace(path)
                 break
@@ -88,6 +98,7 @@ def write_json(path, obj, **kw):
                 if i == 5:
                     raise
                 import time as _t
+
                 _t.sleep(0.05)
     finally:
         try:
@@ -112,7 +123,14 @@ def self_cmd(entry, *args):
     if FROZEN:
         return [sys.executable, entry, *map(str, args)]
     if entry == "helpers":
-        return [sys.executable, "-X", "utf8", "-m", "sc_mining.system.helpers", *map(str, args)]
+        return [
+            sys.executable,
+            "-X",
+            "utf8",
+            "-m",
+            "sc_mining.system.helpers",
+            *map(str, args),
+        ]
     return [sys.executable, "-X", "utf8", "-m", "sc_mining.run", entry, *map(str, args)]
 
 
@@ -140,16 +158,21 @@ def crash_log(name="crash_log.txt"):
         import atexit
         import faulthandler
         import time
+
         f = open(log(name), "a", encoding="utf-8", buffering=1)
         f.write(f"==== {time.strftime('%F %T')} 启动（进程 {os.getpid()}） ====\n")
         faulthandler.enable(file=f, all_threads=True)
-        _CRASH.append(f)                        # 文件要一直开着，崩溃时才写得进去
-        atexit.register(lambda: f.write(f"---- {time.strftime('%F %T')} 正常退出（进程 {os.getpid()}） ----\n"))
+        _CRASH.append(f)  # 文件要一直开着，崩溃时才写得进去
+        atexit.register(
+            lambda: f.write(
+                f"---- {time.strftime('%F %T')} 正常退出（进程 {os.getpid()}） ----\n"
+            )
+        )
     except Exception:
         pass
 
 
-LOG_CAP = 3_000_000       # 日志超过这么大就换成 .old 重新写（只留上一份；以前只追加不封顶，2026-10-28 整体审查）
+LOG_CAP = 3_000_000  # 日志超过这么大就换成 .old 重新写（只留上一份；以前只追加不封顶，2026-10-28 整体审查）
 
 
 def log(name):
@@ -194,11 +217,28 @@ _MOVES = [
 ]
 _SAMPLES = ["scan1.png", "sig1.png", "turret1.png", "pilot_fov.png", "inv_sample.png"]
 # 已经合进主菜单的旧启动器、旧测试结果、合并掉的旧代码
-_DELETE = [ROOT / n for n in ("1_安装.bat", "2_截图测试.bat", "3_实时读屏.bat", "4_找矿点.bat", "手动输入.bat", "刷新矿价.bat",
-                              "测试结果.txt", "test_result.txt", ".autorun_on")] + \
-          [CODE / n for n in ("glossary_names.py", "signature.py", "sigscreen.py", "calibrate.py")] + \
-          [ROOT / "tests" / "test_core.py", ROOT / "tests" / "trade"] + \
-          [USER / "showloc_method.txt"]          # 自动 /showlocation 已删掉，它记的按键方式也不要了
+_DELETE = (
+    [
+        ROOT / n
+        for n in (
+            "1_安装.bat",
+            "2_截图测试.bat",
+            "3_实时读屏.bat",
+            "4_找矿点.bat",
+            "手动输入.bat",
+            "刷新矿价.bat",
+            "测试结果.txt",
+            "test_result.txt",
+            ".autorun_on",
+        )
+    ]
+    + [
+        CODE / n
+        for n in ("glossary_names.py", "signature.py", "sigscreen.py", "calibrate.py")
+    ]
+    + [ROOT / "tests" / "test_core.py", ROOT / "tests" / "trade"]
+    + [USER / "showloc_method.txt"]
+)  # 自动 /showlocation 已删掉，它记的按键方式也不要了
 
 
 def seed_data():
@@ -207,6 +247,7 @@ def seed_data():
     if not VELOPACK or not BUNDLED_DATA.exists():
         return 0
     from .version import VERSION
+
     stamp = DATA / ".bundled_version"
     try:
         if stamp.read_text(encoding="utf-8").strip() == VERSION:
@@ -214,7 +255,9 @@ def seed_data():
     except OSError:
         pass
     n = 0
-    (DATA / "data_pack.json").unlink(missing_ok=True)   # 先删旧标记：安装包带了就复制成和数据一致的版本，没带就保持删掉（下次更新重新下）
+    (DATA / "data_pack.json").unlink(
+        missing_ok=True
+    )  # 先删旧标记：安装包带了就复制成和数据一致的版本，没带就保持删掉（下次更新重新下）
     for p in BUNDLED_DATA.rglob("*"):
         if p.is_file():
             dest = DATA / p.relative_to(BUNDLED_DATA)
@@ -237,7 +280,11 @@ def import_inno():
     n = 0
     for p in INNO_USER.rglob("*"):
         rel = p.relative_to(INNO_USER)
-        if not p.is_file() or rel.parts[0] in _INNO_SKIP_DIRS or p.name in _INNO_SKIP_FILES:
+        if (
+            not p.is_file()
+            or rel.parts[0] in _INNO_SKIP_DIRS
+            or p.name in _INNO_SKIP_FILES
+        ):
             continue
         dest = USER / rel
         try:
@@ -247,7 +294,7 @@ def import_inno():
             shutil.copy2(p, dest)
             n += 1
         except OSError:
-            return n                                  # 没搬完：不写标记，下次启动接着搬
+            return n  # 没搬完：不写标记，下次启动接着搬
     # 老版 data 里下载来的汉化包（loc）不在安装包里：新位置没有的就复制过来，免得升级完显示「汉化包：未下载」
     # （桥接安装程序会整个复制 data；这里是玩家直接装新版、老版还在的情况，2026-10-27）
     old_loc = INNO_USER.parent / "data" / "loc"
@@ -286,7 +333,7 @@ def migrate():
         elif p.exists():
             p.unlink()
             done += 1
-    shots_dir = ROOT / "shots"                      # 剩下的旧截图（调试用的裁剪图等）也收进 userdata
+    shots_dir = ROOT / "shots"  # 剩下的旧截图（调试用的裁剪图等）也收进 userdata
     if shots_dir.exists():
         for p in list(shots_dir.iterdir()):
             dest = SHOTS / "old" / p.name
