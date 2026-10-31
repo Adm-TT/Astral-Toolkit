@@ -1,6 +1,7 @@
-"""测试 navigation 拆分出的 names.py 与 waypoints.py 子模块"""
+"""测试 navigation 拆分出的 names.py、waypoints.py、starmap.py 与 celestial.py 子模块"""
 
-from sc_mining.navigation import names, waypoints, navigate
+import math
+from sc_mining.navigation import names, waypoints, starmap, celestial, navigate
 
 
 def test_names_mappings():
@@ -78,3 +79,88 @@ def test_waypoints_facade_reexport():
     assert navigate.delete_waypoint is waypoints.delete_waypoint
     assert navigate.parse_clip is waypoints.parse_clip
     assert navigate.is_space is waypoints.is_space
+
+
+def test_starmap_compact():
+    oc = [
+        {
+            "Type": "Planet",
+            "BodyRadius": 1000000,
+            "System": "Stanton",
+            "Planet": "Microtech",
+            "XCoord": 100.0,
+            "YCoord": 200.0,
+            "ZCoord": 300.0,
+            "RotationSpeedX": 24.0,
+            "RotationAdjustmentX": 10.0,
+            "OrbitalMarkerRadius": 1200000,
+            "GRIDRadius": 1500000,
+        }
+    ]
+    pois = [
+        {
+            "Planet": "Microtech",
+            "PoiName": "New Babbage",
+            "Type": "City",
+            "XCoord": 10.0,
+            "YCoord": 20.0,
+            "ZCoord": 30.0,
+            "QTMarker": 1,
+        }
+    ]
+    data = starmap.compact(oc, pois)
+    assert "bodies" in data
+    assert "Microtech" in data["bodies"]
+    assert len(data["pois"]) == 1
+    assert data["pois"][0]["n"] == "New Babbage"
+
+
+def test_starmap_facade_reexport():
+    assert navigate.CACHE is starmap.CACHE
+    assert navigate.API is starmap.API
+    assert navigate.load is starmap.load
+    assert navigate.compact is starmap.compact
+    assert navigate.update is starmap.update
+
+
+def test_celestial_math():
+    # 经纬度互转
+    pos = celestial.from_latlon(45.0, 90.0, 1000.0, 500.0)
+    lat, lon, r = celestial.latlon(pos)
+    assert abs(lat - 45.0) < 1e-4
+    assert abs(lon - 90.0) < 1e-4
+    assert abs(r - 1000.5) < 1e-4
+
+    # 距离计算
+    assert celestial.direct_km((0, 0, 0), (3, 4, 0)) == 5.0
+    surf = celestial.surface_km((1000, 0, 0), (0, 1000, 0), 1000.0)
+    assert abs(surf - 1000.0 * (math.pi / 2)) < 1e-2
+
+    # 罗盘方位
+    assert celestial.compass(0) == "北"
+    assert celestial.compass(90) == "东"
+    assert celestial.compass(180) == "南"
+    assert celestial.compass(270) == "西"
+
+    # 方位角与转向
+    brg = celestial.bearing((1000, 0, 0), (0, 1000, 0))
+    assert isinstance(brg, float)
+    s = celestial.steer((0, 0, 0), (0, 0, 0), (0, 100, 0))
+    assert "turn" in s and "pitch" in s and "off" in s
+
+
+def test_celestial_facade_reexport():
+    assert navigate.latlon is celestial.latlon
+    assert navigate.from_latlon is celestial.from_latlon
+    assert navigate.bearing is celestial.bearing
+    assert navigate.surface_km is celestial.surface_km
+    assert navigate.direct_km is celestial.direct_km
+    assert navigate.compass is celestial.compass
+    assert navigate.locate is celestial.locate
+    assert navigate.cam_axes is celestial.cam_axes
+    assert navigate.steer is celestial.steer
+    assert navigate.project is celestial.project
+    assert navigate.rotation_deg is celestial.rotation_deg
+    assert navigate.CALIB is celestial.CALIB
+    assert navigate.LAST is celestial.LAST
+

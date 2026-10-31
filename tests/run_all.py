@@ -15,11 +15,12 @@ from tests.minipytest import run_all, tmpdir  # noqa: E402
 _tmp = tmpdir()
 from sc_mining.navigation import navigate as _nav  # noqa: E402
 from sc_mining.navigation import waypoints as _wp  # noqa: E402
+from sc_mining.navigation import celestial as _cel  # noqa: E402
 
-_nav.CALIB = (
+_nav.CALIB = _cel.CALIB = (
     _tmp / "rotation_calib.json"
 )  # 自转相位校准写临时文件，不碰用户的 userdata（2026-10-28）
-_nav.LAST = (
+_nav.LAST = _cel.LAST = (
     _tmp / "last_position.json"
 )  # locate(record=True) 记的最近位置也一样（2026-10-28 审查：以前写进真实 userdata）
 _nav.WAYPOINTS = _wp.WAYPOINTS = (
