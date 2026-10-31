@@ -229,6 +229,7 @@ _DELETE = (
     ]
     + [ROOT / "tests" / "test_core.py", ROOT / "tests" / "trade"]
     + [USER / "showloc_method.txt"]
+    + [USER / ".autorun_on", USER / "restart_request"]
 )  # 自动 /showlocation 已删掉，它记的按键方式也不要了
 
 

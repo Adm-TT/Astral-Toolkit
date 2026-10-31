@@ -190,8 +190,12 @@ class _Live:
                 with (
                     self.lock
                 ):  # 重来前把上一轮的旧结果清掉（新一轮的过期清理不认旧的）
-                    for k in ("信号", "扫描", "矿袋"):
-                        _H()._hud().clear(k)
+                    hud = _H()._hud()
+                    if (
+                        hud is not None
+                    ):  # 悬浮窗没建起来时别在这里抛错，让重试接着走（审查 2026-10-31）
+                        for k in ("信号", "扫描", "矿袋"):
+                            hud.clear(k)
                 ev.wait(1)
 
     def _fail_off(self, ev, why):

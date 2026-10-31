@@ -23,12 +23,9 @@ def _invalidate_short():
 
 
 def _is_mineral(zh, en):
-    try:
-        from .hover import _is_mineral as im
+    from ..trade.inspector import _is_mineral as im
 
-        return im(zh, en)
-    except Exception:
-        return False
+    return im(zh, en)
 
 
 # ---------------------------------------------------------------- 基础常量与转换函数

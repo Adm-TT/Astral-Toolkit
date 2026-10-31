@@ -45,6 +45,9 @@ def main():
         sys.exit(0)
     args = sys.argv[1:]
     cmd = args[0] if args else "menu"
+    # 老版本拉起的后台辅助进程 / 显卡识别小进程：这两个都删了，直接退出，别把整个 AT 跑起来
+    if cmd in ("helpers", "ocrworker"):
+        sys.exit(0)
     from sc_mining.core import paths
 
     try:

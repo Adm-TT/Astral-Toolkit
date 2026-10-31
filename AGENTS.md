@@ -59,7 +59,7 @@ rem 构建（PyInstaller + ATShell；需打包依赖和 .NET SDK）
 
 - 说"完成"之前必须实际运行上面的命令，并展示结果，不接受口头确认。
 - UI 变更：在 ATShell 窗口里跑一遍，截图并对照 `产品设计文档.md` 第 5 节；悬浮窗变更要在游戏里看。
-- 涉及读屏识别（`sc_mining/{mining,navigation}/`、`sc_mining/app/engines/`、`sc_mining/system/gpu_ocr.py`、`sc_mining/trade/inspector.py`、`sc_mining/tasks/{hover,count,mining}.py`）的改动：额外运行 `.venv\Scripts\python.exe -X utf8 tools\sample_sweep.py`（真实截图全量回归），高风险的再由负责人实机验证。
+- 涉及读屏识别（`sc_mining/{mining,navigation}/`、`sc_mining/app/engines/`、`sc_mining/ocr/`、`sc_mining/trade/inspector.py`、`sc_mining/tasks/{hover,count,mining}.py`）的改动：额外运行 `.venv\Scripts\python.exe -X utf8 tools\sample_sweep.py`（真实截图全量回归），高风险的再由负责人实机验证。
 - 发版时才打安装包：`.venv\Scripts\python.exe -X utf8 tools\build_velopack.py "更新内容"`（vpk 位置见脚本里的 `VPK`）。
 
 ## 提交前流程

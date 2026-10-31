@@ -373,3 +373,42 @@ def test_server_split_keeps_old_names():
     ):
         assert getattr(server, name) is getattr(mod, name), name
     assert callable(server.main) and callable(server._relaunch)
+
+
+def test_stock_kind_mineral_not_swallowed():
+    """库存类别：矿物要认成「矿物」（抽 OCR 模块时删了 tasks.hover 的转出，stock 的导入失败被吞掉，矿物全成了「材料」）"""
+    from sc_mining.tasks import stock
+
+    assert stock._stock_kind("塔兰导电石", "Taranite", "scu") == "矿物"
+    assert stock._stock_kind("", "Taranite", "scu") == "矿物"
+    assert stock._stock_kind("", "Recycled Material Composite", "scu") == "材料"
+    assert stock._stock_kind("", "Taranite", "unit") == "物品"
+
+
+def test_frozen_main_old_helper_args_exit(monkeypatch):
+    """打包版收到老版本的 helpers / ocrworker 参数：直接退出，不把整个 AT 跑起来"""
+    from sc_mining import frozen_main
+    from sc_mining.core import paths
+
+    seeded = []
+    monkeypatch.setattr(frozen_main, "_velopack", lambda: None)
+    monkeypatch.setattr(paths, "seed_data", lambda: seeded.append(1))
+    for argv in (["AT.exe", "helpers", "123"], ["AT.exe", "ocrworker"]):
+        monkeypatch.setattr(sys, "argv", argv)
+        try:
+            frozen_main.main()
+            raise AssertionError("没有退出")
+        except SystemExit as e:
+            assert e.code in (0, None), argv
+    assert seeded == []
+
+
+def test_startup_drops_stale_helper_files():
+    """老版本留下的「自动跑中」标记和重启请求：启动时（paths.migrate）删掉，没有代码再读它们"""
+    from sc_mining.core import paths
+
+    names = [
+        p.name for p in paths._DELETE
+    ]  # 测试时 paths.USER 被换成临时目录，_DELETE 是导入时算好的，只比名字
+    assert "restart_request" in names
+    assert names.count(".autorun_on") == 2  # 程序目录一个（更老的版本）、userdata 一个

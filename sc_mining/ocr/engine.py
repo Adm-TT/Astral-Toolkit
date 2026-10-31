@@ -23,7 +23,7 @@ def raw_detector() -> Callable[[np.ndarray], Sequence[Tuple[Any, str, float]]]:
 
     兼容 rapidocr_onnxruntime 和 rapidocr (支持 Python 3.13) 两种实现。
     """
-    eng = _get_engine()
+    eng: Any = _get_engine()
     if eng.kind.startswith("rapidocr_onnxruntime"):
         return lambda arr: eng(arr)[0] or []
 
@@ -38,7 +38,7 @@ def raw_detector() -> Callable[[np.ndarray], Sequence[Tuple[Any, str, float]]]:
 
 def raw_recognizer() -> Callable[[np.ndarray], Tuple[str, float]]:
     """返回底层单行识别函数：func(arr) -> (text, conf)"""
-    eng = _get_engine()
+    eng: Any = _get_engine()
     if eng.kind.startswith("rapidocr_onnxruntime"):
 
         def run(arr: np.ndarray) -> Tuple[str, float]:
@@ -68,7 +68,7 @@ def recognize(
         offset: 坐标偏移量 (ox, oy)，用于局部裁图后的坐标换算
         native: 小块截图按原尺寸找字（不先放大），快 2 倍多
     """
-    eng = _get_engine()
+    eng: Any = _get_engine()
     if isinstance(image, np.ndarray):
         arr = image
     else:
