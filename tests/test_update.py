@@ -798,6 +798,9 @@ def test_vpk_beta_gets_same_number_live(monkeypatch):
         # 测试版在 beta 频道（发布脚本的规定）：装着 beta.1 能收到 beta.2；win 上旧的正式版不抢（合并后审查 2026-10-31）
         versions.update(win="1.1.1", beta="1.1.2-beta.2")
         assert vpk.install(progress=lambda *a: None) == "1.1.2-beta.2"
+        # beta 频道清单 404（还没发过测试版）不算源失败；连不上、超时才算
+        assert vpk._missing(RuntimeError("HTTP 404 Not Found"))
+        assert not vpk._missing(TimeoutError("timed out"))
         # 正式版玩家不看 beta 频道
         monkeypatch.setattr(upgrade, "VERSION", "1.1.2")
         versions.update(win=None, beta="1.1.3-beta.1")

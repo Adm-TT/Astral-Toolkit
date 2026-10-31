@@ -36,6 +36,9 @@ AREA_MAX_AGE = (
 
 HERE_WAIT = 90  # 点「用当前位置新建」后等 /showlocation 坐标多少秒
 _HERE = {"name": None, "until": 0.0, "thread": None}
+_MARKING = {
+    "on": False
+}  # 热键记路标正在等 /showlocation（只有它会用「新建」填的名字；一键定位、原矿记录不会）
 
 # 游戏里的热键：(设置名, 默认键, 名字)。撞键时排在前面的生效（顺序和以前一样：物品识别 > 记路标 > 一键定位 > 问题反馈 > 采矿助手 > 盘点）
 HOTKEYS = [
@@ -376,12 +379,10 @@ def waypoint_add(name="", body="", lat=None, lon=None, alt=0.0, here=False):
         return {"error": "需填写路标名称"}
     if here:
         # 只用 /showlocation 的坐标（不读右上角）：等你在游戏聊天框自己输入 /showlocation（AT 不替你输入）
-        from ..system import showloc
-
         _HERE.update(name=name.strip(), until=time.time() + HERE_WAIT)
-        if (
-            not showloc._WAITING.locked()
-        ):  # 热键记路标已经在等 /showlocation：名字交给它，不另起一份（合并后审查）
+        if not _MARKING[
+            "on"
+        ]:  # 热键记路标已经在等 /showlocation：名字交给它，不另起一份（合并后审查）
             _start_here_watch()
         return {
             "pending": True,
@@ -754,7 +755,11 @@ def mark_here():
             8,
         )
         return {"pending": True}
-    g, why = _wait_showloc()
+    _MARKING["on"] = True
+    try:
+        g, why = _wait_showloc()
+    finally:
+        _MARKING["on"] = False
     if not g:
         _note_hud("路标", f"未保存：{why}", 8)
         _wp_log(f"失败：{why}")

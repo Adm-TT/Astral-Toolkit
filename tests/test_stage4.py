@@ -277,6 +277,14 @@ def test_showloc_hotkey_and_new_here_do_not_double_save(monkeypatch):
     monkeypatch.setattr(nav, "_HERE", {"name": None, "until": 0.0, "thread": None})
     assert showloc._WAITING.acquire(blocking=False)
     try:
+        r = nav.waypoint_add(
+            "一键定位在等", here=True
+        )  # 锁被一键定位 / 原矿记录占着：照常起盯剪贴板（第 3 轮复审）
+        assert isinstance(r, dict) and r.get("pending") and started
+        started.clear()
+        monkeypatch.setattr(
+            nav, "_MARKING", {"on": True}
+        )  # 热键记路标在等：名字交给它，不另起
         r = nav.waypoint_add("测试点", here=True)
         assert isinstance(r, dict)
         assert r.get("pending") and not started and nav._HERE["name"] == "测试点"
@@ -289,6 +297,7 @@ def test_showloc_hotkey_and_new_here_do_not_double_save(monkeypatch):
     finally:
         showloc._WAITING.release()
     nav._HERE["name"] = None
+    nav._MARKING["on"] = False
     nav.waypoint_add("测试点2", here=True)
     assert started  # 没人在等：照常盯剪贴板
     monkeypatch.setattr(

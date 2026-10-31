@@ -41,9 +41,14 @@ def _channels(rollback):
     （发布脚本把测试版打进 beta 频道；只问 win 的话测试版玩家收不到下一个测试版，2026-10-31 合并后审查）"""
     if rollback:
         return [PREV]
+    return ["beta", CHANNEL] if _installed_channel() == "beta" else [CHANNEL]
+
+
+def _installed_channel():
+    """本机装的是哪个频道：测试版（x.y.z-beta.N）是 beta，正式版是 win"""
     from . import upgrade
 
-    return ["beta", CHANNEL] if "-" in str(upgrade.VERSION) else [CHANNEL]
+    return "beta" if "-" in str(upgrade.VERSION) else CHANNEL
 
 
 def _mgr(rollback=False, timeout_ms=0, feed=None, channel=None):
@@ -52,9 +57,10 @@ def _mgr(rollback=False, timeout_ms=0, feed=None, channel=None):
     import velopack
 
     feed = feed or FEED
-    opts = velopack.UpdateOptions(
-        bool(rollback), 10, channel or (PREV if rollback else CHANNEL)
-    )
+    ch = channel or (PREV if rollback else CHANNEL)
+    # 问的频道和装的不一样（测试版换正式版、回滚）：本机完整包不是那个频道增量包的底，强制下完整包（合并后复审：Velopack 不查增量底版本）
+    deltas = 10 if ch == _installed_channel() else 0
+    opts = velopack.UpdateOptions(bool(rollback), deltas, ch)
     # 超时只对网址有用；本地文件夹（沙盒测试）直接给路径，HttpSource 不认本地路径（2026-10-27 沙盒发现回滚列表是空的）
     src = (
         velopack.HttpSource(feed, velopack.HttpOptions([], timeout_ms))
@@ -82,14 +88,24 @@ def _ask(feed, rollback, timeout_ms=8000):
         try:
             info = _mgr(rollback, timeout_ms, feed, ch).check_for_updates()
             ok = True
-        except Exception as e:  # 这个频道没有（比如还没发过测试版）或连不上：问下一个
-            err = e
-            continue
+        except Exception as e:
+            if _missing(
+                e
+            ):  # 服务器上还没有这个频道（比如没发过测试版）：当它没有新版本
+                ok = True
+                continue
+            raise  # 别的错（连不上、超时）：整个源算失败，换下一个源
         if info and (best is None or vkey(_version_of(info)) > vkey(_version_of(best))):
             best, best_ch = info, ch
     if not ok:
         raise err if err else RuntimeError("更新源没有回答")
     return best, best_ch
+
+
+def _missing(e):
+    """更新源上没有这个频道的清单（404）"""
+    s = str(e).lower()
+    return "404" in s or "not found" in s
 
 
 def _check_at(rollback):
