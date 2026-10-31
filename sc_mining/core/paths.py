@@ -118,19 +118,10 @@ def clear_json_cache(path=None):
 
 
 def self_cmd(entry, *args):
-    """启动 AT 自己的另一个入口（后台辅助、重启、管理员身份）的命令行。
-    独立打包版：AT.exe <入口> …；Python 版：python -m sc_mining.run <入口> …（后台辅助是 -m sc_mining.helpers）"""
+    """启动 AT 自己的另一个入口（重启、管理员身份）的命令行。
+    独立打包版：AT.exe <入口> …；Python 版：python -m sc_mining.run <入口> …"""
     if FROZEN:
         return [sys.executable, entry, *map(str, args)]
-    if entry == "helpers":
-        return [
-            sys.executable,
-            "-X",
-            "utf8",
-            "-m",
-            "sc_mining.system.helpers",
-            *map(str, args),
-        ]
     return [sys.executable, "-X", "utf8", "-m", "sc_mining.run", entry, *map(str, args)]
 
 

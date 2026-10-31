@@ -23,7 +23,6 @@ MODULES = (
     "navigation.navigate",
     "system.showloc",
     "app.overlay",
-    "system.helpers",
     "core.perf",
     "core.perfmon",
     "crafting.itemsearch",

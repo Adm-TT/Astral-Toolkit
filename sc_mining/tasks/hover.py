@@ -13,7 +13,7 @@ import threading
 import time
 
 from ..app import bus
-from ..trade.inspector import inspect_item
+from ..trade.inspector import inspect_item, _read_tooltip, HOVER_REGION  # noqa: F401
 
 WIN = sys.platform == "win32"
 

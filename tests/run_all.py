@@ -29,10 +29,7 @@ _paths.USER = _tmp  # 运行时才取 paths.USER 的（地点编号、锁文件�
 _paths.SHOTS = _tmp / "shots"
 _paths.LOGS = (
     _tmp / "logs"
-)  # 日志也写临时目录（以前测试会往真实 userdata\logs 写 helpers / perf 日志）
-from sc_mining.system import helpers as _helpers  # noqa: E402
-
-_helpers.LOG = _paths.LOGS / "helpers_log.txt"
+)  # 日志也写临时目录（以前测试会往真实 userdata\logs 写 perf 日志）
 
 
 def _off_userdata():

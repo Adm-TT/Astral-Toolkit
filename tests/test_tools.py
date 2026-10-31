@@ -10,8 +10,8 @@ from sc_mining.trade.models import (
     PriceStats,
     ProviderResult,
     ImportRow,
-    OcrToken,
 )
+from sc_mining.ocr import OcrToken
 import time
 from sc_mining.crafting import shops, wikelo
 import json, time  # noqa: E401, F401, F811
@@ -912,18 +912,16 @@ def test_nav_tip_texts():
 
 def test_first_run_agreement(monkeypatch, tmp_path):
     from sc_mining.core import settings
-    from sc_mining.system import helpers
     from sc_mining.tasks import system as t_sys
 
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
     started = []
-    monkeypatch.setattr(helpers, "start", lambda: started.append("helpers"))
     monkeypatch.setattr(t_sys, "start_background", lambda: started.append("bg"))
     assert settings.load()["agreed"] is False
     assert "error" in t_sys.agree("本软件是免费的")  # 差一个字都不行
     assert settings.load()["agreed"] is False and not started
     t_sys.agree(" 本软件是免费软件 ")
-    assert settings.load()["agreed"] is True and started == ["helpers", "bg"]
+    assert settings.load()["agreed"] is True and started == ["bg"]
 
 
 def test_live_scan_updates_when_read_gets_more_complete(monkeypatch, tmp_path):
@@ -1556,7 +1554,6 @@ def test_anti_afk_removed(monkeypatch, tmp_path):
     """2026-10-30 删掉防挂机、2026-10-31 删掉自动跑（不再模拟任何按键）：老设置文件里开着的，读出来也没有这几项；不再启动辅助进程"""
     import json  # noqa: F811
     from sc_mining.core import settings
-    from sc_mining.system import helpers
 
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
     settings.FILE.write_text(
@@ -1589,9 +1586,6 @@ def test_anti_afk_removed(monkeypatch, tmp_path):
     assert (
         "anti_afk" not in saved and "autorun" not in saved
     )  # 文件里也清掉了（回滚旧版不会自动开）
-    assert not hasattr(helpers, "AntiAfk") and not hasattr(helpers, "AutoRun")
-    monkeypatch.setattr(helpers, "stop_helpers", lambda: None)
-    assert helpers.start() is False  # 不再有辅助进程
 
 
 def test_nav_uses_display_info_waypoints_use_showlocation():
@@ -2692,9 +2686,7 @@ def test_hotkey_conflicts(monkeypatch):
         settings, "update", lambda **kw: (store.update(kw), dict(store))[1]
     )
     monkeypatch.setattr(bus, "publish", lambda *a, **k: None)
-    from sc_mining.system import helpers
 
-    monkeypatch.setattr(helpers, "start", lambda: None)
     assert "一键定位" in t_sys.set_settings(trade_capture_key="F9")["error"]
     assert "记录路标" in t_sys.set_settings(trade_capture_key="f7")["error"]
     assert store["trade_capture_key"] == "F8"
@@ -3639,7 +3631,6 @@ def test_feedback_report_bundle(monkeypatch, tmp_path):
         "问题反馈" in w for w in t_sys.hotkey_conflicts({"trade_capture_key": "F10"})
     )
     from sc_mining.core import settings
-    from sc_mining.system import helpers
     from sc_mining.app import bus
 
     store = dict(settings.DEFAULTS)  # 不读写真实设置
@@ -3647,7 +3638,6 @@ def test_feedback_report_bundle(monkeypatch, tmp_path):
     monkeypatch.setattr(
         settings, "update", lambda **kw: (store.update(kw), dict(store))[1]
     )
-    monkeypatch.setattr(helpers, "start", lambda: None)
     monkeypatch.setattr(bus, "publish", lambda *a, **k: None)
     r = t_sys.set_settings(trade_capture_key="F10")
     assert "问题反馈" in r.get("error", ""), r
@@ -3943,7 +3933,6 @@ def test_ore_log_record_and_hotkeys(monkeypatch, tmp_path):
     """1.6.70 原矿记录：记最近一块矿（窗口里点的不带坐标）、删除能撤销；所有热键都能改，原矿记录键能清掉"""
     from sc_mining.mining import ore_log
     from sc_mining.core import settings
-    from sc_mining.system import helpers
     from sc_mining.tasks import navigation as t_nav, system as t_sys
     from sc_mining.app import bus
     from sc_mining.app import hud_state
@@ -4008,7 +3997,6 @@ def test_ore_log_record_and_hotkeys(monkeypatch, tmp_path):
     monkeypatch.setattr(
         settings, "update", lambda **kw: (store.update(kw), dict(store))[1]
     )
-    monkeypatch.setattr(helpers, "start", lambda: None)
     assert t_sys.set_settings(live_key="f4")["live_key"] == "F4"
     assert "盘点" in t_sys.set_settings(ore_key="F6")["error"]
     assert (

@@ -109,7 +109,6 @@ def hotkey_conflicts(cfg=None):
 # ---------------------------------------------------------------- 状态与系统信息
 def status():
     from ..core import settings
-    from ..system import helpers
     from ..system import showloc
     from ..mining.data import GAME_VERSION
 
@@ -129,7 +128,6 @@ def status():
         "win": WIN,
         "admin": showloc.is_admin() if WIN else True,
         "game_elevated": bool(WIN and showloc.game_elevated()),
-        "helpers": helpers.status_line(),
         "live": live_running,
         "live_paused": live_paused,
         "nav": nav_label,
@@ -1124,7 +1122,6 @@ def overlay_move(on=False):
 
 def set_settings(**kw):
     from ..core import settings
-    from ..system import helpers
 
     allowed = {"admin", "hud_scale", "hud_plate", "hud_theme"} | {
         k for k, _, _ in HOTKEYS
@@ -1187,8 +1184,6 @@ def set_settings(**kw):
                 h.restyle()
         except Exception:
             pass
-    if "admin" in kw:
-        helpers.start()  # 1.1.2 起没有辅助进程：只处理重启请求、清老标记
     if "ocr_device" in kw or "always_use_gpu" in kw:
         target = kw.get("ocr_device")
         if target is None and "always_use_gpu" in kw:
@@ -1288,9 +1283,6 @@ def agree(text=""):
     if (text or "").strip() != AGREE_TEXT:
         return {"error": f"需完整输入：{AGREE_TEXT}"}
     settings.update(agreed=True)
-    from ..system import helpers
-
-    helpers.start()
     start_background()
     return status()
 

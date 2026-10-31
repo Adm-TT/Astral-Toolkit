@@ -140,7 +140,6 @@ def test_no_synthetic_input():
     发给自己窗口的 PostMessage / SendMessage 不算"""
     import re
     from sc_mining.core import paths
-    from sc_mining.system import helpers as H
 
     bad = re.compile(r"SendInput|keybd_event|mouse_event|KEYEVENTF|_KEYBDINPUT")
     hits = {}
@@ -150,7 +149,7 @@ def test_no_synthetic_input():
             if bad.search(line):
                 hits.setdefault(rel, []).append(i)
     assert not hits, hits
-    assert H.autorun_on() is False and not hasattr(H, "AutoRun")
+    assert not (paths.CODE / "system" / "helpers.py").exists()
 
 
 def test_settings_drop_autorun(monkeypatch, tmp_path):
@@ -374,24 +373,3 @@ def test_server_split_keeps_old_names():
     ):
         assert getattr(server, name) is getattr(mod, name), name
     assert callable(server.main) and callable(server._relaunch)
-
-
-def test_startup_drops_stale_restart_request(monkeypatch, tmp_path):
-    """AT 刚启动时留下的重启请求直接删掉，不再拉起 restart 进程（S5 第 4 批审查 2026-10-31：那个进程拿旧的
-    window_url.txt 叫不动这个 AT，空等 60 秒后弹「上一个 AT 还没退出」）；运行中收到的重启请求照旧处理"""
-    from sc_mining.system import helpers as H
-
-    started = []
-    monkeypatch.setattr(H, "RESTART_REQUEST", tmp_path / "restart_request")
-    monkeypatch.setattr(H, "FLAG", tmp_path / ".autorun_on")
-    monkeypatch.setattr(
-        H.subprocess if hasattr(H, "subprocess") else __import__("subprocess"),
-        "Popen",
-        lambda *a, **k: started.append(a),
-    )
-    H.RESTART_REQUEST.write_text("")
-    H.FLAG.write_text("")
-    H.clear_startup()
-    assert not H.RESTART_REQUEST.exists() and not H.FLAG.exists() and started == []
-    H.RESTART_REQUEST.write_text("")  # 运行中（同意声明、改管理员设置时）：照旧重启
-    assert H.start() is False and not H.RESTART_REQUEST.exists() and len(started) == 1

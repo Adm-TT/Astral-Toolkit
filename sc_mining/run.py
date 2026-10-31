@@ -232,9 +232,7 @@ def trade():
 
 
 def assist():
-    from .system.helpers import menu as m
-
-    m()
+    print("辅助：无（1.1.2 起 AT 不再模拟按键）")
 
 
 def run_entry(name):
@@ -409,7 +407,7 @@ def menu(console=False, restart=False):
     except Exception:
         traceback.print_exc()
     from .core import settings
-    from .system import helpers, showloc
+    from .system import showloc
     from .app.server import _single_instance, release_instance
 
     # 只允许开一个天枢：已经开着就把它的窗口叫出来，这次直接退出（不再弹管理员确认框、不再重复挂热键）
@@ -427,7 +425,6 @@ def menu(console=False, restart=False):
         print("没能用管理员身份打开（可能点了「否」）。热键在游戏里会失效。")
         if not _single_instance():  # 没换成功：把锁拿回来，继续用普通身份
             return
-    helpers.clear_startup()  # 启动时只清老标记和留下的重启请求，不再拉起 restart 进程
     try:
         if console:
             _menu_loop()
@@ -437,8 +434,6 @@ def menu(console=False, restart=False):
             window(restart=restart)
     except Relaunched:
         pass
-    finally:
-        helpers.stop_helpers()
 
 
 def console_menu():
@@ -448,12 +443,10 @@ def console_menu():
 
 def _menu_loop():
     from .mining.data import GAME_VERSION
-    from .system.helpers import status_line
 
     while True:
         print("\n" + "=" * 50)
         print(f"  AT · 游戏数据 {GAME_VERSION}")
-        print("  " + status_line())
         print("=" * 50)
         for key, title, _ in MENU:
             print(f"  {key}. {title}")

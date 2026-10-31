@@ -1010,9 +1010,6 @@ class Hud:
         if self.ok:
             self._q.put("restyle")
 
-    def pump(self):
-        """兼容旧代码：悬浮窗现在自己刷新，这里什么都不用做"""
-
     def sleep(self, seconds):
         time.sleep(seconds)
 

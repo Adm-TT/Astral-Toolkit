@@ -178,30 +178,15 @@ def _tree(root, kids):
 
 
 def _groups():
-    """{名字: [pid…]}：天枢自己、辅助进程、窗口（用天枢自己那个 Edge 配置文件夹的 Edge 进程）"""
+    """{名字: [pid…]}：天枢自己、窗口（用天枢自己那个 Edge 配置文件夹的 Edge 进程）"""
     me = os.getpid()
     out = {"天枢": [me]}
-    helper = None
-    try:
-        from ..system import helpers
-
-        if helpers._proc and helpers._proc.poll() is None:
-            helper = helpers._proc.pid
-    except Exception:
-        pass
     if sys.platform != "win32":
-        if helper:
-            out["辅助进程"] = [helper]
         return out
     try:
         procs = _win_procs()
     except Exception:
         return out
-    kids = {}
-    for pid, ppid, exe in procs:
-        kids.setdefault(ppid, []).append(pid)
-    if helper:  # .venv 里的 pythonw 只是个启动器，真正干活的是它开的子进程
-        out["辅助进程"] = sorted(_tree(helper, kids))
     try:
         from .paths import USER
 
