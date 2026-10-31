@@ -643,7 +643,7 @@ def test_settings_roundtrip():
 
 
 def test_gamelog_vehicle_channel():
-    """读游戏日志判断在不在驾驶位（自动跑按控制台第 4 批删了，日志判断还在用）"""
+    """读游戏日志判断在不在驾驶位"""
     from sc_mining.system.gamelog import GameLog
 
     g = GameLog()
@@ -703,7 +703,7 @@ def test_seat_from_real_log():
         "<2026-10-20T06:40:07.596Z> [Notice] <Vehicle Control Flow> CVehicleMovementBase::ClearDriver: Local client node "
         "[721472803216] releasing control token for 'ANVL_C8R_Pisces_892158680463' [892158680463] [Team_CGP4][Vehicle]"
     )
-    assert not g.aboard  # 下了驾驶位：可以自动跑
+    assert not g.aboard  # 下了驾驶位
     g.line(
         "<2026-10-20T06:43:18.562Z> [Notice] <Local Route Guard - Server Rerouted> [CL][27808] | NULL ENTITY|"
         "CSCItemNavigation::PostInitialize::<lambda_1>::operator ()|FinalStop=-1 [Team_CGP4][QuantumTravel]"
@@ -726,8 +726,12 @@ def test_seat_state_after_replaying_real_log():
     import pytest
     from sc_mining.system.gamelog import GameLog
 
-    log = Path("/mnt/user-data/uploads/LIVE/Game.log")
-    if not log.exists():
+    import os
+
+    log = Path(
+        os.environ.get("AT_REAL_GAMELOG", "-")
+    )  # 想跑就把真实 Game.log 的路径放进这个环境变量
+    if not log.is_file():
         pytest.skip("没有日志样本")
     g = GameLog(log)
     g.poll()  # 真实日志能完整读完、不出错

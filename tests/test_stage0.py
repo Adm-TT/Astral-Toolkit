@@ -141,7 +141,9 @@ def test_no_synthetic_input():
     import re
     from sc_mining.core import paths
 
-    bad = re.compile(r"SendInput|keybd_event|mouse_event|KEYEVENTF|_KEYBDINPUT")
+    bad = re.compile(
+        r"SendInput|keybd_event|mouse_event|KEYEVENTF|_KEYBDINPUT|pyautogui|pynput|pydirectinput|SetCursorPos|WM_KEYDOWN|WM_CHAR"
+    )
     hits = {}
     for p in paths.CODE.rglob("*.py"):
         rel = p.relative_to(paths.CODE).as_posix()
@@ -410,3 +412,28 @@ def test_live_fail_off_without_hud(monkeypatch):
     assert ev.is_set() and {"live_on": False} in saved
     assert ("live", {"running": False, "error": "坏了"}) in pub
     live.stop()  # 停止收尾也不抛错
+
+
+def test_settings_ignore_removed_keys(monkeypatch, tmp_path):
+    """老设置文件里删掉的功能（autorun、防挂机、双击间隔）读不进来，也不在默认值里"""
+    import json
+    from sc_mining.core import settings
+
+    old = (
+        "autorun",
+        "autorun_sprint",
+        "anti_afk",
+        "afk_seconds",
+        "afk_v3",
+        "afk_v4",
+        "double_tap_ms",
+    )
+    monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
+    settings.FILE.write_text(
+        json.dumps({"agreed": True, "keys_v5": True, **{k: True for k in old}}),
+        encoding="utf-8",
+    )
+    c = settings.load()
+    assert c["agreed"] is True and not any(
+        k in c or k in settings.DEFAULTS for k in old
+    )

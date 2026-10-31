@@ -28,8 +28,6 @@ FILES = (
     "overlay_pos.json",
     "location_ids.json",
     "last_position.json",
-    "showloc_method.txt",
-    "showlocation_method.txt",
 )
 DIRS = ("feedback",)
 KEEP_NEW = ("agreed",)  # 这些设置保留 AT 自己的（免责声明要在新版里重新同意）

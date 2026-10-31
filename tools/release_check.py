@@ -182,8 +182,8 @@ def main():
     )
     step(
         "设置 set_settings",
-        lambda: c.call("set_settings", hud_scale=1.0),
-        lambda r: r.get("hud_scale") == 1.0 or r,
+        lambda: c.call("set_settings", hud_scale=0.75),
+        lambda r: r.get("hud_scale") == 0.75 or r,
     )
     step("刚升级提示 upgraded", lambda: c.call("upgraded"))
     # ---- 全局搜索
