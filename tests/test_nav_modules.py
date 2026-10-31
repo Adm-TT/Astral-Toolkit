@@ -1,7 +1,7 @@
-"""测试 navigation 拆分出的 names.py、waypoints.py、starmap.py 与 celestial.py 子模块"""
+"""测试 navigation 拆分出的 names.py、waypoints.py、starmap.py、celestial.py 与 transit.py 子模块"""
 
 import math
-from sc_mining.navigation import names, waypoints, starmap, celestial, navigate
+from sc_mining.navigation import names, waypoints, starmap, celestial, transit, navigate
 
 
 def test_names_mappings():
@@ -163,4 +163,28 @@ def test_celestial_facade_reexport():
     assert navigate.rotation_deg is celestial.rotation_deg
     assert navigate.CALIB is celestial.CALIB
     assert navigate.LAST is celestial.LAST
+
+
+def test_transit_helpers():
+    assert transit.LINE_ZH["loop"] == "微科地铁环线"
+    assert transit._bi("商业区", "Commerce") == "商业区（Commerce）"
+    assert transit._bi("Station", "Station") == "Station"
+    assert transit._zkey("Transit_Carriage_01") == "transitcarriage01"
+    assert transit._hangar_size("Hangar_Medium_02") == "Medium"
+    assert transit._car_changed("12345", "12999") is True
+    assert transit._car_changed("12345", "12345") is False
+
+
+def test_transit_facade_reexport():
+    assert navigate.city_places is transit.city_places
+    assert navigate.city_route is transit.city_route
+    assert navigate.city_leg is transit.city_leg
+    assert navigate.station_lifts is transit.station_lifts
+    assert navigate.station_route is transit.station_route
+    assert navigate.station_leg is transit.station_leg
+    assert navigate.zone_kind is transit.zone_kind
+    assert navigate.site_at is transit.site_at
+    assert navigate.nearest is transit.nearest
+    assert navigate.amenity_targets is transit.amenity_targets
+
 
