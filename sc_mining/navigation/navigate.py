@@ -19,9 +19,41 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 from ..core.paths import DATA, USER, write_json  # noqa: E402
+from .names import (
+    BODY_ZH,
+    CITY_ZH,
+    POINT_ZH,
+    QT_ZH,
+    SYS_ZH,
+    TYPE_ZH,
+    _POI_BODY,
+    _RR,
+    _RULE_HEAD,
+    _RULE_TAIL,
+    _SEGMENT,
+    _SHIP_ZH,
+    _WRECK,
+    _norm,
+    _places_zh,
+    body_label,
+    label,
+    poi_zh,
+    point_zh,
+    rule_zh,
+)
+from .waypoints import (
+    WAYPOINTS,
+    add_space_waypoint,
+    add_waypoint,
+    delete_waypoint,
+    is_space,
+    parse_clip,
+    read_clipboard,
+    waypoints,
+    _waypoints_strict,
+)
 
 CACHE = DATA / "starmap.json"
-WAYPOINTS = USER / "waypoints.json"  # 自定义路标，放 userdata，更新不会覆盖
 API = "https://starmap.space/api/v3/"
 UA = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -31,303 +63,6 @@ UA = {
 }
 EPOCH = datetime(2020, 1, 1, tzinfo=timezone.utc)
 R2D = 180 / math.pi
-
-# POI 接口里的星球名 → 星体接口里的名字
-_POI_BODY = {"microTech": "Microtech", "Pyro V": "Pyro5"}
-
-BODY_ZH = {
-    "Hurston": "赫斯顿",
-    "Arial": "艾瑞尔",
-    "Aberdeen": "阿伯丁",
-    "Magda": "玛格达",
-    "Ita": "依塔",
-    "Crusader": "十字军",
-    "Cellin": "赛琳",
-    "Daymar": "戴玛尔",
-    "Yela": "耶拉",
-    "ArcCorp": "弧光星",
-    "Lyria": "莉瑞雅",
-    "Wala": "瓦菈",
-    "Microtech": "微科星",
-    "Calliope": "卡利俄佩",
-    "Clio": "克利俄",
-    "Euterpe": "欧忒耳佩",
-    "Pyro1": "派罗 I",
-    "Monox": "殁氧星",
-    "Bloom": "盛放星",
-    "Pyro4": "派罗 IV",
-    "Pyro5": "派罗 V",
-    "Terminus": "端点星",
-    "Ignis": "伊格尼斯",
-    "Vatra": "瓦塔拉",
-    "Adir": "阿迪尔",
-    "Fairo": "法伊罗",
-    "Fuego": "弗果",
-    "Vuur": "伏尔",
-    "Delamar": "德拉玛",
-}
-
-TYPE_ZH = {
-    "Mining Spot": "挖矿点",
-    "City": "城里",
-    "Cave": "洞穴",
-    "Wreck": "残骸",
-    "Outpost": "前哨站",
-    "Derelict Outpost": "废弃前哨",
-    "Derelict Settlement": "废弃定居点",
-    "Abandoned Outpost": "废弃前哨",
-    "Underground Facility": "地下设施",
-    "Security Outpost": "安保哨站",
-    "Onyx Facility": "玛瑙设施",
-    "Druglab": "毒品实验室",
-    "Colonial Outpost": "殖民前哨",
-    "Colonial Bunker": "殖民地堡",
-    "Forward Operating Base": "前线基地",
-    "Distribution Center": "物流中心",
-    "Landing Zone": "主城",
-    "LandingZone": "主城",
-    "Spaceport": "太空港",
-    "Orbital Station": "轨道站",
-    "RestStop": "休息站",
-    "Comm Array": "通讯阵列",
-    "River": "河流",
-    "Scrapyard": "废料场",
-    "Racetrack": "赛道",
-    "Racetrack (Community)": "赛道（玩家）",
-    "Animal Area": "动物区",
-    "Mission Area": "任务区",
-    "Prison": "监狱",
-    "Easteregg": "彩蛋",
-    "Event": "活动",
-    "Planetary Alignment Facility": "行星校准设施",
-    "Orbital Laser Platform": "轨道激光平台",
-    "Ground Activation Platform": "地面激活平台",
-    "AsteroidBase": "小行星基地",
-    "Asteroid Belt": "小行星带",
-    "Object Container": "容器",
-    "Location": "地点",
-    "Unknown": "未知",
-    "": "其他",
-    "Waypoint": "路标",
-}
-QT_ZH = {1: "有信标", 0: "无信标"}
-
-_places_zh = None
-
-
-def _norm(s):
-    return re.sub(r"[^a-z0-9]", "", s.lower())
-
-
-def poi_zh(name):
-    """地点英文名 → 汉化包里的中文名（没有就返回空字符串）"""
-    global _places_zh
-    files = (
-        "places_zh.json",
-        "places_extra_zh.json",
-    )  # 后读的优先：解包对出的汉化名（extra）盖过旧表（二审 2026-10-27）
-    stamp = []
-    for f in files:
-        try:
-            stamp.append((DATA / f).stat().st_mtime_ns)
-        except OSError:
-            stamp.append(0)
-    if _places_zh is None or _places_zh[0] != stamp:  # 更新数据后不用重启
-        table = {}
-        # places_extra_zh.json（tools/unpack_place_names.py，2026-10-27）：汉化包里中文不带英文的地名（采矿基地 #IGB-FXW…）
-        for f in files:
-            try:
-                d = json.loads((DATA / f).read_text(encoding="utf-8"))
-                if isinstance(d, dict):
-                    table.update(
-                        {k: v for k, v in d.items() if isinstance(v, str) and v}
-                    )
-            except Exception:
-                pass
-        _places_zh = (stamp, table)  # 填好了再挂上：别的线程不会拿到半张表
-    base = re.sub(
-        r"\s*[\[(].*?[\])]\s*", " ", name
-    ).strip()  # 去掉 "[F]" "(missing)" 之类的备注
-    table = _places_zh[1]
-    return table.get(_norm(name)) or table.get(_norm(base)) or ""
-
-
-def label(p):
-    """地点显示名：中文名（英文名）。中文名依次查：汉化包对照表 → 星球/拉格朗日点/跳跃点的正式译名 → 洞穴、前哨这类按规则翻"""
-    if p.get("t") == "Waypoint":
-        return p["n"]
-    zh = p.get("zh") or poi_zh(p["n"]) or point_zh(p) or rule_zh(p["n"])
-    if zh:  # 汉化包里的名字自带英文「死局空间站 (Checkmate)」：不再重复写一遍
-        zh = (
-            re.sub(r"\s*[(（]" + re.escape(p["n"]) + r"[)）]\s*$", "", zh, flags=re.I)
-            or zh
-        )
-    return f"{zh}（{p['n']}）" if zh and zh != p["n"] else p["n"]
-
-
-_RR = {"1": "HUR", "2": "CRU", "3": "ARC", "4": "MIC"}  # 斯坦顿几号星 → 空间站代码
-
-
-def point_zh(p):
-    """星图里的星球、恒星、拉格朗日点、跳跃点 → 中文名（2026-10-27：派罗的拉格朗日点以前显示成 PYR1 L1 这种代号）"""
-    from .position import ini_name, place_name
-
-    t, i, name = p.get("t"), p.get("i") or "", p.get("n") or ""
-    if t in ("Planet", "Star"):
-        return (
-            BODY_ZH.get(name)
-            or ini_name(i)
-            or ini_name(i.replace("star", "_Star"))
-            or ""
-        )
-    if t == "Lagrange Point":
-        m = re.match(r"(?:P|Pyro)(\d)_L(\d)$", i)
-        if m:  # 派罗：建在点上的空间站，没有就是点本身（派1 PYR1 L1）
-            return place_name(f"RR_P{m.group(1)}_L{m.group(2)}")
-        m = re.match(r"Stanton(\d)_L(\d)$", i)
-        if m:  # 斯坦顿：弧 L1 广袤森林站
-            code = _RR.get(m.group(1))
-            return (code and ini_name(f"RR_{code}_L{m.group(2)}")) or ini_name(
-                f"Stanton{m.group(1)}_L{m.group(2)}"
-            )
-        return ""
-    if t == "Jumppoint":  # Pyro-Stanton Jump Point → 派罗 - 斯坦顿 跳跃点
-        words = [
-            w
-            for w in re.findall(r"[A-Za-z]+", name)
-            if w.lower() not in ("jump", "point", "jumppoint")
-        ]
-        if len(words) == 1:
-            words = [p.get("sys") or "", words[0]]
-        if len(words) == 2:
-            return ini_name(f"{words[0]}_JumpPoint_{words[1]}")
-    return ""
-
-
-# 洞穴、前哨这类社区起的名字（星图数据里约 1400 个，汉化包里没有）：按规则翻，编号原样保留
-_RULE_HEAD = [
-    (r"Rock ?Cave", "岩石洞穴"),
-    (r"Sand ?Cave", "沙地洞穴"),
-    (r"Acidic ?Cave", "酸性洞穴"),
-    (r"Unknown ?Cave", "未知洞穴"),
-    (r"Cave", "洞穴"),
-    (r"River", "河流"),
-    (r"Remote Outpost", "偏远前哨站"),
-    (r"Abandoned Outpost", "废弃前哨站"),
-    (r"Derelict ?Outpost", "废弃前哨站"),
-    (r"Colonial Outpost XS", "小型殖民前哨站"),
-    (r"Colonial Outpost", "殖民前哨站"),
-    (r"Colonial Bunker", "殖民地地堡"),
-    (r"Frontier Fighters Hideout", "边境战士藏身处"),
-    (r"Comm Array", "通讯阵列"),
-    (r"AsteroidArena", "小行星竞技场"),
-    (r"Mining Tower", "采矿塔"),
-    (r"Kopion Lab", "科皮翁实验室"),
-    (r"Valakkar Apex Spawn Area", "瓦拉卡巨兽出没区"),
-    (r"Crashed Satel+ite", "坠毁卫星"),
-    (r"a Private Landing Pad", "私人停机坪"),
-    (r"OC_EscortMissionMarkup-?", "护送任务点 "),
-    (r"EscortMission", "护送任务点"),
-    (r"Scrapyard", "废料场"),
-]
-_RULE_TAIL = [
-    (r"[,\s]*[\[(]?\b(?:Fauna|F)\b[\])]?", "（有动物）"),
-    (r"[,\s]*\(?\bUnoccupied\b\)?", "（无人）"),
-    (r"[,\s]*\(?\bOccupied\b\)?", "（有人）"),
-    (r"[,\s]*\bAbandoned\b", "（废弃）"),
-    (r"[,\s]*\[Foot\]", "（步行）"),
-    (r"\bSize\s*(\d)", r"规模 \1"),
-]
-_WRECK = re.compile(
-    r"^(?P<ship>[A-Z][A-Za-z]+)(?:\s+(?P<tail>Derelict|Wreck))?(?P<rest>[\s#\dA-Z]*?)$"
-)
-
-
-# 星图里的飞船残骸只写了型号（汉化包 vehicle_Name… 里的叫法，去掉厂商）
-_SHIP_ZH = {
-    "starfarer": "星际远航者",
-    "cutlass": "弯刀",
-    "caterpillar": "毛虫",
-    "freelancer": "自由枪骑兵",
-    "constellation": "星座",
-    "reclaimer": "回收者",
-    "hull": "货轮",
-    "prospector": "勘探者",
-    "mole": "鼹鼠",
-}
-
-
-_SEGMENT = [  # 尼克斯小行星带的分段（星图里是内部名字；冰川环带、基格小行星带是汉化组的，「区段」这些自译，2026-10-27）
-    (r"Glaciemring_Segment_Wtn-(\d+)", "冰川环带 区段 Wtn-{0}"),
-    (
-        r"Glaciemring_Segment_Mission_Genrl_(\d+)_(\d+)_Fstreamable",
-        "冰川环带 任务区段 {0}-{1}",
-    ),
-    (r"Glaciemring_Segment_Levski", "冰川环带 列夫斯基区段"),
-    (r"keeger_segment_mission_genrl_(\d+)_(\d+)", "基格小行星带 任务区段 {0}-{1}"),
-    (r"keeger_segment_outlaw_(\d+)", "基格小行星带 法外区段 {0}"),
-    (r"keeger_segment_social_(\d+)", "基格小行星带 社交区段 {0}"),
-]
-
-
-def rule_zh(name):
-    """按规则翻：Rock Cave #12, Fauna → 岩石洞穴 #12（有动物）；RL_col_m_drlct_otpst_occ_001 → 废弃前哨站（有人）001；
-    Caterpillar Derelict 03 S1 → 毛虫残骸 03 S1。翻不了返回空"""
-    n = (name or "").strip()
-    for pat, zh in _SEGMENT:
-        m = re.fullmatch(pat, n, re.I)
-        if m:
-            return zh.format(*m.groups())
-    m = re.match(
-        r"(?:RL_)?(?:Stanton|Pyro)\w*?_(acidic|sand|rock)\d*_(occu|unoc)_", n, re.I
-    )
-    if m:  # 洞穴的内部名字：Stanton2b_sand01_occu_001_… → 沙地洞穴（有人）
-        kind = {"acidic": "酸性洞穴", "sand": "沙地洞穴", "rock": "岩石洞穴"}[
-            m[1].lower()
-        ]
-        return f"{kind}（{'有人' if m[2].lower() == 'occu' else '无人'}）"
-    if re.fullmatch(r"RL_Pyro\d_Rock Cave", n, re.I):
-        return "岩石洞穴"
-    m = re.fullmatch(
-        r"(Caterpillar|Constellation|Freelancer|Starfarer|Cutlass) ([A-D]) Wreck\s*(.*)",
-        n,
-    )
-    if m and _SHIP_ZH.get(
-        m[1].lower()
-    ):  # 「Caterpillar A Wreck 4HJ-027/158」→ 毛虫残骸 A 4HJ-027/158
-        return f"{_SHIP_ZH[m[1].lower()]}残骸 {m[2]} {m[3]}".strip()
-    m = re.match(r"RL_(?:Pyro\d_)?col_[ms]_drlct_otpst_(occ|unoc)_(\d+)$", n, re.I)
-    if m:
-        return f"废弃前哨站（{'有人' if m.group(1).lower() == 'occ' else '无人'}）{m.group(2)}"
-    for pat, zh in _RULE_HEAD:
-        m = re.match(rf"^{pat}\b\s*", n, re.I) or re.match(rf"^{pat}", n, re.I)
-        if m:
-            rest = n[m.end() :]
-            for tp, tz in _RULE_TAIL:
-                rest = re.sub(tp, tz, rest, flags=re.I)
-            rest = re.sub(
-                r"\s*/\s*(Derelict ?Outpost)", " / 废弃前哨站", rest, flags=re.I
-            )
-            rest = re.sub(r"）\s*,\s*", "） ", re.sub(r"^\s*,\s*", " ", rest))
-            return (
-                zh + (" " if rest and not rest.startswith(("（", " ")) else "") + rest
-            ).strip()
-    m = _WRECK.match(n)
-    if m:
-        ship = _SHIP_ZH.get(m.group("ship").lower())
-        if ship:
-            return f"{ship}{'残骸' if m.group('tail') else ''}{m.group('rest') or ''}".strip()
-    return ""
-
-
-SYS_ZH = {"Stanton": "斯坦顿", "Pyro": "派罗", "Nyx": "尼克斯"}
-
-
-def body_label(name):
-    if name.startswith("@"):  # 太空路标：b = "@星系"
-        return f"{SYS_ZH.get(name[1:], name[1:])}星系 太空"
-    zh = BODY_ZH.get(name)
-    return f"{zh}（{name}）" if zh else name
 
 
 # ---------------------------------------------------------------- 数据
@@ -524,78 +259,6 @@ def _apply_fixes(data):
             p["x"], p["y"], p["z"] = f
 
 
-def waypoints():
-    """路标表（查询用：读不到就当没有，搜索 / 导航照常）"""
-    try:
-        return _waypoints_strict()
-    except RuntimeError:
-        return []
-
-
-def _waypoints_strict():
-    """路标表（改写前用）：文件读不到（被占着）或坏了就抛错，别当成空表——不然接下来存一个路标会把整份覆盖掉（细查 2026-10-28）"""
-    try:
-        rows = json.loads(WAYPOINTS.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return []
-    except OSError as e:
-        raise RuntimeError(f"路标文件暂时读不到：{e}")
-    except ValueError as e:
-        raise RuntimeError(f"路标文件损坏（userdata 里的 waypoints.json）：{e}")
-    return rows if isinstance(rows, list) else []
-
-
-def add_waypoint(name, body, local_xyz):
-    """新建/覆盖一个路标；local_xyz 是星球自转坐标系里的千米坐标"""
-    wps = [w for w in _waypoints_strict() if w["n"] != name]
-    wps.append(
-        dict(
-            b=body,
-            n=name,
-            t="Waypoint",
-            x=round(local_xyz[0], 3),
-            y=round(local_xyz[1], 3),
-            z=round(local_xyz[2], 3),
-            qt=0,
-            saved=datetime.now().strftime("%Y-%m-%d %H:%M"),
-        )
-    )
-    write_json(WAYPOINTS, wps, indent=1)
-
-
-# ---------------------------------------------------------------- 太空路标（不在星球附近：记星系里的绝对坐标）
-# 星球在自转，星球上的点要记「相对星球」的坐标；太空里没有自转，星系坐标本身就是固定的，直接记下来就行。
-
-POINT_ZH = {
-    "Lagrange Point": "拉格朗日点",
-    "Jumppoint": "跳跃点",
-    "Star": "恒星",
-    "Naval Station": "海军站",
-}
-
-
-def is_space(p):
-    return bool(p and p.get("space"))
-
-
-def add_space_waypoint(name, system, g):
-    """g：游戏右上角读到的星系坐标（米）；存成千米"""
-    wps = [w for w in _waypoints_strict() if w["n"] != name]
-    wps.append(
-        dict(
-            b="@" + system,
-            sys=system,
-            space=True,
-            n=name,
-            t="Waypoint",
-            x=round(g[0] / 1000, 3),
-            y=round(g[1] / 1000, 3),
-            z=round(g[2] / 1000, 3),
-            qt=0,
-            saved=datetime.now().strftime("%Y-%m-%d %H:%M"),
-        )
-    )
-    write_json(WAYPOINTS, wps, indent=1)
 
 
 SYS_WORD = re.compile(r"(stanton|pyro|nyx)", re.I)
@@ -1055,13 +718,6 @@ def fix_text(f, key=""):
     return "\n".join(lines)
 
 
-def delete_waypoint(name):
-    wps = _waypoints_strict()
-    left = [w for w in wps if w["n"] != name]
-    write_json(WAYPOINTS, left, indent=1)
-    return len(left) < len(wps)
-
-
 # ---------------------------------------------------------------- 坐标换算
 
 
@@ -1351,44 +1007,6 @@ def locate(
         radius_km=b["r"] / 1000,
         src=src,
     )
-
-
-# ---------------------------------------------------------------- /showlocation 剪贴板
-
-
-def parse_clip(text):
-    """'Coordinates: x:-18930539540.1 y:-2610158765.2 z:295000.3' → (x, y, z)，星系坐标，单位米；不是坐标返回 None"""
-    if not text or "Coordinates:" not in text:
-        return None
-    m = re.search(r"x:\s*(-?[\d.]+)\s+y:\s*(-?[\d.]+)\s+z:\s*(-?[\d.]+)", text)
-    return tuple(float(v) for v in m.groups()) if m else None
-
-
-def read_clipboard():
-    """Windows 剪贴板文本（不依赖第三方库）"""
-    if sys.platform != "win32":
-        return ""
-    import ctypes
-    from ctypes import wintypes
-
-    u32, k32 = ctypes.windll.user32, ctypes.windll.kernel32
-    u32.GetClipboardData.restype = wintypes.HANDLE
-    k32.GlobalLock.argtypes = [wintypes.HGLOBAL]
-    k32.GlobalLock.restype = wintypes.LPVOID
-    k32.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
-    if not u32.OpenClipboard(None):
-        return ""
-    try:
-        h = u32.GetClipboardData(13)  # CF_UNICODETEXT
-        if not h:
-            return ""
-        p = k32.GlobalLock(h)
-        try:
-            return ctypes.wstring_at(p) if p else ""
-        finally:
-            k32.GlobalUnlock(h)
-    finally:
-        u32.CloseClipboard()
 
 
 LAST = USER / "last_position.json"
@@ -1715,13 +1333,6 @@ CITY_ARRIVE_M = 8  # 城里离目标几米以内算到了（星球上的点是 1
 CITY_LEAVE_M = 15  # 算到了以后，走开到这么远才算离开（实测 7–9 米来回跳，2026-10-27）
 CITY_NEAR_M = 15  # 这么近就不给转向角度了：位置差一两米角度就乱跳，只说「就在附近」
 CITY_FLOOR_M = 4  # 上下差这么多米以上才提示换楼层
-CITY_ZH = {
-    "NewBabbage": "新巴贝奇",
-    "Lorville": "罗威尔",
-    "Area18": "18区",
-    "Orison": "奥里森",
-    "Levski": "列夫斯基",
-}
 _city = {}
 
 

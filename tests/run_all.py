@@ -14,6 +14,7 @@ from tests.minipytest import run_all, tmpdir  # noqa: E402
 
 _tmp = tmpdir()
 from sc_mining.navigation import navigate as _nav  # noqa: E402
+from sc_mining.navigation import waypoints as _wp  # noqa: E402
 
 _nav.CALIB = (
     _tmp / "rotation_calib.json"
@@ -21,7 +22,9 @@ _nav.CALIB = (
 _nav.LAST = (
     _tmp / "last_position.json"
 )  # locate(record=True) 记的最近位置也一样（2026-10-28 审查：以前写进真实 userdata）
-_nav.WAYPOINTS = _tmp / "waypoints.json"  # 读路标的测试别读到老大的真实路标
+_nav.WAYPOINTS = _wp.WAYPOINTS = (
+    _tmp / "waypoints.json"
+)  # 读路标的测试别读到老大的真实路标
 from sc_mining.core import paths as _paths  # noqa: E402
 
 _OLD_USER = _paths.USER
@@ -63,6 +66,7 @@ MODULES = [
     "tests.test_hover",
     "tests.test_inspector",
     "tests.test_ocr_module",
+    "tests.test_nav_modules",
 ]
 
 if __name__ == "__main__":
