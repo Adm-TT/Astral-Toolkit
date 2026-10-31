@@ -1,6 +1,6 @@
 from collections import defaultdict
 from datetime import datetime, timezone
-import sqlite3
+import sqlite3  # noqa: F401
 import uuid
 from .models import StockKey, StockLine, ImportPreview
 
@@ -135,7 +135,7 @@ class Inventory:
             is_duplicate = preview.image_hash and c.execute('SELECT 1 FROM batches WHERE image_hash=?', (preview.image_hash,)).fetchone()
             if is_duplicate and not allow_duplicate:
                 raise ValueError('此截图已导入，请核对重复记录')
-            if not preview.lines or len({l.key for l in preview.lines}) != len(preview.lines):
+            if not preview.lines or len({l.key for l in preview.lines}) != len(preview.lines):  # noqa: E741
                 raise ValueError('请重新生成入库预览')
             changes = []
             for line in preview.lines:

@@ -180,7 +180,7 @@ def _mark_goal_lines(lines):
             pats.append(re.compile(f"(?<![\u4e00-\u9fff]){re.escape(t['zh'])}(?![\u4e00-\u9fff])"))
         if t.get("en"):
             pats.append(re.compile(rf"\b{re.escape(t['en'])}\b", re.I))
-    return [("🎯 " + l) if any(p.search(l) for p in pats) else l for l in lines]
+    return [("🎯 " + l) if any(p.search(l) for p in pats) else l for l in lines]  # noqa: E741
 
 
 def crafting_zh(opt):

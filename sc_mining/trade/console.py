@@ -18,19 +18,19 @@ import re as _re
 from .catalog import Catalog
 from .history import History
 from .inspector import (
-    _ANCHOR,
-    _VOLUME,
-    _is_anchor,
-    _SENTENCE,
-    _LETTERS,
-    _STAT,
-    _NOT_ITEM,
-    _ink,
-    _bright_only,
-    tooltip_name,
-    plausible_name,
-    tooltip_pick,
-    _anchor_name,
+    _ANCHOR,  # noqa: F401
+    _VOLUME,  # noqa: F401
+    _is_anchor,  # noqa: F401
+    _SENTENCE,  # noqa: F401
+    _LETTERS,  # noqa: F401
+    _STAT,  # noqa: F401
+    _NOT_ITEM,  # noqa: F401
+    _ink,  # noqa: F401
+    _bright_only,  # noqa: F401
+    tooltip_name,  # noqa: F401
+    plausible_name,  # noqa: F401
+    tooltip_pick,  # noqa: F401
+    _anchor_name,  # noqa: F401
     _cursor_on_image,
     _hover_log,
     inspect_item,

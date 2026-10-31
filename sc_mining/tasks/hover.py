@@ -16,18 +16,18 @@ from ..app import bus
 WIN = sys.platform == "win32"
 
 # ---------------------------------------------------------------- 视觉识别组件重导出（保持向后兼容）
-from ..trade.inspector import (
-    HOVER_REGIONS,
-    HOVER_REGION,
-    get_hover_regions,
-    _read_tooltip,
-    tooltip_quality,
-    _AMOUNT,
-    tooltip_row,
-    parse_qlabel,
-    parse_count,
-    cell_labels,
-    _is_mineral,
+from ..trade.inspector import (  # noqa: E402
+    HOVER_REGIONS,  # noqa: F401
+    HOVER_REGION,  # noqa: F401
+    get_hover_regions,  # noqa: F401
+    _read_tooltip,  # noqa: F401
+    tooltip_quality,  # noqa: F401
+    _AMOUNT,  # noqa: F401
+    tooltip_row,  # noqa: F401
+    parse_qlabel,  # noqa: F401
+    parse_count,  # noqa: F401
+    cell_labels,  # noqa: F401
+    _is_mineral,  # noqa: F401
     inspect_item,
 )
 
@@ -36,9 +36,9 @@ _seq = itertools.count(1)          # 每次 F8 一个编号：同一秒按两次
 
 
 # ---------------------------------------------------------------- 依赖（2026-10-30 重构阶段 3：不再经 services 转发）
-from ..app.hud_state import _item_hud, _off
-from . import goals as _t_goals
-from . import trade as _t_trade
+from ..app.hud_state import _item_hud, _off  # noqa: E402
+from . import goals as _t_goals  # noqa: E402
+from . import trade as _t_trade  # noqa: E402
 
 
 def item_info(*args, **kwargs):
@@ -115,7 +115,7 @@ def _hover_lines(info, en, zh):
         pass
     try:
         from ..crafting import crafting
-        fold = lambda x: re.sub(r"[^a-z0-9一-鿿]", "", (x or "").lower())
+        fold = lambda x: re.sub(r"[^a-z0-9一-鿿]", "", (x or "").lower())  # noqa: E731
         want = {fold(info.get("name")), fold(en), fold(zh)} - {""}
         bps = [b for b in crafting.blueprints() if fold(b["n"]) in want or fold(b["z"]) in want]
         if bps:
@@ -238,7 +238,7 @@ def hover_once(img=None):
     try:
         from ..crafting.crafting import craft_text
     except Exception:
-        craft_text = lambda c: ""
+        craft_text = lambda c: ""  # noqa: E731
     lines = [head] + ([f"材料品质：{craft_text(craft)}"] if craft else []) + _hover_lines(info, en, zh)
     _last_hover.clear()
     _last_hover.update(at=at, seq=seq, id=None, lines=lines)

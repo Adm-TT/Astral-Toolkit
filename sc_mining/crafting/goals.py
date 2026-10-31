@@ -231,7 +231,7 @@ def unit_fits(lot, unit):
 
 def other_unit(lots, unit):
     """单位对不上、没算进来的库存（如需求按个、库存按 SCU 记）→「3 SCU」「5 个」；没有返回空串。别静默丢掉，让玩家知道为什么没算"""
-    n = sum(l[3] for l in lots if l[3] > 0 and not unit_fits(l, unit))
+    n = sum(l[3] for l in lots if l[3] > 0 and not unit_fits(l, unit))  # noqa: E741
     if n <= 0:
         return ""
     if unit == "SCU":                                   # 对不上的是按个记的
@@ -243,8 +243,8 @@ def _take(lots, need, minq):
     """从库存里拿 need：先拿品质刚好够的（高品质留给更挑的目标）。返回 (拿到多少, [(位置, 品质, 数量)], 品质未知的有多少)"""
     got, used, unknown = 0.0, [], 0
     # 没有品质要求时，品质未知的也能用（而且先用它们，把知道品质的留给有门槛的目标）
-    usable = sorted((l for l in lots if l[3] > 0 and (l[0] is not None and l[0] >= minq or (l[0] is None and not minq))),
-                    key=lambda l: -1 if l[0] is None else l[0])
+    usable = sorted((l for l in lots if l[3] > 0 and (l[0] is not None and l[0] >= minq or (l[0] is None and not minq))),  # noqa: E741
+                    key=lambda l: -1 if l[0] is None else l[0])  # noqa: E741
     for lot in usable:
         if got >= need - 1e-9:
             break
@@ -253,7 +253,7 @@ def _take(lots, need, minq):
         got += take
         used.append((lot[2], lot[1], take, lot[0], (lot[6], lot[5], lot[2], lot[4]) if len(lot) > 6 else None))
     if got < need - 1e-9 and minq:
-        unknown = sum(l[3] for l in lots if l[0] is None and l[3] > 0)
+        unknown = sum(l[3] for l in lots if l[0] is None and l[3] > 0)  # noqa: E741
     return got, used, unknown
 
 

@@ -1,5 +1,5 @@
 """只读：解析 .soc 里嵌的 CryXmlB 块 → ElementTree"""
-import struct, re
+import struct, re  # noqa: E401
 import xml.etree.ElementTree as ET
 
 

@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal  # noqa: F401
 import threading
 from ..models import Item, PriceKey, PriceStats, ProviderResult, Quote
 from .http import HttpTransport, SourceError, decimal_price, uex_data

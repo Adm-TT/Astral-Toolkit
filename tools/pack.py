@@ -1,5 +1,5 @@
 # 打包「天枢」安装包 → dist\Dubhe_<版本>.zip（不含个人数据、Python 环境、测试、tools）。用法：.venv\Scripts\python.exe -X utf8 tools\pack.py
-import sys, io, traceback, contextlib, zipfile, time, os
+import sys, io, traceback, contextlib, zipfile, time, os  # noqa: E401, F401
 from pathlib import Path
 root = Path(__file__).resolve().parent.parent      # tools\ 的上一级就是项目根目录
 sys.path.insert(0, str(root))
@@ -32,12 +32,12 @@ with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
             for f in top_files:
                 p = root / f
                 if p.exists():
-                    z.write(p, f"{name}/{f}"); n += 1
+                    z.write(p, f"{name}/{f}"); n += 1  # noqa: E702
                 else:
                     print("缺少", f)
             readme = (root / "README.md").read_text(encoding="utf-8")
-            readme = "\n".join(l for l in readme.splitlines() if "_claude_run" not in l)
-            z.writestr(f"{name}/README.md", readme); n += 1
+            readme = "\n".join(l for l in readme.splitlines() if "_claude_run" not in l)  # noqa: E741
+            z.writestr(f"{name}/README.md", readme); n += 1  # noqa: E702
             for base in ("sc_mining", "data"):
                 for dirpath, dirs, files in os.walk(root / base):
                     rel = Path(dirpath).relative_to(root)
@@ -46,10 +46,10 @@ with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
                         if f.endswith((".pyc",)) or (base == "data" and rel == Path("data") and f in ("loot_details.zip",)):
                             continue                        # 掉落明细整包和数据包版本从 Gitee 数据包下载，安装包里不带
                         p = Path(dirpath) / f
-                        z.write(p, f"{name}/{p.relative_to(root).as_posix()}"); n += 1; size += p.stat().st_size
+                        z.write(p, f"{name}/{p.relative_to(root).as_posix()}"); n += 1; size += p.stat().st_size  # noqa: E702
         print("zip:", zpath, n, "个文件，压缩后", round(zpath.stat().st_size / 1e6, 1), "MB")
         # 检查：解压到临时目录，能导入、关键文件都在
-        import tempfile, subprocess
+        import tempfile, subprocess  # noqa: E401
         tmp = Path(tempfile.mkdtemp())
         with zipfile.ZipFile(zpath) as z:
             z.extractall(tmp)

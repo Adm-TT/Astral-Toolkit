@@ -94,7 +94,7 @@ def _roots(A, D, r):
 def _inside(A, D, t0, lo, hi):
     """t0 附近航线在 lo~hi 这一圈里的那一段 [t1, t2]"""
     cuts = sorted({0.0, 1.0, *_roots(A, D, lo), *_roots(A, D, hi)})
-    r = lambda t: math.sqrt(sum((A[i] + t * D[i]) ** 2 for i in range(3)))
+    r = lambda t: math.sqrt(sum((A[i] + t * D[i]) ** 2 for i in range(3)))  # noqa: E731
     for a, b in zip(cuts, cuts[1:]):
         if a <= t0 <= b and lo <= r((a + b) / 2) <= hi:
             return a, b

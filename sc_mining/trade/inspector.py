@@ -12,7 +12,7 @@ import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-from .names import canonical, has_chinese
+from .names import canonical, has_chinese  # noqa: F401
 
 # 物品说明框识别区域配置：按鼠标横向位置自适应分级识别
 # 纵向覆盖 0.0 ~ 1.0 全高
@@ -38,27 +38,27 @@ def get_hover_regions(cursor: Optional[Tuple[int, int]], width: int) -> List[Tup
     - 鼠标异常(None或越界): 首选中间 30%-70%
     """
     if cursor is None or cursor[0] is None or not width or width <= 0:
-        l, t, r, b = HOVER_REGIONS["中间"]
+        l, t, r, b = HOVER_REGIONS["中间"]  # noqa: E741
         return [(l, t, r, b, "中间")]
     rx = cursor[0] / width
     if rx < 0.0 or rx > 1.0:
-        l, t, r, b = HOVER_REGIONS["中间"]
+        l, t, r, b = HOVER_REGIONS["中间"]  # noqa: E741
         return [(l, t, r, b, "中间")]
 
     mid_l, mid_t, mid_r, mid_b = HOVER_REGIONS["30-70%"]
     fallback_region = (mid_l, mid_t, mid_r, mid_b, "30-70%")
 
     if rx < 0.30:
-        l, t, r, b = HOVER_REGIONS["30-50%"]
+        l, t, r, b = HOVER_REGIONS["30-50%"]  # noqa: E741
         return [(l, t, r, b, "30-50%"), fallback_region]
     elif rx < 0.50:
-        l, t, r, b = HOVER_REGIONS["50-70%"]
+        l, t, r, b = HOVER_REGIONS["50-70%"]  # noqa: E741
         return [(l, t, r, b, "50-70%"), fallback_region]
     elif rx < 0.70:
-        l, t, r, b = HOVER_REGIONS["30-50%"]
+        l, t, r, b = HOVER_REGIONS["30-50%"]  # noqa: E741
         return [(l, t, r, b, "30-50%"), fallback_region]
     else:
-        l, t, r, b = HOVER_REGIONS["50-70%"]
+        l, t, r, b = HOVER_REGIONS["50-70%"]  # noqa: E741
         return [(l, t, r, b, "50-70%"), fallback_region]
 
 
@@ -282,7 +282,7 @@ def _read_tooltip(img, cursor):
     last = ([], None, regions[-1][4])
     anchor_seen = False
 
-    for l, t, r, b, label in regions:
+    for l, t, r, b, label in regions:  # noqa: E741
         box = (int(W * l), int(H * t), int(W * r), int(H * b))
         tokens = recognize(img.crop(box), urgent=True, offset=box[:2])
         name, sure = tooltip_pick(tokens, cursor, img)
@@ -425,7 +425,7 @@ def inspect_item(img, cursor: Tuple[int, int], tokens=None, where=None, craft_ov
         "where": 识别区域标签 ("30-50%" / "50-70%" / "整屏" 等)
     }
     """
-    from .names import canonical
+    from .names import canonical  # noqa: F811
     W, H = img.size
     cx, cy = cursor
 
@@ -455,7 +455,7 @@ def inspect_item(img, cursor: Tuple[int, int], tokens=None, where=None, craft_ov
             can_reuse = True
         elif where in HOVER_REGIONS:
             cw, ch = int(W * 0.065), int(H * 0.11)
-            l, t, r, b = HOVER_REGIONS[where]
+            l, t, r, b = HOVER_REGIONS[where]  # noqa: E741
             box_hover = (int(W * l), int(H * t), int(W * r), int(H * b))
             if cx - cw >= box_hover[0] and cy - ch >= box_hover[1] and cx + cw <= box_hover[2] and cy + ch // 6 <= box_hover[3]:
                 can_reuse = True

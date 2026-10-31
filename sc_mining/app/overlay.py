@@ -20,7 +20,7 @@ import time
 from pathlib import Path
 
 ENABLED = True                      # 不想要悬浮窗就改成 False
-from ..core.paths import USER
+from ..core.paths import USER  # noqa: E402
 POS_FILE = USER / "overlay_pos.json"
 LABEL = {"扫描": "采矿助手", "导航": "导航"}       # 分区显示名（2026-10-25 用户改的页名；内部仍叫扫描 / 导航）
 EN = {"辅助": "ASSIST", "信号": "SIGNAL", "扫描": "SCAN", "矿袋": "BAG", "导航": "NAV", "小行星带": "BELT",
@@ -216,7 +216,7 @@ def _rich_lines(rich, scale, width):
         if text_width(heads, 21 * scale) + 32 * scale + text_width(power, 19 * scale) <= width:
             lines.append(("a", {"heads": heads, "power": power}, ""))
         else:                                                   # 1.6.70：矿头名太长放不下，建议功率换到下一行（以前叠在一起）
-            lines += [("a", {"heads": l}, "") for l in wrap(heads, 21 * scale, width)]
+            lines += [("a", {"heads": l}, "") for l in wrap(heads, 21 * scale, width)]  # noqa: E741
             if power:
                 lines.append(("a", {"heads": power, "sub": True}, ""))
     gain = rich.get("gain") or []
@@ -292,12 +292,12 @@ def paint(sections, note="", movable=False, scale=1.0, plate=PLATE_ALPHA, fresh=
     y = MARGIN
     x0, x1 = MARGIN, W - MARGIN - 1
     if note:                                                  # 一闪而过的提示：白色胶囊，贴右
-        nw = max(text_width(l, NOTE_PX * s) for l in note_lines) + 40 * s
+        nw = max(text_width(l, NOTE_PX * s) for l in note_lines) + 40 * s  # noqa: E741
         nh = len(note_lines) * NOTE_PX * s * 1.45 + 20 * s
         nx = x1 - nw
         d.rounded_rectangle((nx, y, x1, y + nh), radius=min(nh / 2, 32 * s), fill=NOTE_BG)
         by = y + 10 * s + NOTE_PX * s * 1.08
-        for l in note_lines:
+        for l in note_lines:  # noqa: E741
             draw_text(d, nx + 20 * s, by, l, NOTE_PX * s, NOTE_C)
             by += NOTE_PX * s * 1.45
         y += int(nh) + int(GAP * s)
@@ -501,7 +501,7 @@ def edge_point(angle, w, h, margin):
 
 def avoid_box(x, y, w, h, area_w, area_h, box):
     """记号不能盖住右上角调试信息那块（读屏时会把自己的窗口涂黑，盖上就读不到位置了）：碰到就挪到它下面"""
-    l, t, r, b = box[0] * area_w, box[1] * area_h, box[2] * area_w, box[3] * area_h
+    l, t, r, b = box[0] * area_w, box[1] * area_h, box[2] * area_w, box[3] * area_h  # noqa: E741
     if x < r and x + w > l and y < b and y + h > t:
         y = b + 4
     return x, y
@@ -515,12 +515,12 @@ def _ulw(hwnd, img):
     from PIL import Image, ImageChops
     u32, g32 = ctypes.windll.user32, ctypes.windll.gdi32
     vp = ctypes.c_void_p
-    u32.GetDC.restype = vp; u32.GetDC.argtypes = [vp]
+    u32.GetDC.restype = vp; u32.GetDC.argtypes = [vp]  # noqa: E702
     u32.ReleaseDC.argtypes = [vp, vp]
-    g32.CreateCompatibleDC.restype = vp; g32.CreateCompatibleDC.argtypes = [vp]
+    g32.CreateCompatibleDC.restype = vp; g32.CreateCompatibleDC.argtypes = [vp]  # noqa: E702
     g32.CreateDIBSection.restype = vp
-    g32.SelectObject.restype = vp; g32.SelectObject.argtypes = [vp, vp]
-    g32.DeleteObject.argtypes = [vp]; g32.DeleteDC.argtypes = [vp]
+    g32.SelectObject.restype = vp; g32.SelectObject.argtypes = [vp, vp]  # noqa: E702
+    g32.DeleteObject.argtypes = [vp]; g32.DeleteDC.argtypes = [vp]  # noqa: E702
 
     class BMIH(ctypes.Structure):
         _fields_ = [("biSize", wintypes.DWORD), ("biWidth", wintypes.LONG), ("biHeight", wintypes.LONG),

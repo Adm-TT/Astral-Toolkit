@@ -185,7 +185,7 @@ def test_upgrade_backs_up_and_rollback_restores(monkeypatch, tmp_path):
 
 def test_rollback_to_oldest_backup_survives_cleanup(monkeypatch, tmp_path):
     """回滚到备份里的版本：装之前的备份清理会删掉它，也要能装上（Codex 复审 2026-10-23）"""
-    import os, time as _t
+    import os, time as _t  # noqa: E401
     U, root = _setup(monkeypatch, tmp_path)
     bdir = root / "userdata" / "backups"
     bdir.mkdir(parents=True)

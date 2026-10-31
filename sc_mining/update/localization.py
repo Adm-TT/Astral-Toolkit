@@ -17,7 +17,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent.parent
 ROOT = HERE.parent
-from ..core.paths import DATA
+from ..core.paths import DATA  # noqa: E402
 INI = DATA / "loc" / "global_zh.ini"
 STAMP = DATA / "loc" / "version.txt"
 HOSTS = ["https://ecdn.git.scbox.xkeyc.cn", "https://git.scbox.xkeyc.cn"]
@@ -146,7 +146,7 @@ def zh2en_items(ini, wiki_cls=None):
             continue      # 简称：后面带的是尺寸、型号代码（「视差步枪HD」），不是英文名（1.6.41）
         cls = kl[len("item_name"):].lstrip("_") if kl.startswith("item_name") else ""     # item_Name_<类名>：wiki 的 class_name
         put_ = add_mod if ("mining_modules" in kl or "mining_consumable" in kl) else add_laser if "mining_mininglaser" in kl else add
-        put = lambda zh, en, _c=cls, _f=put_: _f(zh, en, _c)
+        put = lambda zh, en, _c=cls, _f=put_: _f(zh, en, _c)  # noqa: E731
         v = re.sub(r"<[^>]+>", "", v)
         parts = v.split("\\n")
         first = parts[0].strip()
@@ -177,7 +177,7 @@ def place_codes(ini):
 
 def places(ini):
     """地名：{英文名去符号小写: 中文名}（导航用）"""
-    norm = lambda s: re.sub(r"[^a-z0-9]", "", s.lower())
+    norm = lambda s: re.sub(r"[^a-z0-9]", "", s.lower())  # noqa: E731
     out = {}
     for k, v in ini.items():
         if k.lower().endswith("desc") or len(v) > 80:

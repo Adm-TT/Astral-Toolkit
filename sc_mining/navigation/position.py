@@ -113,7 +113,7 @@ def place_name(code):
     if m:
         # 派罗：汉化包里有每个站的正式名（RR_P1_L2 → 焰联-远程站-1-2，RR_P3 → 轨道讣闻站）；
         # 没有的再从商店数据里找建在这个点上的空间站；都没有就用汉化包里拉格朗日点本身的叫法（派1 PYR1 L1）
-        k, l = m.group(1), m.group(2)
+        k, l = m.group(1), m.group(2)  # noqa: E741
         hit = ini_name(f"RR_P{k}_L{l}" if l else f"RR_P{k}")
         if hit:
             return hit
@@ -181,7 +181,7 @@ def _ini_label(code):
     key = re.sub(r"\s+", "_", code.strip()).lower()
     m = re.match(r"asteroidcluster_miningbase_([a-z]+)_([a-z]+)", key)          # 尼克斯这种没有逐个命名的采矿基地
     if m:
-        sysname, belt = m.group(1), m.group(2)
+        sysname, belt = m.group(1), m.group(2)  # noqa: F841
         return f"采矿基地（{BELT_ZH.get(belt, belt.capitalize() + '小行星带')}）"
     return ""
 

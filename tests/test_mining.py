@@ -1,9 +1,9 @@
 import pytest
 """挖矿核心、读屏解析、精炼、制造、导航、游戏辅助"""
-from sc_mining.mining.signals import match_signature
-from sc_mining.mining.laser import recommend, evaluate, loadout, verdict, HeadSetup
-from sc_mining.mining.refinery import best_stations
-from sc_mining.mining import data
+from sc_mining.mining.signals import match_signature  # noqa: E402
+from sc_mining.mining.laser import recommend, evaluate, loadout, verdict, HeadSetup  # noqa: E402, F401
+from sc_mining.mining.refinery import best_stations  # noqa: E402
+from sc_mining.mining import data  # noqa: E402
 
 AUTHOR = HeadSetup("helix_ii", ["rieger_c3", "rieger_c3", "focus_iii"])   # 作者那套 MOLE 的第一个矿头
 
@@ -121,7 +121,7 @@ def test_calibration_from_observations(monkeypatch, tmp_path):
 def test_user_formula_example():
     # 用户给的公式：矿头功率 × 模组功率 × (1 − 抗性) × 5
     # 螺旋2 4080 W + 里格-C3 ×3 → 4080 × 1.25³ × 5 = 39843；20% 抗性 → ×0.8 = 31875
-    from sc_mining.mining import laser
+    from sc_mining.mining import laser  # noqa: F401
     h = HeadSetup("helix_ii", ["rieger_c3"] * 3)
     orig = dict(data.HEADS["helix_ii"])
     data.HEADS["helix_ii"].update(pmax=4080, res=0)   # 例子里没算矿头自带的抗性修正
@@ -131,7 +131,7 @@ def test_user_formula_example():
         assert round(p0.max_mass) == 39844 and int(p0.max_mass) == 39843
         assert round(p20.max_mass) == 31875
     finally:
-        data.HEADS["helix_ii"].clear(); data.HEADS["helix_ii"].update(orig)
+        data.HEADS["helix_ii"].clear(); data.HEADS["helix_ii"].update(orig)  # noqa: E702
 
 
 def _items(spec):
@@ -344,7 +344,7 @@ def test_overlay_paint_rules():
     _, busy = O.paint(more, scale=s, fresh=fresh, now=100.05)
     assert busy
     h = O.Hud()
-    h.note("一"); h.note("二")
+    h.note("一"); h.note("二")  # noqa: E702
     assert h.note_text == "二"
     # 1.6.64：采矿助手按层次排（矿名 → 关键读数 → 怎么碎 → 收益 → 次要），数字和单位不拆开
     assert all("SCU" not in ln or "18.35 SCU" in ln for ln in O.wrap("精炼后 18.35 SCU，值 412,000 aUEC（建议：德尼克斯熔解法）", 24, 150))
@@ -354,10 +354,10 @@ def test_overlay_paint_rules():
                      {"name": "惰性物质", "pct": "27%", "inert": True, "subs": []}],
             "advice": {"heads": "Helix II ×2", "power": "建议功率 60%"},
             "gain": [["预计精炼产量", "18.35", "SCU"], ["价格", "412,000", "aUEC"]], "minor": ["德尼克斯熔解法 · 微 L5"], "foot": "精炼结果为估算"}
-    kinds = [l[0] for l in O.layout({"扫描": "x"}, s, {"扫描": rich})[0]["lines"]]     # 1.6.65：照用户样图的层次
+    kinds = [l[0] for l in O.layout({"扫描": "x"}, s, {"扫描": rich})[0]["lines"]]     # 1.6.65：照用户样图的层次  # noqa: E741
     assert kinds == ["t", "s", "d", "h", "c", "q", "q", "c", "d", "h", "a", "d", "G", "m", "f"]
     one = {"title": "铜", "comp": [{"name": "铜", "pct": "18%", "subs": [{"q": "450", "pct": "18%"}]}]}       # 1.6.66：只有一种品质的合成一行
-    assert [l[0] for l in O.layout({"扫描": "x"}, s, {"扫描": one})[0]["lines"]] == ["t", "d", "h", "c"]
+    assert [l[0] for l in O.layout({"扫描": "x"}, s, {"扫描": one})[0]["lines"]] == ["t", "d", "h", "c"]  # noqa: E741
     img, _ = O.paint({"扫描": "x"}, scale=s, rich={"扫描": rich})
     assert img.height > 200
     # 1.6.69：采矿助手和别的分区同时显示时不能报错（开采建议那行曾覆盖底板透明度，悬浮窗整个停掉）
@@ -367,7 +367,7 @@ def test_overlay_paint_rules():
 
 def test_nearby_and_feed():
     from datetime import datetime, timezone
-    from sc_mining.system import showloc
+    from sc_mining.system import showloc  # noqa: F401
     n, d = _nav_data()
     b = d["bodies"]["Daymar"]
     w = datetime(2026, 10, 20, 12, 0, tzinfo=timezone.utc)
@@ -834,8 +834,8 @@ def test_panel_cut_and_chroma_shift():
     from PIL import Image
     from sc_mining.mining import screen
     img = Image.new("RGB", (2560, 1600))
-    ox, oy = int(screen.SEARCH[0] * 2560), int(screen.SEARCH[1] * 1600)
-    it = lambda x0, x1: ("质量： 745", ((x0 + x1) / 2, 10), 14, (x0 - ox, 100, x1 - ox, 114))
+    ox, oy = int(screen.SEARCH[0] * 2560), int(screen.SEARCH[1] * 1600)  # noqa: F841
+    it = lambda x0, x1: ("质量： 745", ((x0 + x1) / 2, 10), 14, (x0 - ox, 100, x1 - ox, 114))  # noqa: E731
     screen._note_panel(img, [it(2200, 2300), it(2480, 2558)])
     assert screen.LAST_PANEL["cut"] and screen.LAST_PANEL["box"][2] == 2558
     screen._note_panel(img, [it(1600, 1700), it(1750, 1820)])
@@ -1045,7 +1045,7 @@ def test_review_104_rocks_reload_and_order(monkeypatch, tmp_path):
     keeger = {"name": "Keeger Belt", "zh": "基格", "minerals": {}, "rocks": {"Bexalite": 18.0, "Savrilium": 2.0}}
     order = [t for t, _, _ in S.guesses(28800, "space", keeger)]
     lines = S.describe_all([(28800, False, "28800", None)], "space", keeger)
-    assert [l.split(" → ")[1].split("｜精炼后")[0] for l in lines] == order
+    assert [l.split(" → ")[1].split("｜精炼后")[0] for l in lines] == order  # noqa: E741
 
 
 

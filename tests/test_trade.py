@@ -2,29 +2,29 @@
 from sc_mining.trade.storage import Database
 from sc_mining.trade.catalog import Catalog
 from sc_mining.trade.models import Item
-import sqlite3
+import sqlite3  # noqa: F401
 import pytest
 from sc_mining.trade.inventory import Inventory
-from sc_mining.trade.models import Item, StockKey, StockLine
+from sc_mining.trade.models import Item, StockKey, StockLine  # noqa: F811
 from datetime import datetime, timezone
-from sc_mining.trade.models import Item, OcrToken
+from sc_mining.trade.models import Item, OcrToken  # noqa: F811
 from sc_mining.trade.names import to_english, has_chinese
 from sc_mining.trade.parser import parse_inventory
 from sc_mining.trade.market_service import MarketService
 from dataclasses import replace
 from pathlib import Path
-import shutil
-from PIL import Image, ImageDraw, ImageFont
-from sc_mining.trade.models import Item, OcrToken, ImportRow
-from sc_mining.trade.parser import parse_inventory, validate_rows
-from datetime import datetime, timedelta, timezone
+import shutil  # noqa: F401
+from PIL import Image, ImageDraw, ImageFont  # noqa: F401
+from sc_mining.trade.models import Item, OcrToken, ImportRow  # noqa: F811
+from sc_mining.trade.parser import parse_inventory, validate_rows  # noqa: F811
+from datetime import datetime, timedelta, timezone  # noqa: F811
 from decimal import Decimal as D
-from sc_mining.trade.models import PriceKey, Quote, Snapshot, PriceStats, StockKey, StockLine
+from sc_mining.trade.models import PriceKey, Quote, Snapshot, PriceStats, StockKey, StockLine  # noqa: F811
 from sc_mining.trade.pricing import aggregate, value_stock
 from sc_mining.trade.history import History
-from sc_mining.trade.models import Item, PriceKey, PriceStats, ProviderResult
+from sc_mining.trade.models import Item, PriceKey, PriceStats, ProviderResult  # noqa: F811
 import json
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta  # noqa: F811
 from decimal import Decimal
 from tests import fakehttp as httpx
 from sc_mining.trade.providers.http import HttpTransport, SourceError, decimal_price
@@ -173,7 +173,7 @@ def test_quality_locations_stay_separate(inv):
 
 def test_whitespace_same_location_move_cannot_create_stock(inv):
     add(inv,10,key('C2'))
-    with pytest.raises(ValueError):inv.move(key('C2'),' C2 ',2)
+    with pytest.raises(ValueError):inv.move(key('C2'),' C2 ',2)  # noqa: E701
     assert inv.list_stock()==[StockLine(key('C2'),10)]
 
 
@@ -225,7 +225,7 @@ def test_market_lookup_translates_for_english_only_source(tmp_path):
         def lookup(self, q):
             self.queries.append(q)
             return [Item('uex:1', 'Carinite')] if q == 'Carinite' else []
-    db = Database(tmp_path / 'p.db'); src = Uex()
+    db = Database(tmp_path / 'p.db'); src = Uex()  # noqa: E702
     items, err = MarketService(db, [src]).lookup('科力晶')
     assert [i.name for i in items] == ['Carinite'] and src.queries == ['科力晶', 'Carinite']
     assert Catalog(db).search('科力晶')[0].id == 'uex:1'          # 中文记成别名了
@@ -246,7 +246,7 @@ def test_glued_quantity_and_quality(tmp_path):
 
 @pytest.fixture
 def catalog(tmp_path):
-    c=Catalog(Database(tmp_path/'p.db'));c.upsert([Item('a','FR-86'),Item('b','FR-76')]);return c
+    c=Catalog(Database(tmp_path/'p.db'));c.upsert([Item('a','FR-86'),Item('b','FR-76')]);return c  # noqa: E702
 
 
 def token(text, y=0):
@@ -275,13 +275,13 @@ def test_ambiguous_item(catalog):
 def test_unknown_quality(catalog):
     row=parse_inventory([token('FR-86 x2')],catalog)[0]
     assert row.quality is None
-    with pytest.raises(ValueError):validate_rows([replace(row,confirmed=True)],'C2')
+    with pytest.raises(ValueError):validate_rows([replace(row,confirmed=True)],'C2')  # noqa: E701
     assert validate_rows([replace(row,quality='unknown',confirmed=True)],'C2')[0].key.quality=='unknown'
 
 
 def test_unconfirmed_rejected(catalog):
     rows=parse_inventory([token('FR-86 x2 Q500')],catalog)
-    with pytest.raises(ValueError):validate_rows(rows,'C2')
+    with pytest.raises(ValueError):validate_rows(rows,'C2')  # noqa: E701
     result=validate_rows([replace(rows[0],confirmed=True)],'C2')
     assert result[0].quantity==2
 
@@ -294,7 +294,7 @@ def test_repeated_rows(catalog):
 
 @pytest.mark.parametrize('qty',[0,-1,True,1.5])
 def test_reject_invalid_confirmed_quantity(qty):
-    with pytest.raises(ValueError):validate_rows([ImportRow('FR-86','a',qty,'q0',confirmed=True)],'C2')
+    with pytest.raises(ValueError):validate_rows([ImportRow('FR-86','a',qty,'q0',confirmed=True)],'C2')  # noqa: E701
 
 
 # ======================================================================
@@ -365,7 +365,7 @@ def test_unpriced_stock_not_zero():
 def test_accepted_large_decimal_stays_exact_in_all_arithmetic(tmp_path):
     value=D('123456789012345678901234567890.12')
     assert aggregate([quote(1,value)],NOW_P)[0].mean==value
-    h=History(Database(tmp_path/'p.db'));h.record(Snapshot(KEY,NOW_P,value))
+    h=History(Database(tmp_path/'p.db'));h.record(Snapshot(KEY,NOW_P,value))  # noqa: E702
     assert h.window(KEY,NOW_P)['mean']==value
     stats=[PriceStats(KEY,value,value,1,NOW_P)]
     stock=[StockLine(StockKey('a','q0','C2'),2)]
@@ -386,12 +386,12 @@ class Source:
         self.fail=False
     def fetch(self,item,quality_group,operation,now):
         self.calls+=1
-        if self.fail:return ProviderResult('uex','offline',message='网络离线')
+        if self.fail:return ProviderResult('uex','offline',message='网络离线')  # noqa: E701
         return ProviderResult('uex','ok',(PriceStats(PriceKey('uex',item.id,quality_group,'UEC','unit','4.10.2',operation),D(200),D(100),2,now),), items=(item,))
 
 
 def test_stale_cache(tmp_path):
-    source=Source();db=Database(tmp_path/'p.db')
+    source=Source();db=Database(tmp_path/'p.db')  # noqa: E702
     service=MarketService(db,[source])
     first=service.refresh(Item('a','FR-86'),'q0','sell',NOW_M)[0]
     service.refresh(Item('a','FR-86'),'q0','sell',NOW_M+timedelta(minutes=1))
@@ -408,7 +408,7 @@ def test_stale_cache(tmp_path):
 
 
 def test_failed_refresh_retries_after_minutes_not_hour(tmp_path):
-    source=Source();source.fail=True
+    source=Source();source.fail=True  # noqa: E702
     s=MarketService(Database(tmp_path/'p.db'),[source])
     assert s.refresh(Item('a','FR-86'),'q0','sell',NOW_M)[0].state=='offline'
     s.refresh(Item('a','FR-86'),'q0','sell',NOW_M+timedelta(minutes=1))
@@ -422,7 +422,7 @@ def test_refresh_total_timeout(tmp_path, monkeypatch):
     import threading
     gate=threading.Event()
     class Hang(Source):
-        def fetch(self,*args):gate.wait(5);return super().fetch(*args)
+        def fetch(self,*args):gate.wait(5);return super().fetch(*args)  # noqa: E702
     s=MarketService(Database(tmp_path/'p.db'),[Hang()])
     monkeypatch.setattr(MarketService,'TIMEOUT',0.2)
     r=s.refresh(Item('a','FR-86'),'q0','sell',NOW_M)[0]
@@ -436,9 +436,9 @@ def test_cli_stock_line_units(tmp_path):
     ore, gun = Item('q', 'Quantainium (Raw)'), Item('g', 'FR-86')
     t.catalog.upsert([ore, gun])
     assert ore_item(ore) and not ore_item(gun)
-    l = _cli_line(t, ore, '0.495', '', 'X')
+    l = _cli_line(t, ore, '0.495', '', 'X')  # noqa: E741
     assert (l.key.unit, l.quantity) == ('uSCU', 495000)      # 矿：SCU → uSCU，和窗口里同一行
-    l = _cli_line(t, gun, '2', '500', 'X')
+    l = _cli_line(t, gun, '2', '500', 'X')  # noqa: E741
     assert (l.key.unit, l.quantity, l.key.quality) == ('unit', 2, 'exact:500')
     with pytest.raises(ValueError):
         _cli_line(t, gun, '1.5', '', 'X')                  # 按个的不能有小数
@@ -456,7 +456,7 @@ def test_trade_dir_follows_install_not_env(tmp_path, monkeypatch):
 
 
 def test_provider_failure_isolated(tmp_path):
-    bad=Source();bad.source='scm';bad.fail=True
+    bad=Source();bad.source='scm';bad.fail=True  # noqa: E702
     s=MarketService(Database(tmp_path/'p.db'),[bad,Source()])
     result=s.refresh(Item('a','FR-86'),'q0','sell',NOW_M)
     assert len(result)==2
@@ -585,8 +585,8 @@ def test_scm_fetch_real_order_sample():
 def test_cancel_stops_before_request():
     import threading
     tr=transport(lambda _:pytest.fail('Cancelled request must not hit transport'))
-    tr.cancel_event=threading.Event();tr.cancel_event.set()
-    with pytest.raises(SourceError) as e:tr.get_json('https://example.com',{})
+    tr.cancel_event=threading.Event();tr.cancel_event.set()  # noqa: E702
+    with pytest.raises(SourceError) as e:tr.get_json('https://example.com',{})  # noqa: E701
     assert e.value.state=='cancelled'
 
 
@@ -684,7 +684,7 @@ def test_cell_quality_and_count_labels():
 
 def test_inventory_cell_labels_real_screens():
     """真截图（2026-10-23 用户发的物品栏）：20 个格子的品质全对（其中 7 个 Q 被认成 0），0Q 是 0，200x / 3x 是数量，200/200 不算"""
-    from sc_mining.tasks.hover import cell_labels, tooltip_row
+    from sc_mining.tasks.hover import cell_labels, tooltip_row  # noqa: F401
     d = Path(__file__).parent / "ingame"
     if not (d / "inv_grid.png").exists():
         pytest.skip("没有物品栏截图")

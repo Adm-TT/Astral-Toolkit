@@ -23,7 +23,7 @@ def ref_name(s):
 
 def main(root, out):
     root = Path(root)
-    rec = lambda rel: load(root / (rel + ".json"))["_RecordValue_"]
+    rec = lambda rel: load(root / (rel + ".json"))["_RecordValue_"]  # noqa: E731, F841
     db = {"elements": {}, "compositions": {}, "rocks": {}, "presets": {}, "clusters": {}, "locations": {}, "quality": {}}
     for f in sorted((root / "mining/mineableelements").glob("*.json")):
         v = load(f)["_RecordValue_"]

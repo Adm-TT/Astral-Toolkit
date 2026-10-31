@@ -31,7 +31,7 @@ def _ocr():
         from ..core.perf import rapidocr
         eng = rapidocr()
         if eng.kind.startswith("rapidocr_onnxruntime"):
-            _engine = lambda arr: eng(arr)[0] or []
+            _engine = lambda arr: eng(arr)[0] or []  # noqa: E731
         else:
             def run(arr):
                 r = eng(arr)
@@ -178,7 +178,7 @@ def read_region_seg(img, region, upscale=None, pad=3, variants=("raw", "inv")):
     import numpy as np
     from PIL import Image
     W, H = img.size
-    l, t, r, b = region
+    l, t, r, b = region  # noqa: E741
     crop = img.crop((int(l * W), int(t * H), int(r * W), int(b * H)))
     rec = _recognize()
     out = []
@@ -222,7 +222,7 @@ def read_box(img, box, up=2):
     返回 (文字行, 扫描结果, 文字块)"""
     import numpy as np
     from PIL import Image
-    from .parse import rows, parse_scan
+    from .parse import rows, parse_scan  # noqa: F401
     x0, y0, x1, y1 = box
     crop = img.crop(box)
     c = crop.resize((crop.width * up, crop.height * up), Image.LANCZOS)
@@ -586,7 +586,7 @@ def _locate(img, up=1.0):
     import statistics
     from PIL import Image
     W, H = img.size
-    l, t, r, b = SEARCH
+    l, t, r, b = SEARCH  # noqa: E741
     ox, oy, bottom_lim = int(l * W), int(t * H), int(b * H)
     crop = img.crop((ox, oy, int(r * W), bottom_lim))
     if up != 1:
@@ -793,7 +793,7 @@ def report(scan, bag):
 def main():
     if len(sys.argv) > 1:
         from PIL import Image
-        from .parse import rows
+        from .parse import rows  # noqa: F401
         img = Image.open(sys.argv[1]).convert("RGB")
         print(f"截图尺寸 {img.size}")
         scan_lines, bag_lines = find_panels(img)
@@ -826,7 +826,7 @@ def live():
     """实时读屏。同一块石头连续多帧投票，结果稳定了才输出一次；识别记录写进 userdata/logs/live_log.txt，
     每块新石头的画面存进 userdata/shots/live/，方便之后排查"""
     import collections
-    from pathlib import Path
+    from pathlib import Path  # noqa: F401
     from ..core import paths
     root = paths.ROOT
     shots = paths.shots("live")
@@ -868,7 +868,7 @@ def _live_loop(root, shots, log, recent, ov):
                 lines = describe_all(find_signatures(img))
                 for line in lines:
                     print("  " + line)
-                ov.set("信号", "\n".join(l.split("｜精炼后")[0].replace("信号 ", "") for l in lines[:4]))
+                ov.set("信号", "\n".join(l.split("｜精炼后")[0].replace("信号 ", "") for l in lines[:4]))  # noqa: E741
                 log.write(f"{time.strftime('%F %T')} SIG {sorted(sigs)}\n")
                 log.flush()
             sig_prev = sigs

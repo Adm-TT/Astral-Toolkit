@@ -4,10 +4,10 @@
 """
 import json
 import urllib.request
-from pathlib import Path
+from pathlib import Path  # noqa: F401
 
 API = "https://api.uexcorp.space/2.0/"
-from ..core.paths import DATA
+from ..core.paths import DATA  # noqa: E402
 OUT = DATA / "prices.json"
 
 

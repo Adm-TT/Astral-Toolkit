@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
-from unpack_crafting import REC, Loc, dl, rec, game_version, manufacturer, attach_def  # noqa: E402
+from unpack_crafting import REC, Loc, dl, rec, game_version, manufacturer, attach_def  # noqa: E402, F401
 from sc_mining.update.localization import read_ini  # noqa: E402
 
 ENT = REC / "entities"

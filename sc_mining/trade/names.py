@@ -5,7 +5,7 @@ UEX 只认英文名；游戏是中文界面，截图识别和手动搜索得到�
 import json
 import re
 from functools import lru_cache
-from pathlib import Path
+from pathlib import Path  # noqa: F401
 
 CJK = re.compile(r'[一-鿿]')
 _PAREN = re.compile(r'\s*[（(][^）)]*[）)]\s*')

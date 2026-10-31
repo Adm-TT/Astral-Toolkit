@@ -9,18 +9,18 @@ if str(ROOT) not in sys.path:
 
 os.environ["AT_FEEDBACK_OFF"] = "1"          # 测试里不往服务器发问题反馈（2026-10-27）
 
-from tests.minipytest import run_all, tmpdir
+from tests.minipytest import run_all, tmpdir  # noqa: E402
 _tmp = tmpdir()
-from sc_mining.navigation import navigate as _nav
+from sc_mining.navigation import navigate as _nav  # noqa: E402
 _nav.CALIB = _tmp / "rotation_calib.json"      # 自转相位校准写临时文件，不碰用户的 userdata（2026-10-28）
 _nav.LAST = _tmp / "last_position.json"        # locate(record=True) 记的最近位置也一样（2026-10-28 审查：以前写进真实 userdata）
 _nav.WAYPOINTS = _tmp / "waypoints.json"        # 读路标的测试别读到老大的真实路标
-from sc_mining.core import paths as _paths
+from sc_mining.core import paths as _paths  # noqa: E402
 _OLD_USER = _paths.USER
 _paths.USER = _tmp                              # 运行时才取 paths.USER 的（地点编号、锁文件、升级目录）也写临时目录；import 时绑定的各测试自己 patch
 _paths.SHOTS = _tmp / "shots"
 _paths.LOGS = _tmp / "logs"                     # 日志也写临时目录（以前测试会往真实 userdata\logs 写 helpers / perf 日志）
-from sc_mining.system import helpers as _helpers
+from sc_mining.system import helpers as _helpers  # noqa: E402
 _helpers.LOG = _paths.LOGS / "helpers_log.txt"
 
 

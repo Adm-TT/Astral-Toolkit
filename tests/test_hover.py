@@ -1,7 +1,7 @@
 """F8 悬停识别自适应区域与兜底流程测试"""
 import unittest
 from sc_mining.trade.models import OcrToken
-from sc_mining.tasks.hover import get_hover_regions, _read_tooltip, HOVER_REGIONS
+from sc_mining.tasks.hover import get_hover_regions, _read_tooltip, HOVER_REGIONS  # noqa: F401
 
 
 class MockImage:

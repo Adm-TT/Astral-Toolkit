@@ -286,7 +286,7 @@ def _hauling(loc, res, orders, pools):
 def contracts(loc, res):
     """所有任务生成器里的任务（含子任务）→ scmdb 的 contracts 行（只放我们用到的字段）"""
     pools, rows = {}, []
-    systems_of = lambda pre: sorted({_sys(p.get("locationAvailable")) for p in pre or [] if p.get("_Type_") == "ContractPrerequisite_Location"} - {""})
+    systems_of = lambda pre: sorted({_sys(p.get("locationAvailable")) for p in pre or [] if p.get("_Type_") == "ContractPrerequisite_Location"} - {""})  # noqa: E731
 
     def sysname(s):
         return {"stanton": "Stanton", "pyro": "Pyro", "nyx": "Nyx"}.get(s, s.capitalize())

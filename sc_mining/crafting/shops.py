@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-from ..core.paths import DATA
+from ..core.paths import DATA  # noqa: E402
 CACHE = DATA / "shops.json"
 BASE = "https://api.uexcorp.uk/2.0/"
 MAX_AGE = 7 * 86400
@@ -174,7 +174,7 @@ def where_by_name(name_en):
 
 def shop_point(fields):
     """商店位置 → 星图点（卫星/拉格朗日点/行星）"""
-    from ..navigation.position import find_point, PLANET_CODE
+    from ..navigation.position import find_point, PLANET_CODE  # noqa: F401
     system, planet, orbit, moon, station, city = (list(fields) + [""] * 6)[:6]
     if moon:
         p = find_point(name=moon)

@@ -8,7 +8,7 @@
 5. 原矿扫描记录及导航追溯。
 """
 import math
-import os
+import os  # noqa: F401
 import re
 import threading
 import time
@@ -55,9 +55,9 @@ DI_HELP = "未检测到右上角位置信息：在游戏中按 ~ 打开控制台
 # ---------------------------------------------------------------- 依赖与辅助
 # 2026-10-30 重构阶段 2：悬浮窗从 app.hud_state 拿，引擎从 EngineManager 拿，原矿结果从 tasks.system 拿，
 # 不再经 services 转发、出错也不再回头找 services 兜底。接口由 app/api/navigation.py 的 ROUTES 注册，不再用 api 装饰器。
-from ..app.hud_state import _hud, _note_hud, _off
-from ..app.engines.manager import EngineManager
-from .system import _ORE_LAST
+from ..app.hud_state import _hud, _note_hud, _off  # noqa: E402
+from ..app.engines.manager import EngineManager  # noqa: E402
+from .system import _ORE_LAST  # noqa: E402
 
 _M = EngineManager.get_instance()
 _pos = _M.pos

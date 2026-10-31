@@ -1,6 +1,6 @@
 """物品视觉识别组件 (Item Inspector) 独立测试"""
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock  # noqa: F401
 
 from sc_mining.trade.models import OcrToken
 
@@ -20,7 +20,7 @@ class MockImage:
 class TestItemInspector(unittest.TestCase):
     def test_import_and_helpers(self):
         from sc_mining.trade.inspector import (
-            HOVER_REGIONS,
+            HOVER_REGIONS,  # noqa: F401
             get_hover_regions,
             parse_qlabel,
             parse_count,
@@ -141,7 +141,7 @@ class TestItemInspector(unittest.TestCase):
         self.assertFalse(plausible_name("聊天：你好", "Hello: World"))  # 含冒号
 
         # 测试说明框标题与中英对提取
-        T = lambda text, x, y: OcrToken(text=text, confidence=0.9, box=(x, y, max(20, len(text) * 9), 18))
+        T = lambda text, x, y: OcrToken(text=text, confidence=0.9, box=(x, y, max(20, len(text) * 9), 18))  # noqa: E731
         toks = [
             T("实准枪口补偿器2", 900, 300),
             T("VeraCompensator2", 900, 324),

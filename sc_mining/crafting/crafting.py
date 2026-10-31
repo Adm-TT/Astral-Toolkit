@@ -7,7 +7,7 @@
 import json
 import re
 from functools import lru_cache
-from pathlib import Path
+from pathlib import Path  # noqa: F401
 
 from ..core.paths import DATA as _D
 DATA = _D / "crafting.json"
@@ -277,7 +277,7 @@ def display_name(bp) -> str:
 
 def for_item(name_en="", name_zh=""):
     """做这件东西的蓝图（英文名一样，或者中文名一样）；没有返回 None"""
-    fold = lambda s: re.sub(r"[\W_]+", "", (s or "").lower())
+    fold = lambda s: re.sub(r"[\W_]+", "", (s or "").lower())  # noqa: E731
     en, zh = fold(name_en), fold(name_zh)
     return (next((b for b in blueprints() if en and fold(b["n"]) == en), None)
             or next((b for b in blueprints() if zh and b["z"] and fold(b["z"]) == zh), None))

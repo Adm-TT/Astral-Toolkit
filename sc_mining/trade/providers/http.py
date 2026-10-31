@@ -95,7 +95,7 @@ class HttpTransport:
         if self.cancel_event is not None:
             self.cancel_event.wait(seconds)
             self.check_cancel()
-        else:self.sleep(seconds)
+        else:self.sleep(seconds)  # noqa: E701
 
     def get_json(self, url: str, params: dict[str, str]):
         headers = {'Authorization': f'Bearer {self.token}'} if self.token else {}

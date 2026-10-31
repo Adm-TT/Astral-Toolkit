@@ -34,7 +34,7 @@ def _same(a, b, tol=0.0):
 
 def check_scan(exp, scan):
     """→ {字段: 对/错}；exp 里没写的字段不算（面板被挡住时只标得出一部分）"""
-    norm = lambda n, p, q: [n or "", round(float(p), 2) if p is not None else None, None if n == "Inert Materials" else q]   # 惰性物质的品质（0）不算
+    norm = lambda n, p, q: [n or "", round(float(p), 2) if p is not None else None, None if n == "Inert Materials" else q]   # 惰性物质的品质（0）不算  # noqa: E731
     got = {"rock": scan.rock, "mass": scan.mass, "res": scan.resistance, "inst": scan.instability, "scu": scan.total_scu,
            "comp": sorted((norm(n, p, q) for n, p, q in scan.composition), key=str)}
     out = {}
@@ -126,8 +126,8 @@ def summary(rows, answers):
         for g in (f"环境·{a.get('env', '?')}", f"船位·{a.get('ship', '?')}-{a.get('seat', '?')}"):
             d = groups.setdefault(g, [0, 0, 0, 0])
             if "all" in r["scan"]:
-                d[0] += r["scan"]["all"]; d[1] += 1
-            d[2] += len(r["sig"]["hit"]); d[3] += len(r["sig"]["want"])
+                d[0] += r["scan"]["all"]; d[1] += 1  # noqa: E702
+            d[2] += len(r["sig"]["hit"]); d[3] += len(r["sig"]["want"])  # noqa: E702
     lines += ["", "| 分组 | 扫描全对 | 信号认出 |", "|---|---|---|"]
     for g in sorted(groups):
         d = groups[g]

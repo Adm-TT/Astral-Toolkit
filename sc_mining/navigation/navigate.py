@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-from ..core.paths import DATA, USER, write_json
+from ..core.paths import DATA, USER, write_json  # noqa: E402
 CACHE = DATA / "starmap.json"
 WAYPOINTS = USER / "waypoints.json"      # 自定义路标，放 userdata，更新不会覆盖
 API = "https://starmap.space/api/v3/"

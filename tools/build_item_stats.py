@@ -24,7 +24,7 @@ def get(url, tries=4):
             req = urllib.request.Request(url, headers=HEADERS)
             with urllib.request.urlopen(req, timeout=40) as r:
                 return json.load(r)
-        except Exception as e:                     # 网络抖一下：等一会再试
+        except Exception as e:                     # 网络抖一下：等一会再试  # noqa: F841
             if i == tries - 1:
                 raise
             time.sleep(2 * (i + 1))
@@ -55,7 +55,7 @@ def main(argv):
     else:
         uuids, page = [], 1
         while True:
-            l = get(f"{API}?limit=100&page={page}&filter[is_craftable]=1")
+            l = get(f"{API}?limit=100&page={page}&filter[is_craftable]=1")  # noqa: E741
             uuids += [x["uuid"] for x in l["data"]]
             if page >= l["meta"]["last_page"]:
                 break

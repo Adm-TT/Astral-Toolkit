@@ -52,7 +52,7 @@ def parse(s):
     kind = next((v for k, v in KIND.items() if any(h.startswith(k) for h in head)), None)
     rs = re.search(r"Radar Sig \(⊙\)\|([\d,]+)", s, re.I)
     price = re.search(r"Terminal Value\|Live NPC\|([\d,]+|TBD)", s, re.I)
-    level = lambda lab: (m := re.search(lab + r"\|([A-Za-z ]+)\|", s, re.I)) and LEVEL.get(m.group(1).strip().lower())
+    level = lambda lab: (m := re.search(lab + r"\|([A-Za-z ]+)\|", s, re.I)) and LEVEL.get(m.group(1).strip().lower())  # noqa: E731
     locs = [(n, sys_.title(), float(p)) for n, sys_, p in
             re.findall(r"\|([^|]+)\|System:\|([a-z]+)\|([\d.]+)\|%\|Abundance", s, re.I) if float(p) > 0]
     if not (kind and rs and locs):

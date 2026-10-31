@@ -338,7 +338,7 @@ class Ships:
         tree = self.loadout(((lo.get("loadout") or {}).get("entries")))
         flat = list(walk(tree))
         mass, parts = vehicle_xml(vc.get("vehicleDefinition"), vc.get("modification") or "")
-        stem = f.stem.lower()
+        stem = f.stem.lower()  # noqa: F841
         armor = next((n for n in flat if n["type"] == "Armor"), None)
         cs_mult = ((armor or {}).get("armor") or {}).get("signal_cs") or 1.0
         fc = next((n for n in flat if n.get("speed")), None)

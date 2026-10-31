@@ -7,8 +7,8 @@
 4. 导航记号（Marker Tick）计算与投射、3D 空间站/太空指引与导览日志。
 """
 import math
-import sys
-import threading
+import sys  # noqa: F401
+import threading  # noqa: F401
 import time
 from collections import defaultdict
 from itertools import combinations
@@ -136,7 +136,7 @@ def _station_view(g, target, data, when=None, prev=None, info=None):
     try:                                                   # 先核对星系：别的星系同一个坐标也可能有东西（二审 2026-10-27）
         system, sure = n.system_info(g, data, **{k: (info or {}).get(k) or "" for k in ("zone", "location", "solar_id")})
     except Exception:
-        system, sure = "", False
+        system, sure = "", False  # noqa: F841
     if target.get("sys") and system and system != target["sys"]:   # 猜出来的星系不一样也不算到（复审 2026-10-27）
         out["far"] = f"目标位于 {n.SYS_ZH.get(target['sys'], target['sys'])}星系，需先跃迁到该星系"
         return out
@@ -273,7 +273,7 @@ def scan_view(scan, bag, cut=False):
     """一块石头的读屏结果（窗口用）。cut=True：面板被屏幕右边挡住，品质和总 SCU 读不到，只有破碎方案和成分占比"""
     from ..core.i18n import mineral_zh, method_zh, station_zh
     from ..mining.laser import recommend
-    from ..mining.data import best_price, GADGETS
+    from ..mining.data import best_price, GADGETS  # noqa: F401
     from ..mining.refinery import refined_plan
     rock = mineral_zh(scan.main_mineral) if scan.main_mineral else "?"
     out = {"rock": rock, "mass": scan.mass, "resistance": scan.resistance, "instability": scan.instability,
@@ -405,7 +405,7 @@ def _gear_summary(key, lo):
     model, k = active_model()
     n = max(1, min(lo.get("crew") or 1, len(setups)))
     combos = list(combinations(setups, n))
-    best = lambda g: max(evaluate(list(c), g, 1.0, 30, 0, k=k, model=model).max_mass for c in combos)
+    best = lambda g: max(evaluate(list(c), g, 1.0, 30, 0, k=k, model=model).max_mass for c in combos)  # noqa: E731
     return {"crew": n, "power": round(max(sum(h.max_power() for h in c) for c in combos)),
             "mass": round(best(None), -1), "mass_gadget": round(best("sabir"), -1), "gadget": gadget_label("sabir")}
 
@@ -431,7 +431,7 @@ def _gear(ship=None):
     def card(k, mods, craft):
         """一个矿头装上模组（和自造）后的读数：功率 W，其余是相对没有修正时的变化 %"""
         h = HeadSetup(k, mods, craft)
-        pct = lambda m: round((m - 1) * 100)
+        pct = lambda m: round((m - 1) * 100)  # noqa: E731
         return {"power": round(h.max_power()), "base": HEADS[k]["pmax"],
                 "stats": {"power": pct(h.max_power() / HEADS[k]["pmax"]),
                           "res": pct(_mult(HEADS[k]["res"], *h.res_mods())), "instab": pct(h.instab_mult()),

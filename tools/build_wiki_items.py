@@ -7,7 +7,7 @@
 """
 import json
 import re
-import sys
+import sys  # noqa: F401
 import time
 import urllib.request
 from pathlib import Path

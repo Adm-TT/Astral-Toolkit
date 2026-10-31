@@ -1,4 +1,4 @@
-from collections import defaultdict
+from collections import defaultdict  # noqa: F401
 import re
 from .models import ImportRow, StockKey, StockLine
 from .names import to_english

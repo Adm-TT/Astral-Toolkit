@@ -2,7 +2,7 @@
 import hashlib
 import io
 import json
-import threading
+import threading  # noqa: F401
 import zipfile
 
 
@@ -74,7 +74,7 @@ def test_unreachable_returns_none_and_run_falls_back(monkeypatch, tmp_path):
 
 def test_pack_up_to_date_skips_sources(monkeypatch, tmp_path):
     data, m = _pack(tmp_path, {"shops.json": "{}"})
-    P = _setup(monkeypatch, tmp_path, {"https://gitee.com/at/at/raw/master/data.json": json.dumps(m).encode(), m["urls"][0]: data})
+    P = _setup(monkeypatch, tmp_path, {"https://gitee.com/at/at/raw/master/data.json": json.dumps(m).encode(), m["urls"][0]: data})  # noqa: F841
     from sc_mining import run
     from sc_mining.update import uex, localization
     called = []

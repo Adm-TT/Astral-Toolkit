@@ -18,18 +18,18 @@ def test_every_loadout(monkeypatch, tmp_path):
             out *= 1 + (p or 0) / 100
         return out
 
-    from sc_mining.tasks import mining as t_mining
+    from sc_mining.tasks import mining as t_mining  # noqa: F811
 
-    def mult(*ps):
+    def mult(*ps):  # noqa: F811
         out = 1.0
-        for p in ps: out *= 1 + (p or 0) / 100
+        for p in ps: out *= 1 + (p or 0) / 100  # noqa: E701
         return out
 
     ROCKS = [(m, r, i) for m in (500, 3000, 8000, 20000, 60000) for r in (0, 15, 35, 60, 90) for i in (0, 15, 60)]
     mods = list(MODULES)
     n_loadouts = n_calcs = 0
     problems = []
-    t0 = time.time()
+    t0 = time.time()  # noqa: F841
     # 1) 每条船、每个能装的矿头、每一种模组组合（含空槽、可重复），逐个验算
     for ship, spec in SHIPS.items():
         heads = [spec["fixed"]] if spec.get("fixed") else [k for k, h in HEADS.items() if h["size"] == spec["size"] and not h.get("ship")]
@@ -41,7 +41,7 @@ def test_every_loadout(monkeypatch, tmp_path):
                     clean = laser.clean_loadout(ship, lo)
                     n_loadouts += 1
                     if clean["heads"][0] != [hk, list(combo)]:
-                        problems.append(("被错改", ship, hk, combo, clean)); continue
+                        problems.append(("被错改", ship, hk, combo, clean)); continue  # noqa: E702
                     hs = laser.HeadSetup(hk, list(combo))
                     want = h["pmax"] * mult(*(MODULES[m].get("power") for m in combo))
                     if abs(hs.max_power() - want) > 1e-6:
@@ -55,7 +55,7 @@ def test_every_loadout(monkeypatch, tmp_path):
                             eff = min(max(r / 100 * mult(h["res"], *(MODULES[x].get("res") for x in combo), gres), 0), 0.99)
                             delivered = want * (1 - eff)
                             if abs(p.delivered - delivered) > 1e-6 or not math.isfinite(p.ratio) or p.ratio < 0:
-                                problems.append(("输出算错", ship, hk, combo, g, m, r, p.delivered, delivered)); break
+                                problems.append(("输出算错", ship, hk, combo, g, m, r, p.delivered, delivered)); break  # noqa: E702
                             if p.breakable and not (0 < p.throttle <= 1):
                                 problems.append(("建议功率越界", ship, hk, combo, g, m, r, p.throttle))
     # 2) 模组塞超了 / 装错尺寸 / 魔像换矿头 / 人数超了：都要被纠正
@@ -63,24 +63,24 @@ def test_every_loadout(monkeypatch, tmp_path):
            ("golem", {"heads": [["lancet_mh1", ["rieger"] * 5]], "crew": 9}), ("mole", {"heads": [["helix_ii", ["xx", "rieger"]]], "crew": 7}),
            ("prospector", {"heads": [["pitman", []]]}), ("mole", None), ("prospector", {}), ("golem", {"heads": []})]
     for ship, lo in bad:
-        c = laser.clean_loadout(ship, lo); n_loadouts += 1
+        c = laser.clean_loadout(ship, lo); n_loadouts += 1  # noqa: E702
         spec = SHIPS[ship]
         ok = len(c["heads"]) == spec["heads"] and 1 <= c["crew"] <= spec["crew_max"] and all(
             HEADS[k]["size"] == spec["size"] and len(m) <= HEADS[k]["slots"] and all(x in MODULES for x in m)
             and (not spec.get("fixed") or k == spec["fixed"]) and (not HEADS[k].get("ship") or HEADS[k]["ship"] == ship) for k, m in c["heads"])
-        if not ok: problems.append(("没纠正", ship, lo, c))
+        if not ok: problems.append(("没纠正", ship, lo, c))  # noqa: E701
     # 3) MOLE 三个矿头随机混搭 + 1~3 人，跑完整推荐（包括多矿头组合、贴工具）
     random.seed(1)
     s2 = [k for k, h in HEADS.items() if h["size"] == 2]
     for _ in range(400):
         heads = []
         for _ in range(3):
-            k = random.choice(s2); heads.append([k, random.choices(mods, k=random.randint(0, HEADS[k]["slots"]))])
+            k = random.choice(s2); heads.append([k, random.choices(mods, k=random.randint(0, HEADS[k]["slots"]))])  # noqa: E702
         crew = random.randint(1, 3)
         settings.update(mining_ship="mole", mining_loadouts={"mole": {"heads": heads, "crew": crew}})
         n_loadouts += 1
         for (m, r, i) in random.sample(ROCKS, 6):
-            plans = laser.recommend(m, r, i, top=5); n_calcs += 1
+            plans = laser.recommend(m, r, i, top=5); n_calcs += 1  # noqa: E702
             if not plans or any(len(p.heads) > crew for p in plans):
                 problems.append(("MOLE 推荐不对", heads, crew, m, r, len(plans)))
             best = plans[0]
@@ -94,9 +94,9 @@ def test_every_loadout(monkeypatch, tmp_path):
             pool = [spec["fixed"]] if spec.get("fixed") else [k for k, h in HEADS.items() if h["size"] == spec["size"] and not h.get("ship")]
             heads = []
             for _ in range(spec["heads"]):
-                k = random.choice(pool); heads.append([k, random.choices(mods, k=random.randint(0, HEADS[k]["slots"]))])
+                k = random.choice(pool); heads.append([k, random.choices(mods, k=random.randint(0, HEADS[k]["slots"]))])  # noqa: E702
             lo = {"heads": heads, "crew": random.randint(1, spec["crew_max"])}
-            g = t_mining.set_mining_gear(ship=ship, loadout=lo); n_loadouts += 1
+            g = t_mining.set_mining_gear(ship=ship, loadout=lo); n_loadouts += 1  # noqa: E702
             got = next(s for s in g["ships"] if s["key"] == ship)["loadout"]
             if got != lo or g["ship"] != ship or not g["chosen"]:
                 problems.append(("保存读回不一致", ship, lo, got))

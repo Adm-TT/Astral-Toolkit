@@ -222,14 +222,14 @@ class _Live:
         from ...mining import screen
         from ...mining.signals import find_signatures, describe_all, match_signature
         ev = ev or self.stop_ev
-        alive = lambda: not ev.is_set()               # 只看本会话的开关
+        alive = lambda: not ev.is_set()               # 只看本会话的开关  # noqa: E731
         shots = paths.shots("live")
         log = open(paths.log("live_log.txt"), "a", encoding="utf-8")
         recent = collections.deque(maxlen=screen.VOTE_FRAMES)
         part = collections.deque(maxlen=screen.VOTE_FRAMES)   # 面板被屏幕右边挡住时（只读到质量/抗性/不稳定性）的投票队列
         hint = {"why": None}                                  # 现在显示着的「读不全」原因提示
         last_key, sig_prev, sig_shown = None, None, None
-        l, t, r, b = screen.SEARCH
+        l, t, r, b = screen.SEARCH  # noqa: E741
         try:
             prev_small, prev_panel, same, settled, done_here = None, None, 0, False, 0
             last_shown, last_full, last_view, last_sig_msg = None, 0.0, {}, None
@@ -434,7 +434,7 @@ class _Live:
                             break
                         if hint["why"]:
                             self._hint(ev, hint, None, log)
-                        last_key, last_shown, scan_live, last_view = None, shown, True, view
+                        last_key, last_shown, scan_live, last_view = None, shown, True, view  # noqa: F841
                         _T("system")._ORE_LAST["view"] = view
                         _T("system")._FB_LAST["scan"] = {"rock": view.get("rock"), "mass": view.get("mass"), "resistance": view.get("resistance"),
                                             "instability": view.get("instability"), "cut": True, "at": view.get("at")}

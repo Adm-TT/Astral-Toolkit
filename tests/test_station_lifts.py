@@ -224,7 +224,7 @@ def test_nav_engine_station_branch(monkeypatch, tmp_path):
 
         def clear(self, k):
             pass
-    _v = lambda: Hud()
+    _v = lambda: Hud()  # noqa: E731
     for _m in (t_mining, t_nav, t_sys, hud_state):
         monkeypatch.setattr(_m, "_hud", _v)
     monkeypatch.setattr(t_mining, "_marker_tick", lambda *a, **k: None)

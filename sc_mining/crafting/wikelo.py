@@ -9,7 +9,7 @@ from functools import lru_cache
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-from ..core.paths import DATA
+from ..core.paths import DATA  # noqa: E402
 OUT = DATA / "wikelo.json"
 TYPE_ZH = {"Wikelo - Vehicles": "载具", "Wikelo - Other Items": "装备/物品", "Collection": "收集"}
 # 汉化包里没有中文名、或者需要说明来源的材料（游戏里 RCMBNT 本身就显示英文代号）

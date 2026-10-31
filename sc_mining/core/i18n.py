@@ -3,7 +3,7 @@
 对照表来自 sc_glossary.json（由 sc_glossary/build_glossary.py 从汉化包生成）
 """
 import json
-from difflib import get_close_matches
+from difflib import get_close_matches  # noqa: F401
 from functools import lru_cache
 from pathlib import Path
 

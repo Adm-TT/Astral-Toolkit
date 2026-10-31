@@ -3,7 +3,7 @@
 用法：python tools/unpack_spots.py <星图记录目录 records/starmap/pu> <pyrosystem.xml> <nyxsystem.xml> <输出 json>
 只读游戏导出的文件"""
 import json
-import math
+import math  # noqa: F401
 import re
 import sys
 import xml.etree.ElementTree as ET

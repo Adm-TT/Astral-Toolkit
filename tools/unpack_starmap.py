@@ -18,7 +18,7 @@ import math
 import os
 import re
 import sys
-from collections import Counter, defaultdict
+from collections import Counter, defaultdict  # noqa: F401
 from pathlib import Path
 
 import xml.etree.ElementTree as ET

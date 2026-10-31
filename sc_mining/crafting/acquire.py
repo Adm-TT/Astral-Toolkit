@@ -127,7 +127,7 @@ def ships_with(name):
     """自带这个部件出厂的船（data/ship_items.json，tools/unpack_ship_data.py 从解包生成，2026-10-27）→ [船中文名]"""
     import re
     from ..core.paths import DATA, cached_json
-    fold = lambda x: re.sub(r"[^a-z0-9]", "", (x or "").lower())
+    fold = lambda x: re.sub(r"[^a-z0-9]", "", (x or "").lower())  # noqa: E731
     table = cached_json(DATA / "ship_items.json", lambda d: {fold(k): v for k, v in (d.get("items") or {}).items()}, {})
     return list(table.get(fold(name)) or [])
 

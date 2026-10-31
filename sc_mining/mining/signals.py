@@ -261,7 +261,7 @@ def find_signatures(img, rec=None):
         _remember(key, (value, fixed, text))
         out.append((value, fixed, text, (x0, y0, x1, y1)))
     W, H = img.size
-    l, tp, r, b = (int(v * s) for v, s in zip(CENTER_TAG, (W, H, W, H)))
+    l, tp, r, b = (int(v * s) for v, s in zip(CENTER_TAG, (W, H, W, H)))  # noqa: E741
     if CENTER_TAG and not any(l <= bx[0] and bx[2] <= r and tp <= bx[1] and bx[3] <= b for *_x, bx in out):
         out += _center_tag(img, (l, tp, r, b))
     return out
@@ -406,7 +406,7 @@ def my_signatures():
 
 def set_my_signature(value, name):
     """记下 / 改名；名字为空 = 删掉"""
-    import json
+    import json  # noqa: F401
     t = dict(my_signatures())
     name = (name or "").strip()[:40]
     if name:

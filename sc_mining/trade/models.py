@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field  # noqa: F401
 from datetime import datetime
 from decimal import Decimal
 

@@ -173,7 +173,7 @@ def report(mineral: str, top: int = 8) -> str:
 def ask():
     """交互：输入矿名（中文或英文，可一次输入多个，用空格或逗号分开）"""
     from .data import SIGNATURES
-    from ..core.i18n import mineral_en
+    from ..core.i18n import mineral_en  # noqa: F401
     en_names = {k.lower(): k for k in SIGNATURES}
     print("输入想挖的矿（中文或英文，可多个，用空格分开），直接回车退出。例：量子 金 钨\n")
     while True:

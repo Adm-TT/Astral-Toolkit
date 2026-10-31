@@ -301,8 +301,8 @@ def mask_overlay(img, left, top, rect=None, scale=1.0, own=None):
     for rc in rects:
         if not rc:
             continue
-        l, t, r, b = (int(v * scale) for v in rc)
-        l, t, r, b = l - left, t - top, r - left, b - top
+        l, t, r, b = (int(v * scale) for v in rc)  # noqa: E741
+        l, t, r, b = l - left, t - top, r - left, b - top  # noqa: E741
         if r <= 0 or b <= 0 or l >= img.width or t >= img.height:
             continue
         ImageDraw.Draw(img).rectangle((max(0, l), max(0, t), min(img.width, r) - 1, min(img.height, b) - 1), fill=(0, 0, 0))
@@ -396,7 +396,7 @@ def grab_screen():
 def grab_region(box):
     """只截游戏画面的一块：box = (左, 上, 右, 下)，都是占画面的比例。返回 PIL 图片"""
     a = game_area()
-    l, t, r, b = box
+    l, t, r, b = box  # noqa: E741
     area = {"left": a["left"] + int(a["width"] * l), "top": a["top"] + int(a["height"] * t),
             "width": max(1, int(a["width"] * (r - l))), "height": max(1, int(a["height"] * (b - t)))}
     img = _shot(area)

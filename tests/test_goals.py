@@ -87,7 +87,7 @@ def test_shared_stock_goes_by_priority(monkeypatch, tmp_path):
     t = _trade(tmp_path, [("vm", "unknown", "Area18", 6)])
     G.add("wikelo", "TheCollector_BigBooma")          # 要 2
     G.add("wikelo", "TheCollector_GMNI_LMG")          # 要 5
-    vm = lambda g: next(r for r in g["rows"] if r["en"] == "Vanduul Metal")
+    vm = lambda g: next(r for r in g["rows"] if r["en"] == "Vanduul Metal")  # noqa: E731
     a, b = G.plan(t)["goals"]
     assert vm(a)["have"] == 2 and vm(b)["have"] == 4 and vm(b)["short"] == 1
     G.update(G.load()[1]["id"], move=-1)              # LMG 挪到前面
@@ -124,7 +124,7 @@ def test_goal_quality_effect_and_stock_quality(monkeypatch, tmp_path):
     from sc_mining.tasks import count as t_count, goals as t_goals, hover as t_hover, stock as t_stock, trade as t_trade
     G = _setup(monkeypatch, tmp_path)
     t = Trade(tmp_path / "db", providers=[])
-    _v = lambda: t
+    _v = lambda: t  # noqa: E731
     for _m in (t_count, t_goals, t_hover, t_stock, t_trade):
         monkeypatch.setattr(_m, "trade", _v)
     bp = next(b for b in CR.blueprints() if any(m for _s, _o, m in b["slots"]) and any(k == "r" for _s, o, _m in b["slots"] for k, *_ in o))
@@ -158,7 +158,7 @@ def test_goal_quality_effect_and_stock_quality(monkeypatch, tmp_path):
 def test_tooltip_quality():
     from types import SimpleNamespace as N
     from sc_mining.tasks.hover import tooltip_quality
-    tk = lambda s, y=0: N(text=s, box=(0, y, 10, y + 5))
+    tk = lambda s, y=0: N(text=s, box=(0, y, 10, y + 5))  # noqa: E731
     assert tooltip_quality([tk("钛"), tk("品质：650", 10)]) == 650
     assert tooltip_quality([tk("Quality 812")]) == 812 and tooltip_quality([tk("Q700")]) == 700
     assert tooltip_quality([tk("品质 4000")]) is None and tooltip_quality([tk("价格 650")]) is None
@@ -170,7 +170,7 @@ def test_units_uscu_and_migration(monkeypatch, tmp_path):
     from sc_mining.tasks import count as t_count, goals as t_goals, hover as t_hover, stock as t_stock, trade as t_trade
     G = _setup(monkeypatch, tmp_path)
     t = Trade(tmp_path / "db", providers=[])
-    _v = lambda: t
+    _v = lambda: t  # noqa: E731
     for _m in (t_count, t_goals, t_hover, t_stock, t_trade):
         monkeypatch.setattr(_m, "trade", _v)
     G.add_stock(t, "Taranite", "塔兰导电石", "0.495", "SCU", "925", "新巴贝奇")
@@ -187,7 +187,7 @@ def test_units_uscu_and_migration(monkeypatch, tmp_path):
     t2 = Trade(tmp_path / "db2", providers=[])
     G.add_stock(t2, "Titanium", "钛", "0.495", "SCU", "950", "A")
     lots = G.stock_lots(t2)
-    assert abs(sum(l[3] for ls in lots.values() for l in ls) - 0.495) < 1e-9
+    assert abs(sum(l[3] for ls in lots.values() for l in ls) - 0.495) < 1e-9  # noqa: E741
     # 旧的 cSCU 记录：换算 ×10000，换算前备份数据库，旧批次还能撤销
     t3 = Trade(tmp_path / "db3", providers=[])
     t3.catalog.upsert([Item("local:Iron", "Iron")])
@@ -208,7 +208,7 @@ def test_stock_suggest_and_named_add(monkeypatch, tmp_path):
     from sc_mining.trade import names
     _setup(monkeypatch, tmp_path)
     t = Trade(tmp_path / "db", providers=[])
-    _v = lambda: t
+    _v = lambda: t  # noqa: E731
     for _m in (t_count, t_goals, t_hover, t_stock, t_trade):
         monkeypatch.setattr(_m, "trade", _v)
     monkeypatch.setattr(names, "table", lambda: {"冷冻舱（剜度）": "CryoPod (Vanduul)", "冷冻舱": "CryoPod", "钛": "Titanium"})
@@ -257,7 +257,7 @@ def test_stock_out_set_move_and_places(monkeypatch, tmp_path):
     from sc_mining.trade.storage import EXPECTED_SCHEMA
     _setup(monkeypatch, tmp_path)
     t = Trade(tmp_path / "db", providers=[])
-    _v = lambda: t
+    _v = lambda: t  # noqa: E731
     for _m in (t_count, t_goals, t_hover, t_stock, t_trade):
         monkeypatch.setattr(_m, "trade", _v)
     monkeypatch.setattr("sc_mining.crafting.stockplaces.current_place", lambda: None)
@@ -267,7 +267,7 @@ def test_stock_out_set_move_and_places(monkeypatch, tmp_path):
            StockLine(StockKey("crp", "exact:0", "MOLE 货舱", "unit"), 2)]
     t.inventory.commit(t.inventory.prepare(old, "add"), allow_duplicate=True)
     t = Trade(tmp_path / "db", providers=[])                                       # 升级后第一次打开：能对上的自动归位
-    _v = lambda: t
+    _v = lambda: t  # noqa: E731
     for _m in (t_count, t_goals, t_hover, t_stock, t_trade):
         monkeypatch.setattr(_m, "trade", _v)
     assert list((tmp_path / "db").glob("inventory_地点归位前备份_*.db"))
@@ -342,7 +342,7 @@ CREATE TABLE batch_notes (batch_id TEXT PRIMARY KEY, note TEXT NOT NULL DEFAULT 
 
 def test_stock_v1_import_leaves_old_file(tmp_path):
     """1.6.58：新库存文件第一次打开时，把旧 inventory.db 的物品、库存、记录（带备注）导进来；旧文件一个字节都不动；不重复导"""
-    import hashlib, sqlite3
+    import hashlib, sqlite3  # noqa: E401
     d = tmp_path / "db"
     d.mkdir()
     old = d / "inventory.db"
@@ -358,7 +358,7 @@ def test_stock_v1_import_leaves_old_file(tmp_path):
     t = Trade(d, providers=[])
     assert (d / "dubhe_inventory.db").exists()
     lines = t.inventory.list_stock()
-    assert [(l.key.item_id, l.key.location, l.quantity) for l in lines] == [("ber", "新巴贝奇", 1495000)]
+    assert [(l.key.item_id, l.key.location, l.quantity) for l in lines] == [("ber", "新巴贝奇", 1495000)]  # noqa: E741
     h = t.inventory.history()
     assert h[0]["note"] == "第一次挖" and h[0]["source"] == "库存页" and t.db.get("last_location") == "新巴贝奇"
     assert hashlib.sha256(old.read_bytes()).hexdigest() == before
@@ -402,11 +402,11 @@ def test_stock_bins_reserve_ledger_and_values(monkeypatch, tmp_path):
     from sc_mining.tasks import count as t_count, goals as t_goals, hover as t_hover, stock as t_stock, trade as t_trade
     G = _setup(monkeypatch, tmp_path)
     t = Trade(tmp_path / "db", providers=[])
-    _v = lambda: t
+    _v = lambda: t  # noqa: E731
     for _m in (t_count, t_goals, t_hover, t_stock, t_trade):
         monkeypatch.setattr(_m, "trade", _v)
     monkeypatch.setattr("sc_mining.crafting.stockplaces.current_place", lambda: None)
-    add = lambda **k: t_stock.stock_add_named(**{"name": "钛", "en": "Titanium", "zh": "钛", "kind": "矿物", "unit": "SCU", "quality": "950", **k})
+    add = lambda **k: t_stock.stock_add_named(**{"name": "钛", "en": "Titanium", "zh": "钛", "kind": "矿物", "unit": "SCU", "quality": "950", **k})  # noqa: E731
     # 仓位：建在 New Babbage → 记在新巴贝奇下面；不能重名、不能叫总仓
     r = t_stock.stock_bin_save(place="New Babbage", name="待卖", desc="拉去卖的")
     assert r["bin"] == "新巴贝奇｜待卖" and r["bins"]["新巴贝奇"]["bins"] == [{"name": "待卖", "desc": "拉去卖的"}]
@@ -435,7 +435,7 @@ def test_stock_bins_reserve_ledger_and_values(monkeypatch, tmp_path):
     d = t_stock.stock_reserve(id=sell["id"], qkey=sell["qkey"], location=sell["location"], ukey=sell["ukey"], on=True)
     sell = next(x for x in d["rows"] if x["bin"] == "卖的")
     assert sell["reserved"] and sell["goal_qty"] == 0
-    assert G.stock_lots(t) and all(l[2] != sell["location"] for ls in G.stock_lots(t).values() for l in ls)
+    assert G.stock_lots(t) and all(l[2] != sell["location"] for ls in G.stock_lots(t).values() for l in ls)  # noqa: E741
     d = t_stock.stock_reserve(id=sell["id"], qkey=sell["qkey"], location=sell["location"], ukey=sell["ukey"], on=False)
     assert not next(x for x in d["rows"] if x["bin"] == "卖的")["reserved"]
     # 删仓位：东西放回总仓
@@ -472,7 +472,7 @@ def test_goal_finish_deducts_stock(monkeypatch, tmp_path):
     from sc_mining.crafting import crafting as CR
     G = _setup(monkeypatch, tmp_path)
     t = Trade(tmp_path / "db", providers=[])
-    _v = lambda: t
+    _v = lambda: t  # noqa: E731
     for _m in (t_count, t_goals, t_hover, t_stock, t_trade):
         monkeypatch.setattr(_m, "trade", _v)
     bp = next(b for b in CR.blueprints() if (G.requirements({"kind": "craft", "ref": b["n"], "times": 1}) or [None])
@@ -519,9 +519,9 @@ def test_crafted_item_qualities_from_bonus(monkeypatch, tmp_path):
     bp = C.for_item('Parallax "Sanguine" Energy Assault Rifle', "")
     r = C.solve_slots(bp, mods)
     assert [x["q"] for x in r["slots"]] == [858, 916, 959] and r["avg"] == 911 and r["exact"]
-    G = _setup(monkeypatch, tmp_path)
+    G = _setup(monkeypatch, tmp_path)  # noqa: F841
     t = Trade(tmp_path / "db", providers=[])
-    _v = lambda: t
+    _v = lambda: t  # noqa: E731
     for _m in (t_count, t_goals, t_hover, t_stock, t_trade):
         monkeypatch.setattr(_m, "trade", _v)
     out = t_stock.stock_add_named(name="视差 “血红” 能量突击步枪", en='Parallax "Sanguine" Energy Assault Rifle', zh="视差 “血红” 能量突击步枪",

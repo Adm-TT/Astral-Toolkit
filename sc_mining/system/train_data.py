@@ -10,7 +10,7 @@ import io
 import json
 import os
 import random
-import re
+import re  # noqa: F401
 import threading
 import time
 import zipfile

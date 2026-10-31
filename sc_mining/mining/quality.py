@@ -68,7 +68,7 @@ def tiers(material):
     k = _key(material)
     if not k:
         return []
-    return [(f"{l} 档", q) for l, q in zip(LETTERS, TIERS[k]) if q] + [("完美", PERFECT)]
+    return [(f"{l} 档", q) for l, q in zip(LETTERS, TIERS[k]) if q] + [("完美", PERFECT)]  # noqa: E741
 
 
 def tier_of(material, q):
@@ -82,7 +82,7 @@ def tier_of(material, q):
     k = _key(material)
     if not k:
         return None
-    for i, (l, v) in enumerate(zip(LETTERS, TIERS[k]), 1):
+    for i, (l, v) in enumerate(zip(LETTERS, TIERS[k]), 1):  # noqa: E741
         if v == q:
             return (l, i, len(LETTERS))
     return None

@@ -44,7 +44,7 @@ def build():
     font = ROOT / "sc_mining" / "app" / "web" / "fonts" / "OFL.txt"
     parts.append("一、组件列表")
     parts.append(f"- Python {sys.version.split()[0]}：Python Software Foundation License")
-    parts += [f"- {n} {v}：{l}" for n, v, l, *_ in rows]
+    parts += [f"- {n} {v}：{l}" for n, v, l, *_ in rows]  # noqa: E741
     parts.append("- D-DIN 字体：SIL Open Font License 1.1")
     parts.append("- DejaVu Sans Mono 字体：Bitstream Vera Fonts License（DejaVu 的改动属于公有领域）")
     parts.append("")

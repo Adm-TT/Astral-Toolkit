@@ -10,7 +10,7 @@ import urllib.request
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-from ..core.paths import DATA
+from ..core.paths import DATA  # noqa: E402
 INDEX = DATA / "loot_index.json"
 CACHE_DIR = DATA / "loot"
 BASE = "https://scl.miao.network/d/"

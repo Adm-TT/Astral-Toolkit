@@ -230,8 +230,8 @@ def _fix_by_tiers(comp, rock):
     ①矿名没认出来、但品质只对得上这块石头里某一种矿的档位 → 补上矿名（「8.23% ??? 588」，同石头里只有艾格瑞有 588）；
     ②品质多认了一位（「5882」）、和这种矿某一档只差一个字 → 改成那一档"""
     from .quality_tiers import TIERS
-    owners = lambda q: [m for m, ts in TIERS.items() if q in ts[:-1]]      # 哪几种矿有这一档（1000 每种都有，不算）
-    ice = lambda m: {"Pressurized Ice": "Ice"}.get(m, m)
+    owners = lambda q: [m for m, ts in TIERS.items() if q in ts[:-1]]      # 哪几种矿有这一档（1000 每种都有，不算）  # noqa: E731
+    ice = lambda m: {"Pressurized Ice": "Ice"}.get(m, m)  # noqa: E731
     # 第一遍：有矿名的行，品质不在这种矿的档位里 → 改品质（差一个字）或改矿名（品质只有另一种矿有）
     named = []
     comp = [(n or None, p, q) for n, p, q in comp]           # 空字符串矿名当没认出
@@ -255,7 +255,7 @@ def _fix_by_tiers(comp, rock):
             # 一块石头里同一种矿最多两份（高、低品质）：已经有两行的矿不再往上补（已经补过的行 + 后面本来就有名字的行）
             room = [m for m in present if sum(1 for x, _, _ in out + named[k + 1:] if x == m) < 2]
             cands = [m for m in room if q in (_tiers(m) or ())]
-            count = lambda m: sum(1 for x, _, _ in out + named[k + 1:] if x == m)
+            count = lambda m: sum(1 for x, _, _ in out + named[k + 1:] if x == m)  # noqa: E731
             if not cands:          # 这种石头本来会出的矿（解包的成分表）里只有一种有这一档：火神石石头只出火神石、石英、硅，510 → 硅
                 can = [m for m in _rock_contains(rock) if q in (_tiers(m) or ()) and count(m) < 2]
                 if len(can) == 1:

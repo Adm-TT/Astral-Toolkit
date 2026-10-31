@@ -144,7 +144,7 @@ def main():
     # ---- 原矿扫描（手动输入 + 配装）
     step("手动输入扫描 manual_scan", lambda: c.call("manual_scan", mass=44336, resistance=4, instability=17.32),
          lambda r: (isinstance(r, list) and len(r) > 0 and "short" in r[0]) or "没有破碎方案")
-    g = step("配装 mining_gear", lambda: c.call("mining_gear"), lambda r: bool(r.get("ships")) or "没有船")
+    g = step("配装 mining_gear", lambda: c.call("mining_gear"), lambda r: bool(r.get("ships")) or "没有船")  # noqa: F841
     step("配装：选勘探者", lambda: c.call("set_mining_gear", ship="prospector"))
     # 1.6.41：自造矿头（发射器、汇流排的品质决定激光功率）
     step("配装：自造矿头 S 档", lambda: c.call("set_mining_gear", ship="prospector",

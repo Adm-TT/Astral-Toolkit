@@ -147,7 +147,7 @@ def parse(lines, need_both=False):
 def crop(img):
     from PIL import Image
     w, h = img.size
-    l, t, r, b = REGION
+    l, t, r, b = REGION  # noqa: E741
     piece = img.crop((int(w * l), int(h * t), int(w * r), int(h * b)))
     return piece.resize((piece.width * UPSCALE, piece.height * UPSCALE), Image.LANCZOS)
 
@@ -445,7 +445,7 @@ def _fast_read(piece, boxes):
 _YIELD = {"until": 0.0, "calib_at": 0.0}
 YIELD_RETRY = 5.0               # 让路时字模认不出：隔这么久再试
 YIELD_CALIB = 20.0              # 让路时字模还没学会：隔这么久放行一次识别引擎（不然整段采矿字模都学不会，独立审查 2026-10-27）
-import threading as _threading
+import threading as _threading  # noqa: E402
 _TL = _threading.local()        # 本次读取要不要跳过识别引擎（地点行 / 区域名那两处也看它）
 
 
@@ -469,7 +469,7 @@ def read(img=None, allow_yield=True):
     else:
         w, h = img.size
         screen_h = h
-        l, t, r, b = REGION
+        l, t, r, b = REGION  # noqa: E741
         piece = img.crop((int(w * l), int(h * t), int(w * r), int(h * b)))
     info = None
     from . import gridtext

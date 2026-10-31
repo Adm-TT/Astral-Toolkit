@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-from .paths import USER
+from .paths import USER  # noqa: E402
 FILE = USER / "settings.json"
 
 DEFAULTS = {

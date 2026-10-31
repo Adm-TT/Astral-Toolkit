@@ -10,7 +10,7 @@
 """
 import csv
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field  # noqa: F401
 from functools import lru_cache
 from itertools import combinations
 
@@ -349,7 +349,7 @@ def recommend(mass, resistance_pct, instability, top=3):
 # - 满功率没破开：K > 实际输出 ÷ 质量（下限）
 # 取所有上限中最小、下限中最大，中点就是校准值。记录存在本地 observations.csv。
 
-from ..core.paths import USER as _USER
+from ..core.paths import USER as _USER  # noqa: E402
 LOG = _USER / "observations.csv"
 FIELDS = ["mass", "resistance", "heads", "gadget", "throttle", "broke", "game_forecast"]
 MIN_OBS = 3  # 至少几条记录才启用校准值

@@ -7,7 +7,7 @@
 4. 确认盘点对账与差额写入库存、清零确认（count_apply, count_cancel）。
 """
 import time
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple  # noqa: F401
 
 from ..app import bus
 
@@ -15,10 +15,10 @@ API = {}
 
 
 # ---------------------------------------------------------------- 依赖（2026-10-30 重构阶段 3：不再经 services 转发）
-from ..app.engines.manager import EngineManager
-from ..trade.inspector import _read_tooltip, tooltip_row, tooltip_quality, cell_labels, _is_mineral  # noqa: F401  原来的转发名保留
-from . import stock as _t_stock
-from . import trade as _t_trade
+from ..app.engines.manager import EngineManager  # noqa: E402
+from ..trade.inspector import _read_tooltip, tooltip_row, tooltip_quality, cell_labels, _is_mineral  # noqa: E402, F401
+from . import stock as _t_stock  # noqa: E402
+from . import trade as _t_trade  # noqa: E402
 
 
 def trade():
@@ -64,7 +64,7 @@ def _count_review(place, items):
     from ..crafting import goals as G
     t = trade()
     rev = t.inventory.revision()                       # 先记版本号再读账：读账这会儿别处写了，确认时才查得出来（二审 2026-10-28）
-    book = [l for l in t.inventory.list_stock() if _place_of(l.key.location)[0] == place]
+    book = [l for l in t.inventory.list_stock() if _place_of(l.key.location)[0] == place]  # noqa: E741
     used, rows = set(), []
     # 同一物品 + 品质 + 单位分成了几组（制造品各槽品质不同、两个名字是同一物品）：会配到同一批库存行，先合成一行
     # （各槽品质只留第一组的——库存还不分变体，见待做 #10；复审 2026-10-28）
@@ -81,16 +81,16 @@ def _count_review(place, items):
             merged[k] = v
     for (ids, qkey, ukey), v in merged.items():
         ids = ids if isinstance(ids, frozenset) else frozenset()
-        lines = [l for l in book if l.key.item_id in ids and l.key.quality == qkey and l.key.unit == ukey]
-        have = sum(l.quantity for l in lines)
+        lines = [l for l in book if l.key.item_id in ids and l.key.quality == qkey and l.key.unit == ukey]  # noqa: E741
+        have = sum(l.quantity for l in lines)  # noqa: E741
         game = int(round(v["qty"] * 1_000_000)) if ukey == G.USCU else int(v["qty"])
-        used.update(l.key for l in lines)
+        used.update(l.key for l in lines)  # noqa: E741
         show = (lambda n: scu_amount(n, ukey)) if ukey == G.USCU else (lambda n: n)
         rows.append({"zh": v["zh"], "en": v["en"], "quality": v["quality"], "unit": v["unit"], "cells": v["cells"], "craft": v.get("craft"),
                      "book": show(have), "game": show(game), "delta": show(game - have) if game != have else 0,
-                     "keys": [_kl(l.key) for l in lines], "raw_game": game})
+                     "keys": [_kl(l.key) for l in lines], "raw_game": game})  # noqa: E741
     missing = []
-    for l in book:
+    for l in book:  # noqa: E741
         if l.key in used or l.quantity <= 0:
             continue
         item = t.catalog.get(l.key.item_id)

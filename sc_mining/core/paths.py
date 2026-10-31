@@ -34,8 +34,8 @@ for _d in (DATA, USER, LOGS):
 
 
 # ---------------------------------------------------------------- JSON 文件缓存（2026-10-28 审查后统一，以前各模块手写了 9 份）
-import json as _json
-import threading as _threading
+import json as _json  # noqa: E402
+import threading as _threading  # noqa: E402
 
 _json_cache = {}
 _json_lock = _threading.Lock()

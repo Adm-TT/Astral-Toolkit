@@ -42,7 +42,7 @@ def main():
     for p in samples:
         img = Image.open(p).convert("RGB")
         W, H = img.size
-        l, tp, r, b = S.HOVER_REGION
+        l, tp, r, b = S.HOVER_REGION  # noqa: E741
         crop = img.crop((int(W * l), int(H * tp), int(W * r), int(H * b)))
         med, best = _ms(lambda: recognize(crop, urgent=True))
         out.append(f"- F8 中间区域识别（{p.name} {W}×{H}）：中位 {med:.0f} ms，最快 {best:.0f} ms")

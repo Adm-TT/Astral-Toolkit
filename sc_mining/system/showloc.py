@@ -7,7 +7,7 @@
 import sys
 import threading
 import time
-from pathlib import Path
+from pathlib import Path  # noqa: F401
 
 GAME_EXE = "starcitizen.exe"
 _MOUSE_VK = (0x01, 0x02, 0x04, 0x05, 0x06)

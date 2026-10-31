@@ -32,7 +32,7 @@ class MarketService:
         self._key_locks = {}        # (物品, 品质档, 买/卖) → 锁：同一个查价连点两下只联网一次，不同物品可以同时查
         self.cancelled = threading.Event()
         for provider in providers:
-            if hasattr(provider,'http'):provider.http.cancel_event=self.cancelled
+            if hasattr(provider,'http'):provider.http.cancel_event=self.cancelled  # noqa: E701
 
     def lookup(self, query):
         found = {i.id: i for i in self.catalog.search(query)}
@@ -46,13 +46,13 @@ class MarketService:
                 if not items and has_chinese(query):
                     for en in to_english(query)[:3]:
                         items = list(items) + list(provider.lookup(en))
-                        if self.cancelled.is_set():break
+                        if self.cancelled.is_set():break  # noqa: E701
                     if items:
                         self.catalog.upsert(items)
                         for i in items:
                             if i.name in to_english(query)[:3]:
                                 self.catalog.add_alias(i.id, query.strip())
-                if self.cancelled.is_set():break
+                if self.cancelled.is_set():break  # noqa: E701
                 self.catalog.upsert(items)
                 found.update({i.id: i for i in items})
             except Exception:

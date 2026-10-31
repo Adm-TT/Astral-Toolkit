@@ -470,7 +470,7 @@ class Glyphs:
                         groups.append((im.copy(), 1))
                 big = [g for g in groups if g[1] >= 2] or groups
                 for m, n in big:
-                    T.append(m); owner.append(ki)
+                    T.append(m); owner.append(ki)  # noqa: E702
             self.T[s] = np.stack(T)
             self.owner[s] = np.array(owner)
             self.starts[s] = np.searchsorted(self.owner[s], np.arange(len(keys)))
@@ -535,16 +535,16 @@ class Glyphs:
         out, sc_of = [], []
         for i in range(len(imgs)):
             if ink[i] < 3:
-                out.append(" "); sc_of.append(1.0)
+                out.append(" "); sc_of.append(1.0)  # noqa: E702
                 continue
             sc = float(SK[i, best[i]])
             ch = keys[best[i]]
             if sc < MIN_SCORE:
                 if ink[i] < 6:                      # 几个像素的墨、又谁都不像：邻格漏进来的，当空格
-                    out.append(" "); sc_of.append(1.0)
+                    out.append(" "); sc_of.append(1.0)  # noqa: E702
                     continue
                 ch, sc = "?", 0.0
-            out.append(ch); sc_of.append(sc)
+            out.append(ch); sc_of.append(sc)  # noqa: E702
         _digit_context(out, sc_of, SK, keys)
         low = min([v for v, c in zip(sc_of, out) if c != " "] or [1.0])
         return "".join(out).strip(), low, scale
