@@ -9,7 +9,7 @@
 [![国内下载 AT 1.1.3](docs/download_cn.png)](https://at-dl-1323647399.cos.ap-guangzhou.myqcloud.com/releases/v1.1.3/AT-win-Setup.exe)
 
 - **国内下载（推荐）**：点上面的按钮，或复制地址：https://at-dl-1323647399.cos.ap-guangzhou.myqcloud.com/releases/v1.1.3/AT-win-Setup.exe
-- **海外下载**：https://dl.astral-trade.com/releases/v1.1.3/AT-win-Setup.exe ，或 [GitHub 发行版](https://github.com/Adm-TT/Astral-Toolkit/releases)
+- **海外下载**：https://dl.astral-trade.com/releases/v1.1.3/AT-win-Setup.exe
 
 **安装**：双击 `AT-win-Setup.exe`。Windows 提示「已保护你的电脑」时，点「更多信息」→「仍要运行」。不需要安装 Python，不需要管理员权限。装好后会自动提示新版本，升级不影响设置和记录。
 
@@ -36,7 +36,7 @@
 
 AT 靠截屏识别文字、读游戏写出的日志文件工作；不模拟按键，不读写游戏内存，不改游戏文件。会联网检查更新、下载数据；按 F10 问题反馈时会把整屏截图、最近的识别截图、识别结果、当时位置和日志片段发给作者；F8 认物品名的一行字小截图（认错的都存，认对的抽一部分）也会攒批发送；两项设置里都能关。
 
-**关于风险，说实话：** AT 只截屏识别文字、读游戏日志，不读写内存、不改游戏文件，不模拟任何键盘或鼠标输入。不自动战斗、不自动开船。RSI 用户协议禁止收集游戏信息的第三方软件和自动化软件，读屏处在灰色地带。我们无法保证 CIG / RSI 认可，也无法保证使用不会引发账号调查或限制，请自行判断；介意的话可以只用不读屏的功能（查物品、蓝图、路标）。
+**关于风险，说实话：** AT 只截屏识别文字、读游戏日志，不读写内存、不改游戏文件，不模拟任何键盘或鼠标输入。1.1.1 及以前的版本有过模拟按键（防挂机、双击 W 自动跑、记录路标时自动输入 `/showlocation`），1.1.2 起全部删除，当前版本 1.1.3。不自动战斗、不自动开船。RSI 用户协议禁止收集游戏信息的第三方软件和自动化软件，读屏处在灰色地带。我们无法保证 CIG / RSI 认可，也无法保证使用不会引发账号调查或限制，请自行判断；介意的话可以只用不读屏的功能（查物品、蓝图、路标）。
 
 ## 从源码运行
 
@@ -79,4 +79,4 @@ AT 是玩家自制的非官方工具，与 Cloud Imperium 集团旗下公司无�
 
 本仓库只包含 AT 客户端；ATA 交易平台、服务器，以及阿塔的形象和声音不在开源范围内。
 
-作者：Adm_TT（游戏 ID）。还没注册星际公民的话，注册时可以填邀请码 `STAR-4CNY-K3YT`：https://www.robertsspaceindustries.com/enlist?referral=STAR-4CNY-K3YT
+作者：Adm_TT（游戏 ID）。

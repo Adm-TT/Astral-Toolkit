@@ -2,7 +2,7 @@
 
 安装（推荐：安装版，不用装 Python）：
   1. 下载 AT-win-Setup.exe（国内：https://at-dl-1323647399.cos.ap-guangzhou.myqcloud.com/releases/v1.1.3/AT-win-Setup.exe ；
-     海外：https://dl.astral-trade.com/releases/v1.1.3/AT-win-Setup.exe 或 GitHub 发行版），双击安装（不需要管理员权限，装在「AppData\Local\AT」）。
+     海外：https://dl.astral-trade.com/releases/v1.1.3/AT-win-Setup.exe），双击安装（不需要管理员权限，装在「AppData\Local\AT」）。
   2. 运行安装程序时 Windows 可能弹「Windows 已保护你的电脑」：点「更多信息」→「仍要运行」。
      AT 是免费的个人作品，没有购买数字签名证书，所以 Windows 不认识它；杀毒软件拦截时添加信任即可。
   3. 以后有新版本，AT 会提示；在「设置与更新」点「下载并升级」，自动下载、安装并重新打开，设置和记录都保留。
@@ -48,5 +48,3 @@
 请先阅读「免责声明.txt」。
 
 作者：Adm_TT（游戏 ID）
-还没注册星际公民的话，注册时可以填作者的邀请码：STAR-4CNY-K3YT
-https://www.robertsspaceindustries.com/enlist?referral=STAR-4CNY-K3YT
