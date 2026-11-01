@@ -3,6 +3,7 @@
 全部用 tmp_path 当 data/ 根（monkeypatch paths.DATA），不读真实 data/、不写 userdata/。"""
 
 from tests.test_gamedata import _write_min_sources
+from sc_mining.gamedata._cache import VersionCache as _VC  # noqa: E402
 
 
 def _setup(monkeypatch, tmp_path, **override):
@@ -306,8 +307,8 @@ def test_places_refresh_after_version_change(monkeypatch, tmp_path):
     from sc_mining.crafting import stockplaces as SP
 
     _setup(monkeypatch, tmp_path)
-    monkeypatch.setattr(SP, "_PLACES", {"ver": None, "list": None})
-    monkeypatch.setattr(SP, "_INDEX", {"of": None, "idx": None})
+    monkeypatch.setattr(SP, "_PLACES", _VC())
+    monkeypatch.setattr(SP, "_INDEX", _VC())
     first = SP.places()
     assert [p["en"] for p in first] == [
         "New Babbage"
@@ -341,8 +342,8 @@ def test_places_cache_clear_still_works(monkeypatch, tmp_path):
     monkeypatch.setattr(
         uex, "apply_live", lambda m: False
     )  # 真 clear_caches 会读真实 prices.json、改 mining.data
-    monkeypatch.setattr(SP, "_PLACES", {"ver": None, "list": None})
-    monkeypatch.setattr(SP, "_INDEX", {"of": None, "idx": None})
+    monkeypatch.setattr(SP, "_PLACES", _VC())
+    monkeypatch.setattr(SP, "_INDEX", _VC())
     first = SP.places()
     clear_caches()  # 汉化包换了：data_pack 按名字清 places / _index
     assert SP.places() is not first
@@ -742,7 +743,7 @@ def _legacy_build(monkeypatch, tmp_path):
 def _fresh_search(monkeypatch):
     from sc_mining.crafting import itemsearch as IS
 
-    monkeypatch.setattr(IS, "_cache", {"key": None, "index": None})
+    monkeypatch.setattr(IS, "_cache", _VC())
     return IS
 
 

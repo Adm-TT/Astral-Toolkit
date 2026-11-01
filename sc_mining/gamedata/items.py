@@ -5,6 +5,7 @@
 
 from dataclasses import dataclass
 
+from ._cache import VersionCache
 from ._ready import use
 from ._types import Item, ItemCandidate
 
@@ -53,29 +54,27 @@ def all(snap=None) -> tuple[ItemRow, ...]:  # noqa: A001 —— 计划定的名�
         )
 
 
-_cand: dict[str, tuple[ItemCandidate, ...]] = {}
+_cand: VersionCache[tuple[ItemCandidate, ...]] = VersionCache()
+
+
+def _load_candidates(s) -> tuple[ItemCandidate, ...]:
+    aka: dict[str, list[str]] = {}
+    for item_id, name in s.execute(
+        "select item_id, name from item_names where kind = 'aka' order by rowid"
+    ):
+        aka.setdefault(item_id, []).append(name)
+    return tuple(
+        ItemCandidate(i, en, tuple(aka.get(i, ())), o)
+        for i, en, o in s.execute(
+            "select item_id, en, source_order from items order by source_order"
+        )
+    )
 
 
 def candidates(snap=None) -> tuple[ItemCandidate, ...]:
     """OCR 纠错 / 模糊搜索的轻量候选：(item_id, 英文名, 旧写法们, 顺序)，按导入顺序；按内容版本缓存一份"""
     with use(snap) as s:
-        hit = _cand.get(s.data_version)
-        if hit is not None:
-            return hit
-        aka: dict[str, list[str]] = {}
-        for item_id, name in s.execute(
-            "select item_id, name from item_names where kind = 'aka' order by rowid"
-        ):
-            aka.setdefault(item_id, []).append(name)
-        out = tuple(
-            ItemCandidate(i, en, tuple(aka.get(i, ())), o)
-            for i, en, o in s.execute(
-                "select item_id, en, source_order from items order by source_order"
-            )
-        )
-        _cand.clear()  # 只留当前版本
-        _cand[s.data_version] = out
-        return out
+        return _cand.get(s, _load_candidates)
 
 
 def names_of(item_id: str, snap=None) -> tuple[tuple[str, str, str], ...]:

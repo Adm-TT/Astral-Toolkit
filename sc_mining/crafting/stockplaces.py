@@ -10,6 +10,8 @@
 import re
 from collections import Counter
 
+from ..gamedata._cache import VersionCache
+
 SYS_ORDER = ("Stanton", "Pyro", "Nyx")
 SYS_ZH = {"Stanton": "斯坦顿", "Pyro": "派罗", "Nyx": "尼克斯"}
 KIND_ORDER = ("城市", "空间站", "休息站", "星门")
@@ -122,27 +124,21 @@ def _data_version():
         return None
 
 
-# 按游戏数据内容版本缓存：更新数据后自己失效
-_PLACES: dict = {"ver": None, "list": None}
-_INDEX: dict = {"of": None, "idx": None}
+# 按游戏数据内容版本缓存：更新数据后自己失效（公共工具 gamedata/_cache.VersionCache）
+_PLACES: VersionCache = VersionCache()
+_INDEX: VersionCache = VersionCache()  # 键是 places() 那份的 id：跟着它走
 
 
 def _clear_cache():
     """data_pack.clear_caches 按名字清（汉化包换了时地点中文名也要重算）"""
-    _PLACES.update(ver=None, list=None)
-    _INDEX.update(of=None, idx=None)
+    _PLACES.clear()
+    _INDEX.clear()
 
 
 def places():
-    """所有地点：[{label, zh, en, sys, sys_zh, planet_zh, moon_zh, path, kind, keys}]，按星系、星球排好"""
-    v = _data_version()
-    hit = _PLACES["list"]
-    if hit is not None and _PLACES["ver"] == v:
-        return hit
-    out = _build_places()
-    # 记建之前读到的版本：建的过程中发布了新库，下次会重算；之前还没有库（这次刚建好）才记建好后的
-    _PLACES.update(ver=v if v is not None else _data_version(), list=out)
-    return out
+    """所有地点：[{label, zh, en, sys, sys_zh, planet_zh, moon_zh, path, kind, keys}]，按星系、星球排好。
+    键是建之前读到的版本：建的过程中发布了新库，下次会重算；之前还没有库（这次刚建好）才记建好后的"""
+    return _PLACES.get_for(_data_version(), _build_places, key_after=_data_version)
 
 
 setattr(places, "cache_clear", _clear_cache)
@@ -202,13 +198,15 @@ def _build_places():
 
 def _index():
     ps = places()
-    if _INDEX["of"] is not ps:  # 跟着 places() 那份走
+
+    def build():
         idx = {}
         for p in ps:
             for k in p["keys"]:
                 idx.setdefault(k, []).append(p)
-        _INDEX.update(of=ps, idx=idx)
-    return _INDEX["idx"]
+        return idx
+
+    return _INDEX.get_for(id(ps), build)  # 跟着 places() 那份走
 
 
 setattr(_index, "cache_clear", _clear_cache)

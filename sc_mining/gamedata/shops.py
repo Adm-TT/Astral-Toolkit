@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 
+from ._cache import VersionCache
 from ._ready import use
 from ._types import ShopRow
 
@@ -17,26 +18,24 @@ class CatalogItem:
     source_order: int
 
 
-_cat: dict[str, tuple[CatalogItem, ...]] = {}
+_cat: VersionCache[tuple[CatalogItem, ...]] = VersionCache()
+
+
+def _load_catalog(s) -> tuple[CatalogItem, ...]:
+    from ..crafting.shops import _fold
+
+    return tuple(
+        CatalogItem(i, en, cat, _fold(en), o)
+        for i, en, cat, o in s.execute(
+            "select uex_item_id, en, cat, source_order from shop_items order by source_order"
+        )
+    )
 
 
 def catalog(snap=None) -> tuple[CatalogItem, ...]:
     """shops.json 的 items，按源顺序；按内容版本缓存一份（以前每次查询都要把几千个名字折叠一遍）"""
-    from ..crafting.shops import _fold
-
     with use(snap) as s:
-        hit = _cat.get(s.data_version)
-        if hit is not None:
-            return hit
-        out = tuple(
-            CatalogItem(i, en, cat, _fold(en), o)
-            for i, en, cat, o in s.execute(
-                "select uex_item_id, en, cat, source_order from shop_items order by source_order"
-            )
-        )
-        _cat.clear()  # 只留当前版本
-        _cat[s.data_version] = out
-        return out
+        return _cat.get(s, _load_catalog)
 
 
 _COLS = "uex_item_id, shop_name, place_text, price_buy, price_sell, version, f0, f1, f2, f3, f4, f5, source_order"
