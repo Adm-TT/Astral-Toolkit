@@ -22,7 +22,7 @@
 
 - **重复实现**：有没有新写了仓库里已有的东西（折叠名字、读 JSON、算距离、清缓存这类小工具）？已有的在 `core/`、`gamedata/`、各模块顶部；新写一份就是重复，报 Important。
 - **没有归属的过渡代码**：留着的兼容层、双路径、门面转发、「先这样以后再删」的代码，必须在注释里写清**删除条件和归属批次 / 待办**（例如「全部读者迁到 gamedata 后删，见待做」）；没写的报 Important。
-- **删得不干净**：删了函数 / 模块 / 脚本的 PR，调用方、测试、lint 忽略项（`pyproject.toml` 的 per-file-ignores、`.basedpyright/baseline.json` 条目）是不是跟着删了？只删实现不删周边的报 Important。
+- **删得不干净**：删了函数 / 模块 / 脚本的 PR，调用方和测试是不是跟着删了？只删实现不删周边的报 Important。lint 忽略项（`pyproject.toml` 的 per-file-ignores、`.basedpyright/baseline.json` 条目）按约定由合并方合并后统一清理，但 PR 说明里必须列出该删哪些条目；没列的报 Nit。
 - **死代码不单独报**：没人引用的函数、死导入由 `ruff` / `vulture` 查，审查时只在它们恰好出现在本 PR 的 diff 里才提一句。
 
 ## 优先级
