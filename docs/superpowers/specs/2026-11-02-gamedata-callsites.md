@@ -44,7 +44,7 @@
 |---|---|---|---|---|
 | 每对 zh→en | `names.table()` L16-38 | 先过 `_junk(en, known)`（去掉“视差步枪→HD”这种假英文名，L40-47）；`zh_only_names` 只在 `len(_norm_zh(zh)) >= 3` 且 zh 不存在时 `setdefault` | 不单独建表：由 `itemsearch` L113-118 消费——`entry(en)`，`loc=True`，`zh` 首个，`zks.add(zh_key(zh))` → `item_names(kind='zh_loc')`、`items.loc` | 字典顺序 → 首个胜出 |
 
-地基决定：导入时**直接调用 `trade.names.table()`** 复用它的过滤规则（它读 `paths.DATA`，与建库读同一目录），不复制 `_junk`。批 6（names/i18n）再决定是否把过滤规则搬进库。
+地基实际做法（2026-11-02 审查后更正）：导入**不调用** `trade.names.table()`（它经 `shops.load()` / `loot.load_index()` 走模块级缓存，建库时换不掉根目录），而是 `_import._names_table()` 直接 import 复用 `names._junk / _fold_en / _norm_zh`，`known` 集合从已读的 shops/loot 源算——规则与 `_known_names()` 相同；`zh_names.json` 缺失时同样返回空表、不补 `zh_only_names`。**维护约束**：改 `names.table()` 的规则必须同步改 `_import._names_table` 并提升 `IMPORTER_VERSION`。批 6（names/i18n）再决定是否把过滤规则搬进库。
 
 ## 4. name_aliases.json（10 KB）
 

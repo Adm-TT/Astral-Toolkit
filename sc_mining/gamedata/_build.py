@@ -17,16 +17,19 @@ from ._manifest import Manifest, read_manifest, write_manifest
 from ._paths import db_path, gamedata_dir, tmp_dir
 from ._schema import DDL, IMPORTER_VERSION, SCHEMA_VERSION
 from ._sources import SourceBytes, read_sources
-from ._types import BuildError
+from ._types import BuildError, GamedataUnavailable
 
 _REQUIRED_NONEMPTY = ("items", "shop_rows")  # 源不空时这两张表不能空
 
 
 def data_version(sources: dict[str, SourceBytes]) -> str:
     """源文件清单（名字、在不在、sha256）+ schema + 导入规则 → 稳定的内容版本"""
+    from ..core import version as _v
+
     payload = {
         "schema": SCHEMA_VERSION,
         "importer": IMPORTER_VERSION,
+        "app": _v.VERSION,  # 导入规则复用 itemsearch / names / i18n 的代码，升级应用就得重建（审查 2026-11-02）
         "files": sorted((s.name, s.present, s.sha256) for s in sources.values()),
     }
     return hashlib.sha256(
@@ -69,7 +72,7 @@ def build(sources: dict[str, SourceBytes], generation_id: str, dv: str) -> Path:
         return dst
     except BuildError:
         raise
-    except (sqlite3.Error, OSError, ValueError, TypeError, KeyError, IndexError) as e:
+    except Exception as e:  # noqa: BLE001 —— 源结构不对会抛各种异常，统一成 BuildError，旧库不受影响
         raise BuildError(f"建游戏数据库失败：{e}") from e
     finally:
         if conn is not None:
@@ -106,9 +109,23 @@ def _verify(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> None:
                 raise BuildError(f"游戏数据库的 {t} 表是空的，源数据有问题")
 
 
+def _db_usable(m: Manifest) -> bool:
+    """清单指的库真的能打开、代号对得上（库文件坏了或对不上就重建；审查 2026-11-02 第 4 条）"""
+    from ._db import _open_readonly
+
+    try:
+        _open_readonly(m).close()
+        return True
+    except GamedataUnavailable:
+        return False
+
+
 def publish(generation_id: str, dv: str) -> Manifest:
     m = Manifest(generation_id, dv, SCHEMA_VERSION, db_path(generation_id).name)
-    write_manifest(m)
+    try:
+        write_manifest(m)
+    except OSError as e:  # Windows 清单被占住：新库留着，清单不动，下次再试
+        raise BuildError(f"发布游戏数据库清单失败：{e}") from e
     return m
 
 
@@ -119,13 +136,16 @@ def rebuild_if_needed(force: bool = False) -> Manifest:
     with write_lock():
         sources = read_sources(paths.DATA)
         dv = data_version(sources)
-        m = read_manifest()
+        try:
+            m = read_manifest()
+        except GamedataUnavailable:
+            m = None  # 清单坏了：当成没有，重建（审查 2026-11-02 第 3 条）
         if (
             not force
             and m is not None
             and m.data_version == dv
             and m.schema_version == SCHEMA_VERSION
-            and db_path(m.generation_id).exists()
+            and _db_usable(m)
         ):
             return m
         gen = new_generation_id()

@@ -30,12 +30,11 @@ def _names_table(sources: dict[str, SourceBytes]) -> dict[str, str]:
     """trade/names.table() L16-38 的规则：去假英文名；zh_only_names 只补中文 ≥3 字且还没有的"""
     from ..trade.names import _junk, _norm_zh
 
+    zh_names = _d(sources, "zh_names.json", None)
+    if zh_names is None:
+        return {}  # names.table() 读不到 zh_names.json 直接返回空，不补 zh_only_names：这里保持一致（审查 2026-11-02 第 6 条）
     known = _known_en(sources)
-    out = {
-        zh: en
-        for zh, en in (_d(sources, "zh_names.json", {}) or {}).items()
-        if not _junk(en, known)
-    }
+    out = {zh: en for zh, en in zh_names.items() if not _junk(en, known)}
     for zh, en in (_d(sources, "zh_only_names.json", {}) or {}).items():
         if not _junk(en, known) and len(_norm_zh(zh)) >= 3:
             out.setdefault(zh, en)
@@ -72,7 +71,9 @@ def import_items(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> N
         return e
 
     def add_zk(e, k, kind, name):
-        if k and k not in e["zks"]:
+        if (
+            k not in e["zks"]
+        ):  # 空键也先留着：原代码的 set 里有空键，第一轮过滤会用到，第 7 段才剔（审查 N1）
             e["zks"].append(k)
         e.setdefault("names", []).append((kind, name, k))
 

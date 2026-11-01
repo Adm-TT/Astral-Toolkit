@@ -598,16 +598,18 @@ def test_updating_skips_rebuild_when_body_raises(monkeypatch, tmp_path):
 
 
 def test_cleanup_skips_when_other_instance_running(monkeypatch, tmp_path):
-    from sc_mining.gamedata import _lock
-    from sc_mining.gamedata._build import cleanup_old_generations
+    from sc_mining.gamedata import _build, _lock
     from sc_mining.gamedata._paths import gamedata_dir
 
     _data_root(monkeypatch, tmp_path)
-    monkeypatch.setattr(_lock, "other_instance_running", lambda: True)
-    _make_db(tmp_path, "g1", "v1")
-    _make_db(tmp_path, "g2", "v2")
-    assert cleanup_old_generations() == []
-    assert len(list(gamedata_dir().glob("gamedata-*.db"))) == 2
+    monkeypatch.setattr(_build, "other_instance_running", lambda: True)
+    monkeypatch.setattr(
+        _lock, "other_instance_running", lambda: True
+    )  # 别碰真实 userdata/instance.lock
+    for i, g in enumerate(("g1", "g2", "g3")):  # 三代：keep=1 本来会删一个
+        _make_db(tmp_path, g, f"v{i}")
+    assert _build.cleanup_old_generations(keep=1) == []
+    assert len(list(gamedata_dir().glob("gamedata-*.db"))) == 3
 
 
 def test_cleanup_keeps_current_and_one_previous(monkeypatch, tmp_path):
@@ -707,3 +709,137 @@ def test_cli_check_without_db_returns_2(monkeypatch, tmp_path):
 
     _data_root(monkeypatch, tmp_path)
     assert T.main(["--data", str(tmp_path), "--check"]) == 2
+
+
+# ---------------------------------------------------------------- 审查整改（新上下文审查 2026-11-02）
+
+
+def test_updating_swallows_any_rebuild_exception(monkeypatch, tmp_path):
+    """审查第 2 条：清单被占（PermissionError）或源结构不对（AttributeError）时，源已写好，不能让更新流程报失败"""
+    import sc_mining.gamedata as G
+    from sc_mining.gamedata import _build
+
+    _data_root(monkeypatch, tmp_path)
+
+    def boom(force=False):
+        raise PermissionError("current.json 被占用")
+
+    monkeypatch.setattr(_build, "rebuild_if_needed", boom)
+    with G.updating():
+        pass
+    assert "被占用" in (G.last_error() or "")
+
+
+def test_build_wraps_unexpected_source_shape_in_build_error(monkeypatch, tmp_path):
+    """审查第 2 条：shops.json 是合法 JSON 但结构不对 → BuildError，不是裸 AttributeError"""
+    from sc_mining.gamedata import BuildError
+    from sc_mining.gamedata._build import rebuild_if_needed
+    from tests.minipytest import raises
+
+    _data_root(monkeypatch, tmp_path)
+    _write_min_sources(tmp_path, **{"shops.json": [1, 2, 3]})
+    with raises(BuildError):
+        rebuild_if_needed()
+
+
+def test_rebuild_recovers_from_corrupt_manifest(monkeypatch, tmp_path):
+    """审查第 3 条：清单坏了要能重建，不是永远报错"""
+    from sc_mining.gamedata._build import rebuild_if_needed
+    from sc_mining.gamedata._manifest import read_manifest
+    from sc_mining.gamedata._paths import manifest_path
+
+    _data_root(monkeypatch, tmp_path)
+    _write_min_sources(tmp_path)
+    manifest_path().parent.mkdir(parents=True, exist_ok=True)
+    manifest_path().write_text("{", encoding="utf-8")
+    m = rebuild_if_needed()
+    assert read_manifest() == m
+
+
+def test_ensure_ready_rebuilds_when_db_file_corrupt(monkeypatch, tmp_path):
+    """审查第 4 条：库文件在但是坏的 → 启动要重建新一代，不能跳过"""
+    import sc_mining.gamedata as G
+    from sc_mining.gamedata._build import rebuild_if_needed
+    from sc_mining.gamedata._paths import db_path
+
+    _data_root(monkeypatch, tmp_path)
+    _write_min_sources(tmp_path)
+    m1 = rebuild_if_needed()
+    db_path(m1.generation_id).write_bytes(b"garbage")
+    m2 = G.ensure_ready()
+    assert m2.generation_id != m1.generation_id
+    with G.snapshot() as s:
+        assert s.execute("select count(*) from items")[0][0] > 0
+
+
+def test_data_version_includes_app_version(monkeypatch, tmp_path):
+    """审查第 5 条：导入规则是代码，升级应用后库要重建"""
+    from sc_mining.core import version as V
+    from sc_mining.gamedata._build import data_version
+    from sc_mining.gamedata._sources import read_sources
+
+    _write_min_sources(tmp_path)
+    a = data_version(read_sources(tmp_path))
+    monkeypatch.setattr(V, "VERSION", "99.99.99")
+    b = data_version(read_sources(tmp_path))
+    assert a != b
+
+
+def test_names_table_without_zh_names_is_empty(monkeypatch, tmp_path):
+    """审查第 6 条：没有 zh_names.json 时 names.table() 返回空，不补 zh_only_names；导入要一致"""
+    from sc_mining.gamedata._import import _names_table
+    from sc_mining.gamedata._sources import read_sources
+
+    _write_min_sources(tmp_path)
+    (tmp_path / "zh_names.json").unlink()
+    assert _names_table(read_sources(tmp_path)) == {}
+
+
+def test_import_matches_itemsearch_index_on_sample(monkeypatch, tmp_path):
+    """审查第 8 条：在同一份小样本上，建库结果和 itemsearch._build_locked() 逐条一致"""
+    from sc_mining.crafting import itemsearch, loot, shops
+    from sc_mining.gamedata import snapshot
+    from sc_mining.gamedata._build import rebuild_if_needed
+
+    _data_root(monkeypatch, tmp_path)
+    _write_min_sources(tmp_path)
+    monkeypatch.setattr(shops, "CACHE", tmp_path / "shops.json")
+    monkeypatch.setattr(shops, "_data", None)
+    monkeypatch.setattr(loot, "INDEX", tmp_path / "loot_index.json")
+    monkeypatch.setattr(loot, "_index", None)
+    monkeypatch.setattr(itemsearch, "_cache", {"key": None, "index": None})
+    index = itemsearch._build_locked()
+    assert index is not None
+    rows = index["rows"]
+    rebuild_if_needed()
+    with snapshot() as s:
+        db = s.execute(
+            "select item_id, en, zh, cat, has_shop, has_loot, loc, wiki, wtype, wsize, desc, variant, zlen, source_order from items order by source_order"
+        )
+        aka = {}
+        for iid, name in s.execute(
+            "select item_id, name from item_names where kind='aka'"
+        ):
+            aka.setdefault(iid, []).append(name)
+    exp = [
+        (
+            e["ek"],
+            e["en"],
+            e["zh"],
+            e["cat"],
+            int(e["shop"] is not None),
+            int(e["loot"]),
+            int(e["loc"]),
+            int(bool(e.get("wiki"))),
+            e.get("wtype") or "",
+            e.get("wsize"),
+            e.get("desc") or "",
+            int(e["variant"]),
+            e["zlen"],
+            i,
+        )
+        for i, e in enumerate(rows)
+    ]
+    assert db == exp
+    assert aka == {e["ek"]: e["aka"] for e in rows if e.get("aka")}
+    assert len(rows) >= 4

@@ -108,7 +108,7 @@ def updating() -> Iterator[None]:
                 try:
                     _build.rebuild_if_needed()
                     _state["last_error"] = None
-                except GamedataError as e:
+                except Exception as e:  # noqa: BLE001 —— 源已经写好了，建库失败只记录，不让更新流程报失败
                     _state["last_error"] = (
                         f"数据已更新，但游戏数据库重建失败，仍在用旧数据：{e}"
                     )
