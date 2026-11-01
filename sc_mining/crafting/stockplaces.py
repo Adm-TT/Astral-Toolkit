@@ -126,7 +126,9 @@ def _data_version():
 
 # 按游戏数据内容版本缓存：更新数据后自己失效（公共工具 gamedata/_cache.VersionCache）
 _PLACES: VersionCache = VersionCache()
-_INDEX: VersionCache = VersionCache()  # 键是 places() 那份的 id：跟着它走
+_INDEX: VersionCache = VersionCache(
+    identity=True
+)  # 键是 places() 那份对象本身（按 is 比）：跟着它走
 
 
 def _clear_cache():
@@ -206,7 +208,7 @@ def _index():
                 idx.setdefault(k, []).append(p)
         return idx
 
-    return _INDEX.get_for(id(ps), build)  # 跟着 places() 那份走
+    return _INDEX.get_for(ps, build)  # 跟着 places() 那份走
 
 
 setattr(_index, "cache_clear", _clear_cache)

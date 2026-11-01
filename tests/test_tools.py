@@ -17,7 +17,7 @@ from sc_mining.crafting import shops, wikelo
 import json, time  # noqa: E401, F401, F811
 from sc_mining.crafting import shops, loot, acquire  # noqa: F811
 from sc_mining.navigation import position, navigate
-from sc_mining.gamedata._cache import VersionCache as _VC  # noqa: E402
+from sc_mining.gamedata._cache import VersionCache as _VC
 
 
 # ======================================================================

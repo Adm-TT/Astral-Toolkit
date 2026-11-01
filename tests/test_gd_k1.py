@@ -48,17 +48,41 @@ def test_version_cache_clear_and_peek():
 
 
 def test_version_cache_get_for_none_key():
-    """还没有库（版本 None）：没 key_after 就不缓存；有 key_after 就用算完后的版本当键（stockplaces 的用法）"""
+    """还没有库（版本 None）：和以前的字典写法一样照样缓存在 None 下；给了 key_after 就在算完后用它再取一次键（stockplaces 的用法）"""
     from sc_mining.gamedata._cache import VersionCache
 
     c = VersionCache()
     calls = []
     c.get_for(None, lambda: calls.append(1) or "x")
-    c.get_for(None, lambda: calls.append(1) or "x")
-    assert calls == [1, 1] and c.peek() is None
+    assert c.get_for(None, lambda: calls.append(1) or "x2") == "x" and calls == [1]
+    c.clear()
     c.get_for(None, lambda: calls.append(1) or "y", key_after=lambda: "v9")
     assert c.peek() == "y"
-    assert c.get_for("v9", lambda: calls.append(1) or "z") == "y" and calls == [1, 1, 1]
+    assert c.get_for("v9", lambda: calls.append(1) or "z") == "y" and calls == [1, 1]
+    assert (
+        c.get_for(None, lambda: calls.append(1) or "w") == "w"
+    )  # 键已是 v9，None 不命中
+
+
+def test_version_cache_identity_mode():
+    """identity=True：按 is 比，内容相等的另一个对象不命中；缓存持有键，旧键对象不会被回收后地址复用"""
+    import gc
+
+    from sc_mining.gamedata._cache import VersionCache
+
+    c = VersionCache(identity=True)
+    k1 = (1, 2)
+    v1 = c.get_for(k1, lambda: ["a"])
+    assert c.get_for(k1, lambda: ["b"]) is v1
+    assert c.get_for(tuple([1, 2]), lambda: ["c"]) == ["c"]  # 相等但不是同一个对象
+    # 连换两代：第一代建过，第二代没建，第三代新对象——不能误命中第一代
+    c.clear()
+    gen1 = [object()]
+    c.get_for(gen1, lambda: "idx1")
+    del gen1
+    gc.collect()
+    gen3 = [object()]
+    assert c.get_for(gen3, lambda: "idx3") == "idx3"
 
 
 def test_topics_share_version_cache(monkeypatch, tmp_path):
@@ -100,6 +124,36 @@ def test_topics_share_version_cache(monkeypatch, tmp_path):
     assert any(c.en == "Brand New Thing" for c in b[1])
 
 
+def test_stockplaces_index_follows_current_places_across_generations(
+    monkeypatch, tmp_path
+):
+    """连换两代、中间只调 places() 不调 _index()：_index() 里的对象必须属于当前这份 places()（复审第 1 条：以前按 id 当键会误命中）"""
+    import json
+
+    import sc_mining.gamedata as G
+    from sc_mining.crafting import stockplaces as SP
+    from sc_mining.gamedata._cache import VersionCache
+    from tests.test_gamedata import _write_min_sources
+
+    _setup(monkeypatch, tmp_path)
+    monkeypatch.setattr(SP, "_PLACES", VersionCache())
+    monkeypatch.setattr(SP, "_INDEX", VersionCache(identity=True))
+    SP._index()
+    for n in range(2):
+        src = json.loads((tmp_path / "shops.json").read_text(encoding="utf-8"))
+        src["items"][str(900 + n)] = [f"Thing {n}", "Misc"]
+        _write_min_sources(tmp_path, **{"shops.json": src})
+        with G.updating():
+            pass
+        ps = SP.places()
+        if n == 0:
+            continue  # 第二代只建 places，不建索引
+        idx = SP._index()
+        assert all(p in ps for lst in idx.values() for p in lst) and any(
+            p is q for lst in idx.values() for p in lst for q in ps
+        )
+
+
 # ---------------------------------------------------------------- Task 2：写源文件进更新边界，删 itemsearch 的补建库钩子
 
 
@@ -139,7 +193,7 @@ def _fake_localization(monkeypatch, tmp_path, aliases, zh_names=None, with_build
 
 
 def test_localization_rebuild_runs_inside_updating(monkeypatch, tmp_path):
-    """汉化重建写的四份源文件和 BUILD_LOCK 里的蓝图重建都在 updating() 里，边界只进一次（updating 在外、BUILD_LOCK 在内）"""
+    """汉化重建写的四份源文件在 updating() 里、边界只进一次；蓝图 / 维科洛重建（不是库的源）在边界之外、只拿 BUILD_LOCK"""
     from sc_mining.crafting import build_crafting
     from sc_mining.update import localization as L
 
@@ -162,7 +216,35 @@ def test_localization_rebuild_runs_inside_updating(monkeypatch, tmp_path):
         "place_codes_zh.json",
     ]
     assert all(inside for _, inside in state["writes"])
-    assert built == ["bp", "wk"] and inside_build == [True]
+    assert built == ["bp", "wk"] and inside_build == [False]
+
+
+def test_localization_rebuild_db_rebuilt_even_if_crafting_build_fails(
+    monkeypatch, tmp_path
+):
+    """四份源文件写完库就重建了；之后蓝图重建抛异常也不影响（以前靠 clear_caches 里的钩子兜，现在不需要）"""
+    import json
+
+    import sc_mining.gamedata as G
+    from sc_mining.crafting import build_crafting
+    from sc_mining.update import localization as L
+    from tests.minipytest import raises
+
+    _setup(monkeypatch, tmp_path)
+    IS = _fresh_search(monkeypatch)
+    G.ensure()
+    zh = json.loads((tmp_path / "zh_names.json").read_text(encoding="utf-8"))
+    _fake_localization(
+        monkeypatch, tmp_path, {"MedPack X": "Medpen"}, zh_names=zh, with_build=True
+    )
+
+    def boom(*a, **k):
+        raise RuntimeError("蓝图构建坏了")
+
+    monkeypatch.setattr(build_crafting, "build", boom)
+    with raises(RuntimeError):
+        L.rebuild(progress=lambda *_: None)
+    assert (IS.lookup("MedPack X") or {}).get("ek") == "medpen"
 
 
 def test_loot_update_runs_inside_updating(monkeypatch, tmp_path):
@@ -234,10 +316,12 @@ def test_make_data_pack_web_ok_names_starmap_too(monkeypatch, tmp_path):
     import json
     import runpy
     import subprocess
+    import sys
     from pathlib import Path
 
     from sc_mining import run
     from sc_mining.core import paths
+    from sc_mining.crafting import loot
     from sc_mining.update import data_pack
     from tests.minipytest import raises
 
@@ -245,6 +329,11 @@ def test_make_data_pack_web_ok_names_starmap_too(monkeypatch, tmp_path):
         str(Path(__file__).resolve().parent.parent / "tools" / "make_data_pack.py")
     )
     monkeypatch.setattr(paths, "DATA", tmp_path)
+    monkeypatch.setattr(
+        loot, "load_index", lambda auto=True: {}
+    )  # loot.INDEX 是 import 时绑的真实路径：别读真实 data/
+    monkeypatch.setattr(loot, "_index", None)
+    monkeypatch.setattr(sys, "path", list(sys.path))  # runpy 会往 sys.path 插一条
     (tmp_path / "starmap.json").write_text(
         json.dumps({"source": "starmap.space"}), encoding="utf-8"
     )

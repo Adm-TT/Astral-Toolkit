@@ -267,29 +267,34 @@ def places(ini):
 
 
 def rebuild(progress=print):
+    """按汉化重建四份中文名 / 地名源文件（在 gamedata.updating() 里写，出口重建游戏数据库），
+    再用本机构建输入重建蓝图 + 维科洛（只拿 BUILD_LOCK，不在写锁里联网 / 久算；crafting.json、wikelo.json 不是库的源）。
+    转换在写锁外先算好，锁里只写文件（收口 1，复审第 2、8 条）"""
     src = names_source()
     if src.suffix != ".ini":
         return
     ini = read_ini(src)
+    zh_names, places_zh, codes_zh = zh2en_items(ini), places(ini), place_codes(ini)
     from .. import gamedata
 
-    with gamedata.updating():  # 数据目录写锁；出口重建游戏数据库（updating 在外、BUILD_LOCK 在内，和 data_pack.install 一致；收口 1）
-        _rebuild_files(ini, src, progress)
+    with gamedata.updating():
+        _write_name_files(zh_names, places_zh, codes_zh)
     from .data_pack import clear_caches
 
     clear_caches()
+    _rebuild_crafting(src, progress)
 
 
-def _rebuild_files(ini, src, progress):
-    """四份中文名 / 地名源文件 + 本机有构建输入时的蓝图、维科洛重建；调用方已在 updating() 里"""
+def _write_name_files(zh_names, places_zh, codes_zh):
+    """四份源文件 + 跟着它们走的两处内存缓存；调用方已在 updating() 里"""
     from ..core.paths import write_json
 
     write_json(
-        DATA / "zh_names.json", zh2en_items(ini), separators=(",", ":")
+        DATA / "zh_names.json", zh_names, separators=(",", ":")
     )  # 原子写：中途被结束不会留半个文件（2026-10-28）
     write_json(DATA / "name_aliases.json", ALIASES, separators=(",", ":"))
-    write_json(DATA / "places_zh.json", places(ini), separators=(",", ":"))
-    write_json(DATA / "place_codes_zh.json", place_codes(ini), separators=(",", ":"))
+    write_json(DATA / "places_zh.json", places_zh, separators=(",", ":"))
+    write_json(DATA / "place_codes_zh.json", codes_zh, separators=(",", ":"))
     try:
         from ..navigation import position
 
@@ -303,7 +308,10 @@ def _rebuild_files(ini, src, progress):
         names._index.cache_clear()
     except Exception:
         pass
-    # 制造蓝图和维科洛兑换：用本地已有的数据 + 新汉化重建（2026-10-28 审查：先看本机构建输入，没有才用 scmdb）
+
+
+def _rebuild_crafting(src, progress):
+    """制造蓝图和维科洛兑换：用本地已有的数据 + 新汉化重建（2026-10-28 审查：先看本机构建输入，没有才用 scmdb）"""
     from ..crafting.build_crafting import (
         latest_live,
         live_version,

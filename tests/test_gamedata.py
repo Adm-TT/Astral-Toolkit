@@ -3,7 +3,7 @@
 全部用 tmp_path 当 data/ 根（monkeypatch paths.DATA），不读真实 data/、不写 userdata/。"""
 
 import dataclasses
-from sc_mining.gamedata._cache import VersionCache as _VC  # noqa: E402
+from sc_mining.gamedata._cache import VersionCache as _VC
 
 
 def _data_root(monkeypatch, tmp_path):
