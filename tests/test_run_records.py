@@ -118,3 +118,18 @@ def test_read_recent_fills_from_yesterday(monkeypatch, tmp_path):
     (logs / f"runrec_{today}.log").write_text("t0\nt1\n", encoding="utf-8")
     assert run_records.read_recent(limit=5) == ["y7", "y8", "y9", "t0", "t1"]
     assert run_records.read_recent(limit=2) == ["t0", "t1"]
+
+
+def test_record_still_mirrors_when_logs_unwritable(monkeypatch, tmp_path):
+    """logs 位置被同名文件占了、建不了目录：不抛错，面板那条照样显示"""
+    import sc_mining.app.bus as bus
+
+    blocker = tmp_path / "logs"
+    blocker.write_text("not a dir", encoding="utf-8")
+    monkeypatch.setattr(paths, "LOGS", blocker)
+    seen = []
+    monkeypatch.setattr(
+        bus, "runtime_log", lambda line, tag="SYS", level="INFO": seen.append(line)
+    )
+    run_records.record("MINING", "采矿助手已暂停", "游戏不在最前面")
+    assert seen == ["采矿助手已暂停 | 游戏不在最前面"]

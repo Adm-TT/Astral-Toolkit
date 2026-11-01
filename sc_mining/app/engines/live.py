@@ -136,7 +136,7 @@ class _Live:
         run_records.record(
             "MINING",
             "采矿助手已暂停" if on else "采矿助手已继续",
-            None if on else f"暂停了 {gap:.0f} 秒",
+            "游戏不在最前面" if on else f"暂停了 {gap:.0f} 秒",
             level="WARN" if on else "INFO",
             ui_tag="LIVE",
         )

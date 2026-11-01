@@ -109,13 +109,13 @@ def record(
         else:
             detail_str = f" | {details}"
         line = f"{timestamp_str} [{level}] [{mod}] {act}{detail_str}\n"
-        path = path_for(today)
         try:
+            path = path_for(today)
             with _LOCK:
                 with open(path, "a", encoding="utf-8") as f:
                     f.write(line)
-        except OSError:
-            pass  # 写不进文件也别丢面板那条
+        except Exception:
+            pass  # 写不进文件（连 logs 目录都建不了）也别丢面板那条
 
         if mirror_ui:
             try:
