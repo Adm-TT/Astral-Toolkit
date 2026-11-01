@@ -53,7 +53,7 @@
 | 源字段 | 读它的函数 | 转换规则 | 目标表.列 |
 |---|---|---|---|
 | old→real | `itemsearch` L141-150 | `e = by_en.get(en_key(real))`；**仅当 `en_key(old) not in by_en`** 才 `e["aka"].append(old)`；之后 `by_en.setdefault(en_key(old), e)`（L163-165） | `item_names(kind='aka', name=old, norm=en_key(old))` |
-| 同上 | `gamekey._index` L41-48 | `alias[_fold(old)] = new`，解析时 `by_name.get(_fold(alias.get(k)))` | 同一张 `item_names(kind='aka')` 可覆盖；批 1 核对 `_fold` 与 `en_key` 是否同一函数（都是 `shops._fold` → 是） |
+| 同上 | `gamekey._index` L41-48 | `alias[_fold(old)] = new`，解析时 `by_name.get(_fold(alias.get(k)))` | 同一张 `item_names(kind='aka')` 可覆盖；**更正（批 6 矩阵核对，2026-11-02）**：`gamekey._fold` 不做 l→i，与 `en_key`（`shops._fold`）**不是**同一规则，`item_names(kind='aka')` 是过滤后的——gamekey 不能复用，改用 schema 4 的原样表 `name_alias_pairs`（见 gd-b6 矩阵 §3、§8） |
 
 ## 5. wiki_items.json（3.6 MB）
 

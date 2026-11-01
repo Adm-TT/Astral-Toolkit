@@ -56,6 +56,9 @@ def build(sources: dict[str, SourceBytes], generation_id: str, dv: str) -> Path:
             _import.import_items(conn, sources)
             _import.import_shops(conn, sources)
             _import.import_loot(conn, sources)
+            _import.import_wiki_classes(conn, sources)
+            _import.import_name_pairs(conn, sources)
+            _import.import_wiki_rows(conn, sources)
             _import.import_prices(conn, sources)
             _import.import_starmap(conn, sources)
             _import.import_city_places(conn, sources)
@@ -63,6 +66,11 @@ def build(sources: dict[str, SourceBytes], generation_id: str, dv: str) -> Path:
             _import.import_station_lifts(conn, sources)
             _import.import_place_names(conn, sources)
             _import.import_mining_spots(conn, sources)
+            _import.import_crafting(conn, sources)
+            _import.import_wikelo(conn, sources)
+            _import.import_item_stats(conn, sources)
+            _import.import_print_spots(conn, sources)
+            _import.import_ship_items(conn, sources)
             meta = [
                 ("schema_version", str(SCHEMA_VERSION)),
                 ("importer_version", str(IMPORTER_VERSION)),
@@ -116,6 +124,22 @@ def _verify(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> None:
         "place_names",
         "place_codes",
         "mining_spots",
+        # schema 4
+        "wiki_classes",
+        "zh_name_pairs",
+        "wiki_items",
+        "wiki_alt_classes",
+        "name_alias_pairs",
+        "blueprints",
+        "blueprint_materials",
+        "wikelo_contracts",
+        "wikelo_rewards",
+        "wikelo_requirements",
+        "wikelo_contract_systems",
+        "item_stats",
+        "print_spots",
+        "print_spot_places",
+        "ship_stock_items",
     }
     if not need <= have:
         raise BuildError(f"游戏数据库缺表：{sorted(need - have)}")

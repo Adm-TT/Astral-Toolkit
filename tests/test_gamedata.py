@@ -150,6 +150,22 @@ _TABLES = {
     "mining_spots",
     # schema 3
     "shop_items",
+    # schema 4（制造 / 维科洛 / 物品属性 + 掉落类名，见 test_gamedata_craft）
+    "wiki_classes",
+    "zh_name_pairs",
+    "wiki_items",
+    "wiki_alt_classes",
+    "name_alias_pairs",
+    "blueprints",
+    "blueprint_materials",
+    "wikelo_contracts",
+    "wikelo_rewards",
+    "wikelo_requirements",
+    "wikelo_contract_systems",
+    "item_stats",
+    "print_spots",
+    "print_spot_places",
+    "ship_stock_items",
 }
 
 
@@ -159,8 +175,8 @@ def test_ddl_creates_all_tables(tmp_path):
     from sc_mining.gamedata._schema import DDL, SCHEMA_VERSION
 
     assert (
-        SCHEMA_VERSION == 3
-    )  # 2 = 批 2 导航表（见 test_gamedata_nav）；3 = shop_items
+        SCHEMA_VERSION == 4
+    )  # 2 = 批 2 导航表（见 test_gamedata_nav）；3 = shop_items；4 = 制造 / 维科洛 / 物品属性（见 test_gamedata_craft）
     c = sqlite3.connect(tmp_path / "x.db")
     for s in DDL:
         c.execute(s)
@@ -879,7 +895,7 @@ def test_shop_items_keep_every_uex_entry_verbatim(monkeypatch, tmp_path):
     from sc_mining.gamedata._build import rebuild_if_needed
     from sc_mining.gamedata._schema import SCHEMA_VERSION
 
-    assert SCHEMA_VERSION == 3
+    assert SCHEMA_VERSION >= 3  # shop_items 从 3 起就有
     _data_root(monkeypatch, tmp_path)
     shops = dict(_MIN_SOURCES["shops.json"])
     shops["items"] = {

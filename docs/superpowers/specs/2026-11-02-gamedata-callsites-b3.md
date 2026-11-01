@@ -1,6 +1,8 @@
 # 游戏数据层 批 3 调用点矩阵（crafting / wikelo / itemstats，含 goals / acquire / laser / hover 的相关读取）
 
-日期：2026-11-02　基准：`1.1.4-beta.1-database`（schema 3）　状态：公共层先行 PR（schema 4）的依据；批 3 开工前逐行复核“调用模块”列
+日期：2026-11-02　基准：`1.1.4-beta.1-database`（schema 3）　状态：公共层先行 PR（schema 4，已实现）的依据；批 3 开工前逐行复核“调用模块”列
+
+> **schema 4 实现时按真实数据修正（2026-11-02）**：① `blueprints.u` 真实数据有重复和空值，**不作主键**，用自增 `id`，`bp_key` 唯一索引；② `slots[i][2]`（改装列表）随 `slots_json` 整段存，不拆表；③ `item_stats.s` 的形状不只 `{min,max}` / 数值，还有多种嵌套键 → **整段存 `stats_json`**，不建 `item_stat_values`，`itemstats._get` 读时按路径取；④ `wikelo_requirements` 多 `norm_z`（`_fold(z)`），`wikelo_contract_systems` 建了；⑤ `dismantle_efficiency / dismantle_blacklist / crafting_version / wikelo_version / item_stats_version` 进 `meta`；⑥ `print_spots.cls` 来自源的 `class`。表定义以 `sc_mining/gamedata/_schema.py` 为准。
 
 ## 0. 使用方式概览（决定表怎么建）
 
@@ -11,7 +13,7 @@
 | `needs / uses / mat_summary / uses_report` | 遍历所有 bp 的所有槽找某种矿 | 平铺表 `blueprint_materials(blueprint_u, slot_idx, slot_name, kind, material, qty, min_q)`，按 `material` 索引 |
 | `wikelo.load()`（`lru_cache(maxsize=1)`） | 71 份合同整表，`uses(name)` 遍历 `req`，`search` 遍历 | `wikelo_contracts` + `wikelo_requirements` + `wikelo_rewards` 三表；`load()` 保留 dict 形状按版本缓存 |
 | `wikelo.print_spots(name)` | `print_spots.json` 的 `items[name]` | `print_spots` + `print_spot_places` |
-| `itemstats.data()`（`lru_cache(maxsize=1)`） | 按 uuid 取一条（`item(uuid)`），字段里 `s` 是属性字典 | `item_stats(uuid PK, …)` + `item_stat_values(uuid, stat, min, max, value)`；`item(uuid)` 单条查询，不再整表常驻（1.1 MB） |
+| `itemstats.data()`（`lru_cache(maxsize=1)`） | 按 uuid 取一条（`item(uuid)`），字段里 `s` 是属性字典 | `item_stats(uuid PK, …, stats_json)`（**已废 `item_stat_values`，见开头修正 ③**）；`item(uuid)` 单条查询，不再整表常驻（1.1 MB） |
 | `acquire` 读 `ship_items.json` | `items[部件名]` → 船列表 | `ship_stock_items(item_name, ship, idx)` |
 
 ## 1. crafting.json（1.0 MB）
@@ -51,7 +53,7 @@
 | 源字段 | 读者 | 目标表.列 |
 |---|---|---|
 | `items[uuid]` 标量字段 | `itemstats.item(uuid)` → `crafting.stats/header`（按 `bp["u"]`） | `item_stats(uuid PK, n, size, grade, cls, type, sub, mass REAL, ver, mfr, cn, source_order)` |
-| `items[uuid].s` | `itemstats._get(d, *path)` 按属性键取 `min/max` 或数值 | `item_stat_values(uuid, stat, min REAL, max REAL, value REAL)`；读时拼回 `{stat: {min,max}}` / `{stat: value}` 的 dict（`_get` 不改） |
+| `items[uuid].s` | `itemstats._get(d, *path)` 按属性键取 `min/max` 或数值 | `item_stats.stats_json`（整段 JSON 原样，`json.loads` 后 `_get` 不改；**已废 `item_stat_values`，见开头修正 ③**） |
 | `version` | `itemstats.version()` | `meta: item_stats_version` |
 | `fetched` 等顶层键 | 没人读 | 不入库 |
 
@@ -69,7 +71,7 @@
 
 ## 6. 公共层先行 PR 要做的（schema 4）
 
-新表：`blueprints`、`blueprint_materials`、`wikelo_contracts`、`wikelo_rewards`、`wikelo_requirements`、`wikelo_contract_systems`、`item_stats`、`item_stat_values`、`print_spots`、`print_spot_places`、`ship_stock_items`。`SOURCES` 加 5 个可选源。导入：`bp_key` 规则**直接复用** `crafting._keys()` 的算法（抽成纯函数 `crafting.assign_keys(bps) -> dict[id, key]`，和 `_keys` 共用）；`for_item` 的 `fold` 抽成模块级 `_fold_name`；`norm` 规则不抄。
+新表：`blueprints`、`blueprint_materials`、`wikelo_contracts`、`wikelo_rewards`、`wikelo_requirements`、`wikelo_contract_systems`、`item_stats`、`item_stat_values`、`print_spots`、`print_spot_places`、`ship_stock_items`。`SOURCES` 加 5 个可选源。导入：`bp_key` 规则**直接复用** `crafting._keys()` 的算法（抽成纯函数 `crafting.assign_keys(bps) -> (keys: {id(bp): 编号}, index, total)`，和 `_keys` 共用（已做））；`for_item` 的 `fold` 抽成模块级 `_fold_name`；`norm` 规则不抄。
 
 ## 7. 批 3 开工前必须补的核对
 

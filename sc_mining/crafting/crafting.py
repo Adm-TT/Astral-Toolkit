@@ -337,24 +337,28 @@ _KEYS = [
 ]  # (那份数据, 编号表)：一次读出一对，并发清缓存时不会拿到 None 或别的数据的表
 
 
-def _keys():
-    """每份蓝图的唯一编号：名字不重复就用名字；有十几个名字对应两份不同配方（比如 Main Powerplant），
-    这些用「名字#1」「名字#2」区分（二审 2026-10-23 发现：只按名字会点开别的配方）。
-    跟着 data() 那份走：数据换了（或刚读成功）就重算，别把读失败时的空表一直留着"""
+def assign_keys(bps):
+    """每份蓝图的唯一编号（纯函数，游戏数据层导入也用它，规则只写一处）：名字不重复就用名字；
+    有十几个名字对应两份不同配方（比如 Main Powerplant），这些用「名字#1」「名字#2」区分（二审 2026-10-23 发现：只按名字会点开别的配方）。
+    返回 (keys: {id(bp): 编号}, index: {编号: bp}, total: Counter(名字))"""
     from collections import Counter
 
+    total = Counter(b["n"] for b in bps)
+    seen, keys, index = Counter(), {}, {}
+    for b in bps:
+        seen[b["n"]] += 1
+        k = b["n"] if total[b["n"]] == 1 else f"{b['n']}#{seen[b['n']]}"
+        keys[id(b)] = k
+        index[k] = b
+    return keys, index, total
+
+
+def _keys():
+    """跟着 data() 那份走：数据换了（或刚读成功）就重算，别把读失败时的空表一直留着。规则在 assign_keys"""
     d = data()
     src, val = _KEYS[0]
     if src is not d:
-        bps = d["blueprints"]
-        total = Counter(b["n"] for b in bps)
-        seen, keys, index = Counter(), {}, {}
-        for b in bps:
-            seen[b["n"]] += 1
-            k = b["n"] if total[b["n"]] == 1 else f"{b['n']}#{seen[b['n']]}"
-            keys[id(b)] = k
-            index[k] = b
-        val = (keys, index, total)
+        val = assign_keys(d["blueprints"])
         _KEYS[0] = (d, val)  # 留着 d 的引用：id(b) 不会被别的对象重用
     return val
 
@@ -394,9 +398,19 @@ def display_name(bp) -> str:
     return f"{zh} {en}" if zh else en
 
 
+def _fold_name(s):
+    """for_item 的比较键：小写、去掉所有非字母数字（游戏数据层 blueprints.norm_n / norm_z 用同一个函数算）"""
+    return re.sub(r"[\W_]+", "", (s or "").lower())
+
+
+def _search_norm(s):
+    """search 的比较键：小写、去空格（和 for_item 的规则不同，各存各的：blueprints.search_n / search_z）"""
+    return (s or "").lower().replace(" ", "")
+
+
 def for_item(name_en="", name_zh=""):
     """做这件东西的蓝图（英文名一样，或者中文名一样）；没有返回 None"""
-    fold = lambda s: re.sub(r"[\W_]+", "", (s or "").lower())  # noqa: E731
+    fold = _fold_name
     en, zh = fold(name_en), fold(name_zh)
     return next((b for b in blueprints() if en and fold(b["n"]) == en), None) or next(
         (b for b in blueprints() if zh and b["z"] and fold(b["z"]) == zh), None
@@ -405,12 +419,12 @@ def for_item(name_en="", name_zh=""):
 
 def search(query: str, limit: int = 20):
     """按中文或英文名搜索蓝图：完全匹配优先，再按包含匹配"""
-    q = query.strip().lower().replace(" ", "")
+    q = _search_norm(query.strip())
     if not q:
         return []
     exact, part = [], []
     for bp in blueprints():
-        names = [bp["n"].lower().replace(" ", ""), bp["z"].lower().replace(" ", "")]
+        names = [_search_norm(bp["n"]), _search_norm(bp["z"])]
         if q in names:
             exact.append(bp)
         elif any(q in n for n in names if n):
