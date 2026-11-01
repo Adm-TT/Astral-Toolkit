@@ -14,7 +14,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-SEARCHES = ["视差步枪", "parallax", "Medpen", "头盔", "劳森", "P4-AR", "Hurston", "xyz不存在"]
+SEARCHES = [
+    "视差步枪",
+    "parallax",
+    "Medpen",
+    "头盔",
+    "劳森",
+    "P4-AR",
+    "Hurston",
+    "xyz不存在",
+]
 LOOKUPS = ["Lawson Mining Laser", "medpen"]
 LOOT_NAMES = ["Medpen", "AdrenaPen (Demexatrine)", "Parallax"]
 GAMEKEY_NAMES = ["Medpen", "Lawson Mining Laser"]
@@ -25,7 +34,11 @@ NEAREST_ITEMS = 5
 def _git_head():
     try:
         return subprocess.run(
-            ["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, timeout=10
+            ["git", "rev-parse", "HEAD"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=10,
         ).stdout.strip()
     except Exception:
         return ""
@@ -52,7 +65,9 @@ def collect():
     for q in LOOKUPS:
         e = itemsearch.lookup(q)
         out[f"itemsearch.lookup({q!r})"] = (
-            None if e is None else {k: (sorted(v) if isinstance(v, set) else v) for k, v in e.items()}
+            None
+            if e is None
+            else {k: (sorted(v) if isinstance(v, set) else v) for k, v in e.items()}
         )
     data = shops.load(auto_update=False)
     ids = sorted(int(i) for i in (data.get("items") or {}))
@@ -74,13 +89,14 @@ def collect():
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(description="游戏数据层迁移前的行为基线")
     ap.add_argument("--out", required=True, help="输出 JSON 路径")
     a = ap.parse_args(argv)
     res = collect()
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     Path(a.out).write_text(
-        json.dumps(res, ensure_ascii=False, indent=1, sort_keys=True, default=str), encoding="utf-8"
+        json.dumps(res, ensure_ascii=False, indent=1, sort_keys=True, default=str),
+        encoding="utf-8",
     )
     print(f"基线写到 {a.out}：{len(res['results'])} 项")
     return 0
