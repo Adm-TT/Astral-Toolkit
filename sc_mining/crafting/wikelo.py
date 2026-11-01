@@ -154,20 +154,14 @@ def build(merged_path, names_path, out=OUT):
 
 
 def _write(out, data):
-    """写 wikelo.json（游戏数据库的源）：临时文件再换名；在更新边界里写（updating 在外、BUILD_LOCK 在内），出口重建一次库"""
-    import os
-
+    """写 wikelo.json（游戏数据库的源）：write_json 临时文件再换名（换名撞上占用会重试）；
+    在更新边界里写（updating 在外、BUILD_LOCK 在内），出口重建一次库"""
     from .. import gamedata
+    from ..core.paths import write_json
     from .build_crafting import BUILD_LOCK
 
-    text = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
-    tmp = Path(out).with_name(f".{Path(out).stem}.{os.getpid()}.tmp")
     with gamedata.updating(), BUILD_LOCK:
-        try:
-            tmp.write_text(text, encoding="utf-8")
-            tmp.replace(out)
-        finally:
-            tmp.unlink(missing_ok=True)
+        write_json(out, data, separators=(",", ":"))
 
 
 def load():

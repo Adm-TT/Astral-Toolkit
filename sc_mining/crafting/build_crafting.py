@@ -266,20 +266,13 @@ def build(bp_path, merged_path, names_path, out_path):
 
 
 def _write(out_path, data):
-    """写 crafting.json（游戏数据库的源）：先写临时文件再换，AT 开着时读到的不会是半个文件。
+    """写 crafting.json（游戏数据库的源）：write_json 先写临时文件再换名（换名撞上占用会重试）。
     在游戏数据层的更新边界里写（updating 在外、BUILD_LOCK 在内，和 data_pack.install 一致），最外层出口重建一次库"""
-    import os
-
     from .. import gamedata
+    from ..core.paths import write_json
 
-    text = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
-    tmp = Path(out_path).with_name(f".{Path(out_path).stem}.{os.getpid()}.tmp")
     with gamedata.updating(), BUILD_LOCK:
-        try:
-            tmp.write_text(text, encoding="utf-8")
-            tmp.replace(out_path)
-        finally:
-            tmp.unlink(missing_ok=True)
+        write_json(out_path, data, separators=(",", ":"))
 
 
 def _fetch(name):
@@ -347,9 +340,19 @@ def _rebuild(bp, merged, names, out, done):
     from .. import gamedata
     from .wikelo import build as build_wikelo
 
+    err = None
     with gamedata.updating():
         build(bp, merged, names, out)
-        print(f"维科洛兑换：{build_wikelo(merged, names)} 个")
+        try:
+            n = build_wikelo(merged, names)
+        except (
+            Exception
+        ) as e:  # crafting.json 已经写好：让边界正常退出、库照样重建，出来再把错抛出去
+            err = e
+        else:
+            print(f"维科洛兑换：{n} 个")
+    if err is not None:
+        raise err
     print(done)
 
 

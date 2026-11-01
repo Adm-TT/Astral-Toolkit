@@ -1,14 +1,16 @@
 """制造 topic：blueprints / blueprint_materials 两张表（crafting.json 的蓝图）
 
 蓝图在消费方（目标清单、悬停、库存、采矿激光、读屏）都是当嵌套 dict 传来传去的，所以这里还原成与 crafting.json
-逐字一致的 dict，按内容版本缓存一份：同一版本内每次拿到的是同一批对象（crafting.bp_key 靠 id(bp) 查编号）。
+逐字一致的 dict，缓存一份：crafting.json 和导入规则没变就一直是同一批对象（crafting.bp_key 靠 id(bp) 查编号，
+目标清单等处还会长期拿着这些对象）。别的源文件更新（矿价、商店）换了库版本也不换蓝图对象；建的时候持锁，
+两个线程同时第一次取也只建一份。
 编号用导入时算好的 bp_key 列（规则在 crafting.assign_keys）。传 snap 时用调用方的快照，不传就自己开一个。"""
 
 import json
+import threading
 from collections import Counter
 from dataclasses import dataclass
 
-from ._cache import VersionCache
 from ._ready import use
 
 _COLS = "id, u, n, z, g, t, s, m, sec, d, slots_json, src_json, nsrc, bp_key"
@@ -26,7 +28,8 @@ class Blueprints:
     by_id: dict
 
 
-_all: VersionCache[Blueprints] = VersionCache()
+_lock = threading.Lock()
+_cur: tuple[tuple, Blueprints] | None = None  # (蓝图来源的版本键, 那一版的蓝图)
 
 
 def _bp(r: tuple) -> dict:
@@ -61,10 +64,39 @@ def _load(s) -> Blueprints:
     )
 
 
+def _source_key(s) -> tuple:
+    """蓝图内容只由 crafting.json 和导入规则决定：库里记的 crafting.json 哈希 + schema / 导入规则 / 应用版本。
+    id 是源下标，同一份源导入出来的 id 一样，所以沿用旧对象时 by_id 照样对得上。没记哈希就退回整库版本"""
+    from ..core import version as _v
+
+    m = dict(
+        s.execute(
+            "select key, value from meta where key in "
+            "('src:crafting.json', 'schema_version', 'importer_version')"
+        )
+    )
+    src = m.get("src:crafting.json")
+    if not src:
+        return ("data", s.data_version)
+    return (src, m.get("schema_version"), m.get("importer_version"), _v.VERSION)
+
+
 def catalog(snap=None) -> Blueprints:
-    """全部蓝图（按源顺序）和编号表；按内容版本缓存一份"""
+    """全部蓝图（按源顺序）和编号表；蓝图来源没变就返回同一份"""
+    global _cur
     with use(snap) as s:
-        return _all.get(s, _load)
+        key = _source_key(s)
+        with _lock:
+            if _cur is None or _cur[0] != key:
+                _cur = (key, _load(s))
+            return _cur[1]
+
+
+def _clear() -> None:
+    """只给测试用：丢掉缓存的那份"""
+    global _cur
+    with _lock:
+        _cur = None
 
 
 def for_item(norm_en: str, norm_zh: str, snap=None) -> dict | None:

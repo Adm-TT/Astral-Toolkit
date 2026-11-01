@@ -272,7 +272,8 @@ def _catalog():
         if not c.data["blueprints"]:
             why = "库里没有蓝图"
     except gamedata.GamedataError as e:
-        c, why = None, f"游戏数据库不可用：{e}"
+        # 只记错误类型：消息里可能带数据目录的完整路径（含 Windows 用户名）
+        c, why = None, f"游戏数据库不可用：{type(e).__name__}"
     if why is not None and why not in _WARNED:  # 同一个错只记一次，别刷日志
         _WARNED.add(why)
         import logging

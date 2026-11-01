@@ -61,6 +61,52 @@ def test_blueprints_same_objects_within_version(monkeypatch, tmp_path):
     assert crafting.bp_key(c[1]) == "Main Powerplant#2"
 
 
+def test_blueprints_kept_when_other_source_changes(monkeypatch, tmp_path):
+    """别的源文件更新（这里换 wikelo.json）换了库版本，蓝图还是同一批对象：长期拿着旧对象的地方编号照样对"""
+    from sc_mining.crafting import crafting, wikelo
+
+    _setup(monkeypatch, tmp_path)
+    a = crafting.blueprints()
+    before = [c["id"] for c in wikelo.load()]
+    _rewrite(tmp_path, "wikelo.json", copy.deepcopy(_WIKELO))
+    assert [c["id"] for c in wikelo.load()] != before  # 库确实重建了
+    assert crafting.blueprints() is a
+    assert crafting.bp_key(a[1]) == "Main Powerplant#2"
+
+
+def test_catalog_built_once_when_threads_race(monkeypatch, tmp_path):
+    """两个以上线程同时第一次取：只建一份，大家拿到同一批对象"""
+    import threading
+    import time
+
+    from sc_mining.gamedata import crafting as gc
+
+    _setup(monkeypatch, tmp_path)
+    gc.catalog()  # 先把库建好
+    gc._clear()
+    real, calls = gc._load, []
+
+    def slow(s):
+        calls.append(1)
+        time.sleep(0.05)
+        return real(s)
+
+    monkeypatch.setattr(gc, "_load", slow)
+    bar, got = threading.Barrier(4), []
+
+    def run():
+        bar.wait()
+        got.append(gc.catalog())
+
+    ts = [threading.Thread(target=run) for _ in range(4)]
+    for x in ts:
+        x.start()
+    for x in ts:
+        x.join()
+    assert len(calls) == 1 and len(got) == 4
+    assert all(g is got[0] for g in got)
+
+
 def test_blueprint_dicts_are_plain_mutable_like_json(monkeypatch, tmp_path):
     """slots / 选项 / 改装 / src 是 list 不是 tuple，d 是 bool，和 json.loads 出来的一样"""
     from sc_mining.crafting import crafting
@@ -700,3 +746,38 @@ def test_update_rebuilds_once_and_checks_outside_write_lock(monkeypatch, tmp_pat
     assert n[0] == 1 and G.last_error() is None
     assert out == ["维科洛兑换：2 个", "已更新"]
     assert crafting.by_key("Medpen Mk2") is not None and wikelo.load()[1]["id"] == "C0"
+
+
+def test_rebuild_still_rebuilds_db_when_wikelo_fails(monkeypatch, tmp_path):
+    """维科洛那份写失败：crafting.json 已经换了，库照样重建一次（新蓝图查得到），错再往外抛、不打印完成提示"""
+    from sc_mining.crafting import build_crafting, crafting, wikelo
+
+    _setup(monkeypatch, tmp_path)
+    crafting.blueprints()
+    new_bp = copy.deepcopy(_CRAFT_SOURCES["crafting.json"])
+    new_bp["blueprints"][2]["n"] = "Medpen Mk2"
+    monkeypatch.setattr(
+        build_crafting,
+        "build",
+        lambda bp, m, n, out: build_crafting._write(out, new_bp),
+    )
+
+    def bad(merged, names):
+        raise PermissionError("占用")
+
+    monkeypatch.setattr(wikelo, "build", bad)
+    out = []
+    monkeypatch.setattr(
+        "builtins.print", lambda *a, **k: out.append(" ".join(map(str, a)))
+    )
+    n = _count_rebuilds(monkeypatch)
+    try:
+        build_crafting._rebuild(
+            "bp.json", "merged.json", "names.ini", tmp_path / "crafting.json", "已更新"
+        )
+    except PermissionError:
+        pass
+    else:
+        raise AssertionError("维科洛的错应该抛出来")
+    assert n[0] == 1 and out == []
+    assert crafting.by_key("Medpen Mk2") is not None
