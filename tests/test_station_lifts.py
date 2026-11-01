@@ -182,7 +182,22 @@ def _station(tmp_path, monkeypatch):
         json.dumps(places, ensure_ascii=False), encoding="utf-8"
     )
     monkeypatch.setattr(n, "DATA", tmp_path)
+    _db(monkeypatch, tmp_path)
     return n, {q["city"]: q for q in n.city_places()}
+
+
+def _db(monkeypatch, tmp_path):
+    """批 2 起城市地点、空间站电梯走游戏数据层：tmp_path 当 data/ 根，补一份空商店表（建库必需的源），查询时建库"""
+    import sc_mining.gamedata as G
+    from sc_mining.core import paths
+    from sc_mining.gamedata import _ready
+
+    (tmp_path / "shops.json").write_text(
+        json.dumps({"fmt": 2, "fetched": 0, "items": {}, "rows": []}), encoding="utf-8"
+    )
+    monkeypatch.setattr(paths, "DATA", tmp_path)
+    monkeypatch.setattr(_ready, "_state", {"done": None, "failed": None})
+    monkeypatch.setattr(G, "_state", {"last_error": None, "warm_thread": None})
 
 
 def test_zone_kind(monkeypatch, tmp_path):

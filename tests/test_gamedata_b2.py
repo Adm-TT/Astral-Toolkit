@@ -266,3 +266,108 @@ def test_zh_name_station_suffix_fallback(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path, **{"places_zh.json": {"checkmate": "死局空间站"}})
     assert position._zh_name("Checkmate Station") == "死局空间站"
     assert position._zh_name("Unknown Station") == "Unknown Station"
+
+
+# ---------------------------------------------------------------- Task 4：城市地点、设施、空间站电梯
+
+
+def test_city_places_equal_to_legacy_transform(monkeypatch, tmp_path):
+    """建库时变换好的城市地点读出来，和以前 _city_rows(city_places.json) 逐条相等（同名加序号、重复 id 加 +、@sys 空间点、up）"""
+    from sc_mining.navigation import transit
+
+    _setup(monkeypatch, tmp_path)
+    got = transit.city_places()
+    legacy = transit._city_rows(_NAV_SOURCES["city_places.json"])
+    assert got == legacy
+    assert [q["zh"] for q in got] == ["公寓大堂", "公寓大堂 2", "", "轨道店"]
+    assert [q["id"] for q in got] == ["lor_hab", "lor_hab2", "lor_hab+", "orb"]
+    assert got[2]["up"] == (0.0, 0.0, 1.0) and got[3]["b"] == "@Stanton"
+    assert got[0]["t"] == "City" and got[0]["qt"] == 0 and got[0]["kinds"] == ["住宿"]
+    assert transit.city_places() is got  # 同一版本同一个列表
+
+
+def test_station_lifts_equal_to_legacy(monkeypatch, tmp_path):
+    from sc_mining.navigation import transit
+
+    _setup(monkeypatch, tmp_path)
+    got = transit.station_lifts()
+    assert got == transit._lift_rows(_NAV_SOURCES["station_lifts.json"])
+    assert list(got) == ["rr_hur_l1"]  # ok=False 的整站丢
+
+
+def test_amenity_targets_resolves_three_ref_kinds(monkeypatch, tmp_path):
+    """设施的 poi / point(_id) / body 三种引用按当前星图回查；星图单独更新后，设施跟着用新坐标"""
+    import sc_mining.gamedata as G
+    from sc_mining.navigation import transit
+
+    amen = _NAV_SOURCES["place_amenities.json"] + [
+        {
+            "en": "Lorville",
+            "zh": "",
+            "kinds": ["医疗"],
+            "rec": "",
+            "ref": {"poi": "Lorville"},
+        }
+    ]
+    _setup(monkeypatch, tmp_path, **{"place_amenities.json": amen})
+    assert transit.amenity_targets("医疗") == [
+        dict(
+            b="Hurston",
+            n="Everus Harbor",
+            zh="艾维拉斯港",
+            t="Orbital Station",
+            qt=1,
+            x=-507.7,
+            y=-903.4,
+            z=496.4,
+        ),  # poi 找不到：用 body + local 造轨道站
+        dict(
+            b="@Stanton",
+            sys="Stanton",
+            space=True,
+            n="Pyro Body Only",
+            zh="",
+            t="Orbital Station",
+            qt=1,
+            x=0.001,
+            y=0.0,
+            z=0.0,
+        ),  # 只有 body：天体坐标 /1000
+        dict(b="Hurston", n="Lorville", t="City", x=3.0, y=4.0, z=0.0, qt=1),  # poi
+    ]  # Lorville Clinic 只有 city 引用：没有坐标，不列
+    shop = transit.amenity_targets("商店")
+    assert [(q["n"], q["x"]) for q in shop] == [("HUR-L1 Shop", 0.009)]  # point_id
+    with G.updating():
+        (tmp_path / "starmap_fixes.json").write_text(
+            json.dumps({"Hurston L1": [12.0, 12.0, 12.0]}), encoding="utf-8"
+        )
+    assert transit.amenity_targets("商店")[0]["x"] == 0.012
+
+
+def test_transit_does_not_read_json(monkeypatch, tmp_path):
+    """数据目录里只有游戏数据库、没有那几份 JSON：城市地点、电梯、设施照样能用"""
+    import shutil
+
+    from sc_mining.core import paths
+    from sc_mining.gamedata import _ready
+    from sc_mining.navigation import starmap, transit
+
+    a = _setup(monkeypatch, tmp_path / "a")
+    want = (
+        transit.city_places(),
+        transit.station_lifts(),
+        transit.amenity_targets("商店"),
+    )
+    b = tmp_path / "b"
+    shutil.copytree(a / "gamedata", b / "gamedata")
+    monkeypatch.setattr(paths, "DATA", b)
+    monkeypatch.setattr(_ready, "_state", {"done": str(b / "gamedata"), "failed": None})
+    monkeypatch.setattr(
+        starmap, "CACHE", a / "starmap.json"
+    )  # 只给 load() 判断「下载过没有」
+    got = (
+        transit.city_places(),
+        transit.station_lifts(),
+        transit.amenity_targets("商店"),
+    )
+    assert got == want and len(got[0]) == 4 and got[1] and got[2]
