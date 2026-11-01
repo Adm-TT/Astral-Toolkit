@@ -77,3 +77,26 @@ def test_path_for_default_today(monkeypatch, tmp_path):
     p = run_records.path_for()
     assert p.name.startswith("runrec_")
     assert p.parent == logs
+
+
+def test_perfmon_start_off_by_default(monkeypatch):
+    from sc_mining.core import perfmon
+
+    monkeypatch.delenv("DUBHE_PERFMON", raising=False)
+    m = perfmon.Monitor()
+    m.start()
+    assert m.thread is None
+    monkeypatch.setenv("DUBHE_PERFMON", "1")
+    started = []
+
+    class FakeThread:
+        def __init__(self, *a, **k):
+            started.append(1)
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(perfmon.threading, "Thread", FakeThread)
+    m2 = perfmon.Monitor()
+    m2.start()
+    assert started == [1]
