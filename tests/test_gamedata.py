@@ -135,6 +135,18 @@ _TABLES = {
     "shop_rows",
     "loot_rows",
     "mineral_prices",
+    # schema 2（导航）
+    "bodies",
+    "pois",
+    "points",
+    "city_places",
+    "city_place_kinds",
+    "amenities",
+    "amenity_kinds",
+    "station_lifts",
+    "place_names",
+    "place_codes",
+    "mining_spots",
 }
 
 
@@ -143,7 +155,7 @@ def test_ddl_creates_all_tables(tmp_path):
 
     from sc_mining.gamedata._schema import DDL, SCHEMA_VERSION
 
-    assert SCHEMA_VERSION == 1
+    assert SCHEMA_VERSION == 2  # 2 = 批 2 导航表（见 test_gamedata_nav）
     c = sqlite3.connect(tmp_path / "x.db")
     for s in DDL:
         c.execute(s)
@@ -151,7 +163,7 @@ def test_ddl_creates_all_tables(tmp_path):
         r[0] for r in c.execute("select name from sqlite_master where type='table'")
     }
     c.close()
-    assert names == _TABLES
+    assert names == _TABLES  # 多一张少一张都不行
 
 
 def test_read_sources_hash_matches_bytes(tmp_path):
