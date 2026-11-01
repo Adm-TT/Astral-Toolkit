@@ -52,7 +52,12 @@ def main(argv):
     if "--no-update" not in argv:
         # 有构建输入目录才去 starmap.space 下星图（下面数据构建脚本会重新合并，只取自转相位和玩家补充的点）；没有就别拿网站版盖掉游戏数据版
         r = run.update(
-            direct=True, web_ok=("sc_mining.navigation.navigate",) if oc else ()
+            direct=True,
+            web_ok=(
+                ("sc_mining.navigation.navigate", "sc_mining.navigation.starmap")
+                if oc
+                else ()
+            ),  # navigate.update 的 __module__ 实际是 starmap：两个名字都给（收口 1）
         )
         bad = [x["title"] for x in r["results"] if not x["ok"]]
         if bad:

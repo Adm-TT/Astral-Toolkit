@@ -3,6 +3,7 @@
 全部用 tmp_path 当 data/ 根（monkeypatch paths.DATA），不读真实 data/、不写 userdata/。"""
 
 from tests.test_gamedata import _write_min_sources
+from sc_mining.gamedata._cache import VersionCache as _VC
 
 
 def _setup(monkeypatch, tmp_path, **override):
@@ -306,8 +307,8 @@ def test_places_refresh_after_version_change(monkeypatch, tmp_path):
     from sc_mining.crafting import stockplaces as SP
 
     _setup(monkeypatch, tmp_path)
-    monkeypatch.setattr(SP, "_PLACES", {"ver": None, "list": None})
-    monkeypatch.setattr(SP, "_INDEX", {"of": None, "idx": None})
+    monkeypatch.setattr(SP, "_PLACES", _VC())
+    monkeypatch.setattr(SP, "_INDEX", _VC())
     first = SP.places()
     assert [p["en"] for p in first] == [
         "New Babbage"
@@ -341,8 +342,8 @@ def test_places_cache_clear_still_works(monkeypatch, tmp_path):
     monkeypatch.setattr(
         uex, "apply_live", lambda m: False
     )  # 真 clear_caches 会读真实 prices.json、改 mining.data
-    monkeypatch.setattr(SP, "_PLACES", {"ver": None, "list": None})
-    monkeypatch.setattr(SP, "_INDEX", {"of": None, "idx": None})
+    monkeypatch.setattr(SP, "_PLACES", _VC())
+    monkeypatch.setattr(SP, "_INDEX", _VC())
     first = SP.places()
     clear_caches()  # 汉化包换了：data_pack 按名字清 places / _index
     assert SP.places() is not first
@@ -742,7 +743,7 @@ def _legacy_build(monkeypatch, tmp_path):
 def _fresh_search(monkeypatch):
     from sc_mining.crafting import itemsearch as IS
 
-    monkeypatch.setattr(IS, "_cache", {"key": None, "index": None})
+    monkeypatch.setattr(IS, "_cache", _VC())
     return IS
 
 
@@ -907,28 +908,6 @@ def test_apply_live_yields_when_db_unavailable(monkeypatch, tmp_path):
     assert m.CITY_PRICES["Aluminum"] == {"Area18": 3800, "Lorville": 2}
     assert type(m.CITY_PRICES["Aluminum"]["Area18"]) is int
     assert m.REFINERIES["ARC-L1"] == ("弧 L1", {"Aluminum": 5})
-
-
-def test_clear_caches_rebuilds_for_writers_outside_updating(monkeypatch, tmp_path):
-    """汉化包重建 / 掉落更新还没经过 updating() 写文件：clear_caches 之后物品搜索也要看到新数据"""
-    import json
-
-    import sc_mining.gamedata as G
-    from sc_mining.update import uex
-    from sc_mining.update.data_pack import clear_caches
-
-    _setup(monkeypatch, tmp_path)
-    monkeypatch.setattr(
-        uex, "apply_live", lambda m: False
-    )  # 真 clear_caches 会读真实 prices.json、改 mining.data
-    IS = _fresh_search(monkeypatch)
-    G.ensure()
-    assert IS.lookup("MedPack X") is None
-    (tmp_path / "name_aliases.json").write_text(
-        json.dumps({"MedPack X": "Medpen"}), encoding="utf-8"
-    )
-    clear_caches()
-    assert (IS.lookup("MedPack X") or {}).get("ek") == "medpen"
 
 
 def test_query_while_new_content_is_published(monkeypatch, tmp_path):

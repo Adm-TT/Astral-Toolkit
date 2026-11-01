@@ -3,6 +3,7 @@
 全部用 tmp_path 当 data/ 根（monkeypatch paths.DATA），不读真实 data/、不写 userdata/。"""
 
 import dataclasses
+from sc_mining.gamedata._cache import VersionCache as _VC
 
 
 def _data_root(monkeypatch, tmp_path):
@@ -831,7 +832,7 @@ def test_import_matches_itemsearch_index_on_sample(monkeypatch, tmp_path):
     monkeypatch.setattr(shops, "_data", None)
     monkeypatch.setattr(loot, "INDEX", tmp_path / "loot_index.json")
     monkeypatch.setattr(loot, "_index", None)
-    monkeypatch.setattr(itemsearch, "_cache", {"key": None, "index": None})
+    monkeypatch.setattr(itemsearch, "_cache", _VC())
     index = itemsearch._build_locked()
     assert index is not None
     rows = index["rows"]

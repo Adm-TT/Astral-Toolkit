@@ -17,6 +17,7 @@ from sc_mining.crafting import shops, wikelo
 import json, time  # noqa: E401, F401, F811
 from sc_mining.crafting import shops, loot, acquire  # noqa: F811
 from sc_mining.navigation import position, navigate
+from sc_mining.gamedata._cache import VersionCache as _VC
 
 
 # ======================================================================
@@ -3914,7 +3915,7 @@ def test_item_desc_and_alias_from_wiki(monkeypatch, tmp_path):
     f = tmp_path / "name_aliases.json"
     f.write_text('{"Helix 2 Old Name": "Helix II Mining Laser"}', encoding="utf-8")
     real = paths.DATA
-    monkeypatch.setattr(I, "_cache", {"key": None, "index": None})
+    monkeypatch.setattr(I, "_cache", _VC())
     monkeypatch.setattr(paths, "DATA", tmp_path)
     import shutil
 
@@ -3931,7 +3932,7 @@ def test_item_desc_and_alias_from_wiki(monkeypatch, tmp_path):
             in t_trade.item_info(name="Helix II Mining Laser", exact=True)["aka"]
         )
     finally:
-        monkeypatch.setattr(I, "_cache", {"key": None, "index": None})
+        monkeypatch.setattr(I, "_cache", _VC())
 
 
 def test_ore_log_record_and_hotkeys(monkeypatch, tmp_path):

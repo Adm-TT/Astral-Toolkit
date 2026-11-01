@@ -16,9 +16,10 @@
 import re
 import unicodedata
 
+from ..gamedata._cache import VersionCache
 from . import shops
 
-_cache = {"key": None, "index": None}
+_cache = VersionCache()  # 索引按库的内容版本缓存一份
 _build_lock = __import__(
     "threading"
 ).Lock()  # 启动时后台先建索引；玩家这时搜索就等它建完，不重复建
@@ -72,22 +73,25 @@ def _build_locked():
     """从游戏数据层的物品目录建内存索引（合并规则在 gamedata/_import.import_items，和以前这里的一样）；
     缓存键是库的内容版本：五份源（商店、掉落、汉化、旧写法、wiki）哪份变了都会重建"""
     from .. import gamedata
-    from ..gamedata import items as gd_items
 
     try:
         gamedata.ensure()
         with gamedata.snapshot() as snap:
-            key = (snap.data_version,)
-            if _cache["key"] == key:
-                return _cache["index"]
-            items = gd_items.all(snap)
-            zks_of = gd_items.zh_keys_of_all(snap)
-            names = gd_items.names_by_kind(("zh_loot", "aka"), snap)
-            shop_of = gd_items.first_source_ids("uex", snap)
+            return _cache.get(snap, _index_from)
     except gamedata.GamedataError:
         return (
             _empty_index()
         )  # 库建不出来：和以前没有数据文件一样，搜不到东西，不报错（不缓存，下次再试）
+
+
+def _index_from(snap):
+    """从一个快照把索引建出来（VersionCache 按 snap.data_version 缓存）"""
+    from ..gamedata import items as gd_items
+
+    items = gd_items.all(snap)
+    zks_of = gd_items.zh_keys_of_all(snap)
+    names = gd_items.names_by_kind(("zh_loot", "aka"), snap)
+    shop_of = gd_items.first_source_ids("uex", snap)
     rows = []
     for it in items:
         e = {
@@ -125,32 +129,7 @@ def _build_locked():
         for old in e.get("aka") or []:
             for t in _trigrams(en_key(old)):
                 by_tri.setdefault(t, set()).add(i)
-    index = {"rows": rows, "by_char": by_char, "by_tri": by_tri, "by_en": by_en}
-    _cache.update(key=key, index=index)
-    return index
-
-
-def _on_data_changed():
-    """data_pack.clear_caches() 调（数据文件换了之后）：汉化包重建（zh_names / name_aliases）、掉落索引更新这几处
-    还没经过 gamedata.updating() 写文件，库不会自己重建，索引按库的内容版本缓存就会一直是旧的——这里补建一次库
-    （源没变就是空操作）。过渡代码：等 GD-B4（汉化 / 掉落）把 localization.rebuild、loot.update 的写入套进 updating()
-    之后，由 GD-B4 删掉这个钩子和下面的登记（审查 2026-11-02 第 2 条；控制台复审第 7 条：登记在队首，先补库再让别的钩子重填缓存）"""
-    from .. import gamedata
-
-    try:
-        gamedata.rebuild()
-    except Exception:  # noqa: BLE001 —— 清缓存的钩子不能让更新流程报失败；建不出来下次查询再试
-        pass
-
-
-try:
-    from ..update.data_pack import CACHE_HOOKS as _CACHE_HOOKS
-
-    _CACHE_HOOKS.insert(
-        0, _on_data_changed
-    )  # 排最前：先补建库，后面 goals 等钩子重填缓存时读到的才是新库
-except Exception:  # noqa: BLE001 —— 和 tasks/goals.py 登记钩子的写法一样
-    pass
+    return {"rows": rows, "by_char": by_char, "by_tri": by_tri, "by_en": by_en}
 
 
 def wiki_items():

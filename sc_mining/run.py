@@ -258,6 +258,14 @@ def run_entry(name):
     input("\n按回车关闭这个窗口")
 
 
+_SOURCE_FILES = {
+    # navigate.update 是从 starmap 转出来的（__module__ 是 starmap）：两个名字都认。以前只写了 navigate，星图的保护从没生效（收口 1）
+    "sc_mining.navigation.navigate": ["starmap.json"],
+    "sc_mining.navigation.starmap": ["starmap.json"],
+    "sc_mining.crafting.build_crafting": ["crafting.json"],
+}
+
+
 def _is_game_source(fn):
     """这项更新对应的本地文件是不是由游戏数据构建的版本（paths.from_game）：是就不用网站版覆盖"""
     import json as _j
@@ -273,10 +281,7 @@ def _is_game_source(fn):
             build_crafting.source_rows() is not None
         ):  # 本机有构建输入：交给它自己按游戏数据重编（不会去 scmdb），游戏更新后新蓝图才进得来（二十一审）
             return False
-    for f in {
-        "sc_mining.navigation.navigate": ["starmap.json"],
-        "sc_mining.crafting.build_crafting": ["crafting.json"],
-    }.get(mod, []):
+    for f in _SOURCE_FILES.get(mod, []):
         try:
             if paths.from_game(_j.loads(paths.data(f).read_text(encoding="utf-8"))):
                 return True
