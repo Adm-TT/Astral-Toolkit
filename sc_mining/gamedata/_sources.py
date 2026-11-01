@@ -4,6 +4,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from ._types import BuildError
 
@@ -31,7 +32,7 @@ class SourceBytes:
     name: str
     present: bool
     sha256: str  # 不存在时 ""
-    data: object | None  # 解析后的 JSON；不存在时 None
+    data: Any  # 解析后的 JSON；不存在时 None
 
 
 def read_sources(data_dir: Path) -> dict[str, SourceBytes]:

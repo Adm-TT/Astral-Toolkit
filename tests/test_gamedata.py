@@ -307,3 +307,211 @@ def test_snapshot_connection_is_readonly(monkeypatch, tmp_path):
     with snapshot() as s:
         with raises(sqlite3.OperationalError):
             s.execute("insert into meta values ('x', 'y')")
+
+
+# ---------------------------------------------------------------- Task 5：导入与建库
+
+_F = ["Stanton", "MicroTech", "MicroTech", "", "", "New Babbage"]
+_MIN_SOURCES = {
+    "shops.json": {
+        "fmt": 2,
+        "fetched": 1.0,
+        "items": {
+            "171": ["Venture Arms", "Arms"],
+            "200": ["Lawson Mining Laser", "Mining"],
+            "201": ["Lawson Mining Laser", "Mining"],  # 同名第二个 id：商店 id 取第一个
+        },
+        "rows": [
+            [171, "Shop A", "Stanton · X", 586.0, 0.0, "4.10", _F],
+            [171, "Shop B", "Stanton · Y", 0.0, 300.0, "4.10", _F],
+            [200, "Shop C", "Pyro · Z", 1000.0, 0.0, "4.10", _F],
+        ],
+    },
+    "loot_index.json": {
+        "version": "4.10.2LIVE",
+        "rows": [
+            ["u1", "Medpen", "medpen_01", "common", 3, "医疗笔"],
+            ["u2", "夹克 - 名称", "jacket_01", "rare", 1, "DYL Jacket"],  # 中英填反
+        ],
+    },
+    "zh_names.json": {"视差步枪": "HD", "医疗笔": "Medpen"},  # HD 是假英文名
+    "zh_only_names.json": {"荣誉勋章": "Medal Of Honor", "章": "Badge"},  # 后者中文太短
+    "name_aliases.json": {
+        "Medi Pen": "Medpen",
+        "Venture Arms": "Lawson Mining Laser",  # 旧写法已经是另一件物品：不能登记
+    },
+    "wiki_items.json": {
+        "items": [
+            {"n": "Medpen", "t": "Consumable", "s": 1, "cls": "medpen_01", "d": "急救"},
+            {"n": "Some Paint", "t": "Paints", "s": None, "cls": "paint_01", "d": ""},
+        ]
+    },
+    "prices.json": {"prices": {"Aluminum": {"Area18": 3800, "Lorville": 3000}}},
+}
+
+
+def _write_min_sources(tmp_path, **override):
+    import json
+
+    for name, obj in {**_MIN_SOURCES, **override}.items():
+        (tmp_path / name).write_text(
+            json.dumps(obj, ensure_ascii=False), encoding="utf-8"
+        )
+
+
+def test_build_publish_roundtrip(monkeypatch, tmp_path):
+    from sc_mining.gamedata import snapshot
+    from sc_mining.gamedata._build import rebuild_if_needed
+    from sc_mining.gamedata._manifest import read_manifest
+    from sc_mining.gamedata._paths import db_path, tmp_dir
+
+    _data_root(monkeypatch, tmp_path)
+    _write_min_sources(tmp_path)
+    m = rebuild_if_needed()
+    assert read_manifest() == m and db_path(m.generation_id).exists()
+    assert not list(tmp_dir().glob("*.tmp"))
+    with snapshot() as s:
+        assert s.data_version == m.data_version
+        assert s.execute("select count(*) from shop_rows") == [(3,)]
+        assert s.execute("select count(*) from loot_rows") == [(2,)]
+        assert s.execute("select price from mineral_prices where city='Lorville'") == [
+            (3000.0,)
+        ]
+
+
+def test_rebuild_skips_when_unchanged(monkeypatch, tmp_path):
+    from sc_mining.gamedata._build import rebuild_if_needed
+
+    _data_root(monkeypatch, tmp_path)
+    _write_min_sources(tmp_path)
+    assert rebuild_if_needed() == rebuild_if_needed()
+
+
+def test_rebuild_when_source_changes(monkeypatch, tmp_path):
+    from sc_mining.gamedata._build import rebuild_if_needed
+
+    _data_root(monkeypatch, tmp_path)
+    _write_min_sources(tmp_path)
+    m1 = rebuild_if_needed()
+    _write_min_sources(
+        tmp_path, **{"prices.json": {"prices": {"Aluminum": {"Area18": 3900}}}}
+    )
+    m2 = rebuild_if_needed()
+    assert m2.generation_id != m1.generation_id
+    assert m2.data_version != m1.data_version
+
+
+def test_rebuild_force_makes_new_generation_same_version(monkeypatch, tmp_path):
+    from sc_mining.gamedata._build import rebuild_if_needed
+
+    _data_root(monkeypatch, tmp_path)
+    _write_min_sources(tmp_path)
+    m1 = rebuild_if_needed()
+    m2 = rebuild_if_needed(force=True)
+    assert m2.generation_id != m1.generation_id
+    assert m2.data_version == m1.data_version
+
+
+def test_build_bad_json_keeps_old_manifest(monkeypatch, tmp_path):
+    from sc_mining.gamedata import BuildError
+    from sc_mining.gamedata._build import rebuild_if_needed
+    from sc_mining.gamedata._manifest import read_manifest
+    from sc_mining.gamedata._paths import tmp_dir
+    from tests.minipytest import raises
+
+    _data_root(monkeypatch, tmp_path)
+    _write_min_sources(tmp_path)
+    m1 = rebuild_if_needed()
+    (tmp_path / "shops.json").write_text("{", encoding="utf-8")
+    with raises(BuildError):
+        rebuild_if_needed()
+    assert read_manifest() == m1
+    assert not list(tmp_dir().glob("*"))
+
+
+def test_import_items_follows_itemsearch_rules(monkeypatch, tmp_path):
+    from sc_mining.gamedata import snapshot
+    from sc_mining.gamedata._build import rebuild_if_needed
+
+    _data_root(monkeypatch, tmp_path)
+    _write_min_sources(tmp_path)
+    rebuild_if_needed()
+    with snapshot() as s:
+        ids = {r[0] for r in s.execute("select item_id from items")}
+        # 身份键 = itemsearch.en_key（含 l→i 折叠）
+        assert ids == {
+            "venturearms",
+            "iawsonminingiaser",
+            "medpen",
+            "dyijacket",
+            "medaiofhonor",
+        }
+        # 中英填反的掉落行已纠正
+        assert s.execute("select en, zh from items where item_id='dyijacket'") == [
+            ("DYL Jacket", "夹克 - 名称")
+        ]
+        # 三份数据都有的物品：标记齐全，中文名来自汉化包，wiki 字段进来
+        row = s.execute(
+            "select zh, has_shop, has_loot, loc, wiki, wtype, wsize, desc from items where item_id='medpen'"
+        )
+        assert row == [("医疗笔", 0, 1, 1, 1, "Consumable", 1, "急救")]
+        # 商店 id 取第一个；两个 uex id 都能对到同一件
+        assert s.execute(
+            "select item_id from item_source_ids where source='uex' and external_id in ('200','201') order by external_id"
+        ) == [("iawsonminingiaser",), ("iawsonminingiaser",)]
+        assert s.execute(
+            "select item_id from item_source_ids where source='loot_uuid' and external_id='u1'"
+        ) == [("medpen",)]
+        assert s.execute(
+            "select item_id from item_source_ids where source='class' and external_id='medpen_01'"
+        ) == [("medpen",)]
+        # 名字表：英文 + 汉化中文 + 掉落中文 + 旧写法
+        kinds = s.execute(
+            "select kind, name from item_names where item_id='medpen' order by kind, name"
+        )
+        assert kinds == [
+            ("aka", "Medi Pen"),
+            ("en", "Medpen"),
+            ("zh_loc", "医疗笔"),
+            ("zh_loot", "医疗笔"),
+        ]
+        # 商店行原样、顺序保留
+        assert s.execute(
+            "select uex_item_id, shop_name, price_buy, price_sell, f5, source_order from shop_rows order by source_order"
+        ) == [
+            (171, "Shop A", 586.0, 0.0, "New Babbage", 0),
+            (171, "Shop B", 0.0, 300.0, "New Babbage", 1),
+            (200, "Shop C", 1000.0, 0.0, "New Babbage", 2),
+        ]
+
+
+def test_import_alias_does_not_override_existing_item(monkeypatch, tmp_path):
+    from sc_mining.gamedata import snapshot
+    from sc_mining.gamedata._build import rebuild_if_needed
+
+    _data_root(monkeypatch, tmp_path)
+    _write_min_sources(tmp_path)
+    rebuild_if_needed()
+    with snapshot() as s:
+        # "Venture Arms" 本身是一件物品，不能变成 Lawson 的旧写法
+        assert s.execute(
+            "select count(*) from item_names where kind='aka' and name='Venture Arms'"
+        ) == [(0,)]
+        assert s.execute("select item_id from item_names where norm='venturearms'") == [
+            ("venturearms",)
+        ]
+
+
+def test_data_version_depends_on_missing_flag(tmp_path):
+    import json
+
+    from sc_mining.gamedata._build import data_version
+    from sc_mining.gamedata._sources import read_sources
+
+    (tmp_path / "shops.json").write_text(
+        json.dumps(_MIN_SOURCES["shops.json"]), encoding="utf-8"
+    )
+    v_missing = data_version(read_sources(tmp_path))
+    (tmp_path / "prices.json").write_text("{}", encoding="utf-8")
+    v_present = data_version(read_sources(tmp_path))
+    assert v_missing != v_present
