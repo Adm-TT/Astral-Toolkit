@@ -71,6 +71,9 @@ def build(sources: dict[str, SourceBytes], generation_id: str, dv: str) -> Path:
             _import.import_item_stats(conn, sources)
             _import.import_print_spots(conn, sources)
             _import.import_ship_items(conn, sources)
+            _import.import_mining_rocks(conn, sources)
+            _import.import_ship_signatures(conn, sources)
+            _import.import_refinery_yields(conn, sources)
             meta = [
                 ("schema_version", str(SCHEMA_VERSION)),
                 ("importer_version", str(IMPORTER_VERSION)),
@@ -140,6 +143,10 @@ def _verify(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> None:
         "print_spots",
         "print_spot_places",
         "ship_stock_items",
+        # schema 6
+        "mining_rock_entries",
+        "ship_signatures",
+        "refinery_yields",
     }
     if not need <= have:
         raise BuildError(f"游戏数据库缺表：{sorted(need - have)}")
