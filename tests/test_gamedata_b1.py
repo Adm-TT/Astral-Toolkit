@@ -825,7 +825,7 @@ def test_ensure_rebuilds_old_schema(monkeypatch, tmp_path):
 
 
 def test_apply_live_yields_when_db_unavailable(monkeypatch, tmp_path):
-    """库建不出来（shops.json 坏了）：矿价先用内置的，精炼站加成照样从 prices.json 套上"""
+    """库建不出来（shops.json 坏了）：矿价和精炼站加成都退回直接读 prices.json（和迁移前一样）"""
     import json
 
     from sc_mining.update import uex
@@ -844,7 +844,8 @@ def test_apply_live_yields_when_db_unavailable(monkeypatch, tmp_path):
     monkeypatch.setattr(uex, "OUT", tmp_path / "prices.json")
     m = _fake_data_module()
     assert uex.apply_live(m) is True
-    assert m.CITY_PRICES["Aluminum"] == {"Area18": 1, "Lorville": 2}
+    assert m.CITY_PRICES["Aluminum"] == {"Area18": 3800, "Lorville": 2}
+    assert type(m.CITY_PRICES["Aluminum"]["Area18"]) is int
     assert m.REFINERIES["ARC-L1"] == ("弧 L1", {"Aluminum": 5})
 
 

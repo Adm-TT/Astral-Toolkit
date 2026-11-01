@@ -4,7 +4,10 @@
 各 topic 查询前调 ensure()。进程里对同一个库目录核对过一次之后直接返回（以后换代由 snapshot() 读清单跟上），
 不在每次查询都读源文件算哈希；库目录换了（测试换 paths.DATA）就重新核对。真的建不出库才抛 BuildError。
 不另加锁：rebuild_if_needed 自己在数据目录写锁里核对和建库，多个线程同时进来只会建一次；
-更新边界 updating() 里（已拿着写锁）再调到这里是同线程重入，不会卡住（审查 2026-11-02 第 1 条）。"""
+更新边界 updating() 里（已拿着写锁）再调到这里是同线程重入，不会卡住（审查 2026-11-02 第 1 条）。
+代价：每个进程第一次查询一定要拿一次数据目录写锁、读一遍源算哈希（真实数据 50–70 ms）；这时别的线程正在
+updating() 里装数据，就要等它装完。mining/data.py 在 import 时就调 apply_live → 这里，升级后库过时会在 import 的线程上
+同步重建一次（约 0.5 秒）。"""
 
 import threading
 from contextlib import contextmanager

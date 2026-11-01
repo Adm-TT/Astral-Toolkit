@@ -84,14 +84,19 @@ def apply_live(data_module):
     try:
         live_prices = gamedata.prices.city_prices()
     except gamedata.GamedataError:
-        live_prices = {}  # 库建不出来：矿价先用内置的，下面的精炼站加成照样套（审查 2026-11-02 第 3 条）
+        # 库建不出来（如 shops.json 缺了）：矿价退回直接读 prices.json，和迁移前一样（审查 2026-11-02 第 3 条、复审第 1 条）
+        live_prices = live.get("prices") or {}
     prices = {
         m: dict(c) for m, c in data_module.CITY_PRICES.items()
     }  # 先组好新表再整体换：采矿线程可能正在遍历旧表
     for m, cities in live_prices.items():
         prices.setdefault(m, {}).update(
             # 库里是 REAL：源里是整数（UEX 的价都是整数 aUEC）就还原成 int，和以前直接读 JSON 一样
-            {c: (int(p) if p.is_integer() else p) for c, p in cities.items() if p}
+            {
+                c: (int(p) if isinstance(p, float) and p.is_integer() else p)
+                for c, p in cities.items()
+                if p
+            }
         )  # 0 价（UEX 没报价）不盖内置价
     data_module.CITY_PRICES = prices  # 整个换掉（best_price 调用时才取 data.CITY_PRICES；没人在 import 时绑定它）
     refs = (
