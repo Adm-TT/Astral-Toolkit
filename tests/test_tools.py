@@ -815,15 +815,19 @@ def test_log_place_is_specific(monkeypatch):
     """顶部「位置」要显示具体地点（新巴贝奇），不是星球（微科星）"""
     from sc_mining.navigation import position
 
-    monkeypatch.setattr(
-        position,
-        "_places_zh",
-        lambda: {
-            "newbabbage": "新巴贝奇",
-            "arcl1wideforeststation": "弧 L1 广袤森林站",
-            "checkmate": "死局空间站",
-        },
-    )
+    zh = {
+        "newbabbage": "新巴贝奇",
+        "arcl1wideforeststation": "弧 L1 广袤森林站",
+        "checkmate": "死局空间站",
+    }
+
+    def place_zh(key=None, prefix=None):  # 代替查库的 places_zh（批 2 起走游戏数据层）
+        if prefix is not None:
+            keys = sorted((k for k in zh if k.startswith(prefix)), key=len)
+            return zh[keys[0]] if keys else None
+        return zh.get(key)
+
+    monkeypatch.setattr(position, "_place_zh", place_zh)
     monkeypatch.setattr(
         position, "_station_at", lambda i: "Checkmate Station" if i == "P2_L4" else ""
     )

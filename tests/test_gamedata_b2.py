@@ -188,3 +188,81 @@ def test_from_code_lagrange(monkeypatch, tmp_path):
     assert (
         position.from_code("RR_HUR_L1") is None
     )  # 斯坦顿按 Stanton1_L1 找，最小数据里没有
+
+
+# ---------------------------------------------------------------- Task 3：地名对照
+
+
+def _no_ini(monkeypatch):
+    """汉化包当作没有（不读真实 data/loc），地点代号只剩 place_codes_zh；place_name 的缓存前后都清掉"""
+    from sc_mining.navigation import position
+
+    monkeypatch.setattr(position, "_ini_cache", {"ini": {}})
+    position.place_name.cache_clear()
+
+
+def test_poi_zh_extra_overrides(monkeypatch, tmp_path):
+    from sc_mining.navigation import names
+
+    _setup(monkeypatch, tmp_path)
+    assert names.poi_zh("Lorville") == "洛维尔（新）"  # places_extra_zh 盖过 places_zh
+    assert names.poi_zh("Everus Harbor") == "艾维拉斯港"
+
+
+def test_poi_zh_strips_bracket_notes(monkeypatch, tmp_path):
+    from sc_mining.navigation import names
+
+    _setup(monkeypatch, tmp_path)
+    assert names.poi_zh("Everus Harbor [F]") == "艾维拉斯港"
+    assert names.poi_zh("Everus Harbor (missing)") == "艾维拉斯港"
+    assert names.poi_zh("Nowhere") == ""
+
+
+def test_place_name_prefix_shortest_then_first(monkeypatch, tmp_path):
+    """斯坦顿拉格朗日站汉化包没有时，按 places_zh 里以「arcl1」开头的最短键；同样长取源里靠前的。只看 places_zh"""
+    from sc_mining.navigation import position
+
+    _setup(
+        monkeypatch,
+        tmp_path,
+        **{
+            "places_zh.json": {"arcl1zzz": "长", "arcl1b": "乙", "arcl1a": "甲"},
+            "places_extra_zh.json": {"arcl1": "extra 不算", "newbabbage": "extra 不算"},
+            "place_codes_zh.json": {},
+        },
+    )
+    _no_ini(monkeypatch)
+    try:
+        assert position.place_name("RR_ARC_L1") == "乙"
+        assert position.place_name("RR_HUR_L1") == "HUR-L1"
+        assert position.place_name("Stanton4_NewBabbage") == "New Babbage"
+    finally:
+        position.place_name.cache_clear()
+
+
+def test_place_name_code_table_then_ini(monkeypatch, tmp_path):
+    """地点代号：汉化包有就用汉化包的，没有再用随包的代号表（以前两份合成一张表、汉化包盖过代号表）"""
+    from sc_mining.navigation import position
+
+    _setup(
+        monkeypatch,
+        tmp_path,
+        **{"place_codes_zh.json": {"rr_p3": "代号表名 (Orbituary)", "rr_p6": "废墟"}},
+    )
+    _no_ini(monkeypatch)
+    try:
+        assert position.ini_name("RR_P3") == "代号表名"
+        monkeypatch.setattr(position, "_ini_cache", {"ini": {"rr_p3": "汉化包名"}})
+        assert position.ini_name("RR_P3") == "汉化包名"
+        assert position.ini_name("RR_P6") == "废墟"
+        assert position.ini_name("RR_P9") == ""
+    finally:
+        position.place_name.cache_clear()
+
+
+def test_zh_name_station_suffix_fallback(monkeypatch, tmp_path):
+    from sc_mining.navigation import position
+
+    _setup(monkeypatch, tmp_path, **{"places_zh.json": {"checkmate": "死局空间站"}})
+    assert position._zh_name("Checkmate Station") == "死局空间站"
+    assert position._zh_name("Unknown Station") == "Unknown Station"

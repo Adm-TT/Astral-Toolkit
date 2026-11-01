@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+from .. import gamedata  # noqa: E402
 from ..core.paths import DATA, USER, write_json  # noqa: E402
 from .names import (
     BODY_ZH,
@@ -34,7 +35,6 @@ from .names import (
     _SHIP_ZH,
     _WRECK,
     _norm,
-    _places_zh,
     body_label,
     label,
     poi_zh,
@@ -294,6 +294,13 @@ def space_points(data=None):
 def search(query, data=None, limit=15):
     """按中文名/英文名/星球名/类型搜地点；多个词都要命中。没信标的排前面"""
     data = data or load()
+    with (
+        gamedata.snapshot()
+    ):  # 一次搜索钉在一个版本上：几千次地名查询复用这个快照，不每次读清单
+        return _search(query, data, limit)
+
+
+def _search(query, data, limit):
     words = [w for w in re.split(r"[\s,，]+", query.strip().lower()) if w]
     rows = []
     try:
