@@ -41,6 +41,52 @@ def _names_table(sources: dict[str, SourceBytes]) -> dict[str, str]:
     return out
 
 
+def import_name_pairs(
+    conn: sqlite3.Connection, sources: dict[str, SourceBytes]
+) -> None:
+    """批 6 公共层：names.table() 的结果原样有序入 zh_name_pairs（src 标明来自哪份）；name_aliases.json 全部 str→str 对入 name_alias_pairs"""
+    table = _names_table(sources)
+    zh_names = _d(sources, "zh_names.json", None) or {}
+    conn.executemany(
+        "insert into zh_name_pairs values (?,?,?,?)",
+        [
+            (
+                i,
+                zh,
+                en,
+                "zh_names" if zh in zh_names and zh_names[zh] == en else "zh_only",
+            )
+            for i, (zh, en) in enumerate(table.items())
+        ],
+    )
+    aliases = _d(sources, "name_aliases.json", {}) or {}
+    conn.executemany(
+        "insert into name_alias_pairs values (?,?,?)",
+        [
+            (i, old, new)
+            for i, (old, new) in enumerate(
+                aliases.items() if isinstance(aliases, dict) else ()
+            )
+            if isinstance(old, str) and isinstance(new, str)
+        ],
+    )
+
+
+def import_wiki_rows(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> None:
+    """批 6 公共层：wiki_items.json 的 items 原样（含噪声物品，cls 原大小写），alt 只收字符串、保序"""
+    items = (_d(sources, "wiki_items.json", {}) or {}).get("items") or []
+    rows, alts = [], []
+    for i, w in enumerate(items if isinstance(items, list) else []):
+        if not isinstance(w, dict) or not isinstance(w.get("n"), str):
+            continue
+        rows.append((i, w["n"], w.get("cls") if isinstance(w.get("cls"), str) else ""))
+        alts.extend(
+            (i, j, c) for j, c in enumerate(w.get("alt") or []) if isinstance(c, str)
+        )
+    conn.executemany("insert into wiki_items values (?,?,?)", rows)
+    conn.executemany("insert into wiki_alt_classes values (?,?,?)", alts)
+
+
 def import_items(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> None:
     from ..core.i18n import gear_zh_of_item
     from ..crafting.itemsearch import _has_cjk, _variant, _wiki_noise, en_key, zh_key
@@ -109,6 +155,8 @@ def import_items(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> N
             add_zk(e, zh_key(zh), "zh_loc", zh)
     # 4. wiki 清单（L124-131）：只补别处没有的英文名；类型 / 尺寸 / 描述
     for w in _d(sources, "wiki_items.json", {}).get("items") or []:
+        if not isinstance(w, dict) or not isinstance(w.get("n"), str):
+            continue  # 坏一条跳一条，别让整个库建不出来（批 6 矩阵核对时发现这里会 KeyError）
         e = entry(w["n"])
         if e:
             e.setdefault("wiki", True)
@@ -117,10 +165,12 @@ def import_items(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> N
                 w.get("s"),
                 w.get("d") or "",
             )
-            if w.get("cls"):
+            if isinstance(w.get("cls"), str) and w["cls"]:
                 source_ids.append(("class", w["cls"].lower(), e["ek"]))
     # 5. 旧写法（L141-150）：正名存在、旧写法还不是别的物品，才登记
     for old, real in (_d(sources, "name_aliases.json", {}) or {}).items():
+        if not (isinstance(old, str) and isinstance(real, str)):
+            continue
         e = by_en.get(en_key(real))
         if e and en_key(old) not in by_en:
             e["aka"].append(old)
@@ -221,9 +271,14 @@ def import_shops(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> N
 
 
 def import_loot(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> None:
-    rows = _d(sources, "loot_index.json", {}).get("rows") or []
+    import json
+
+    from ..crafting.loot import _fold
+
+    raw = _d(sources, "loot_index.json", None)
+    rows = (raw.get("rows") if isinstance(raw, dict) else None) or []
     conn.executemany(
-        "insert or ignore into loot_rows values (?,?,?,?,?,?,?)",
+        "insert or ignore into loot_rows values (?,?,?,?,?,?,?,?,?,?)",
         [
             (
                 r[0],
@@ -232,11 +287,39 @@ def import_loot(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> No
                 r[3] or "",
                 int(r[4] or 0),
                 (r[5] if len(r) > 5 else "") or "",
+                _fold(r[1]),
+                _fold(r[5] if len(r) > 5 else ""),
+                (r[2] or "").lower(),
                 i,
             )
             for i, r in enumerate(rows)
         ],
     )
+    if isinstance(raw, dict):
+        # 有文件才写这个键（批 4 靠「键在不在」区分「没有掉落索引」和「索引是空的」；version 原值类型照存）
+        meta = {"version": raw["version"]} if "version" in raw else {}
+        conn.execute(
+            "insert or replace into meta values ('loot_index_meta', ?)",
+            (json.dumps(meta, ensure_ascii=False),),
+        )
+
+
+def import_wiki_classes(
+    conn: sqlite3.Connection, sources: dict[str, SourceBytes]
+) -> None:
+    """loot._wiki_classes 的规则：按 loot._fold(n) 收 cls 和 alt[] 的小写，空串不存"""
+    from ..crafting.loot import _fold
+
+    items = (_d(sources, "wiki_items.json", {}) or {}).get("items") or []
+    out = []
+    for i, w in enumerate(items if isinstance(items, list) else []):
+        if not isinstance(w, dict):
+            continue
+        k = _fold(w.get("n"))
+        for c in [w.get("cls"), *(w.get("alt") or [])]:
+            if isinstance(c, str) and c.lower():
+                out.append((k, c.lower(), i))
+    conn.executemany("insert into wiki_classes values (?,?,?)", out)
 
 
 def import_prices(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> None:
@@ -498,5 +581,257 @@ def import_mining_spots(
                 i,
             )
             for i, (r, xyz) in _rows(raw, lambda r: (r, _xyz(r)))
+        ],
+    )
+
+
+# ---------------------------------------------------------------- schema 4：制造 / 维科洛 / 物品属性（批 3 公共层，2026-11-02）
+# 规则直接 import 复用：crafting.assign_keys（「名字#序号」编号）、crafting._fold_name / _search_norm、wikelo._fold、itemsearch.en_key
+# 都是可选源：缺了空表；坏一条跳一条（_rows）
+
+
+def import_crafting(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> None:
+    import json
+
+    from ..crafting.crafting import _fold_name, _search_norm, assign_keys
+    from ..crafting.itemsearch import en_key
+
+    raw = _d(sources, "crafting.json", {}) or {}
+    bps = raw.get("blueprints") if isinstance(raw, dict) else None
+    bps = (
+        [b for b in bps if isinstance(b, dict) and isinstance(b.get("n"), str)]
+        if isinstance(bps, list)
+        else []
+    )
+    keys, _index, _total = assign_keys(bps)
+    known = {r[0] for r in conn.execute("select item_id from items")}
+    rows = []
+    mats = []
+    for i, b in enumerate(bps):
+        slots = b.get("slots") if isinstance(b.get("slots"), list) else []
+        src = b.get("src") if isinstance(b.get("src"), list) else []
+        ek = en_key(b["n"])
+        rows.append(
+            (
+                i + 1,
+                b.get("u") or "",
+                b["n"],
+                b.get("z") or "",
+                b.get("g") or "",
+                b.get("t") or "",
+                b.get("s") or "",
+                b.get("m") or "",
+                b.get("sec"),
+                1 if b.get("d") else 0,
+                b.get("nsrc"),
+                keys[id(b)],
+                _fold_name(b["n"]),
+                _fold_name(b.get("z")),
+                _search_norm(b["n"]),
+                _search_norm(b.get("z")),
+                ek if ek in known else None,
+                json.dumps(slots, ensure_ascii=False, separators=(",", ":")),
+                json.dumps(src, ensure_ascii=False, separators=(",", ":")),
+                i,
+            )
+        )
+        for si, slot in enumerate(slots):
+            try:
+                slot_name, opts = slot[0], slot[1]
+            except (IndexError, TypeError):
+                continue
+            for oi, o in enumerate(opts if isinstance(opts, list) else []):
+                try:
+                    mats.append(
+                        (
+                            i + 1,
+                            si,
+                            str(slot_name),
+                            oi,
+                            str(o[0]),
+                            str(o[1]),
+                            float(o[2]),
+                            int(o[3]),
+                        )
+                    )
+                except (IndexError, TypeError, ValueError):
+                    continue
+    conn.executemany(
+        "insert into blueprints values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows
+    )
+    conn.executemany(
+        "insert or ignore into blueprint_materials values (?,?,?,?,?,?,?,?)", mats
+    )
+    if isinstance(raw, dict):
+        meta = []
+        if raw.get("version") is not None:
+            meta.append(("crafting_version", str(raw["version"])))
+        if raw.get("dismantle_efficiency") is not None:
+            meta.append(
+                ("dismantle_efficiency", json.dumps(raw["dismantle_efficiency"]))
+            )
+        if raw.get("dismantle_blacklist") is not None:
+            meta.append(
+                (
+                    "dismantle_blacklist",
+                    json.dumps(raw["dismantle_blacklist"], ensure_ascii=False),
+                )
+            )
+        conn.executemany("insert or replace into meta values (?,?)", meta)
+
+
+def import_wikelo(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> None:
+    from ..crafting.wikelo import _fold
+
+    raw = _d(sources, "wikelo.json", {}) or {}
+    contracts = raw.get("contracts") if isinstance(raw, dict) else None
+    ok = _rows(contracts, lambda c: (str(c["id"]), c))
+    conn.executemany(
+        "insert or ignore into wikelo_contracts values (?,?,?,?,?,?)",
+        [
+            (
+                cid,
+                c.get("type") or "",
+                c.get("t") or "",
+                c.get("te") or "",
+                c.get("rz") or "",
+                i,
+            )
+            for i, (cid, c) in ok
+        ],
+    )
+    conn.executemany(
+        "insert or ignore into wikelo_rewards values (?,?,?)",
+        [
+            (cid, k, str(x))
+            for _i, (cid, c) in ok
+            for k, x in enumerate(c.get("rewards") or [])
+            if x is not None
+        ],
+    )
+    conn.executemany(
+        "insert or ignore into wikelo_requirements values (?,?,?,?,?,?,?,?)",
+        [
+            (
+                cid,
+                k,
+                str(r.get("n") or ""),
+                str(r.get("z") or ""),
+                (
+                    float(r["q"])
+                    if isinstance(r.get("q"), (int, float))
+                    and not isinstance(r.get("q"), bool)
+                    else None
+                ),
+                str(r.get("u") or ""),
+                _fold(r.get("n")),
+                _fold(r.get("z")),
+            )
+            for _i, (cid, c) in ok
+            for k, r in enumerate(c.get("req") or [])
+            if isinstance(r, dict)
+        ],
+    )
+    conn.executemany(
+        "insert or ignore into wikelo_contract_systems values (?,?,?)",
+        [
+            (cid, k, str(x))
+            for _i, (cid, c) in ok
+            for k, x in enumerate(c.get("systems") or [])
+            if x is not None
+        ],
+    )
+    if isinstance(raw, dict) and raw.get("version") is not None:
+        conn.execute(
+            "insert or replace into meta values ('wikelo_version', ?)",
+            (str(raw["version"]),),
+        )
+
+
+def import_item_stats(
+    conn: sqlite3.Connection, sources: dict[str, SourceBytes]
+) -> None:
+    import json
+
+    raw = _d(sources, "item_stats.json", {}) or {}
+    items = raw.get("items") if isinstance(raw, dict) else None
+    rows = []
+    for i, (uuid, v) in enumerate(
+        (items or {}).items() if isinstance(items, dict) else ()
+    ):
+        if not isinstance(v, dict):
+            continue
+        try:
+            size = int(v["size"]) if v.get("size") is not None else None
+            mass = float(v["mass"]) if v.get("mass") is not None else None
+        except (TypeError, ValueError):
+            continue
+        rows.append(
+            (
+                str(uuid),
+                v.get("n") or "",
+                size,
+                v.get("grade") or "",
+                v.get("cls") or "",
+                v.get("type") or "",
+                v.get("sub") or "",
+                mass,
+                v.get("ver") or "",
+                v.get("mfr") or "",
+                v.get("cn") or "",
+                json.dumps(v.get("s") or {}, ensure_ascii=False, separators=(",", ":")),
+                i,
+            )
+        )
+    conn.executemany(
+        "insert or ignore into item_stats values (?,?,?,?,?,?,?,?,?,?,?,?,?)", rows
+    )
+    if isinstance(raw, dict) and raw.get("version") is not None:
+        conn.execute(
+            "insert or replace into meta values ('item_stats_version', ?)",
+            (str(raw["version"]),),
+        )
+
+
+def import_print_spots(
+    conn: sqlite3.Connection, sources: dict[str, SourceBytes]
+) -> None:
+    raw = _d(sources, "print_spots.json", {}) or {}
+    items = raw.get("items") if isinstance(raw, dict) else None
+    ok = [
+        (i, (str(k), v))
+        for i, (k, v) in enumerate(
+            (items or {}).items() if isinstance(items, dict) else ()
+        )
+        if isinstance(v, dict)
+    ]
+    conn.executemany(
+        "insert or ignore into print_spots values (?,?,?,?)",
+        [(k, v.get("zh") or "", v.get("class") or "", i) for i, (k, v) in ok],
+    )
+    conn.executemany(
+        "insert or ignore into print_spot_places values (?,?,?)",
+        [
+            (k, j, str(p))
+            for _i, (k, v) in ok
+            for j, p in enumerate(v.get("where") or [])
+            if p is not None
+        ],
+    )
+
+
+def import_ship_items(
+    conn: sqlite3.Connection, sources: dict[str, SourceBytes]
+) -> None:
+    raw = _d(sources, "ship_items.json", {}) or {}
+    items = raw.get("items") if isinstance(raw, dict) else None
+    conn.executemany(
+        "insert or ignore into ship_stock_items values (?,?,?)",
+        [
+            (str(k), j, str(ship))
+            for k, ships in ((items or {}).items() if isinstance(items, dict) else ())
+            if isinstance(ships, list)
+            for j, ship in enumerate(ships)
+            if ship is not None
         ],
     )

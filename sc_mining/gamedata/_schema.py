@@ -2,8 +2,8 @@
 
 试点（批 1）用到的表。各列对应的源字段见 docs/superpowers/specs/2026-11-02-gamedata-callsites.md。"""
 
-SCHEMA_VERSION = 3  # 2：导航表（批 2 公共层）；3：shop_items 商店物品目录原样（批 1 要求，2026-11-02）
-IMPORTER_VERSION = 3
+SCHEMA_VERSION = 4  # 2：导航表（批 2 公共层）；3：shop_items 商店物品目录原样（批 1 要求）；4：制造 / 维科洛 / 物品属性（批 3 公共层，2026-11-02）
+IMPORTER_VERSION = 4
 
 DDL: list[str] = [
     # 清单和版本：schema_version / importer_version / data_version / generation_id / build_time / src:<文件名>=sha256
@@ -66,6 +66,8 @@ DDL: list[str] = [
     "CREATE INDEX idx_shop_rows_item ON shop_rows(uex_item_id)",
     "CREATE INDEX idx_shop_rows_shop ON shop_rows(shop_name)",
     # loot_index.json 的 rows 原样 6 列
+    # schema 4 加三列（批 4 公共层）：norm_en / norm_zh = crafting.loot._fold（find 的比较键，源里原样 en/zh 折叠，不做中英对调）；
+    # cls_lower = cls 小写（mine_info 按前缀筛；真实数据 uuid 无重复、各列无 None，2026-11-02 核过）
     """CREATE TABLE loot_rows (
         uuid TEXT PRIMARY KEY,
         en TEXT NOT NULL,
@@ -73,9 +75,49 @@ DDL: list[str] = [
         rarity TEXT NOT NULL,
         n INTEGER NOT NULL,
         zh TEXT NOT NULL DEFAULT '',
+        norm_en TEXT NOT NULL,
+        norm_zh TEXT NOT NULL DEFAULT '',
+        cls_lower TEXT NOT NULL DEFAULT '',
         source_order INTEGER NOT NULL
     )""",
     "CREATE INDEX idx_loot_rows_cls ON loot_rows(cls)",
+    "CREATE INDEX idx_loot_rows_norm_en ON loot_rows(norm_en)",
+    "CREATE INDEX idx_loot_rows_norm_zh ON loot_rows(norm_zh)",
+    "CREATE INDEX idx_loot_rows_cls_lower ON loot_rows(cls_lower)",
+    # wiki_items.json 的游戏类名（cls + alt[] 同一列多行），norm_n = crafting.loot._fold(n)：loot._wiki_classes 用（批 4 公共层）。
+    # 不能用 item_source_ids('class') 代替：那张表没有 alt、同名只留首个、折叠规则是 en_key
+    """CREATE TABLE wiki_classes (
+        norm_n TEXT NOT NULL,
+        cls_lower TEXT NOT NULL,
+        source_order INTEGER NOT NULL
+    )""",
+    "CREATE INDEX idx_wiki_classes_norm_n ON wiki_classes(norm_n)",
+    # ---- 批 6 公共层（names / gamekey）：三张「原样、有序」表，不过物品目录的合并 / 过滤（item_names 是过滤后的，gamekey / names.table 用不了）
+    # trade/names.table() 的结果原样：_import._names_table 的规则；src = zh_names / zh_only
+    """CREATE TABLE zh_name_pairs (
+        source_order INTEGER PRIMARY KEY,
+        zh TEXT NOT NULL,
+        en TEXT NOT NULL,
+        src TEXT NOT NULL
+    )""",
+    # wiki_items.json 的 items 原样（全部行，含噪声物品）；cls 保留原大小写（localization.wiki_class_names 按原样当键）
+    """CREATE TABLE wiki_items (
+        id INTEGER PRIMARY KEY,
+        n TEXT NOT NULL,
+        cls TEXT NOT NULL DEFAULT ''
+    )""",
+    """CREATE TABLE wiki_alt_classes (
+        wiki_id INTEGER NOT NULL REFERENCES wiki_items(id),
+        idx INTEGER NOT NULL,
+        cls TEXT NOT NULL,
+        PRIMARY KEY (wiki_id, idx)
+    )""",
+    # name_aliases.json 原样：全部 str→str 对，按 dict 顺序
+    """CREATE TABLE name_alias_pairs (
+        source_order INTEGER PRIMARY KEY,
+        old TEXT NOT NULL,
+        new TEXT NOT NULL
+    )""",
     # prices.json：矿物 × 城市 收购价
     """CREATE TABLE mineral_prices (
         mineral TEXT NOT NULL,
@@ -201,5 +243,119 @@ DDL: list[str] = [
         area TEXT NOT NULL DEFAULT '',
         x REAL NOT NULL, y REAL NOT NULL, z REAL NOT NULL,
         source_order INTEGER NOT NULL
+    )""",
+    # ---------------------------------------------------------------- schema 4：制造 / 维科洛 / 物品属性（批 3 公共层，2026-11-02）
+    # crafting.json blueprints：标量列原样；slots（含每槽的改装列表）、src 整段存 JSON——消费方吃嵌套树，拆表无查询收益；
+    # u（实体 uuid）真实数据里有重复和空值，不作主键，用自增 id。bp_key = crafting.assign_keys 的「名字#序号」规则；
+    # norm_n / norm_z = crafting._fold_name（for_item 规则），search_n / search_z = crafting._search_norm（search 规则）；
+    # item_id = itemsearch.en_key(n) 且在 items 表里才填（批 1 物品身份）
+    """CREATE TABLE blueprints (
+        id INTEGER PRIMARY KEY,
+        u TEXT NOT NULL DEFAULT '',
+        n TEXT NOT NULL,
+        z TEXT NOT NULL DEFAULT '',
+        g TEXT NOT NULL DEFAULT '',
+        t TEXT NOT NULL DEFAULT '',
+        s TEXT NOT NULL DEFAULT '',
+        m TEXT NOT NULL DEFAULT '',
+        sec INTEGER,
+        d INTEGER NOT NULL DEFAULT 0,
+        nsrc INTEGER,
+        bp_key TEXT NOT NULL UNIQUE,
+        norm_n TEXT NOT NULL,
+        norm_z TEXT NOT NULL DEFAULT '',
+        search_n TEXT NOT NULL,
+        search_z TEXT NOT NULL DEFAULT '',
+        item_id TEXT,
+        slots_json TEXT NOT NULL,
+        src_json TEXT NOT NULL,
+        source_order INTEGER NOT NULL
+    )""",
+    "CREATE INDEX idx_blueprints_norm_n ON blueprints(norm_n)",
+    "CREATE INDEX idx_blueprints_norm_z ON blueprints(norm_z)",
+    "CREATE INDEX idx_blueprints_u ON blueprints(u)",
+    "CREATE INDEX idx_blueprints_item ON blueprints(item_id)",
+    # slots 平铺一份供「哪些蓝图用到某种材料」筛选：kind = r（原料）/ i（物品）；qty / min_q 原样（源里 qty 多为小数、min_q 整数）
+    """CREATE TABLE blueprint_materials (
+        blueprint_id INTEGER NOT NULL REFERENCES blueprints(id),
+        slot_idx INTEGER NOT NULL,
+        slot_name TEXT NOT NULL,
+        opt_idx INTEGER NOT NULL,
+        kind TEXT NOT NULL,
+        material TEXT NOT NULL,
+        qty REAL NOT NULL,
+        min_q INTEGER NOT NULL,
+        PRIMARY KEY (blueprint_id, slot_idx, opt_idx)
+    )""",
+    "CREATE INDEX idx_bp_materials_material ON blueprint_materials(material)",
+    # wikelo.json contracts：标量原样；rewards / req / systems 各一张子表，idx 保序；req.norm_n = wikelo._fold（uses 的比较规则）
+    """CREATE TABLE wikelo_contracts (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL DEFAULT '',
+        t TEXT NOT NULL DEFAULT '',
+        te TEXT NOT NULL DEFAULT '',
+        rz TEXT NOT NULL DEFAULT '',
+        source_order INTEGER NOT NULL
+    )""",
+    """CREATE TABLE wikelo_rewards (
+        contract_id TEXT NOT NULL REFERENCES wikelo_contracts(id),
+        idx INTEGER NOT NULL,
+        item TEXT NOT NULL,
+        PRIMARY KEY (contract_id, idx)
+    )""",
+    """CREATE TABLE wikelo_requirements (
+        contract_id TEXT NOT NULL REFERENCES wikelo_contracts(id),
+        idx INTEGER NOT NULL,
+        n TEXT NOT NULL,
+        z TEXT NOT NULL DEFAULT '',
+        q REAL,
+        u TEXT NOT NULL DEFAULT '',
+        norm_n TEXT NOT NULL,
+        norm_z TEXT NOT NULL DEFAULT '',
+        PRIMARY KEY (contract_id, idx)
+    )""",
+    "CREATE INDEX idx_wikelo_req_norm_n ON wikelo_requirements(norm_n)",
+    """CREATE TABLE wikelo_contract_systems (
+        contract_id TEXT NOT NULL REFERENCES wikelo_contracts(id),
+        idx INTEGER NOT NULL,
+        system TEXT NOT NULL,
+        PRIMARY KEY (contract_id, idx)
+    )""",
+    # item_stats.json items：标量原样；s（属性字典，形状不一：{min,max} / {value} / 各种嵌套键）整段存 JSON，itemstats._get 按路径取
+    """CREATE TABLE item_stats (
+        uuid TEXT PRIMARY KEY,
+        n TEXT NOT NULL DEFAULT '',
+        size INTEGER,
+        grade TEXT NOT NULL DEFAULT '',
+        cls TEXT NOT NULL DEFAULT '',
+        type TEXT NOT NULL DEFAULT '',
+        sub TEXT NOT NULL DEFAULT '',
+        mass REAL,
+        ver TEXT NOT NULL DEFAULT '',
+        mfr TEXT NOT NULL DEFAULT '',
+        cn TEXT NOT NULL DEFAULT '',
+        stats_json TEXT NOT NULL,
+        source_order INTEGER NOT NULL
+    )""",
+    "CREATE INDEX idx_item_stats_n ON item_stats(n)",
+    # print_spots.json items：打印机打印的物品在哪打
+    """CREATE TABLE print_spots (
+        item_name TEXT PRIMARY KEY,
+        zh TEXT NOT NULL DEFAULT '',
+        cls TEXT NOT NULL DEFAULT '',
+        source_order INTEGER NOT NULL
+    )""",
+    """CREATE TABLE print_spot_places (
+        item_name TEXT NOT NULL REFERENCES print_spots(item_name),
+        idx INTEGER NOT NULL,
+        place TEXT NOT NULL,
+        PRIMARY KEY (item_name, idx)
+    )""",
+    # ship_items.json items：部件名 → 自带它出厂的船（中文名），保序
+    """CREATE TABLE ship_stock_items (
+        item_name TEXT NOT NULL,
+        idx INTEGER NOT NULL,
+        ship TEXT NOT NULL,
+        PRIMARY KEY (item_name, idx)
     )""",
 ]

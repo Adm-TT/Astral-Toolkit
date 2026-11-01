@@ -75,6 +75,7 @@ MODULES = [
     "tests.test_feedback_guard",
     "tests.test_gamedata_b1",
     "tests.test_gd_k1",
+    "tests.test_gamedata_craft",
 ]
 
 if __name__ == "__main__":
