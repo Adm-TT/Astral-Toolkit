@@ -1,0 +1,302 @@
+"""游戏数据层批 3：制造蓝图 / 维科洛兑换 / 物品属性 / 打印点 / 出厂配件改走数据层（gamedata.crafting / wikelo / itemstats）
+
+全部用 tmp_path 当 data/ 根（monkeypatch paths.DATA），不读真实 data/、不写 userdata/。最小源复用 test_gamedata_craft 的 _CRAFT_SOURCES。"""
+
+import copy
+import json
+
+from tests.test_gamedata import _write_min_sources
+from tests.test_gamedata_craft import _BP, _CRAFT_SOURCES
+
+
+def _setup(monkeypatch, tmp_path, **override):
+    """tmp_path 当 data/ 根、写最小源 + 制造源；就绪标记、后台线程记录换成新的（每个测试一个新库目录）"""
+    import sc_mining.gamedata as G
+    from sc_mining.core import paths
+    from sc_mining.gamedata import _ready
+
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(paths, "DATA", tmp_path)
+    monkeypatch.setattr(_ready, "_state", {"done": None, "failed": None})
+    monkeypatch.setattr(G, "_state", {"last_error": None, "warm_thread": None})
+    _write_min_sources(tmp_path, **{**copy.deepcopy(_CRAFT_SOURCES), **override})
+    return tmp_path
+
+
+def _rewrite(tmp_path, name, obj):
+    """换一个源文件并重建（模拟更新数据）"""
+    from sc_mining.gamedata._build import rebuild_if_needed
+
+    (tmp_path / name).write_text(json.dumps(obj, ensure_ascii=False), encoding="utf-8")
+    rebuild_if_needed()
+
+
+# ---------------------------------------------------------------- Task 1：data() / blueprints() / 编号
+
+
+def test_blueprints_dict_shape_equals_json(monkeypatch, tmp_path):
+    """还原出的蓝图 dict 与源逐字相等（含重名两份、u 空、无槽）"""
+    from sc_mining.crafting import crafting
+
+    _setup(monkeypatch, tmp_path)
+    src = _CRAFT_SOURCES["crafting.json"]["blueprints"]
+    got = crafting.blueprints()
+    assert got == src
+    assert crafting.data() == {"blueprints": src}
+
+
+def test_blueprints_same_objects_within_version(monkeypatch, tmp_path):
+    """同一版本内两次取到的是同一批对象（bp_key 靠 id(bp)）；换了版本就是新对象、新内容"""
+    from sc_mining.crafting import crafting
+
+    _setup(monkeypatch, tmp_path)
+    a, b = crafting.blueprints(), crafting.blueprints()
+    assert a is b and all(x is y for x, y in zip(a, b))
+    assert crafting.data() is crafting.data()
+    new = copy.deepcopy(_CRAFT_SOURCES["crafting.json"])
+    new["blueprints"][2]["z"] = "医疗笔 改"
+    _rewrite(tmp_path, "crafting.json", new)
+    c = crafting.blueprints()
+    assert c is not a and c[2]["z"] == "医疗笔 改"
+    assert crafting.bp_key(c[1]) == "Main Powerplant#2"
+
+
+def test_blueprint_dicts_are_plain_mutable_like_json(monkeypatch, tmp_path):
+    """slots / 选项 / 改装 / src 是 list 不是 tuple，d 是 bool，和 json.loads 出来的一样"""
+    from sc_mining.crafting import crafting
+
+    _setup(monkeypatch, tmp_path)
+    bp = crafting.blueprints()[0]
+    assert type(bp) is dict and type(bp["slots"]) is list
+    assert type(bp["slots"][0]) is list and type(bp["slots"][0][1][0]) is list
+    assert type(bp["slots"][0][2][0]) is list and type(bp["src"][0]) is list
+    assert bp["d"] is False and type(bp["sec"]) is int
+    assert type(bp["slots"][0][1][1][2]) is int  # 物品数量 2 还是 int（不是 2.0）
+
+
+def test_keys_rule_unchanged(monkeypatch, tmp_path):
+    """编号：名字唯一 → 名字；重名 → 名字#序号；旧编号（只有名字）取第一份；variant_note 照旧"""
+    from sc_mining.crafting import crafting
+
+    _setup(monkeypatch, tmp_path)
+    bps = crafting.blueprints()
+    assert [crafting.bp_key(b) for b in bps] == [
+        "Main Powerplant#1",
+        "Main Powerplant#2",
+        "Medpen",
+    ]
+    assert crafting.by_key("Main Powerplant#2") is bps[1]
+    assert crafting.by_key("Main Powerplant") is bps[0]  # 旧目标只存了名字
+    assert crafting.by_key("Medpen") is bps[2]
+    assert crafting.by_key("Main Powerplant#3") is None and crafting.by_key("x") is None
+    assert crafting.variant_note(bps[1]) == "配方 2/2 · 0 分钟"
+    assert crafting.variant_note(bps[2]) == ""
+    assert crafting.bp_key({"n": "别的"}) == "别的"  # 不是这一版的对象：退回名字
+
+
+def test_data_empty_when_no_blueprints(monkeypatch, tmp_path):
+    """库里没有蓝图 / 库不可用：{"blueprints": []}，同一个原因只记一次警告"""
+    import sc_mining.gamedata as G
+    from sc_mining.crafting import crafting
+
+    _setup(monkeypatch, tmp_path, **{"crafting.json": {"version": "x"}})
+    assert crafting.data() == {"blueprints": []} and crafting.blueprints() == []
+    assert crafting.by_key("Medpen") is None and crafting.search("med") == []
+
+    def boom(snap=None):
+        raise G.GamedataUnavailable("坏了")
+
+    monkeypatch.setattr(G.crafting, "catalog", boom)
+    warned = []
+    monkeypatch.setattr(crafting, "_WARNED", set())
+    import logging
+
+    log = logging.getLogger(crafting.__name__)
+    monkeypatch.setattr(log, "warning", lambda *a: warned.append(a))
+    assert crafting.data() == {"blueprints": []}
+    assert crafting.data() == {"blueprints": []}
+    assert crafting.bp_key({"n": "Medpen"}) == "Medpen"
+    assert len(warned) == 1
+
+
+# ---------------------------------------------------------------- Task 2：for_item / search / by_key / uses / mat_summary
+
+_MORE_BPS = [
+    {
+        **_BP,
+        "n": "Tin Can",
+        "z": "锡罐",
+        "u": "u-3",
+        "slots": [
+            ["A", [["r", "Tin", 0.5, 600], ["r", "Iron", 1, 0]], []],
+            ["B", [["r", "Tin", 2, 900]], []],
+        ],
+    },
+    {
+        **_BP,
+        "n": "Pen",
+        "z": "",
+        "u": "u-4",
+        "slots": [["A", [["i", "Tin", 1, 0]], []]],  # 物品 Tin 不算矿
+    },
+    {**_BP, "n": "Main Power", "z": "主发电", "u": "u-5"},
+    {
+        **_BP,
+        "n": "main-powerplant",
+        "z": "主 发电机",
+        "u": "u-6",
+    },  # 折叠后和 Main Powerplant 撞
+]
+
+
+def _rich(monkeypatch, tmp_path):
+    src = copy.deepcopy(_CRAFT_SOURCES["crafting.json"])
+    src["blueprints"] += copy.deepcopy(_MORE_BPS)
+    _setup(monkeypatch, tmp_path, **{"crafting.json": src})
+    return src["blueprints"]
+
+
+def _legacy_for_item(bps, name_en="", name_zh=""):
+    """迁移前的 crafting.for_item（照抄，比对用）"""
+    import re
+
+    def fold(s):
+        return re.sub(r"[\W_]+", "", (s or "").lower())
+
+    en, zh = fold(name_en), fold(name_zh)
+    return next((b for b in bps if en and fold(b["n"]) == en), None) or next(
+        (b for b in bps if zh and b["z"] and fold(b["z"]) == zh), None
+    )
+
+
+def _legacy_search(bps, query, limit=20):
+    q = query.strip().lower().replace(" ", "")
+    if not q:
+        return []
+    exact, part = [], []
+    for bp in bps:
+        names = [
+            bp["n"].lower().replace(" ", ""),
+            (bp["z"] or "").lower().replace(" ", ""),
+        ]
+        if q in names:
+            exact.append(bp)
+        elif any(q in n for n in names if n):
+            part.append(bp)
+    part.sort(key=lambda b: (len(b["n"]), b["n"]))
+    return (exact + part)[:limit]
+
+
+def _legacy_uses(bps, mineral):
+    return [
+        (bp, qty, minq)
+        for bp in bps
+        for slot, opts, mods in bp["slots"]
+        for kind_, name, qty, minq in opts
+        if kind_ == "r" and name == mineral
+    ]
+
+
+def _pos(bps, got):
+    """把结果里的蓝图换成在源列表里的下标（库里还原的对象和源不是同一个，按位置比）"""
+    return [bps.index(b) for b in got]
+
+
+def test_for_item_fold_rule(monkeypatch, tmp_path):
+    from sc_mining.crafting import crafting
+
+    src = _rich(monkeypatch, tmp_path)
+    bps = crafting.blueprints()
+    cases = [
+        ("Main Powerplant", ""),
+        ("MAIN-powerplant!", ""),  # 去符号、不分大小写；撞名取第一份
+        ("", "主发电机"),
+        ("", "主 发电机"),
+        ("", "主发电机 B"),
+        ("Medpen", "主发电机"),  # 英文优先
+        ("xx", "锡罐"),
+        ("", ""),
+        ("Pen", ""),
+        ("", "不存在"),
+    ]
+    for en, zh in cases:
+        want = _legacy_for_item(src, en, zh)
+        got = crafting.for_item(en, zh)
+        assert (want is None and got is None) or bps.index(got) == src.index(want), (
+            en,
+            zh,
+        )
+    assert crafting.for_item("Medpen") is bps[2]
+
+
+def test_search_exact_before_partial_sorted(monkeypatch, tmp_path):
+    from sc_mining.crafting import crafting
+
+    src = _rich(monkeypatch, tmp_path)
+    bps = crafting.blueprints()
+    for q in [
+        "main",
+        "Main Powerplant",
+        "主发电机",
+        "主发电",
+        "pen",
+        " PEN ",
+        "n",
+        "锡",
+        "",
+        "  ",
+        "xyz",
+    ]:
+        assert _pos(bps, crafting.search(q)) == _pos(src, _legacy_search(src, q)), q
+    assert _pos(bps, crafting.search("n", limit=3)) == _pos(
+        src, _legacy_search(src, "n", 3)
+    )
+    hits = crafting.search("主发电机")
+    assert hits[0] is bps[0] and hits[0]["z"] == "主发电机"  # 完全匹配在前
+
+
+def test_by_key_legacy_name_only(monkeypatch, tmp_path):
+    from sc_mining.crafting import crafting
+
+    _rich(monkeypatch, tmp_path)
+    bps = crafting.blueprints()
+    assert crafting.by_key("Main Powerplant") is bps[0]
+    assert crafting.by_key("Main Powerplant#2") is bps[1]
+    assert crafting.by_key("Tin Can") is bps[3] and crafting.by_key("Tin Can#1") is None
+
+
+def test_mat_summary_gates_are_ints(monkeypatch, tmp_path):
+    from sc_mining.crafting import crafting
+
+    _rich(monkeypatch, tmp_path)
+    m = crafting.mat_summary("Tin", 700)
+    assert m == {"count": 5, "ok": 4, "gated": 4, "gates": [2, 600, 900], "gated_ok": 3}
+    assert all(type(g) is int for g in m["gates"])
+    assert crafting.mat_summary("Tin")["ok"] is None
+    assert crafting.mat_summary("不存在") == {
+        "count": 0,
+        "ok": None,
+        "gated": 0,
+        "gates": [],
+        "gated_ok": None,
+    }
+
+
+def test_uses_matches_legacy_on_sample(monkeypatch, tmp_path):
+    from sc_mining.crafting import crafting
+
+    src = _rich(monkeypatch, tmp_path)
+    bps = crafting.blueprints()
+    for m in ["Tin", "Iron", "Hephaestanite", "Medpen", "不存在"]:
+        got = crafting.uses(m)
+        want = _legacy_uses(src, m)
+        assert [(bps.index(b), q, mq) for b, q, mq in got] == [
+            (src.index(b), q, mq) for b, q, mq in want
+        ], m
+        assert [type(q) for _b, q, _m in got] == [type(q) for _b, q, _m in want]
+    assert all(
+        b is bps[i] for b, i in zip((x[0] for x in crafting.uses("Tin")), (0, 1, 3, 3))
+    )
+    assert "锡" in crafting.uses_report("Tin") and crafting.uses_report(
+        "Medpen"
+    ).endswith("没有蓝图用到它。")

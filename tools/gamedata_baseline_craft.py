@@ -73,7 +73,9 @@ def collect():
     ]
     for b in picks:
         k = crafting.bp_key(b)
-        out[f"for_item(n of {k})"] = crafting.bp_key(crafting.for_item(b["n"]) or {"n": ""})
+        out[f"for_item(n of {k})"] = crafting.bp_key(
+            crafting.for_item(b["n"]) or {"n": ""}
+        )
         out[f"for_item(zh of {k})"] = (
             None
             if crafting.for_item("", b["z"]) is None
@@ -128,7 +130,15 @@ def collect():
     out["print_spots(None)"] = wikelo.print_spots(None)
 
     st = json.loads((DATA / "item_stats.json").read_text(encoding="utf-8"))["items"]
-    uuids = [bps[0]["u"], bps[300]["u"], sorted(st)[0], sorted(st)[-1], "", None, "不存在"]
+    uuids = [
+        bps[0]["u"],
+        bps[300]["u"],
+        sorted(st)[0],
+        sorted(st)[-1],
+        "",
+        None,
+        "不存在",
+    ]
     for u in uuids:
         out[f"itemstats.item({u!r})"] = itemstats.item(u)
         out[f"itemstats.tags({u!r})"] = itemstats.tags(u)

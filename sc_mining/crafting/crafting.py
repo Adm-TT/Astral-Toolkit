@@ -1,18 +1,11 @@
-"""制造联动（数据：scmdb.net，4.10.2；由 tools/build_crafting.py 生成 crafting.json）
+"""制造联动（数据：scmdb.net，4.10.2；由 tools/build_crafting.py 生成 crafting.json，读取走游戏数据层 gamedata.crafting）
 
 - 查蓝图：要哪些矿、多少 SCU、最低品质；矿的品质怎样影响成品属性；去哪挖；哪些任务给蓝图
 - 反查：某种矿能做什么
 - 扫描联动：扫到的矿石各成分品质，够做多少蓝图
 """
 
-import json
 import re
-from functools import lru_cache
-from pathlib import Path  # noqa: F401
-
-from ..core.paths import DATA as _D
-
-DATA = _D / "crafting.json"
 
 GEAR_ZH = {
     ("fpsgear", "armour"): "护甲",
@@ -263,63 +256,41 @@ def header(bp):
     }
 
 
-class _NoData(Exception):
-    pass
+_WARNED = set()
+_EMPTY = None  # 库不可用 / 没有蓝图时用的空表（第一次用到时建）
 
 
-@lru_cache
-def _load():
-    """读成功才缓存（lru_cache 不缓存异常）：文件修好后下次调用就能读到，不用等重启"""
+def _catalog():
+    """当前内容版本的蓝图和编号表（gamedata.crafting.catalog）；库不可用当成没有蓝图，同一个原因只记一次警告"""
+    global _EMPTY
+    from .. import gamedata
+
+    why = None
     try:
-        d = json.loads(DATA.read_text(encoding="utf-8"))
-    except OSError as e:
-        raise _NoData(
-            f"{DATA.name}：{type(e).__name__}"
-        )  # 只记文件名和错误类型，完整路径里有 Windows 用户名
-    except ValueError as e:
-        raise _NoData(f"{DATA.name}：{e}")
-    if not (isinstance(d, dict) and isinstance(d.get("blueprints"), list)):
-        raise _NoData(f"{DATA.name}：格式不对")
-    return d
+        c = gamedata.crafting.catalog()
+        if not c.data["blueprints"]:
+            why = "库里没有蓝图"
+    except gamedata.GamedataError as e:
+        c, why = None, f"游戏数据库不可用：{e}"
+    if why is not None and why not in _WARNED:  # 同一个错只记一次，别刷日志
+        _WARNED.add(why)
+        import logging
 
+        logging.getLogger(__name__).warning("制造数据读不到：%s", why)
+    if c is None:
+        if _EMPTY is None:
+            from ..gamedata.crafting import Blueprints
+            from collections import Counter
 
-def _sig():
-    try:
-        st = DATA.stat()
-        return st.st_mtime_ns, st.st_size
-    except OSError:
-        return None
+            _EMPTY = Blueprints({"blueprints": []}, {}, {}, Counter(), {})
+        c = _EMPTY
+    return c
 
 
 def data():
-    """crafting.json；没有或坏了当成没有蓝图（别让整个目标清单、维科洛目标跟着报错）"""
-    failed = _FAILED[0]
-    if (
-        failed is not None and failed[0] == _sig()
-    ):  # 上次读坏了、文件也没变：别每次都重新解析一遍整个文件
-        return {"blueprints": []}
-    try:
-        return _load()
-    except _NoData as e:
-        _FAILED[0] = (_sig(),)
-        if str(e) not in _WARNED:  # 同一个错只记一次，别刷日志
-            _WARNED.add(str(e))
-            import logging
-
-            logging.getLogger(__name__).warning("制造数据读不到：%s", e)
-        return {"blueprints": []}
-
-
-_WARNED = set()
-_FAILED = [None]  # 读失败时文件的 (修改时间, 大小)；文件一变就再读
-
-
-def _clear_data():
-    _load.cache_clear()
-    _FAILED[0] = None
-
-
-data.cache_clear = _clear_data  # 更新数据后 data_pack.clear_caches 按名字清 data
+    """{"blueprints": [bp…]}，bp 与 crafting.json 里的逐字一致；同一内容版本内每次返回同一批对象（bp_key 靠 id(bp)）。
+    没有蓝图或库不可用时当成没有蓝图（别让整个目标清单、维科洛目标跟着报错）"""
+    return _catalog().data
 
 
 def blueprints():
@@ -330,11 +301,6 @@ def material_zh(name: str) -> str:
     from ..core.i18n import mineral_zh
 
     return ITEM_ZH.get(name) or mineral_zh(name)
-
-
-_KEYS = [
-    (None, None)
-]  # (那份数据, 编号表)：一次读出一对，并发清缓存时不会拿到 None 或别的数据的表
 
 
 def assign_keys(bps):
@@ -354,16 +320,9 @@ def assign_keys(bps):
 
 
 def _keys():
-    """跟着 data() 那份走：数据换了（或刚读成功）就重算，别把读失败时的空表一直留着。规则在 assign_keys"""
-    d = data()
-    src, val = _KEYS[0]
-    if src is not d:
-        val = assign_keys(d["blueprints"])
-        _KEYS[0] = (d, val)  # 留着 d 的引用：id(b) 不会被别的对象重用
-    return val
-
-
-_keys.cache_clear = lambda: _KEYS.__setitem__(0, (None, None))
+    """(keys: {id(bp): 编号}, index: {编号: bp}, total: Counter(名字))，跟着 data() 那一版走；编号导入时按 assign_keys 算好"""
+    c = _catalog()
+    return c.keys, c.index, c.total
 
 
 def bp_key(bp) -> str:
