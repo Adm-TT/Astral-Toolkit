@@ -1457,8 +1457,7 @@ def test_craft_stats_and_detail_structure(monkeypatch, tmp_path):
     """制造页改版（1.6.47）：属性统计（基础 → 强化 → 变化，几个槽影响同一属性时相加）、标题标签（尺寸 / 等级 / 类别）、
     结构化的材料槽位、去哪挖、蓝图来源带掉率。成品基础值来自 data/item_stats.json（star-citizen.wiki 整理的游戏数据，按 uuid 对上）"""
     import json
-    from sc_mining.crafting import crafting as C, itemstats
-    from sc_mining.core import paths
+    from sc_mining.crafting import crafting as C
     from sc_mining.tasks import goals as t_goals
 
     bp = next(b for b in C.blueprints() if b["n"] == "Helix II Mining Laser")
@@ -1491,14 +1490,14 @@ def test_craft_stats_and_detail_structure(monkeypatch, tmp_path):
             }
         },
     }
-    f = tmp_path / "item_stats.json"
-    f.write_text(json.dumps(fake), encoding="utf-8")
-    monkeypatch.setattr(
-        paths,
-        "data",
-        lambda name: f if name == "item_stats.json" else paths.DATA / name,
+    from sc_mining.gamedata import itemstats as gd_stats
+
+    # 属性数据走游戏数据层（批 3）：这一段换成假数据，后面的真数据断言再换回来
+    real = gd_stats.item, gd_stats.version
+    gd_stats.item = lambda uuid, snap=None: json.loads(
+        json.dumps(fake["items"].get(uuid))
     )
-    itemstats.data.cache_clear()
+    gd_stats.version = lambda snap=None: fake["version"]
     try:
         st = C.stats(bp, {0: 501, 1: 947, 2: 958})
         by = {p["name"]: p for p in st["props"]}
@@ -1539,7 +1538,7 @@ def test_craft_stats_and_detail_structure(monkeypatch, tmp_path):
             :1
         ] in ([], ["S0"], ["S1"], ["S2"], ["S3"])
     finally:
-        itemstats.data.cache_clear()
+        gd_stats.item, gd_stats.version = real
     # 真数据：Helix II 的成品基础值（star-citizen.wiki）和 SCM 一致；wiki 数据里没有的属性（后坐力）只有变化、没有绝对值
     assert C.stats(bp, {1: 1000, 2: 1000})["props"][1]["base"] == 4930
     gun = next(

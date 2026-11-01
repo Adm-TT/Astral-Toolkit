@@ -469,3 +469,119 @@ def test_wikelo_empty_when_db_unavailable(monkeypatch, tmp_path):
         monkeypatch.setattr(G.wikelo, name, boom)
     assert wikelo.load() == [] and wikelo.uses("Medpen") == []
     assert wikelo.search("x") == [] and wikelo.print_spots("Comp-Board") == []
+
+
+# ---------------------------------------------------------------- Task 4：物品属性 / 出厂配件
+
+_STATS = {
+    "version": "s2",
+    "source": "x",
+    "fetched": "2026",
+    "items": {
+        "uuid-a": {
+            "n": "ADP Core",
+            "size": 1,
+            "grade": "A",
+            "cls": "Civilian",
+            "type": "Char_Armor_Torso",
+            "sub": "Heavy",
+            "mass": 7.0,
+            "ver": "4.10",
+            "mfr": "CDS",
+            "cn": "cds_core",
+            "s": {
+                "temperature_resistance": {"min": -75.0, "max": 105.0},
+                "durability": {"health": 55},
+                "suit_armor": {
+                    "damage_resistance": {
+                        "physical": {"multiplier": 0.8},
+                        "energy": {"multiplier": 0.9},
+                    }
+                },
+            },
+        },
+        "uuid-b": {
+            "n": "Cooler",
+            "size": 2,
+            "grade": "C",
+            "cls": "Military",
+            "type": "Cooler",
+            "sub": "",
+            "mass": 120.5,
+            "ver": "4.10",
+            "mfr": "ACOM",
+            "cn": "cool",
+            "s": {},
+        },
+    },
+}
+
+
+def test_itemstats_item_shapes(monkeypatch, tmp_path):
+    """item(uuid) 与源同形（s 里 {min,max} / 数值 / 嵌套都原样）；base_value / tags 照旧"""
+    from sc_mining.crafting import itemstats
+
+    _setup(monkeypatch, tmp_path, **{"item_stats.json": copy.deepcopy(_STATS)})
+    a = itemstats.item("uuid-a")
+    assert (
+        a == _STATS["items"]["uuid-a"] and type(a["s"]["durability"]["health"]) is int
+    )
+    assert itemstats.item("uuid-b") == _STATS["items"]["uuid-b"]
+    assert itemstats.base_value("uuid-a", "armor_temperaturemin") == (-75.0, " ºC")
+    assert itemstats.base_value("uuid-a", "health_maxhealth") == (55, "")
+    assert itemstats.base_value("uuid-a", "armor_damagemitigation") == (0.85, "")
+    assert itemstats.base_value("uuid-b", "health_maxhealth") == (None, "")
+    assert itemstats.tags("uuid-b") == {
+        "size": 2,
+        "grade": "C",
+        "cls": "Military",
+        "mfr": "ACOM",
+        "type": "Cooler",
+    }
+
+
+def test_itemstats_none_for_unknown(monkeypatch, tmp_path):
+    from sc_mining.crafting import itemstats
+
+    _setup(monkeypatch, tmp_path, **{"item_stats.json": copy.deepcopy(_STATS)})
+    for u in ("", None, "不存在"):
+        assert itemstats.item(u) is None and itemstats.tags(u) == {}
+        assert itemstats.base_value(u, "health_maxhealth") == (None, "")
+
+
+def test_itemstats_version(monkeypatch, tmp_path):
+    import sc_mining.gamedata as G
+    from sc_mining.crafting import itemstats
+
+    _setup(monkeypatch, tmp_path, **{"item_stats.json": copy.deepcopy(_STATS)})
+    assert itemstats.version() == "s2"
+    _rewrite(tmp_path, "item_stats.json", {"items": {}})  # 没有 version 键
+    assert itemstats.version() == "" and itemstats.item("uuid-a") is None
+
+    def boom(*a, **k):
+        raise G.GamedataUnavailable("坏了")
+
+    monkeypatch.setattr(G.itemstats, "item", boom)
+    monkeypatch.setattr(G.itemstats, "version", boom)
+    assert itemstats.item("uuid-a") is None and itemstats.version() == ""
+
+
+def test_ships_with(monkeypatch, tmp_path):
+    """部件名折叠（小写、只留字母数字）后对上；返回新列表；没有 → []"""
+    import sc_mining.gamedata as G
+    from sc_mining.crafting import acquire
+
+    _setup(monkeypatch, tmp_path)
+    want = ["剜度 死镰", "埃斯佩里亚 刀锋"]
+    assert acquire.ships_with("'Arrow' I Missile") == want
+    assert acquire.ships_with("ARROW I missile") == want
+    a = acquire.ships_with("arrowimissile")
+    a.append("x")
+    assert acquire.ships_with("arrowimissile") == want  # 调用方改了返回值不影响下次
+    assert acquire.ships_with("不存在") == [] and acquire.ships_with(None) == []
+
+    def boom(*a, **k):
+        raise G.GamedataUnavailable("坏了")
+
+    monkeypatch.setattr(G.itemstats, "ships_with", boom)
+    assert acquire.ships_with("'Arrow' I Missile") == []

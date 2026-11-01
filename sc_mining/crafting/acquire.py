@@ -155,18 +155,21 @@ def resolve(name_en="", name_zh="", item_id=None):
     return None
 
 
-def ships_with(name):
-    """自带这个部件出厂的船（data/ship_items.json，由数据构建脚本从游戏数据生成，2026-10-27）→ [船中文名]"""
+def _ship_fold(x):
+    """出厂配件按部件名对：小写、只留字母数字（游戏数据层建对照表也用它）"""
     import re
-    from ..core.paths import DATA, cached_json
 
-    fold = lambda x: re.sub(r"[^a-z0-9]", "", (x or "").lower())  # noqa: E731
-    table = cached_json(
-        DATA / "ship_items.json",
-        lambda d: {fold(k): v for k, v in (d.get("items") or {}).items()},
-        {},
-    )
-    return list(table.get(fold(name)) or [])
+    return re.sub(r"[^a-z0-9]", "", (x or "").lower())
+
+
+def ships_with(name):
+    """自带这个部件出厂的船（ship_items.json，由数据构建脚本从游戏数据生成，2026-10-27；读库）→ [船中文名]"""
+    from .. import gamedata
+
+    try:
+        return gamedata.itemstats.ships_with(_ship_fold(name))
+    except gamedata.GamedataError:
+        return []
 
 
 def info(

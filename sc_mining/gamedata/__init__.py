@@ -18,7 +18,7 @@ import threading
 from contextlib import contextmanager
 from typing import Iterator
 
-from . import _build, _db, crafting, items, prices, shops, wikelo
+from . import _build, _db, crafting, items, itemstats, prices, shops, wikelo
 from ._db import current_version as version, snapshot
 from ._lock import write_lock
 from ._manifest import Manifest
@@ -51,6 +51,7 @@ __all__ = [
     "ensure",
     "ensure_ready",
     "items",
+    "itemstats",
     "last_error",
     "prices",
     "rebuild",
