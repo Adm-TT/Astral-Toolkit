@@ -130,6 +130,26 @@ def _build_locked():
     return index
 
 
+def _on_data_changed():
+    """data_pack.clear_caches() 调（数据文件换了之后）：汉化包重建（zh_names / name_aliases）、掉落索引更新这几处
+    还没经过 gamedata.updating() 写文件，库不会自己重建，索引按库的内容版本缓存就会一直是旧的——这里补建一次库
+    （源没变就是空操作）。那几处的写入改进更新边界后（批 4 / 批 6）可以删掉这个钩子（审查 2026-11-02 第 2 条）"""
+    from .. import gamedata
+
+    try:
+        gamedata.rebuild()
+    except Exception:  # noqa: BLE001 —— 清缓存的钩子不能让更新流程报失败；建不出来下次查询再试
+        pass
+
+
+try:
+    from ..update.data_pack import CACHE_HOOKS as _CACHE_HOOKS
+
+    _CACHE_HOOKS.append(_on_data_changed)
+except Exception:  # noqa: BLE001 —— 和 tasks/goals.py 登记钩子的写法一样
+    pass
+
+
 def wiki_items():
     """data/wiki_items.json：star-citizen.wiki（游戏解包）的物品清单 [{n, t, s, mfr}]；没有这份数据就是空的"""
     from ..core.paths import DATA, cached_json

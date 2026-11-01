@@ -140,8 +140,8 @@ def places():
     if hit is not None and _PLACES["ver"] == v:
         return hit
     out = _build_places()
-    # 第一次查询可能刚把库建好：记建好后的版本
-    _PLACES.update(ver=_data_version(), list=out)
+    # 记建之前读到的版本：建的过程中发布了新库，下次会重算；之前还没有库（这次刚建好）才记建好后的
+    _PLACES.update(ver=v if v is not None else _data_version(), list=out)
     return out
 
 

@@ -68,9 +68,9 @@ def test_ensure_fast_path_after_first_success(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path)
     G.ensure()
     calls = []
-    monkeypatch.setattr(_build, "_db_usable", lambda m: calls.append(m) or True)
+    monkeypatch.setattr(_build, "rebuild_if_needed", lambda *a, **k: calls.append(1))
     G.ensure()
-    assert calls == []  # 确认过一次就不再每次查询都开库校验
+    assert calls == []  # 核对过一次就不再每次查询都读源文件算哈希
 
 
 # ---------------------------------------------------------------- Task 2：items / shops / prices 查询主题
@@ -782,3 +782,120 @@ def test_itemsearch_empty_when_db_unavailable(monkeypatch, tmp_path):
     )  # 建不出库：和以前没有数据一样搜不到，不报错
     IS = _fresh_search(monkeypatch)
     assert IS.find("Medpen") == [] and IS.lookup("Medpen") is None
+
+
+# ---------------------------------------------------------------- 审查 2026-11-02 整改
+
+
+def test_ensure_rebuilds_stale_db(monkeypatch, tmp_path):
+    """升级时安装包换了源文件（不经过 updating()）：进程里第一次查询前要按源核对，别用旧库"""
+    import json
+
+    import sc_mining.gamedata as G
+    from sc_mining.gamedata import _ready, prices
+
+    _setup(monkeypatch, tmp_path)
+    G.ensure()
+    (tmp_path / "prices.json").write_text(
+        json.dumps({"prices": {"Aluminum": {"Area18": 987654}}}), encoding="utf-8"
+    )
+    monkeypatch.setattr(_ready, "_state", {"done": None})  # 新进程
+    assert prices.city_prices()["Aluminum"]["Area18"] == 987654.0
+
+
+def test_ensure_rebuilds_old_schema(monkeypatch, tmp_path):
+    """清单还是旧表结构（从旧版升级上来）：重建，不拿旧库去查新表"""
+    import json
+
+    import sc_mining.gamedata as G
+    from sc_mining.gamedata import _ready, shops
+    from sc_mining.gamedata._paths import manifest_path
+
+    _setup(monkeypatch, tmp_path)
+    G.ensure()
+    m = json.loads(manifest_path().read_text(encoding="utf-8"))
+    m["schema_version"] = 2
+    manifest_path().write_text(json.dumps(m), encoding="utf-8")
+    monkeypatch.setattr(_ready, "_state", {"done": None})
+    assert len(shops.catalog()) == 3
+    assert (
+        json.loads(manifest_path().read_text(encoding="utf-8"))["generation_id"]
+        != m["generation_id"]
+    )
+
+
+def test_apply_live_yields_when_db_unavailable(monkeypatch, tmp_path):
+    """库建不出来（shops.json 坏了）：矿价先用内置的，精炼站加成照样从 prices.json 套上"""
+    import json
+
+    from sc_mining.update import uex
+
+    _setup(monkeypatch, tmp_path)
+    (tmp_path / "shops.json").write_text("{坏", encoding="utf-8")
+    (tmp_path / "prices.json").write_text(
+        json.dumps(
+            {
+                "prices": {"Aluminum": {"Area18": 3800}},
+                "yields": {"ARC-L1": {"Aluminum": 5}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(uex, "OUT", tmp_path / "prices.json")
+    m = _fake_data_module()
+    assert uex.apply_live(m) is True
+    assert m.CITY_PRICES["Aluminum"] == {"Area18": 1, "Lorville": 2}
+    assert m.REFINERIES["ARC-L1"] == ("弧 L1", {"Aluminum": 5})
+
+
+def test_clear_caches_rebuilds_for_writers_outside_updating(monkeypatch, tmp_path):
+    """汉化包重建 / 掉落更新还没经过 updating() 写文件：clear_caches 之后物品搜索也要看到新数据"""
+    import json
+
+    import sc_mining.gamedata as G
+    from sc_mining.update.data_pack import clear_caches
+
+    _setup(monkeypatch, tmp_path)
+    IS = _fresh_search(monkeypatch)
+    G.ensure()
+    assert IS.lookup("MedPack X") is None
+    (tmp_path / "name_aliases.json").write_text(
+        json.dumps({"MedPack X": "Medpen"}), encoding="utf-8"
+    )
+    clear_caches()
+    assert (IS.lookup("MedPack X") or {}).get("ek") == "medpen"
+
+
+def test_query_while_new_content_is_published(monkeypatch, tmp_path):
+    """边搜边发布内容不同的新库（索引也跟着重建）：不报错、结果不空"""
+    import json
+    import threading
+
+    import sc_mining.gamedata as G
+
+    _setup(monkeypatch, tmp_path)
+    IS = _fresh_search(monkeypatch)
+    IS._build()
+    errors, empty, stop = [], [], threading.Event()
+
+    def worker():
+        while not stop.is_set():
+            try:
+                if not IS.find("Medpen"):
+                    empty.append(1)
+            except Exception as e:  # noqa: BLE001 —— 测试要看到任何异常
+                errors.append(e)
+
+    th = threading.Thread(target=worker)
+    th.start()
+    try:
+        for n in range(4):
+            (tmp_path / "name_aliases.json").write_text(
+                json.dumps({f"Med Alias {n}": "Medpen"}), encoding="utf-8"
+            )
+            G.rebuild()
+            assert (IS.lookup(f"Med Alias {n}") or {}).get("ek") == "medpen"
+    finally:
+        stop.set()
+        th.join(60)
+    assert not errors and not empty

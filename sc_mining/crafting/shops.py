@@ -149,9 +149,8 @@ def _fold(s):
     return re.sub(r"[^a-z0-9]", "", (s or "").lower().replace("l", "i"))
 
 
-def _folded_items(data=None):
-    """[(id, 英文名, 类别, 折叠后的名字)]，按 shops.json 的顺序；来自游戏数据层的商店物品目录（按内容版本缓存）。
-    data 参数不再用，留着兼容老调用"""
+def _folded_items():
+    """[(id, 英文名, 类别, 折叠后的名字)]，按 shops.json 的顺序；来自游戏数据层的商店物品目录（按内容版本缓存）"""
     from ..gamedata import shops as gd_shops
 
     return [(c.uex_item_id, c.en, c.cat, c.folded) for c in gd_shops.catalog()]

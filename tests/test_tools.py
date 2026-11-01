@@ -253,7 +253,7 @@ def _shops_db(monkeypatch, tmp_path, data):
     paths.DATA 不动（别的数据照旧读真实 data/）。shops._data 也照旧换掉，给还在用 load() 的地方"""
     from sc_mining import gamedata
     from sc_mining.core import paths
-    from sc_mining.gamedata import _paths
+    from sc_mining.gamedata import _paths, _ready
 
     src = tmp_path / "gamedata_src"
     src.mkdir(exist_ok=True)
@@ -268,6 +268,8 @@ def _shops_db(monkeypatch, tmp_path, data):
         gamedata.rebuild()
     finally:
         paths.DATA = real
+    # 记成已核对：查询时 ensure() 会按 paths.DATA（真实 data/）的源核对，别拿真实源把临时库重建掉
+    monkeypatch.setattr(_ready, "_state", {"done": str(src / "gamedata")})
 
 
 def fake_shops(monkeypatch, tmp_path):

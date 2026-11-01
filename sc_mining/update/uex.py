@@ -80,8 +80,11 @@ def apply_live(data_module):
         return False
     from .. import gamedata
 
-    live_prices = gamedata.prices.city_prices()
     live = json.loads(OUT.read_text(encoding="utf-8"))
+    try:
+        live_prices = gamedata.prices.city_prices()
+    except gamedata.GamedataError:
+        live_prices = {}  # 库建不出来：矿价先用内置的，下面的精炼站加成照样套（审查 2026-11-02 第 3 条）
     prices = {
         m: dict(c) for m, c in data_module.CITY_PRICES.items()
     }  # 先组好新表再整体换：采矿线程可能正在遍历旧表
