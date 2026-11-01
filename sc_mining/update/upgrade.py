@@ -38,6 +38,7 @@ TOP_FILES = (
     "requirements.txt",
     "README.md",
 )
+# 以后 BUILD_DIR 改名时，旧目录名也要留在这个排除表里，否则游戏数据原文件会被打进安装包（升级备份同理）
 SKIP_DATA = {"scmdb", "loc", BUILD_DIR}  # 原始大文件 / 构建输入，更新数据时会重新下载
 SKIP_DATA_FILES = {
     "loot_details.zip"

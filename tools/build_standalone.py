@@ -24,6 +24,7 @@ OUT = DIST / "AT"
 sys.path.insert(0, str(ROOT))
 from sc_mining.core.paths import BUILD_DIR  # noqa: E402
 
+# 以后 BUILD_DIR 改名时，旧目录名也要留在这个排除表里，否则游戏数据原文件会被打进安装包
 SKIP_DATA_DIRS = {
     "scmdb",
     "loc",
