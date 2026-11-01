@@ -1,4 +1,4 @@
-"""解包：制造蓝图 + 任务 / 维科洛兑换（2026-10-28，老大定：不再等 scmdb，自己从游戏文件出）。
+"""解包：制造蓝图 + 任务 / 维科洛兑换（2026-10-28，负责人定：不再等 scmdb，自己从游戏文件出）。
 
 用法：.venv\\Scripts\\python.exe -X utf8 tools\\unpack_crafting.py [--compare]
 读：E:\\Game3\\unpack\\dcb_json（unpack_all 导出的 Game2.dcb JSON）+ 游戏英文文本 p4k_out\\Data\\Localization\\english\\global.ini

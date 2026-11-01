@@ -323,7 +323,7 @@ def update(direct=False, web_ok=()):
         s
         for s in sources
         if getattr(s[1], "__module__", "") not in web_ok and _is_unpack(s[1])
-    ]  # 本机已是自己解包的（星图、制造 + 维科洛）：网站版不再盖掉（2026-10-28 老大定：自己解包的优先）
+    ]  # 本机已是自己解包的（星图、制造 + 维科洛）：网站版不再盖掉（2026-10-28 负责人定：自己解包的优先）
     sources = tuple(s for s in sources if s not in own)
 
     def say_own():

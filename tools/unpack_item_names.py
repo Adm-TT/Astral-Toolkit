@@ -1,5 +1,5 @@
 """解包：汉化包里只写了中文名的物品（勋章、计算板、钥匙卡、摆件…）→ 从游戏英文文本补英文名（2026-10-27）。
-老大 F8 反馈：这些东西说明框只有中文名，AT 只靠「中文\\n英文」的对照表找，全都查不到、还会把说明文字当名字。
+F8 反馈：这些东西说明框只有中文名，AT 只靠「中文\\n英文」的对照表找，全都查不到、还会把说明文字当名字。
 
 用法：.venv\\Scripts\\python.exe -X utf8 tools\\unpack_item_names.py
 读：E:\\Game3\\unpack\\p4k_out\\Data\\Localization\\english\\global.ini（unpack_all 解出来的游戏英文文本）+ data\\loc\\global_zh.ini（汉化包）
@@ -19,7 +19,7 @@ EN_INI = pathlib.Path(r"E:\Game3\unpack\p4k_out\Data\Localization\english\global
 ZH_INI = ROOT / "data" / "loc" / "global_zh.ini"
 OUT = ROOT / "data" / "zh_only_names.json"
 CJK = "\u4e00-\u9fff"
-# item_name_*：一般物品；item_Mining_*：采矿模组 / 激光器 / 小工具 / 耗材（2026-10-28 老大 F8 反馈：FLTR-XL 模组查不到——
+# item_name_*：一般物品；item_Mining_*：采矿模组 / 激光器 / 小工具 / 耗材（2026-10-28 F8 反馈：FLTR-XL 模组查不到——
 # 汉化包里它只有中文名「FLTR-XL 模组」，第二行是「[-24%废料|-5%提取功率]」属性）
 KEY = re.compile(r"^item_(?:name_?|mining_)(?P<cls>.+?)$", re.I)
 

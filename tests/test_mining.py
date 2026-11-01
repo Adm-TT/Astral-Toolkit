@@ -1052,7 +1052,7 @@ def test_cockpit_hud_numbers_are_not_a_scan_panel():
     assert panel_seen(parse_scan(half), half)
     top = ["扫描结果", "质量： 12431"]
     assert panel_seen(parse_scan(top), top)
-    # 屏幕上别的窗口里的字（2026-10-23 自动留图：Claude 窗口里「快速稳定性测试…扫描面板…」）：只有字没有数字，不算
+    # 屏幕上别的窗口里的字（2026-10-23 自动留图：聊天窗口里「快速稳定性测试…扫描面板…」）：只有字没有数字，不算
     chat = [
         "快速稳定性测试跑完了， ， 没发现问题： 用时 4分钟， 0 报",
         "。 挑了 36 张有代表性的截图： 以前认出过信号、 扫描",
@@ -1713,7 +1713,7 @@ def test_radar_uses_unpacked_rock_types():
 
 
 def test_review_102_area_never_guesses(monkeypatch):
-    """Codex 2026-10-27 补审：只靠坐标猜的星系不能拿来排除矿种（亚伦光环会被猜成尼克斯 → 报「不刷」）；
+    """2026-10-27 补审：只靠坐标猜的星系不能拿来排除矿种（亚伦光环会被猜成尼克斯 → 报「不刷」）；
     派罗星图缺地点列表 = 不知道，不是「不刷」"""
     from sc_mining.navigation import navigate as n
     from sc_mining.mining import mining_area as M
@@ -1761,7 +1761,7 @@ def test_review_102_place_names_without_ini(monkeypatch, tmp_path):
 
 
 def test_review_104_rocks_reload_and_order(monkeypatch, tmp_path):
-    """Codex 二审：①更新数据换了石头表不用重启就生效；②同一个信号的几种可能保持「当地概率 × 一团几块」的顺序，不被矿价打乱"""
+    """二审：①更新数据换了石头表不用重启就生效；②同一个信号的几种可能保持「当地概率 × 一团几块」的顺序，不被矿价打乱"""
     import json
     from sc_mining.mining import mining_area as M, signals as S
     from sc_mining.core import paths
@@ -1821,7 +1821,7 @@ def test_unpacked_mining_spots_and_pyro_areas():
 
 
 def test_review_104_final(monkeypatch, tmp_path):
-    """1.0.4 发版前 Codex 二审：派罗 L 点缺石头表时不能判成「不刷」；只认正式服数据；星图改正文件坏了不崩"""
+    """1.0.4 发版前二审：派罗 L 点缺石头表时不能判成「不刷」；只认正式服数据；星图改正文件坏了不崩"""
     from sc_mining.navigation import navigate as n
     from sc_mining.mining import mining_area as M
     from sc_mining.crafting.build_crafting import pick_live, latest_live, live_version

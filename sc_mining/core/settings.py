@@ -29,8 +29,8 @@ DEFAULTS = {
     "update_online": True,  # 启动时到网上检查新版本（只读一个小文件；下载要玩家点）
     "ocr_device": "gpu",  # 文字识别设备：gpu (显卡 DirectML 加速) / cpu (处理器)
     "always_use_gpu": True,  # 兼容旧配置项
-    "train_upload": True,  # 帮助改进识别：认字的错题（一行字的小截图 + 正确答案）发给作者训练（2026-10-27 老大定）
-    "feedback_upload": True,  # 问题反馈存好后自动发给作者（2026-10-27 老大定，设置页能关）
+    "train_upload": True,  # 帮助改进识别：认字的错题（一行字的小截图 + 正确答案）发给作者训练（2026-10-27 负责人定）
+    "feedback_upload": True,  # 问题反馈存好后自动发给作者（2026-10-27 负责人定，设置页能关）
     "legacy_checked": False,  # 安装版第一次打开时找过旧版天枢、问过要不要导入（1.0.1）
     "nav_marker": True,  # 导航时在游戏画面上画目标记号（画面外贴边画箭头）和瞄准环（2026-10-27）
     "fov_axis": "v",  # 右上角 FOV 是上下（v）还是左右（h）的视角：记号位置不对时改这个
@@ -43,7 +43,9 @@ DEFAULTS = {
 
 
 def load():
-    with _LOCK:  # 迁移时的读-改-写也要连着（老大审查 2026-10-28：和 update 交错会把新设置写回旧的）
+    with (
+        _LOCK
+    ):  # 迁移时的读-改-写也要连着（审查 2026-10-28：和 update 交错会把新设置写回旧的）
         return _load()
 
 

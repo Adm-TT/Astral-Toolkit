@@ -1,4 +1,4 @@
-"""Velopack 在线更新和回滚（2026-10-27，老大定：换 Velopack，只下载改过的部分）
+"""Velopack 在线更新和回滚（2026-10-27，负责人定：换 Velopack，只下载改过的部分）
 
 - 只在 Velopack 安装版里用（paths.VELOPACK）；Python 版、老的 Inno 安装版照旧走 update_check / upgrade
 - 更新源：自己的香港服务器 https://dl.astral-trade.com/velopack/（releases.win.json + 完整包 / 增量包）；

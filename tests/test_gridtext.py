@@ -228,7 +228,7 @@ def test_system_from_solar_id_and_zone(monkeypatch, tmp_path):
 
     if (
         not n.CACHE.exists()
-    ):  # 先判断再 load：load 在没有数据时会联网下载（S2 审查 2026-10-31）
+    ):  # 先判断再 load：load 在没有数据时会联网下载（审查 2026-10-31）
         pytest.skip("没有星图数据")
     data = n.load()
     if not data.get("points"):
@@ -426,7 +426,7 @@ def test_font_file_and_license_present():
 
 
 def test_review_102_position_guards(monkeypatch, tmp_path):
-    """Codex 2026-10-27 补审：①字模这条路两行坐标都要读出来且一致；②数字旁认不出的格子让坐标作废，不删成少一位；
+    """2026-10-27 补审：①字模这条路两行坐标都要读出来且一致；②数字旁认不出的格子让坐标作废，不删成少一位；
     ③挑出来的数字也不像就写 ?；④字模失效（识别引擎读得出、字模读不出）连续 3 次就扔掉重画；⑤学字样本有上限"""
     from sc_mining.navigation import displayinfo as D, gridtext as G
 
@@ -556,7 +556,7 @@ def test_lost_minus_sign_rejected(monkeypatch, tmp_path):
 
 
 def test_dot_after_unit_may_be_lost_minus():
-    """「km.21」可能是认丢的负号：两行都这样（或只有一行）就不采用；另一行干净、数值一致才采用（S2 审查 2026-10-31）"""
+    """「km.21」可能是认丢的负号：两行都这样（或只有一行）就不采用；另一行干净、数值一致才采用（审查 2026-10-31）"""
     from sc_mining.navigation.displayinfo import parse
 
     sys_dot = "Zone: SolarSystem 862685702877 Pos: 744.0843km 1000.5km.42.6401km"
@@ -573,7 +573,7 @@ def test_dot_after_unit_may_be_lost_minus():
 
 
 def test_camdir_broken_row_rejected():
-    """CamDir 那行残缺（认不出的格子、丢了负号、数多了少了）整行不要（S2 审查 2026-10-31）"""
+    """CamDir 那行残缺（认不出的格子、丢了负号、数多了少了）整行不要（审查 2026-10-31）"""
     from sc_mining.navigation.displayinfo import parse, grid_text
 
     assert parse(["CamDir: 52 27 -176 FOV: 64"])["camdir"] == (52, 27, -176)
@@ -599,7 +599,7 @@ def test_camdir_broken_row_rejected():
 
 
 def test_cam_filter_recovers_from_real_mirror_turn():
-    """被拒的读数连着几帧都一样就收下，不会永久卡在旧值上（S2 审查 2026-10-31）"""
+    """被拒的读数连着几帧都一样就收下，不会永久卡在旧值上（审查 2026-10-31）"""
     from sc_mining.app.engines.nav import _CamFilter
 
     f = _CamFilter()
@@ -618,7 +618,7 @@ def test_cam_filter_recovers_from_real_mirror_turn():
 
 
 def test_font_hires_cache_released_after_build():
-    """画字模用的高清大图画完就放掉，不常驻内存（S2 审查 2026-10-31）"""
+    """画字模用的高清大图画完就放掉，不常驻内存（审查 2026-10-31）"""
     from sc_mining.navigation import gridtext as G
 
     if not G.FONT_FILE.exists():

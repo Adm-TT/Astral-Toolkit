@@ -105,7 +105,7 @@ def _raw_post(port, headers, body=b""):
 
 
 def test_post_rejects_before_reading_body():
-    """不带令牌、请求体太大、Content-Length 不对：不读请求体直接拒绝（S5 审查 2026-10-31：以前先按 Content-Length
+    """不带令牌、请求体太大、Content-Length 不对：不读请求体直接拒绝（审查 2026-10-31：以前先按 Content-Length
     把请求体整个读进内存再验令牌，本机任何程序不带令牌就能让 AT 吃掉上 GB 内存）"""
     from sc_mining.app.server import Server, Handler, TOKEN
 
@@ -330,7 +330,7 @@ def test_appjs_no_pywebview():
 
 
 def test_server_split_keeps_old_names():
-    """server.py 按职责拆成 http_server / launcher / instance（控制台指令第 1 批，2026-10-31）：
+    """server.py 按职责拆成 http_server / launcher / instance（整改第 1 批，2026-10-31）：
     外面用的旧名字从 server 照样拿得到，是同一个对象；令牌、监听地址的检查只在 http_server 一处"""
     from sc_mining.app import server, http_server, launcher, instance
 

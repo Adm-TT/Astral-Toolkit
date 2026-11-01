@@ -100,7 +100,7 @@ def _add(kind, ref, times, src):
 
 _LOCK = __import__(
     "threading"
-).RLock()  # 读-改-写连在一起（老大审查 2026-10-28：两个请求同时改会丢一个）
+).RLock()  # 读-改-写连在一起（审查 2026-10-28：两个请求同时改会丢一个）
 
 
 def update(gid, times=None, move=0, remove=False):
@@ -578,7 +578,7 @@ def finish(trade, gid):
             else:
                 _update(gid, remove=True)
         except Exception as e:
-            if batch:  # 目标没记下来：把刚扣的材料退回去，别再点一次就重复扣（老大审查 2026-10-28）
+            if batch:  # 目标没记下来：把刚扣的材料退回去，别再点一次就重复扣（审查 2026-10-28）
                 try:
                     trade.inventory.undo(batch)
                 except Exception as u:  # 退也没退成：不能吞掉，不然玩家以为什么都没发生、再点一次就扣两遍
@@ -645,7 +645,7 @@ def market_price(trade, item_id, minq=0, unit=None):
 
 def stock_line(trade, en, zh, qty, unit, quality, location, item_id=None):
     """入库前把一行算清楚（不写库）：返回 (StockKey, 数量)。unit 是「个」「SCU」「uSCU」，SCU 和 uSCU 都按 uSCU 存。
-    数量、单位、位置不对就抛 ValueError（盘点确认也用它，老大审查 2026-10-28 第 8 条）"""
+    数量、单位、位置不对就抛 ValueError（盘点确认也用它，审查 2026-10-28 第 8 条）"""
     from ..trade.console import _quality
     from ..trade.models import StockKey
 

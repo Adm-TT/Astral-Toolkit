@@ -10,7 +10,7 @@ def _pkg(path, version, files, top=None):
         z.writestr(f"{top}/sc_mining/app/server.py", "# server")
         z.writestr(
             f"{top}/sc_mining/app/services.py", "# services"
-        )  # 必需文件清单（老大审查 2026-10-28 第 3 条）
+        )  # 必需文件清单（审查 2026-10-28 第 3 条）
         z.writestr(f"{top}/sc_mining/run.py", "# run")
         z.writestr(f"{top}/sc_mining/version.py", f'VERSION = "{version}"\n')
         for name, text in files.items():
@@ -253,7 +253,7 @@ def test_upgrade_backs_up_and_rollback_restores(monkeypatch, tmp_path):
 
 
 def test_rollback_to_oldest_backup_survives_cleanup(monkeypatch, tmp_path):
-    """回滚到备份里的版本：装之前的备份清理会删掉它，也要能装上（Codex 复审 2026-10-23）"""
+    """回滚到备份里的版本：装之前的备份清理会删掉它，也要能装上（复审 2026-10-23）"""
     import os, time as _t  # noqa: E401
 
     U, root = _setup(monkeypatch, tmp_path)
@@ -312,7 +312,7 @@ def test_adopt_previous_package_after_first_upgrade(monkeypatch, tmp_path):
 
 def test_beta_backup_shows_in_rollback(monkeypatch, tmp_path):
     """beta 版的备份、稳定版文件名带完整版本号，回滚列表看得到；同号的 beta 和正式版是两个包，不能互相顶掉
-    （S5 审查 2026-10-31：以前 beta 的备份打好了列表里看不到；第 2 轮复审：只用三位数命名会让 beta 和正式版撞名，
+    （审查 2026-10-31：以前 beta 的备份打好了列表里看不到；第 2 轮复审：只用三位数命名会让 beta 和正式版撞名，
     从 beta.2 升到同号正式版时拿更旧的 beta.1 备份当退路，稳定版也会被同号的另一版覆盖）"""
     U, root = _setup(monkeypatch, tmp_path)
     monkeypatch.setattr(U, "VERSION", "1.5.0-beta.1")

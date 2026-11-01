@@ -25,7 +25,7 @@ def _setup(monkeypatch, tmp_path, pages):
     )
     monkeypatch.setattr(
         C, "KILL_FILE", tmp_path / "killswitch.json"
-    )  # 不碰真实的关功能记录（Codex 2026-10-27）
+    )  # 不碰真实的关功能记录（审查 2026-10-27）
     monkeypatch.setattr(C, "_kill", {"list": None, "at": 0.0})
     calls = []
 
@@ -401,7 +401,7 @@ def test_killswitch(monkeypatch, tmp_path):
     assert U.disabled("nav_marker") == "记号位置不对"
     U._set_kill([])
     assert U.disabled("nav_marker") is None
-    # 拿到的不是版本说明（错误页面）：保留原来关掉的功能（Codex 2026-10-27）
+    # 拿到的不是版本说明（错误页面）：保留原来关掉的功能（审查 2026-10-27）
     import io
 
     U._set_kill([{"feature": "radar", "versions": "*"}])
@@ -415,7 +415,7 @@ def test_killswitch(monkeypatch, tmp_path):
 
 
 def test_own_server_stale_does_not_hide_newer(monkeypatch, tmp_path):
-    """Codex 2026-10-27：自己服务器上的清单旧了，Gitee 上有新版本，要用新的；关功能列表取 kill_rev 最大的那份"""
+    """审查 2026-10-27：自己服务器上的清单旧了，Gitee 上有新版本，要用新的；关功能列表取 kill_rev 最大的那份"""
     z = _pkg(tmp_path / "Dubhe_9.0.0.zip", "9.0.0", {})
     new = dict(_manifest(z), kill_rev=5, disabled=[{"feature": "radar", "why": "新"}])
     old = dict(
@@ -521,7 +521,7 @@ def test_publish_hk_checks_manifest(tmp_path):
     only_setup = {
         "version": "1.0.5",
         "installer": good["installer"],
-    }  # 压缩包版停了：清单只给安装程序也合法（控制台第 1 批）
+    }  # 压缩包版停了：清单只给安装程序也合法（整改第 1 批）
     assert [e[0] for e in H.entries(lj, only_setup)] == ["AT_Setup_1.0.5.exe"]
     bad = [
         {},
@@ -650,7 +650,7 @@ def test_vpk_check_fail_not_up_to_date(monkeypatch):
 
 
 def test_killswitch_old_mirror_cannot_undo(monkeypatch, tmp_path):
-    """Codex 2026-10-27：第一次读到 kill_rev=200 关了雷达；第二次只有旧镜像（kill_rev=100、没关）能连上，雷达照样关着；
+    """审查 2026-10-27：第一次读到 kill_rev=200 关了雷达；第二次只有旧镜像（kill_rev=100、没关）能连上，雷达照样关着；
     重开 AT 从本地文件读回来也一样。发新版的 make_manifest 带上网上的 disabled 和 kill_rev"""
     z = _pkg(tmp_path / "Dubhe_9.0.0.zip", "9.0.0", {})
     m = _manifest(z)
@@ -727,7 +727,7 @@ def test_import_inno_userdata(monkeypatch, tmp_path):
 
 
 def test_vkey_beta_older_than_live():
-    """版本比较按 semver：x.y.z-beta.N 比同号 x.y.z 旧；beta.2 比 beta.1 新，beta.10 比 beta.9 新（S5 审查 2026-10-31）"""
+    """版本比较按 semver：x.y.z-beta.N 比同号 x.y.z 旧；beta.2 比 beta.1 新，beta.10 比 beta.9 新（审查 2026-10-31）"""
     from sc_mining.update.upgrade import vkey
 
     assert vkey("1.1.2-beta.1") < vkey("1.1.2")
@@ -771,7 +771,7 @@ def _fake_velopack(versions):
 
 def test_vpk_beta_gets_same_number_live(monkeypatch):
     """Velopack 版装着 1.1.2-beta.1：服务器上的 1.1.2 正式版能升级、界面也提示；同号 beta 不算新；
-    装着 1.1.2 时上一个版本 1.1.2-beta.3 能回滚（S5 审查 2026-10-31：以前比版本丢掉 beta 后缀，测试玩家收不到同号正式版）"""
+    装着 1.1.2 时上一个版本 1.1.2-beta.3 能回滚（审查 2026-10-31：以前比版本丢掉 beta 后缀，测试玩家收不到同号正式版）"""
     import sys
     from sc_mining.update import upgrade, vpk
     from sc_mining.tasks import system as t_sys
@@ -824,7 +824,7 @@ def test_vpk_beta_gets_same_number_live(monkeypatch):
 
 def test_killswitch_refreshes_when_update_check_off(monkeypatch):
     """玩家关了「启动时检查更新」：不提示新版本，但远程关功能清单照常每小时查一次
-    （控制台指令第 2 批选 A，2026-10-31：远程关是游戏更新后防止给出错误识别结果的兜底）"""
+    （整改第 2 批选 A，2026-10-31：远程关是游戏更新后防止给出错误识别结果的兜底）"""
     import time as _t
     from sc_mining.core import settings
     from sc_mining.tasks import system as t_sys

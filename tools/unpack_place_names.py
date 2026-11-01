@@ -20,7 +20,7 @@ CJK = re.compile(r"[\u4e00-\u9fff]")
 
 
 # 汉化包里也没有的：自己翻（用到的专有名词按汉化组：克莱舍尔、标枪、布拉什伍德、哈特莫尔、索兰奇、行政中心、莉瑞雅），
-# 都写进 翻译对照\自译对照_全部地名.csv 给老大改。纯内部编号（RastarLocationEntity-001、ObjectContainer-003）保持英文
+# 都写进 翻译对照\自译对照_全部地名.csv 给负责人改。纯内部编号（RastarLocationEntity-001、ObjectContainer-003）保持英文
 SELF = {
     "Velakar Spawn Area #001": "瓦拉卡出没区 #001",
     "Velakar Spawn Area #002": "瓦拉卡出没区 #002",

@@ -1,4 +1,4 @@
-"""AT 的本机网页服务（从 server.py 拆出来，2026-10-31 控制台指令第 1 批）：令牌校验、静态文件、接口转发、安装包上传、事件流、截图
+"""AT 的本机网页服务（从 server.py 拆出来，2026-10-31 整改第 1 批）：令牌校验、静态文件、接口转发、安装包上传、事件流、截图
 
 - 只监听 127.0.0.1（server.main 里建服务时传入），别的电脑访问不到
 - 每次启动随机生成口令 TOKEN：只有 AT 自己打开的窗口知道
@@ -99,7 +99,7 @@ class Handler(BaseHTTPRequestHandler):
                     ensure_ascii=False,
                 ),
             )
-        if not allowed:  # 不读请求体，答完关连接（S5 审查 2026-10-31）
+        if not allowed:  # 不读请求体，答完关连接（审查 2026-10-31）
             self.close_connection = True
             return self._send(403, json.dumps({"ok": False, "error": "拒绝访问"}))
 
@@ -151,7 +151,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         # 拒绝时不读请求体，答完就关连接（请求体留在连接里，这条连接不能再复用）。
-        # S5 审查 2026-10-31：以前先按 Content-Length 把请求体整个读进内存再验令牌，本机任何程序不带令牌就能让 AT 吃掉上 GB 内存
+        # 审查 2026-10-31：以前先按 Content-Length 把请求体整个读进内存再验令牌，本机任何程序不带令牌就能让 AT 吃掉上 GB 内存
         if not self.path.startswith("/api/"):
             self.close_connection = True
             return self._send(404, "{}")

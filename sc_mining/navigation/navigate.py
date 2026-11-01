@@ -213,7 +213,7 @@ def mining_spots(data=None):
         rocks_stamp(),
         id(data),
         _data_stamp,
-    )  # 挖矿点文件、石头表、星图任何一个换了都重算（Codex 2026-10-27）
+    )  # 挖矿点文件、石头表、星图任何一个换了都重算（审查 2026-10-27）
     if _spots.get("stamp") == stamp and "list" in _spots:
         return _spots["list"]
     out = []

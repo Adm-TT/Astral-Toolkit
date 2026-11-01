@@ -286,7 +286,7 @@ def find_signatures(img, rec=None):
         h = y1 - y0
         pad = max(2, h // 4)
         piece = img.crop((x0 - pad, y0 - pad, x1 + pad, y1 + pad))
-        # 指纹连左边 5 个字宽一起算：同样的数字、左边多了一截（余额这种长数字）就不是同一块，要重新判断（Codex 2026-10-27）
+        # 指纹连左边 5 个字宽一起算：同样的数字、左边多了一截（余额这种长数字）就不是同一块，要重新判断（审查 2026-10-27）
         key = (
             _crop_key(img.crop((max(0, x0 - 5 * h), y0 - pad, x1 + pad, y1 + pad)))
             if cache
@@ -294,7 +294,7 @@ def find_signatures(img, rec=None):
         )
         if (
             cache and key in _SEEN
-        ):  # 这块标签画面和刚才一模一样：直接用上次的结果（含「不是信号」），不再认一遍（老大审查 2026-10-28：None 以前当没命中）
+        ):  # 这块标签画面和刚才一模一样：直接用上次的结果（含「不是信号」），不再认一遍（审查 2026-10-28：None 以前当没命中）
             hit = _SEEN[key]
             if hit:
                 out.append((*hit, (x0, y0, x1, y1)))
@@ -394,7 +394,7 @@ def _longer_number(img, box, rec):
 # 太空里 3,000 的倍数是可打捞残骸（用户 2026-10-23 提供）
 # 最后一项是一个集群最多几个：手采矿、车矿最多十来个，按 15 算；残骸一般 3 到 8 块、也有十块以上的，按 15 算（用户 2026-10-25）
 GROUND_MAX = 15
-# 2,000：可采集物（植物、菌菇等，harvestable_base_*，2026-10-27 解包核对；老大实测 10,000 = 5 个可采集物）
+# 2,000：可采集物（植物、菌菇等，harvestable_base_*，2026-10-27 解包核对；实测 10,000 = 5 个可采集物）
 GROUND_SOURCES = (
     ("ROC 车矿", 4000, "熵瞬晶 / 冰碛棉 / 冰蓝珀", GROUND_MAX),
     ("车矿或手采", 3000, "哈丹水晶 / 紫钠水晶 / 暗橄榄石", GROUND_MAX),
@@ -700,5 +700,5 @@ def describe_all(found, where=None, area=None):
             )
         if lines:
             groups.append((max(p for p, _ in lines), [t for _, t in lines]))
-    # 几个信号之间按价值排；同一个信号的几种可能保持 guesses 的顺序（当地概率 × 一团几块，Codex 2026-10-27 二审）
+    # 几个信号之间按价值排；同一个信号的几种可能保持 guesses 的顺序（当地概率 × 一团几块，2026-10-27 二审）
     return [t for _, ts in sorted(groups, key=lambda g: g[0], reverse=True) for t in ts]

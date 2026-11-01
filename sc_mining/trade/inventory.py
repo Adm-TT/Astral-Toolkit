@@ -304,7 +304,7 @@ class Inventory:
             return self._quantity(c, key)
 
     def revision(self):
-        """库存版本号：每写一笔 +1。盘点对账时记下，确认时核对，中间有人改过账就不能按旧账改（老大审查 2026-10-28 第 8 条）"""
+        """库存版本号：每写一笔 +1。盘点对账时记下，确认时核对，中间有人改过账就不能按旧账改（审查 2026-10-28 第 8 条）"""
         with self.db.connection() as c:
             return self._revision(c)
 

@@ -86,7 +86,7 @@ LABEL_C = (196, 196, 204, 255)
 MINOR_C = (180, 180, 190, 255)  # 次要详情：灰一档，在雪地上也有 4.5:1
 NOTE_BG = (240, 240, 250, 255)
 NOTE_C = (0, 0, 0, 255)
-# 2026-10-27 老大：保留现有（默认）、再加两套。设置 hud_theme 选
+# 2026-10-27 负责人：保留现有（默认）、再加两套。设置 hud_theme 选
 PALETTES = {
     "默认": dict(
         PLATE=(0, 0, 0),
@@ -1053,7 +1053,7 @@ class Hud:
                 raise RuntimeError("UpdateLayeredWindow")
             self.ok = True
             try:  # 导航记号的两个小窗口启动时就建好：Tk 第一次显示新窗口可能激活它，
-                self._mk_window()  # 以前第一次出记号时（正在游戏里）才建，可能抢一次焦点（S2 审查 2026-10-31）
+                self._mk_window()  # 以前第一次出记号时（正在游戏里）才建，可能抢一次焦点（审查 2026-10-31）
             except Exception:
                 pass
         except Exception:

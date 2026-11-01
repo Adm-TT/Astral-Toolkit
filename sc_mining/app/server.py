@@ -14,7 +14,7 @@ from . import bus
 from . import http_server, instance, launcher
 from ..tasks import system as _sys_task  # main 里启动后台引擎
 
-# 2026-10-31 按职责拆开（控制台指令第 1 批）：网页服务在 http_server，开窗口在 launcher，只开一个 AT 在 instance；
+# 2026-10-31 按职责拆开（整改第 1 批）：网页服务在 http_server，开窗口在 launcher，只开一个 AT 在 instance；
 # 这里只留启动 / 退出流程。下面这些名字原样导回，外面的 import 不用改
 from .http_server import WEB, TOKEN, MAX_BODY, Handler, Server, _last_client  # noqa: F401
 from .launcher import (

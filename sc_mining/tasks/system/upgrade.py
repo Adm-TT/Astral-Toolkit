@@ -49,7 +49,7 @@ def _online_info(force=False):
         return None
     if not settings.load().get("update_online", True):
         _online["info"] = (
-            None  # 不提示新版本；远程关功能清单照常每小时查（控制台指令第 2 批选 A）
+            None  # 不提示新版本；远程关功能清单照常每小时查（整改第 2 批选 A）
         )
         try:
             update_check.refresh_kill()
@@ -96,7 +96,7 @@ def upgrade_check(online=False):
         from ...update.upgrade import (
             current_key,
             vkey,
-        )  # 算上 beta 后缀比（S5 审查 2026-10-31）
+        )  # 算上 beta 后缀比（审查 2026-10-31）
 
         if online:
             src, fail = "", False

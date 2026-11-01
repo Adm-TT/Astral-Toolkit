@@ -1,4 +1,4 @@
-// AT 窗口外壳（2026-10-27，老大定：WinUI 3 + WebView2，取代 Edge 应用窗口）
+// AT 窗口外壳（2026-10-27，负责人定：WinUI 3 + WebView2，取代 Edge 应用窗口）
 // AT（Python）用 ATShell.exe --url <界面地址> --data <WebView2 资料夹> --parent <AT 的进程号> 打开它。
 // - 标题栏融进界面，最小化/最大化/关闭由 Windows 自己画（保住 Win11 分屏菜单），Mica 背景
 // - 关窗口就是关窗口（AT 照旧在托盘里跑，和以前关 Edge 窗口一样）；AT 退出了它也跟着退
@@ -152,7 +152,7 @@ public class ShellWindow : Window
     const string Title_ = "AT 星际公民助手";        // 和 index.html 的 <title>、winid.TITLE 一样：AT 按标题找窗口
     readonly WebView2 _web;
     readonly string _boundsFile;
-    // 顶条（2026-10-27 老大要：和我们的风格统一）：左段和侧边栏同色、右段和页面同色，三个按钮自己画
+    // 顶条（2026-10-27 负责人要：和我们的风格统一）：左段和侧边栏同色、右段和页面同色，三个按钮自己画
     readonly Grid _bar = new() { Height = BarH };
     readonly Border _railPart = new();
     readonly Border _railLine = new() { Width = 1, HorizontalAlignment = HorizontalAlignment.Right };
@@ -458,7 +458,7 @@ public class ShellWindow : Window
         };
         core.NewWindowRequested += (s, e) =>            // 外链：用系统浏览器打开
         {
-            // AT 自己的网址（带口令，如实时预览大图）不交给系统浏览器：不处理，WebView2 自己开弹出窗口，口令不进浏览器历史（S5 审查 2026-10-31）
+            // AT 自己的网址（带口令，如实时预览大图）不交给系统浏览器：不处理，WebView2 自己开弹出窗口，口令不进浏览器历史（审查 2026-10-31）
             if (Program.IsAt(e.Uri, Program.Port)) return;
             e.Handled = true;
             Open(e.Uri);

@@ -1,4 +1,4 @@
-"""Velopack 安装包 + 在线更新包（2026-10-27，老大定：换 Velopack，只下载改过的部分）
+"""Velopack 安装包 + 在线更新包（2026-10-27，负责人定：换 Velopack，只下载改过的部分）
 
 用构建环境的 Python 运行（不是项目的 .venv）：
   E:\\Game3\\AT_build\\venv\\Scripts\\python.exe -X utf8 tools\\build_velopack.py [--skip-build] ["更新内容一" "更新内容二" …]
@@ -10,9 +10,9 @@
    （beta 频道 vpk 会在版本号后加频道名：AT-<版本>-beta-full.nupkg / -beta-delta.nupkg、AT-beta-Setup.exe、releases.beta.json）
 3. releases.prev.json：只放上一个正式版的完整包（AT 设置页「回滚」用）
 4. 桥接安装程序 AT_Setup_<版本>.exe（老的 Inno 安装版在线升级用，tools\\AT_bridge.iss）
-测试版（x.y.z-beta.N，2026-10-31 老大定单独频道）：打进 beta 频道（releases.beta.json、AT-beta-Setup.exe），
+测试版（x.y.z-beta.N，2026-10-31 负责人定单独频道）：打进 beta 频道（releases.beta.json、AT-beta-Setup.exe），
 不进正式版玩家的 win 频道；不动回滚清单，不打桥接安装程序（老 Inno 版和 latest.json 只走正式版）。
-发布：tools\\publish_hk.py --velopack（正式版）/ --velopack beta（测试版），要老大点头
+发布：tools\\publish_hk.py --velopack（正式版）/ --velopack beta（测试版），要负责人点头
 """
 
 import json

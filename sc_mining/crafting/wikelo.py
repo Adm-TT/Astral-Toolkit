@@ -264,7 +264,7 @@ def source_note(name):
         return "打印：" + "；".join(w)
     if (
         (name or "").upper().startswith("DCHS-")
-    ):  # 老大 2026-10-27：DCHS 计算板是派罗争夺区打印的（数据包里没有地点时的兜底）
+    ):  # 负责人 2026-10-27：DCHS 计算板是派罗争夺区打印的（数据包里没有地点时的兜底）
         return "派罗争夺区（Contested Zone）内打印"
     return ""
 

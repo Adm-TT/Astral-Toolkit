@@ -411,7 +411,7 @@ class _Live:
                     from ...mining.parse import (
                         parse_scan,
                         parse_bag,
-                    )  # 投票队列清掉、悬浮窗旧结果收起、不算「读不全」（Codex 2026-10-27）
+                    )  # 投票队列清掉、悬浮窗旧结果收起、不算「读不全」（审查 2026-10-27）
 
                     scan, bag = parse_scan([]), parse_bag([])
                     recent.clear()

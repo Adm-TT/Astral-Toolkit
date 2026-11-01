@@ -129,7 +129,7 @@ def main():
         "--filter",
         "Data/Localization/english/global.ini",
         env=env,
-    )  # 星图要用当前的 global.ini（老大审查 2026-10-28）
+    )  # 星图要用当前的 global.ini（审查 2026-10-28）
     run(
         PY, "-X", "utf8", tools / "unpack_starmap.py", "--write"
     )  # 星图整表（2026-10-28）：太空点、星球参数、有星图记录的地点

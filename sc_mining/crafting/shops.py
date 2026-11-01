@@ -104,7 +104,7 @@ def update(progress=print):
     if failed:
         raise RuntimeError(
             f"商店价格有 {len(failed)} 类下载失败（{failed[0]}），这次不更新，继续用旧表"
-        )  # 老大审查 2026-10-28：以前会把残缺表写成最新
+        )  # 审查 2026-10-28：以前会把残缺表写成最新
     data = {
         "fmt": FMT,
         "fetched": time.time(),
