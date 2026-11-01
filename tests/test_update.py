@@ -893,14 +893,15 @@ def test_build_input_rows(monkeypatch, tmp_path):
 
 
 def test_make_data_pack_keeps_game_starmap(monkeypatch, tmp_path):
-    """本机星图是游戏数据版、却没设好构建目录：直接停下，不拿网站版盖掉再打进数据包；
-    设好了：星图合并脚本拿到这份仓库和输入目录（不会去改别的签出）"""
+    """本机星图是游戏数据版、却没设好构建目录（或脚本目录里没有合并脚本）：直接停下，不拿网站版盖掉再打进数据包；
+    带 --no-update 不会去网站更新，不用停；设好了：星图合并脚本拿到这份仓库和输入目录（不会去改别的签出）"""
     import runpy
     import subprocess
     from pathlib import Path
 
     from sc_mining import run
     from sc_mining.core import paths
+    from sc_mining.update import data_pack
     from tests.minipytest import raises
 
     M = runpy.run_path(
@@ -917,12 +918,28 @@ def test_make_data_pack_keeps_game_starmap(monkeypatch, tmp_path):
     assert M["main"]([]) == 2 and calls == []
     src = tmp_path / "src"
     (src / "oc_x").mkdir(parents=True)
+    empty = tmp_path / "empty"
+    empty.mkdir()
     monkeypatch.setenv("AT_SRC_DIR", str(src))
-    monkeypatch.setenv("AT_DATA_TOOLS", str(tmp_path))
-    seen = []
+    monkeypatch.setenv("AT_DATA_TOOLS", str(empty))  # 目录对、里面没有合并脚本
+    assert M["main"]([]) == 2 and calls == []
 
     class Stop(Exception):
         pass
+
+    def stop(*a, **kw):
+        raise Stop
+
+    monkeypatch.setattr(
+        data_pack, "make", stop
+    )  # 走到打包这一步就算没停下（也不真打包）
+    with raises(Stop):
+        M["main"](["--no-update", "--no-loot"])
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    (tools / "starmap_merge.py").write_text("", encoding="utf-8")
+    monkeypatch.setenv("AT_DATA_TOOLS", str(tools))
+    seen = []
 
     def fake_run(cmd, **kw):
         seen.append((cmd, kw.get("env") or {}))
