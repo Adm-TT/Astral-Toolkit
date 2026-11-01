@@ -71,6 +71,7 @@ MODULES = [
     "tests.test_system_modules",
     "tests.test_run_records",
     "tests.test_gamedata",
+    "tests.test_feedback_guard",
 ]
 
 if __name__ == "__main__":

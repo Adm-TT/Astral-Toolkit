@@ -5,6 +5,9 @@ import os
 import tempfile
 
 os.environ["LOCALAPPDATA"] = tempfile.mkdtemp(prefix="dubhe_test_localappdata_")
+os.environ["AT_FEEDBACK_OFF"] = (
+    "1"  # 测试一律不往服务器发反馈：以前只在 run_all 里设，单跑一个模块会漏（2026-11-01 收件箱出现过测试数据）
+)
 
 # 2026-10-30 重构阶段 4：services.py 删了，patch_services 也删了。测试直接换名字所在的模块
 # （tasks/*、app/hud_state.py，引擎换 EngineManager.get_instance() 上的）；一个名字被几个模块 import 了的，几个一起换。
