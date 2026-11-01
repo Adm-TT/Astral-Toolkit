@@ -102,9 +102,24 @@ def _station_at(internal):
     return ""
 
 
-@lru_cache(maxsize=256)
 def place_name(code):
     """日志里的地点代码 → 具体地点的中文名：Stanton4_NewBabbage → 新巴贝奇，RR_ARC_L1 → 弧 L1 广袤森林站"""
+    return _place_name(code, _data_version())
+
+
+def _data_version():
+    """缓存按游戏数据库版本分开：汉化包更新时 reset_names 在 updating() 里、库还没换代，
+    这时别的线程查到的旧名记在旧版本下，换代后自然查新库"""
+    from ..gamedata import GamedataError, version
+
+    try:
+        return version()
+    except GamedataError:
+        return None
+
+
+@lru_cache(maxsize=256)
+def _place_name(code, _version):
     m = re.match(r"RR_(ARC|HUR|CRU|MIC)_L(\d)", code)
     if m:
         return (
@@ -196,7 +211,7 @@ def _ini_get(ini, k):
 def reset_names():
     """汉化包更新后清掉地名缓存，这次运行里马上用上新地名"""
     _ini_cache.clear()
-    place_name.cache_clear()
+    _place_name.cache_clear()
 
 
 def _ini_label(code):

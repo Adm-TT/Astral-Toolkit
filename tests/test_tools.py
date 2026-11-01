@@ -851,12 +851,12 @@ def test_log_place_is_specific(monkeypatch):
     monkeypatch.setattr(
         position, "_station_at", lambda i: "Checkmate Station" if i == "P2_L4" else ""
     )
-    position.place_name.cache_clear()
+    position._place_name.cache_clear()
     assert position.place_name("Stanton4_NewBabbage") == "新巴贝奇"
     assert position.place_name("RR_ARC_L1") == "弧 L1 广袤森林站"
     assert position.place_name("RR_P2_L4") == "死局空间站"
     assert position.place_name("Stanton1_SomeNewPlace") == "Some New Place"
-    position.place_name.cache_clear()
+    position._place_name.cache_clear()
 
 
 def test_displayinfo_real_ocr_lines():

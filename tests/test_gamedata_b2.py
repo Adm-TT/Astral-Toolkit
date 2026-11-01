@@ -197,7 +197,7 @@ def _no_ini(monkeypatch):
     from sc_mining.navigation import position
 
     monkeypatch.setattr(position, "_ini_cache", {"ini": {}})
-    position.place_name.cache_clear()
+    position._place_name.cache_clear()
 
 
 def test_poi_zh_extra_overrides(monkeypatch, tmp_path):
@@ -236,7 +236,7 @@ def test_place_name_prefix_shortest_then_first(monkeypatch, tmp_path):
         assert position.place_name("RR_HUR_L1") == "HUR-L1"
         assert position.place_name("Stanton4_NewBabbage") == "New Babbage"
     finally:
-        position.place_name.cache_clear()
+        position._place_name.cache_clear()
 
 
 def test_place_name_code_table_then_ini(monkeypatch, tmp_path):
@@ -256,7 +256,32 @@ def test_place_name_code_table_then_ini(monkeypatch, tmp_path):
         assert position.ini_name("RR_P6") == "废墟"
         assert position.ini_name("RR_P9") == ""
     finally:
-        position.place_name.cache_clear()
+        position._place_name.cache_clear()
+
+
+def test_place_name_follows_data_version(monkeypatch, tmp_path):
+    """汉化包更新时 reset_names 在 updating() 里、库还没换代；别的线程这时查到旧名记进缓存，
+    换代以后 place_name 也要用上新库里的地名，不能一直显示旧的"""
+    from sc_mining import gamedata
+    from sc_mining.navigation import position
+
+    _setup(
+        monkeypatch,
+        tmp_path,
+        **{"places_zh.json": {"arcl1a": "旧名"}, "place_codes_zh.json": {}},
+    )
+    _no_ini(monkeypatch)
+    try:
+        assert position.place_name("RR_ARC_L1") == "旧名"
+        with gamedata.updating():
+            (tmp_path / "places_zh.json").write_text(
+                json.dumps({"arcl1a": "新名"}, ensure_ascii=False), encoding="utf-8"
+            )
+            position._place_name.cache_clear()
+            assert position.place_name("RR_ARC_L1") == "旧名"  # 库还没换代，查到的还是旧库
+        assert position.place_name("RR_ARC_L1") == "新名"
+    finally:
+        position._place_name.cache_clear()
 
 
 def test_zh_name_station_suffix_fallback(monkeypatch, tmp_path):
