@@ -371,3 +371,87 @@ def test_transit_does_not_read_json(monkeypatch, tmp_path):
         transit.amenity_targets("商店"),
     )
     assert got == want and len(got[0]) == 4 and got[1] and got[2]
+
+
+# ---------------------------------------------------------------- Task 5：挖矿点、死导入
+
+
+def test_mining_spots_divides_by_1000_and_merges(monkeypatch, tmp_path):
+    """挖矿点从库读：坐标米 → 千米（保留 3 位），没有英文名用 id；挖矿点更新后跟着变"""
+    import sc_mining.gamedata as G
+    from sc_mining.navigation import navigate
+
+    spots = _NAV_SOURCES["mining_spots.json"] + [
+        dict(
+            id="x2",
+            sys="Pyro",
+            zh="",
+            en="",
+            kind="cluster",
+            area="",
+            x=1000.0,
+            y=0.0,
+            z=0.0,
+        )
+    ]
+    _setup(monkeypatch, tmp_path, **{"mining_spots.json": spots})
+    got = navigate.mining_spots()
+    assert got == [
+        dict(
+            b="@Pyro",
+            sys="Pyro",
+            space=True,
+            n="RMB-DARI",
+            zh="远矿站-DARI",
+            t="Mining Spot",
+            x=-13.521,
+            y=12.915,
+            z=-0.149,
+            qt=1,
+            rocks=None,
+        ),
+        dict(
+            b="@Pyro",
+            sys="Pyro",
+            space=True,
+            n="x2",
+            zh="",
+            t="Mining Spot",
+            x=1.0,
+            y=0.0,
+            z=0.0,
+            qt=1,
+            rocks=None,
+        ),
+    ]  # 最小星图里没有拉格朗日点：只有这两条
+    assert navigate.mining_spots() is got
+    with G.updating():
+        (tmp_path / "mining_spots.json").write_text(
+            json.dumps(spots[:1]), encoding="utf-8"
+        )
+    assert [q["n"] for q in navigate.mining_spots()] == ["RMB-DARI"]
+
+
+def test_navigate_has_no_starmap_private_imports():
+    """星图、地名、城市地点以前的读文件缓存（_data / _data_stamp / _places_zh / _city / _amen …）都删干净了"""
+    from sc_mining.navigation import names, navigate, starmap, transit
+
+    for mod, gone in (
+        (
+            navigate,
+            (
+                "_data",
+                "_data_stamp",
+                "_files_stamp",
+                "_apply_fixes",
+                "_places_zh",
+                "_city",
+                "_amen",
+            ),
+        ),
+        (starmap, ("_data", "_data_stamp", "_files_stamp", "_apply_fixes")),
+        (names, ("_places_zh",)),
+        (transit, ("_city", "_amen")),
+    ):
+        for name in gone:
+            assert not hasattr(mod, name), f"{mod.__name__}.{name}"

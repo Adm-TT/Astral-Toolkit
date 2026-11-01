@@ -190,30 +190,24 @@ _spots = {}
 
 def mining_spots(data=None):
     """导航里的「挖矿点」（太空目标，b = "@星系"，坐标千米）：
-    - data/mining_spots.json（数据构建脚本从游戏数据生成）：派罗 15 个小行星群、86 个远矿站，冰川环带中转点、QV 碎岩站
+    - mining_spots.json（数据构建脚本从游戏数据生成，从游戏数据层读）：派罗 15 个小行星群、86 个远矿站，冰川环带中转点、QV 碎岩站
     - 星图里有刷矿表的拉格朗日点（斯坦顿 20 个、派罗 25 个，data/mining_rocks.json 里有表的才算）
     每个点带 rocks：这里刷哪几种石头（搜「贝沙电气石」能搜到会刷它的点）"""
     from ..mining.mining_area import rocks_stamp, area_for_spot
-    from ..core import paths as _paths  # 调用时现取 paths.DATA（测试会换掉它）
 
-    p = _paths.DATA / "mining_spots.json"
     data = data or load()
-    try:
-        mt = p.stat().st_mtime_ns
-    except OSError:
-        mt = None
     stamp = (
-        mt,
+        gamedata.version(),
         rocks_stamp(),
         id(data),
-    )  # 挖矿点文件、石头表、星图任何一个换了都重算（审查 2026-10-27）
+    )  # 游戏数据（挖矿点、星图）、石头表、传进来的星图任何一个换了都重算（审查 2026-10-27）
     if _spots.get("stamp") == stamp and "list" in _spots:
         return _spots["list"]
     out = []
     try:
-        raw = json.loads(p.read_text(encoding="utf-8")) if mt is not None else []
-    except Exception:
-        raw = []
+        raw = gamedata.mining.spots()
+    except gamedata.GamedataError:
+        raw = ()  # 库不可用：和以前没有文件一样，只剩拉格朗日点
     for r in raw:
         x, y, z = r["x"] / 1000, r["y"] / 1000, r["z"] / 1000
         out.append(
