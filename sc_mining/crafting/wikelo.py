@@ -149,22 +149,25 @@ def build(merged_path, names_path, out=OUT):
             }
         )
     out_rows.sort(key=lambda r: (r["type"], r["te"]))
+    _write(out, {"version": merged.get("version"), "contracts": out_rows})
+    return len(out_rows)
+
+
+def _write(out, data):
+    """写 wikelo.json（游戏数据库的源）：临时文件再换名；在更新边界里写（updating 在外、BUILD_LOCK 在内），出口重建一次库"""
     import os
 
+    from .. import gamedata
+    from .build_crafting import BUILD_LOCK
+
+    text = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
     tmp = Path(out).with_name(f".{Path(out).stem}.{os.getpid()}.tmp")
-    try:
-        tmp.write_text(
-            json.dumps(
-                {"version": merged.get("version"), "contracts": out_rows},
-                ensure_ascii=False,
-                separators=(",", ":"),
-            ),
-            encoding="utf-8",
-        )
-        tmp.replace(out)
-    finally:
-        tmp.unlink(missing_ok=True)
-    return len(out_rows)
+    with gamedata.updating(), BUILD_LOCK:
+        try:
+            tmp.write_text(text, encoding="utf-8")
+            tmp.replace(out)
+        finally:
+            tmp.unlink(missing_ok=True)
 
 
 def load():

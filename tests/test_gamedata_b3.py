@@ -585,3 +585,117 @@ def test_ships_with(monkeypatch, tmp_path):
 
     monkeypatch.setattr(G.itemstats, "ships_with", boom)
     assert acquire.ships_with("'Arrow' I Missile") == []
+
+
+# ---------------------------------------------------------------- Task 5：重建 crafting.json / wikelo.json 的更新边界
+
+
+def _spy_updating(monkeypatch, log):
+    """包一层 gamedata.updating：记下每次进入时本线程是不是已经拿着 BUILD_LOCK（拿着就是锁顺序反了）"""
+    import sc_mining.gamedata as G
+    from sc_mining.crafting.build_crafting import BUILD_LOCK
+
+    real = G.updating
+
+    from contextlib import contextmanager
+
+    @contextmanager
+    def spy():
+        log.append(("updating", BUILD_LOCK._is_owned()))
+        with real():
+            yield
+
+    monkeypatch.setattr(G, "updating", spy)
+
+
+def _count_rebuilds(monkeypatch):
+    from sc_mining.gamedata import _build
+
+    n = [0]
+    real = _build.rebuild_if_needed
+
+    def counted(*a, **k):
+        n[0] += 1
+        return real(*a, **k)
+
+    monkeypatch.setattr(_build, "rebuild_if_needed", counted)
+    return n
+
+
+def test_build_crafting_runs_inside_updating(monkeypatch, tmp_path):
+    """写 crafting.json 在 updating 里（BUILD_LOCK 在内），出口重建库：新蓝图马上查得到"""
+    from sc_mining.crafting import build_crafting, crafting
+
+    _setup(monkeypatch, tmp_path)
+    assert crafting.by_key("Medpen") is not None
+    log = []
+    _spy_updating(monkeypatch, log)
+    new = copy.deepcopy(_CRAFT_SOURCES["crafting.json"])
+    new["blueprints"][2]["n"] = "Medpen Mk2"
+    build_crafting._write(tmp_path / "crafting.json", new)
+    assert log == [("updating", False)]
+    assert (
+        crafting.by_key("Medpen") is None and crafting.by_key("Medpen Mk2") is not None
+    )
+    assert not list(tmp_path.glob(".crafting.*.tmp"))
+
+
+def test_wikelo_build_runs_inside_updating(monkeypatch, tmp_path):
+    from sc_mining.crafting import wikelo
+
+    _setup(monkeypatch, tmp_path)
+    log = []
+    _spy_updating(monkeypatch, log)
+    wikelo._write(tmp_path / "wikelo.json", copy.deepcopy(_WIKELO))
+    assert log == [("updating", False)]
+    assert [c["id"] for c in wikelo.load()] == ["C1", "C0"]
+
+
+def test_update_rebuilds_once_and_checks_outside_write_lock(monkeypatch, tmp_path):
+    """update()：比版本 / 下载只在 BUILD_LOCK 里、不进 updating；两份文件重建套一层 updating，库只重建一次"""
+    import sc_mining.gamedata as G
+    from sc_mining.crafting import build_crafting, crafting, wikelo
+    from sc_mining.gamedata import _lock
+
+    _setup(monkeypatch, tmp_path)
+    crafting.blueprints()  # 先建好库
+    seen = {}
+
+    def fake_update():
+        seen["write_lock_depth"] = _lock._depth
+        seen["build_lock"] = build_crafting.BUILD_LOCK._is_owned()
+        return (
+            "bp.json",
+            "merged.json",
+            "names.ini",
+            tmp_path / "crafting.json",
+            "已更新",
+        )
+
+    new_bp = copy.deepcopy(_CRAFT_SOURCES["crafting.json"])
+    new_bp["blueprints"][2]["n"] = "Medpen Mk2"
+    monkeypatch.setattr(build_crafting, "_update", fake_update)
+    monkeypatch.setattr(
+        build_crafting,
+        "build",
+        lambda bp, m, n, out: build_crafting._write(out, new_bp),
+    )
+
+    def fake_wikelo_build(merged, names):
+        wikelo._write(tmp_path / "wikelo.json", copy.deepcopy(_WIKELO))
+        return 2
+
+    monkeypatch.setattr(wikelo, "build", fake_wikelo_build)
+    log = []
+    _spy_updating(monkeypatch, log)
+    n = _count_rebuilds(monkeypatch)
+    out = []
+    monkeypatch.setattr(
+        "builtins.print", lambda *a, **k: out.append(" ".join(map(str, a)))
+    )
+    build_crafting.update()
+    assert seen == {"write_lock_depth": 0, "build_lock": True}
+    assert [x for x, _ in log] == ["updating"] * 3 and not any(held for _, held in log)
+    assert n[0] == 1 and G.last_error() is None
+    assert out == ["维科洛兑换：2 个", "已更新"]
+    assert crafting.by_key("Medpen Mk2") is not None and wikelo.load()[1]["id"] == "C0"

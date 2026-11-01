@@ -258,23 +258,28 @@ def build(bp_path, merged_path, names_path, out_path):
         blueprints=out,
         names=_names_tag(names_path),
     )
-    import os
-
-    tmp = Path(out_path).with_name(
-        f".{Path(out_path).stem}.{os.getpid()}.tmp"
-    )  # 先写临时文件再换，AT 开着时读到的不会是半个文件
-    try:
-        tmp.write_text(
-            json.dumps(data, ensure_ascii=False, separators=(",", ":")),
-            encoding="utf-8",
-        )
-        tmp.replace(out_path)
-    finally:
-        tmp.unlink(missing_ok=True)
+    _write(out_path, data)
     print(
         f"{len(out)} 份蓝图；{sum(1 for x in out if x['z'])} 份有中文名；"
         f"{sum(1 for x in out if x['src'])} 份有任务来源"
     )
+
+
+def _write(out_path, data):
+    """写 crafting.json（游戏数据库的源）：先写临时文件再换，AT 开着时读到的不会是半个文件。
+    在游戏数据层的更新边界里写（updating 在外、BUILD_LOCK 在内，和 data_pack.install 一致），最外层出口重建一次库"""
+    import os
+
+    from .. import gamedata
+
+    text = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+    tmp = Path(out_path).with_name(f".{Path(out_path).stem}.{os.getpid()}.tmp")
+    with gamedata.updating(), BUILD_LOCK:
+        try:
+            tmp.write_text(text, encoding="utf-8")
+            tmp.replace(out_path)
+        finally:
+            tmp.unlink(missing_ok=True)
 
 
 def _fetch(name):
@@ -329,12 +334,27 @@ def source_rows():
 
 
 def update():
-    """重建 crafting.json：有本机构建输入就用它；没有才去 scmdb 看有没有新版本"""
+    """重建 crafting.json + wikelo.json：有本机构建输入就用它；没有才去 scmdb 看有没有新版本。
+    比版本、下载在 BUILD_LOCK 里，不进游戏数据层的写锁（联网别卡住别的数据更新）；要重建时两份文件套一层
+    gamedata.updating()（锁顺序 updating → BUILD_LOCK，和 data_pack.install 一致），出口只重建一次库"""
     with BUILD_LOCK:
-        return _update()
+        job = _update()
+    if job:
+        _rebuild(*job)
+
+
+def _rebuild(bp, merged, names, out, done):
+    from .. import gamedata
+    from .wikelo import build as build_wikelo
+
+    with gamedata.updating():
+        build(bp, merged, names, out)
+        print(f"维科洛兑换：{build_wikelo(merged, names)} 个")
+    print(done)
 
 
 def _update():
+    """比版本、需要时下载；要重建返回 (蓝图文件, 任务文件, 汉化源, 输出, 完成提示)，不用重建返回 None"""
     own = source_rows()
     if own:
         bp, merged, ver = own
@@ -349,12 +369,7 @@ def _update():
         ):
             print(f"制造数据已是最新（游戏数据 {ver}）")
             return
-        build(bp, merged, names_source(), out)
-        from .wikelo import build as build_wikelo
-
-        print(f"维科洛兑换：{build_wikelo(merged, names_source())} 个")
-        print(f"制造数据已更新（游戏数据 {ver}）")
-        return
+        return bp, merged, names_source(), out, f"制造数据已更新（游戏数据 {ver}）"
     ver = pick_live([v["version"] for v in json.loads(_fetch("versions.json"))])
     if not ver:
         print("scmdb 现在没有正式服（LIVE）的数据，制造数据先不动")
@@ -400,11 +415,7 @@ def _update():
         files.append(p)
     from ..update.localization import names_source
 
-    build(files[0], files[1], names_source(), out)
-    from .wikelo import build as build_wikelo
-
-    print(f"维科洛兑换：{build_wikelo(files[1], names_source())} 个")
-    print(f"制造数据已更新：{cur} → {ver}")
+    return files[0], files[1], names_source(), out, f"制造数据已更新：{cur} → {ver}"
 
 
 if __name__ == "__main__":
