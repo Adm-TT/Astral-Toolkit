@@ -7,12 +7,13 @@
 
 import argparse
 import json
-import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+
+from gamedata_baseline import _git_head  # noqa: E402 —— 同目录的批 1 基线工具，取 git HEAD 复用它
 
 # (name_en, name_zh)
 FIND = [
@@ -62,19 +63,6 @@ SHIP = [
     ("Quartz (Raw)", ""),
 ]
 DETAILS = 20
-
-
-def _git_head():
-    try:
-        return subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        ).stdout.strip()
-    except Exception:
-        return ""
 
 
 def _offline():
