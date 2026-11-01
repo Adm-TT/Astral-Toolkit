@@ -618,3 +618,147 @@ def test_mine_info_none_when_db_unavailable(monkeypatch, tmp_path):
     _detail_env(monkeypatch, tmp_path)
     monkeypatch.setattr(paths, "DATA", tmp_path / "empty")
     assert loot.mine_info("carinite", online=False) is None
+
+
+# ---------------------------------------------------------------- Task 4：输出不变与更新流程保持
+
+
+def _details_zip(path, version, details):
+    import json
+    import zipfile
+
+    with zipfile.ZipFile(path, "w") as z:
+        z.writestr("version.txt", version)
+        for u, d in details.items():
+            z.writestr(f"{u}.json", json.dumps(d, ensure_ascii=False))
+    return path
+
+
+_DETAILS = {
+    # 8 个地区概率、箱子一样（合成一行，「等 8 类」），再加 6 个更低的（top=5 截掉 →「…还有 N 类」）
+    "c4": {
+        "raw": "Item.core_01_c",
+        "regions": [
+            {
+                "name": f"地区{i}",
+                "best": 0.0106,
+                "containers": [
+                    {
+                        "name": "Lootable_Container_Large",
+                        "loc": "前哨站",
+                        "openp": 0.0106,
+                    }
+                ],
+            }
+            for i in range(8)
+        ]
+        + [
+            {
+                "name": f"低{i}",
+                "best": 0.001 * (i + 1),
+                "containers": [{"name": f"Box_{i}", "p": 0.001}],
+            }
+            for i in range(6)
+        ],
+    },
+    # 「容器」就是物品自己：直接刷在场景里
+    "k2": {
+        "raw": "Item.Knife_01_B",
+        "regions": [
+            {
+                "name": "洞穴",
+                "best": 0.3,
+                "containers": [
+                    {"name": "Knife_01_B · 架子", "loc": "奖励室", "openp": 0.3}
+                ],
+            },
+            {"name": "空地", "best": 0.05, "containers": []},
+        ],
+    },
+}
+
+
+def test_info_and_text_equal_legacy_on_sample(monkeypatch, tmp_path):
+    import json
+
+    from sc_mining.crafting import loot
+
+    _find_setup(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        loot,
+        "DETAILS",
+        _details_zip(tmp_path / "loot_details.zip", "4.10.2LIVE", _DETAILS),
+    )
+    monkeypatch.setattr(loot, "CACHE_DIR", tmp_path / "loot")
+    monkeypatch.setattr(loot, "_zip", {"z": None, "mtime": None, "version": None})
+
+    def no_net(*a, **kw):
+        raise OSError("断网")
+
+    monkeypatch.setattr(loot, "_get", no_net)
+    inputs = [
+        ("Citadel Core", ""),
+        ("Combat Knife", ""),
+        ("Twin Thing", ""),
+        ("Gadget", ""),
+        ("Nothing", "无"),
+    ]
+
+    def run():
+        out = []
+        for en, zh in inputs:
+            monkeypatch.setattr(loot, "_failed", {})
+            out.append(loot.info(en, zh, online=False))
+            monkeypatch.setattr(loot, "_failed", {})
+            out.append(loot.text(en, zh))
+        return out
+
+    new = run()
+    legacy_version = json.loads(
+        (tmp_path / "loot_index.json").read_text(encoding="utf-8")
+    )
+    monkeypatch.setattr(
+        loot, "find", lambda en="", zh="": _legacy_find(tmp_path, en, zh)
+    )
+    monkeypatch.setattr(
+        loot, "_index_meta", lambda: {"version": legacy_version["version"]}
+    )
+    old = run()
+    loot.close_bundle()
+    assert new == old
+    texts = "\n".join(t for t in new[1::2] if t)
+    assert "等 8 类" in texts and "…还有" in texts and loot.PLACED in texts
+    assert (
+        new[4] == {"pending": True} and "暂时取不到" in new[5]
+    )  # 明细本机没有：离线挂起、在线断网报错
+    assert new[8] is None and new[9] == ""
+
+
+def test_loot_update_still_inside_updating(monkeypatch, tmp_path):
+    from sc_mining.crafting import loot
+    from tests.test_gamedata_b1 import _count_updating
+
+    _setup(monkeypatch, tmp_path)
+    monkeypatch.setattr(loot, "INDEX", tmp_path / "loot_index.json")
+    monkeypatch.setattr(loot, "_index", None)
+    monkeypatch.setattr(loot, "latest_version", lambda: "4.10.3LIVE")
+    monkeypatch.setattr(
+        loot,
+        "_get",
+        lambda url, timeout=60: (
+            {"version": "4.10.3LIVE"} if url.endswith("manifest.json") else []
+        ),
+    )
+    state = _count_updating(monkeypatch)
+    data = loot.update(progress=None)
+    assert state["n"] == 1 and state["writes"] == [(tmp_path / "loot_index.json", True)]
+    assert data == {"version": "4.10.3LIVE", "rows": []} and loot._index is data
+
+
+def test_load_index_still_available_for_batch6(monkeypatch, tmp_path):
+    from sc_mining.crafting import loot
+
+    _setup(monkeypatch, tmp_path)
+    monkeypatch.setattr(loot, "INDEX", tmp_path / "loot_index.json")
+    monkeypatch.setattr(loot, "_index", None)
+    assert loot.load_index(False) == _MIN_SOURCES["loot_index.json"]
