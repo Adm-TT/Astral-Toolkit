@@ -33,6 +33,7 @@
 !/docs/shot_item.jpg
 !/docs/shot_mining.jpg
 !/docs/shot_nav.jpg
+!/docs/1.1.1_自动化与注入说明.md
 # 和开源导出脚本 oss_export.py 一致的排除
 __pycache__/
 codex_out/
