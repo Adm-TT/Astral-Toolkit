@@ -6,7 +6,6 @@
 
 import json
 import re
-from functools import lru_cache
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -168,16 +167,15 @@ def build(merged_path, names_path, out=OUT):
     return len(out_rows)
 
 
-@lru_cache(maxsize=1)
 def load():
+    """全部兑换（wikelo.json 的 contracts 同形，按源顺序；材料中文名已去掉末尾的反斜杠）。同一内容版本内是同一个列表；
+    库不可用当成没有兑换"""
+    from .. import gamedata
+
     try:
-        cs = json.loads(OUT.read_text(encoding="utf-8"))["contracts"]
-    except Exception:
+        return gamedata.wikelo.contracts()
+    except gamedata.GamedataError:
         return []
-    for c in cs:  # 汉化包里个别名字末尾带了个反斜杠（「约曼迪之眼\」）
-        for r in c.get("req", []):
-            r["z"] = (r.get("z") or "").rstrip("\\ ").strip()
-    return cs
 
 
 def _fold(s):
@@ -193,13 +191,21 @@ def _same(a, b):
 
 def uses(name_en="", name_zh=""):
     """这样东西（英文名/中文名）在哪些兑换里要用：[(兑换, 需要的数量, 单位)]"""
-    hits = []
-    for c in load():
-        for r in c["req"]:
-            if (name_en and _fold(r["n"]) == _fold(name_en)) or (
-                name_zh and r["z"] and _fold(r["z"]) == _fold(name_zh)
-            ):
-                hits.append((c, r["q"], r["u"]))
+    from .. import gamedata
+
+    fe, fz = _fold(name_en), _fold(name_zh)
+    try:  # 先按折叠名相等：库里按比较键筛（norm_n / norm_z），再照原条件核一遍（中文名去掉反斜杠后为空的不算）
+        pairs = gamedata.wikelo.requiring(
+            fe if name_en else None, fz if name_zh else None
+        )
+    except gamedata.GamedataError:
+        return []
+    hits = [
+        (c, r["q"], r["u"])
+        for c, r in pairs
+        if (name_en and _fold(r["n"]) == fe)
+        or (name_zh and r["z"] and _fold(r["z"]) == fz)
+    ]
     if not hits:  # 名字被 OCR 截断时放宽成包含
         for c in load():
             for r in c["req"]:
@@ -238,17 +244,13 @@ def req_label(r):
 
 
 def print_spots(name):
-    """打印机打印的物品在哪打（data/print_spots.json，由数据构建脚本从游戏数据生成，2026-10-27）→ [地点]"""
-    from ..core.paths import cached_json
+    """打印机打印的物品在哪打（print_spots.json，由数据构建脚本从游戏数据生成，2026-10-27；读库）→ [地点]，不分大小写"""
+    from .. import gamedata
 
-    table = cached_json(
-        DATA / "print_spots.json",
-        lambda d: {
-            k.lower(): v.get("where") or [] for k, v in (d.get("items") or {}).items()
-        },
-        {},
-    )
-    return table.get((name or "").strip().lower(), [])
+    try:
+        return gamedata.wikelo.print_places((name or "").strip().lower())
+    except gamedata.GamedataError:
+        return []
 
 
 def source_note(name):

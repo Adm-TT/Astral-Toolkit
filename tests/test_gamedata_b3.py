@@ -319,3 +319,153 @@ def test_queries_empty_when_db_unavailable(monkeypatch, tmp_path):
     assert crafting.search("med") == [] and crafting.uses("Tin") == []
     assert crafting.mat_summary("Tin")["count"] == 0
     assert crafting.by_key("Medpen") is None
+
+
+# ---------------------------------------------------------------- Task 3：维科洛兑换 / 打印点
+
+_WIKELO = {
+    "version": "w2",
+    "contracts": [
+        {
+            "id": "C1",
+            "type": "收集",
+            "t": "非常饥饿",
+            "te": "Very Hungry",
+            "rz": "随机衣服",
+            "rewards": ["Hat Blue", "Hat Red"],
+            "req": [
+                {"n": "Lawson Mining Laser", "z": "激光", "q": 2, "u": "个"},
+                {"n": "Tin", "z": "", "q": 1.5, "u": "SCU"},
+                {
+                    "n": "Yormandi Eye",
+                    "z": "约曼迪之眼\\",
+                    "q": 4,
+                    "u": "个",
+                },  # 汉化包里末尾带反斜杠
+            ],
+            "systems": ["Stanton", "Pyro"],
+        },
+        {
+            "id": "C0",
+            "type": "载具",
+            "t": "要北极星？",
+            "te": "Want Polaris?",
+            "rz": "",
+            "rewards": ["Polaris"],
+            "req": [
+                {"n": "Medpen", "z": "医疗笔", "q": 10, "u": "个"},
+                {"n": "Lawson Mining Laser Mk2", "z": "激光二型", "q": 1, "u": "个"},
+            ],
+            "systems": [],
+        },
+    ],
+}
+
+
+def _wk(monkeypatch, tmp_path):
+    _setup(monkeypatch, tmp_path, **{"wikelo.json": copy.deepcopy(_WIKELO)})
+    src = copy.deepcopy(_WIKELO["contracts"])
+    for c in src:  # 原 wikelo.load() 的清理
+        for r in c["req"]:
+            r["z"] = (r.get("z") or "").rstrip("\\ ").strip()
+    return src
+
+
+def _legacy_wk_uses(cs, name_en="", name_zh=""):
+    """迁移前的 wikelo.uses（照抄，比对用；_fold / _same 用模块里的，没改）"""
+    from sc_mining.crafting.wikelo import _fold, _same
+
+    hits = []
+    for c in cs:
+        for r in c["req"]:
+            if (name_en and _fold(r["n"]) == _fold(name_en)) or (
+                name_zh and r["z"] and _fold(r["z"]) == _fold(name_zh)
+            ):
+                hits.append((c, r["q"], r["u"]))
+    if not hits:
+        for c in cs:
+            for r in c["req"]:
+                if (name_en and _same(r["n"], name_en)) or (
+                    name_zh and r["z"] and _same(r["z"], name_zh)
+                ):
+                    hits.append((c, r["q"], r["u"]))
+    return hits
+
+
+def test_wikelo_load_shape(monkeypatch, tmp_path):
+    """load() 与源同形（按源顺序，req 的 z 去掉末尾反斜杠），同一版本内是同一个列表"""
+    from sc_mining.crafting import wikelo
+
+    src = _wk(monkeypatch, tmp_path)
+    got = wikelo.load()
+    assert got == src and got is wikelo.load()
+    assert [c["id"] for c in got] == ["C1", "C0"]
+    assert got[0]["req"][2]["z"] == "约曼迪之眼" and got[0]["systems"] == [
+        "Stanton",
+        "Pyro",
+    ]
+    assert type(got[0]["rewards"]) is list and type(got[0]["req"][0]) is dict
+
+
+def test_wikelo_uses_prefix_rule_preserved(monkeypatch, tmp_path):
+    """先按折叠名相等找；一条都没有才放宽成包含（≥4 个字符），和旧实现逐条一致"""
+    from sc_mining.crafting import wikelo
+
+    src = _wk(monkeypatch, tmp_path)
+    cases = [
+        ("Lawson Mining Laser", ""),  # 相等命中一条，不放宽（Mk2 不算）
+        ("lawson-mining-laser!", ""),
+        ("Lawson Mining", ""),  # 截断：放宽后两条都中
+        ("", "约曼迪之眼"),
+        ("", "约曼迪"),  # 中文截断
+        ("Tin", ""),
+        ("", ""),
+        ("Laws", ""),
+        ("Law", ""),  # 不到 4 个字符不放宽
+        ("medpen", "激光"),
+        ("xyz", "不存在"),
+    ]
+    for en, zh in cases:
+        got = [(c["id"], q, u) for c, q, u in wikelo.uses(en, zh)]
+        want = [(c["id"], q, u) for c, q, u in _legacy_wk_uses(src, en, zh)]
+        assert got == want, (en, zh, got, want)
+    cs = wikelo.load()
+    assert wikelo.uses("Medpen")[0][0] is cs[1]  # 返回的是 load() 里那份对象
+    assert wikelo.uses_text("Medpen") == "维科洛兑换要用：要北极星？（10）"
+
+
+def test_wikelo_search(monkeypatch, tmp_path):
+    from sc_mining.crafting import wikelo
+
+    _wk(monkeypatch, tmp_path)
+    assert wikelo.search("") is wikelo.load()
+    assert [c["id"] for c in wikelo.search("polaris")] == ["C0"]
+    assert [c["id"] for c in wikelo.search("激光")] == ["C1", "C0"]
+    assert [c["id"] for c in wikelo.search("hat red")] == ["C1"]
+    assert wikelo.search("不存在") == []
+
+
+def test_print_spots(monkeypatch, tmp_path):
+    """按名字找打印地点：不分大小写、去首尾空格；没有 → []"""
+    from sc_mining.crafting import wikelo
+
+    _setup(monkeypatch, tmp_path)
+    assert wikelo.print_spots("Comp-Board") == ["死局空间站", "另一处"]
+    assert wikelo.print_spots("  comp-board ") == ["死局空间站", "另一处"]
+    assert wikelo.print_spots("不存在") == [] and wikelo.print_spots(None) == []
+    assert wikelo.source_note("Comp-Board") == "打印：死局空间站；另一处"
+
+
+def test_wikelo_empty_when_db_unavailable(monkeypatch, tmp_path):
+    import sc_mining.gamedata as G
+    from sc_mining.crafting import wikelo
+
+    _wk(monkeypatch, tmp_path)
+
+    def boom(*a, **k):
+        raise G.GamedataUnavailable("坏了")
+
+    for name in ("contracts", "requiring", "print_places"):
+        monkeypatch.setattr(G.wikelo, name, boom)
+    assert wikelo.load() == [] and wikelo.uses("Medpen") == []
+    assert wikelo.search("x") == [] and wikelo.print_spots("Comp-Board") == []

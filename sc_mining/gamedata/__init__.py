@@ -18,7 +18,7 @@ import threading
 from contextlib import contextmanager
 from typing import Iterator
 
-from . import _build, _db, crafting, items, prices, shops
+from . import _build, _db, crafting, items, prices, shops, wikelo
 from ._db import current_version as version, snapshot
 from ._lock import write_lock
 from ._manifest import Manifest
@@ -60,6 +60,7 @@ __all__ = [
     "updating",
     "version",
     "warm_up",
+    "wikelo",
 ]
 
 _state: dict = {"last_error": None, "warm_thread": None}
