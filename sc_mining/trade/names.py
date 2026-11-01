@@ -4,6 +4,7 @@ UEX 只认英文名；游戏是中文界面，截图识别和手动搜索得到�
 """
 
 import re
+from typing import Callable, Protocol, TypeVar, cast
 
 CJK = re.compile(r"[一-鿿]")
 _PAREN = re.compile(r"\s*[（(][^）)]*[）)]\s*")
@@ -13,6 +14,15 @@ _PAREN = re.compile(r"\s*[（(][^）)]*[）)]\s*")
 # 同一版本同一个对象），_index 跟着 table() 那份 dict 走。本模块顶层不 import gamedata（建库时 gamedata/_import → 本模块，
 # 会循环），缓存对象第一次用时才建。
 _caches: dict = {}
+_R = TypeVar("_R", covariant=True)
+
+
+class _Cached(Protocol[_R]):
+    """带 cache_clear 的无参函数（以前是 lru_cache）：localization / data_pack / 测试按名字调 cache_clear"""
+
+    def __call__(self) -> _R: ...
+
+    def cache_clear(self) -> None: ...
 
 
 def _cache(name):
@@ -24,7 +34,13 @@ def _cache(name):
     return c
 
 
-def table():
+def _with_clear(fn: Callable[[], _R], name: str) -> _Cached[_R]:
+    """给 fn 挂上 cache_clear（清掉 name 那份缓存）；版本变了本来就会自己失效"""
+    setattr(fn, "cache_clear", lambda: _cache(name).clear())
+    return cast(_Cached[_R], fn)
+
+
+def _table() -> dict[str, str]:
     """{中文: 英文}，汉化包原文拼写；规则（去假英文名、zh_names 优先、zh_only_names 只补 ≥3 字的）在建库时算好
     （gamedata/_import._names_table），顺序同以前。库不可用时返回 {}，不缓存（库好了下次立刻正常）"""
     from .. import gamedata
@@ -36,13 +52,7 @@ def table():
     return _cache("table").get_for(pairs, lambda: {p.zh: p.en for p in pairs})
 
 
-def _clear_table():
-    _cache("table").clear()
-
-
-setattr(
-    table, "cache_clear", _clear_table
-)  # localization / data_pack 按名字调；版本变了本来就会自己失效
+table = _with_clear(_table, "table")
 
 
 # 汉化包里物品「简称」带出来的假英文名（1.6.41）：简称后面跟的是尺寸、型号代码，不是英文名，
@@ -105,10 +115,13 @@ def _norm_zh(text):  # 改了要升 gamedata/_schema.IMPORTER_VERSION（见 _COD
     )
 
 
-def _index():
+def _index_of_table() -> tuple[dict, dict]:
     """({规整的中文名: (中文, 英文)}, {折叠的英文名: (中文, 英文)})；跟着 table() 那份对象缓存"""
     t = table()
     return _cache("index").get_for(t, lambda: _build_index(t))
+
+
+_index = _with_clear(_index_of_table, "index")
 
 
 def _build_index(t):
@@ -117,13 +130,6 @@ def _build_index(t):
         zh_map.setdefault(_norm_zh(zh), (zh, en))
         en_map.setdefault(_fold_en(en), (zh, en))
     return zh_map, en_map
-
-
-def _clear_index():
-    _cache("index").clear()
-
-
-setattr(_index, "cache_clear", _clear_index)
 
 
 _BILINGUAL = re.compile(r'^(.*[一-鿿）)])\s*([A-Za-z][A-Za-z0-9 \-\'".()/&]*)$')
