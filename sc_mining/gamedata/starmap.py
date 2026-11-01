@@ -50,3 +50,23 @@ def data_dict(snap=None) -> dict[str, Any]:
     按内容版本缓存一份，同一版本返回同一个对象（和以前一样，调用方别改它）"""
     with use(snap) as s:
         return _dict.get(s, _load_dict)
+
+
+def point_by_internal(internal: str, snap=None) -> dict[str, Any] | None:
+    """内部名（不分大小写）→ 源里第一个这个内部名的点 {n,i,sys,t,x,y,z}；没有返回 None"""
+    with use(snap) as s:
+        rows = s.execute(
+            f"select {_POINT_COLS} from points where i_lower = ? order by source_order limit 1",
+            (internal.lower(),),
+        )
+    return _point(rows[0]) if rows else None
+
+
+def point_by_name(norm: str, snap=None) -> dict[str, Any] | None:
+    """规范化名字（小写去非字母数字，names._norm）→ 源里第一个这个名字的点；没有返回 None"""
+    with use(snap) as s:
+        rows = s.execute(
+            f"select {_POINT_COLS} from points where norm_n = ? order by source_order limit 1",
+            (norm,),
+        )
+    return _point(rows[0]) if rows else None

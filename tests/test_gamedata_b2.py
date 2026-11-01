@@ -133,3 +133,58 @@ def test_starmap_load_downloads_when_no_file(monkeypatch, tmp_path):
     monkeypatch.setattr(starmap, "update", fake_update)
     d = starmap.load()
     assert called == [1] and "Hurston" in d["bodies"]
+
+
+# ---------------------------------------------------------------- Task 2：按内部名 / 名字找点
+
+
+def _more_points():
+    """最小星图再加派罗的行星和拉格朗日点（Pyro3 → Bloom、P1_L1），给罗马数字和地点代码用"""
+    sm = json.loads(json.dumps(_NAV_SOURCES["starmap.json"]))
+    sm["points"] += [
+        dict(n="Bloom", i="pyro3", sys="Pyro", t="Planet", x=7.0, y=7.0, z=0.0),
+        dict(
+            n="PYR1 L1", i="P1_L1", sys="Pyro", t="Lagrange Point", x=8.0, y=8.0, z=0.0
+        ),
+    ]
+    return {"starmap.json": sm}
+
+
+def test_find_point_internal_case_insensitive_first_match(monkeypatch, tmp_path):
+    """内部名不分大小写；同一内部名两个点取源里第一个（商店「最近买点」靠它定位）"""
+    from sc_mining.navigation import position
+
+    _setup(monkeypatch, tmp_path)
+    p = position.find_point(internal="dup_x")
+    assert p == dict(n="Dup A", i="DUP_X", sys="Pyro", t="Outpost", x=1.0, y=1.0, z=1.0)
+    assert position.find_point(internal="Hur_L1")["x"] == 9.0  # 坐标改正后的
+    assert position.find_point(internal="nope") is None
+
+
+def test_find_point_name_norm(monkeypatch, tmp_path):
+    from sc_mining.navigation import position
+
+    _setup(monkeypatch, tmp_path)
+    assert position.find_point(name="hurston-L1")["i"] == "HUR_L1"
+    assert position.find_point(name="Dup B")["n"] == "Dup B"
+    assert (
+        position.find_point(internal="nope", name="Stanton Star")["n"] == "Stanton Star"
+    )
+    assert position.find_point(name="Nowhere") is None
+
+
+def test_find_point_pyro_roman(monkeypatch, tmp_path):
+    from sc_mining.navigation import position
+
+    _setup(monkeypatch, tmp_path, **_more_points())
+    assert position.find_point(name="Pyro III")["n"] == "Bloom"
+
+
+def test_from_code_lagrange(monkeypatch, tmp_path):
+    from sc_mining.navigation import position
+
+    _setup(monkeypatch, tmp_path, **_more_points())
+    assert position.from_code("RR_P1_L1")["n"] == "PYR1 L1"
+    assert (
+        position.from_code("RR_HUR_L1") is None
+    )  # 斯坦顿按 Stanton1_L1 找，最小数据里没有

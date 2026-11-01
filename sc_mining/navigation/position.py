@@ -31,31 +31,19 @@ JUMP = {
 }
 
 
-def points():
-    from .navigate import load
-
-    data = load()
-    if "points" not in data:  # 旧版星图缓存没有拉格朗日点，重新下载一次
-        from . import navigate
-
-        navigate._data = None
-        navigate.update()
-        data = navigate.load()
-    return data.get("points") or []
-
-
 def find_point(name=None, internal=None):
-    pts = points()
+    """星图里的点 {n,i,sys,t,x,y,z}：先按内部名（不分大小写），再按名字（小写去非字母数字）；同名取源里第一个"""
+    from ..gamedata import starmap as gd_starmap
+
     if internal:
-        il = internal.lower()
-        for p in pts:
-            if p["i"].lower() == il:
-                return p
+        p = gd_starmap.point_by_internal(internal)
+        if p:
+            return p
     if name:
         nl = re.sub(r"[^a-z0-9]", "", name.lower())
-        for p in pts:
-            if re.sub(r"[^a-z0-9]", "", p["n"].lower()) == nl:
-                return p
+        p = gd_starmap.point_by_name(nl)
+        if p:
+            return p
         m = re.fullmatch(r"pyro(i{1,3}|iv|v|vi)", nl)
         if m:
             return find_point(internal=f"Pyro{ROMAN[m.group(1).upper()]}")
