@@ -123,3 +123,69 @@ def test_manifest_corrupt_raises(monkeypatch, tmp_path):
     manifest_path().write_text('{"generation_id": "g"}', encoding="utf-8")  # 缺字段
     with raises(GamedataUnavailable):
         read_manifest()
+
+
+# ---------------------------------------------------------------- Task 3：表结构与源清单
+
+_TABLES = {
+    "meta",
+    "items",
+    "item_names",
+    "item_source_ids",
+    "shop_rows",
+    "loot_rows",
+    "mineral_prices",
+}
+
+
+def test_ddl_creates_all_tables(tmp_path):
+    import sqlite3
+
+    from sc_mining.gamedata._schema import DDL, SCHEMA_VERSION
+
+    assert SCHEMA_VERSION == 1
+    c = sqlite3.connect(tmp_path / "x.db")
+    for s in DDL:
+        c.execute(s)
+    names = {
+        r[0] for r in c.execute("select name from sqlite_master where type='table'")
+    }
+    c.close()
+    assert names == _TABLES
+
+
+def test_read_sources_hash_matches_bytes(tmp_path):
+    import hashlib
+
+    from sc_mining.gamedata._sources import SOURCES, read_sources
+
+    raw = b'{"items":{},"rows":[]}'
+    (tmp_path / "shops.json").write_bytes(raw)
+    s = read_sources(tmp_path)
+    assert set(s) == {x.name for x in SOURCES}
+    assert (
+        s["shops.json"].present
+        and s["shops.json"].sha256 == hashlib.sha256(raw).hexdigest()
+    )
+    assert s["shops.json"].data == {"items": {}, "rows": []}
+    assert s["loot_index.json"].present is False
+    assert s["loot_index.json"].data is None and s["loot_index.json"].sha256 == ""
+
+
+def test_read_sources_missing_required_raises(tmp_path):
+    from sc_mining.gamedata import BuildError
+    from sc_mining.gamedata._sources import read_sources
+    from tests.minipytest import raises
+
+    with raises(BuildError):
+        read_sources(tmp_path)
+
+
+def test_read_sources_bad_json_raises(tmp_path):
+    from sc_mining.gamedata import BuildError
+    from sc_mining.gamedata._sources import read_sources
+    from tests.minipytest import raises
+
+    (tmp_path / "shops.json").write_text('{"items":', encoding="utf-8")
+    with raises(BuildError):
+        read_sources(tmp_path)
