@@ -1742,14 +1742,23 @@ def test_review_102_area_never_guesses(monkeypatch):
 def test_review_102_place_names_without_ini(monkeypatch, tmp_path):
     """新装还没下汉化包：派罗地名用随包的地点代号表，不显示 PYR3"""
     import json
+    import sc_mining.gamedata as G
+    from sc_mining.core import paths
+    from sc_mining.gamedata import _ready
     from sc_mining.navigation import position as P
     from sc_mining.update import localization as L
 
+    # 地点代号表在游戏数据库里：tmp_path 当 data/ 根（补一份建库必需的空商店表），不读真实 data/
+    (tmp_path / "shops.json").write_text(
+        json.dumps({"fmt": 2, "fetched": 0, "items": {}, "rows": []}), encoding="utf-8"
+    )
     (tmp_path / "place_codes_zh.json").write_text(
         json.dumps({"rr_p3": "轨道讣闻站 (Orbituary)"}, ensure_ascii=False),
         encoding="utf-8",
     )
-    monkeypatch.setattr(L, "DATA", tmp_path)
+    monkeypatch.setattr(paths, "DATA", tmp_path)
+    monkeypatch.setattr(_ready, "_state", {"done": None, "failed": None})
+    monkeypatch.setattr(G, "_state", {"last_error": None, "warm_thread": None})
     monkeypatch.setattr(
         L, "read_ini", lambda *a: (_ for _ in ()).throw(FileNotFoundError())
     )
