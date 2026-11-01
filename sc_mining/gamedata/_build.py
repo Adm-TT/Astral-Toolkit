@@ -101,6 +101,7 @@ def _verify(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> None:
         "items",
         "item_names",
         "item_source_ids",
+        "shop_items",
         "shop_rows",
         "loot_rows",
         "mineral_prices",

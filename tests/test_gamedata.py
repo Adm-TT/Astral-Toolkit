@@ -147,6 +147,8 @@ _TABLES = {
     "place_names",
     "place_codes",
     "mining_spots",
+    # schema 3
+    "shop_items",
 }
 
 
@@ -155,7 +157,9 @@ def test_ddl_creates_all_tables(tmp_path):
 
     from sc_mining.gamedata._schema import DDL, SCHEMA_VERSION
 
-    assert SCHEMA_VERSION == 2  # 2 = 批 2 导航表（见 test_gamedata_nav）
+    assert (
+        SCHEMA_VERSION == 3
+    )  # 2 = 批 2 导航表（见 test_gamedata_nav）；3 = shop_items
     c = sqlite3.connect(tmp_path / "x.db")
     for s in DDL:
         c.execute(s)
@@ -855,3 +859,39 @@ def test_import_matches_itemsearch_index_on_sample(monkeypatch, tmp_path):
     assert db == exp
     assert aka == {e["ek"]: e["aka"] for e in rows if e.get("aka")}
     assert len(rows) >= 4
+
+
+# ---------------------------------------------------------------- schema 3：shop_items（批 1 要求，2026-11-02）
+
+
+def test_shop_items_keep_every_uex_entry_verbatim(monkeypatch, tmp_path):
+    """shops.json 的 items 原样一行一条：同一折叠名的两种写法（Synergy / Synergy+）都在，英文名不改、顺序照源"""
+    from sc_mining.gamedata import snapshot
+    from sc_mining.gamedata._build import rebuild_if_needed
+    from sc_mining.gamedata._schema import SCHEMA_VERSION
+
+    assert SCHEMA_VERSION == 3
+    _data_root(monkeypatch, tmp_path)
+    shops = dict(_MIN_SOURCES["shops.json"])
+    shops["items"] = {
+        **shops["items"],
+        "1797": ["Synergy", "Component"],
+        "1798": ["Synergy+", None],  # 折叠后同名；类别 None → ''
+        "1799": ["Odd\xa0Name", "Misc"],  # 不换 \xa0
+    }
+    _write_min_sources(tmp_path, **{"shops.json": shops})
+    rebuild_if_needed()
+    with snapshot() as s:
+        rows = s.execute(
+            "select uex_item_id, en, cat, source_order from shop_items order by source_order"
+        )
+    assert rows[:3] == [
+        (171, "Venture Arms", "Arms", 0),
+        (200, "Lawson Mining Laser", "Mining", 1),
+        (201, "Lawson Mining Laser", "Mining", 2),
+    ]
+    assert rows[3:] == [
+        (1797, "Synergy", "Component", 3),
+        (1798, "Synergy+", "", 4),
+        (1799, "Odd\xa0Name", "Misc", 5),
+    ]

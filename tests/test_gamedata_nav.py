@@ -290,7 +290,7 @@ def _built(monkeypatch, tmp_path, **override):
 def test_schema2_tables_exist(monkeypatch, tmp_path):
     from sc_mining.gamedata._schema import SCHEMA_VERSION
 
-    assert SCHEMA_VERSION == 2
+    assert SCHEMA_VERSION >= 2
     snapshot = _built(monkeypatch, tmp_path)
     with snapshot() as s:
         names = {
@@ -362,28 +362,39 @@ def test_city_places_import_matches_transit_rules(monkeypatch, tmp_path):
         rows = s.execute(
             "select id, b, n, zh, city, city_zh, x from city_places order by source_order"
         )
-        assert rows == [
-            ("lor_hab", "Hurston", "Hab Lobby", "公寓大堂", "Lorville", "洛维尔", 1.0),
-            (
-                "lor_hab2",
-                "Hurston",
-                "Hab Lobby 2",
-                "公寓大堂 2",
-                "Lorville",
-                "洛维尔",
-                1.5,
-            ),
-            (
-                "lor_hab+",
-                "Hurston",
-                "Hab Dup",
-                "",
-                "Lorville",
-                "罗威尔",  # 没有 site_zh 时 city_zh 来自 transit.CITY_ZH（和汉化包的「洛维尔」不一样，现状如此）
-                1.0,
-            ),  # 重复 src 加 +
-            ("orb", "@Stanton", "Orbit Shop", "轨道店", "", "", 9.0),  # 空间点
-        ]  # 坏坐标那条被丢；同名第二条加序号
+        assert (
+            rows
+            == [
+                (
+                    "lor_hab",
+                    "Hurston",
+                    "Hab Lobby",
+                    "公寓大堂",
+                    "Lorville",
+                    "洛维尔",
+                    1.0,
+                ),
+                (
+                    "lor_hab2",
+                    "Hurston",
+                    "Hab Lobby 2",
+                    "公寓大堂 2",
+                    "Lorville",
+                    "洛维尔",
+                    1.5,
+                ),
+                (
+                    "lor_hab+",
+                    "Hurston",
+                    "Hab Dup",
+                    "",
+                    "Lorville",
+                    "罗威尔",  # 没有 site_zh 时 city_zh 来自 transit.CITY_ZH（和汉化包的「洛维尔」不一样，现状如此）
+                    1.0,
+                ),  # 重复 src 加 +
+                ("orb", "@Stanton", "Orbit Shop", "轨道店", "", "", 9.0),  # 空间点
+            ]
+        )  # 坏坐标那条被丢；同名第二条加序号
         assert s.execute(
             "select kind from city_place_kinds where place_id='lor_hab'"
         ) == [("住宿",)]
