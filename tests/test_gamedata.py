@@ -189,3 +189,121 @@ def test_read_sources_bad_json_raises(tmp_path):
     (tmp_path / "shops.json").write_text('{"items":', encoding="utf-8")
     with raises(BuildError):
         read_sources(tmp_path)
+
+
+# ---------------------------------------------------------------- Task 4：只读连接与快照
+
+
+def _make_db(tmp_path, gen, data_version):
+    """按 DDL 建一个空库、写 meta、写清单（不走建库流程，单测快照用）"""
+    import sqlite3
+
+    from sc_mining.gamedata._manifest import Manifest, write_manifest
+    from sc_mining.gamedata._paths import db_path
+    from sc_mining.gamedata._schema import DDL, IMPORTER_VERSION, SCHEMA_VERSION
+
+    p = db_path(gen)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    c = sqlite3.connect(p)
+    for s in DDL:
+        c.execute(s)
+    c.executemany(
+        "insert into meta values (?, ?)",
+        [
+            ("schema_version", str(SCHEMA_VERSION)),
+            ("importer_version", str(IMPORTER_VERSION)),
+            ("data_version", data_version),
+            ("generation_id", gen),
+            ("build_time", "2026-11-02T00:00:00"),
+        ],
+    )
+    c.commit()
+    c.close()
+    m = Manifest(gen, data_version, SCHEMA_VERSION, p.name)
+    write_manifest(m)
+    return m
+
+
+def test_snapshot_reads_meta(monkeypatch, tmp_path):
+    from sc_mining.gamedata import snapshot
+
+    _data_root(monkeypatch, tmp_path)
+    _make_db(tmp_path, "g1", "v1")
+    with snapshot() as s:
+        assert s.data_version == "v1"
+        assert s.execute("select value from meta where key='generation_id'") == [
+            ("g1",)
+        ]
+
+
+def test_snapshot_nested_reuses_outer(monkeypatch, tmp_path):
+    from sc_mining.gamedata import snapshot
+
+    _data_root(monkeypatch, tmp_path)
+    _make_db(tmp_path, "g1", "v1")
+    with snapshot() as a:
+        _make_db(tmp_path, "g2", "v2")  # 中途发布了新代
+        with snapshot() as b:
+            assert b is a and b.data_version == "v1"
+    with snapshot() as c:
+        assert c.data_version == "v2"
+
+
+def test_snapshot_no_manifest_raises(monkeypatch, tmp_path):
+    from sc_mining.gamedata import GamedataUnavailable, snapshot
+    from tests.minipytest import raises
+
+    _data_root(monkeypatch, tmp_path)
+    with raises(GamedataUnavailable):
+        with snapshot():
+            pass
+
+
+def test_snapshot_missing_db_file_raises(monkeypatch, tmp_path):
+    from sc_mining.gamedata import GamedataUnavailable, snapshot
+    from sc_mining.gamedata._paths import db_path
+    from tests.minipytest import raises
+
+    _data_root(monkeypatch, tmp_path)
+    _make_db(tmp_path, "g1", "v1")
+    db_path("g1").unlink()
+    with raises(GamedataUnavailable):
+        with snapshot():
+            pass
+
+
+def test_snapshot_generation_mismatch_raises(monkeypatch, tmp_path):
+    from sc_mining.gamedata import GamedataUnavailable, snapshot
+    from sc_mining.gamedata._manifest import Manifest, write_manifest
+    from tests.minipytest import raises
+
+    _data_root(monkeypatch, tmp_path)
+    _make_db(tmp_path, "g1", "v1")
+    write_manifest(
+        Manifest("g9", "v1", 1, "gamedata-g1.db")
+    )  # 清单说 g9，库里 meta 是 g1
+    with raises(GamedataUnavailable):
+        with snapshot():
+            pass
+
+
+def test_version_outside_snapshot_follows_manifest(monkeypatch, tmp_path):
+    from sc_mining.gamedata import version
+
+    _data_root(monkeypatch, tmp_path)
+    assert version() is None
+    _make_db(tmp_path, "g1", "v1")
+    assert version() == "v1"
+
+
+def test_snapshot_connection_is_readonly(monkeypatch, tmp_path):
+    import sqlite3
+
+    from sc_mining.gamedata import snapshot
+    from tests.minipytest import raises
+
+    _data_root(monkeypatch, tmp_path)
+    _make_db(tmp_path, "g1", "v1")
+    with snapshot() as s:
+        with raises(sqlite3.OperationalError):
+            s.execute("insert into meta values ('x', 'y')")
