@@ -609,3 +609,88 @@ def test_gamekey_refreshes_after_alias_change(monkeypatch, tmp_path):
     G.rebuild()  # 只改了旧写法：以前的索引只认 wiki_items 那份 list，不会刷新（G10，允许差异）
     assert gamekey.resolve("Zed Pen") == ("medpen_01", "u1")
     assert gamekey.resolve("Medi Pen") is None
+
+
+# ---------------------------------------------------------------- Task 4：调用方冒烟（调用方代码不改）
+
+
+def _catalog(tmp_path):
+    from sc_mining.trade.catalog import Catalog
+    from sc_mining.trade.storage import Database
+
+    return Catalog(Database(tmp_path / "inv" / "trade.db"))
+
+
+def test_catalog_search_uses_to_english(monkeypatch, tmp_path):
+    from sc_mining.trade.models import Item
+
+    _b6(monkeypatch, tmp_path)
+    cat = _catalog(tmp_path)
+    cat.upsert([Item("uex:1", "Old Medpen Name", None), Item("uex:2", "Tin", None)])
+    assert [i.id for i in cat.search("医疗笔")] == [
+        "uex:1"
+    ]  # 中文 → 汉化包英文原文 → 库存物品
+    assert [i.id for i in cat.search("锡")] == ["uex:2"]
+
+
+def test_catalog_fill_keys_resolves(monkeypatch, tmp_path):
+    from sc_mining.trade.models import Item
+
+    _b6(monkeypatch, tmp_path)
+    cat = _catalog(tmp_path)
+    cat.upsert(
+        [
+            Item("uex:1", "Medpen", None),
+            Item("uex:2", "Lawson Mining Iaser", None),
+            Item("uex:3", "Nothing Here", None),
+        ]
+    )  # upsert 里会调 fill_keys
+    assert cat.game_key("uex:1") == ("medpen_01", "u1")
+    assert cat.game_key("uex:2") == ("klein_s0", "u3")
+    assert cat.game_key("uex:3") is None
+    assert cat.fill_keys() == 0  # 已经填过的不再填
+
+
+def test_parser_and_market_service_import_ok(monkeypatch, tmp_path):
+    import sc_mining.trade.market_service  # noqa: F401
+    import sc_mining.trade.parser  # noqa: F401
+    from sc_mining.trade import names
+
+    _b6(monkeypatch, tmp_path)
+    a = names.to_english("医疗")[:3]
+    assert (
+        a and names.to_english("医疗")[:3] == a
+    )  # market_service 连调两次，结果要一致
+
+
+def test_trade_names_module_has_no_toplevel_gamedata_import():
+    """建库时 gamedata/_import → trade.names：trade/names.py、trade/gamekey.py 顶层 import gamedata 会循环"""
+    import ast
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent / "sc_mining" / "trade"
+    for name in ("names.py", "gamekey.py"):
+        tree = ast.parse((root / name).read_text(encoding="utf-8"))
+        for node in tree.body:
+            if isinstance(node, ast.ImportFrom):
+                mods = [node.module or ""] + [a.name for a in node.names]
+            elif isinstance(node, ast.Import):
+                mods = [a.name for a in node.names]
+            else:
+                continue
+            assert not any("gamedata" in m for m in mods), (name, mods)
+
+
+def test_tasks_trade_zh_of_refreshes_with_table(monkeypatch, tmp_path):
+    import sc_mining.gamedata as G
+    from sc_mining.tasks import trade as T
+
+    _b6(monkeypatch, tmp_path)
+    assert T._zh_of("Medpen") == "医疗笔"
+    assert T._zh_of("LAWSON MINING LASER") == "劳森"
+    _write_min_sources(
+        tmp_path, **{**_B6_SOURCES, "zh_names.json": {"新医疗笔": "Medpen"}}
+    )
+    G.rebuild()  # 更新数据后：以前反查表挂在函数属性上永不失效（矩阵 §9 第 4 条）
+    assert T._zh_of("Medpen") == "新医疗笔"
+    assert T._zh_of("LAWSON MINING LASER") == ""
