@@ -278,7 +278,8 @@ def test_place_name_follows_data_version(monkeypatch, tmp_path):
                 json.dumps({"arcl1a": "新名"}, ensure_ascii=False), encoding="utf-8"
             )
             position._place_name.cache_clear()
-            assert position.place_name("RR_ARC_L1") == "旧名"  # 库还没换代，查到的还是旧库
+            # 库还没换代，查到的还是旧库
+            assert position.place_name("RR_ARC_L1") == "旧名"
         assert position.place_name("RR_ARC_L1") == "新名"
     finally:
         position._place_name.cache_clear()

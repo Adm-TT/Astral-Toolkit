@@ -181,7 +181,6 @@ def _station(tmp_path, monkeypatch):
     (tmp_path / "city_places.json").write_text(
         json.dumps(places, ensure_ascii=False), encoding="utf-8"
     )
-    monkeypatch.setattr(n, "DATA", tmp_path)
     _db(monkeypatch, tmp_path)
     return n, {q["city"]: q for q in n.city_places()}
 

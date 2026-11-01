@@ -4307,7 +4307,6 @@ def test_game_events_from_log(tmp_path):
 def test_city_nav(monkeypatch, tmp_path):
     """城内导航：读 city_places.json（坏行跳过、改了文件重读），按米显示、8 米内到达、上下楼层提示"""
     import json  # noqa: F811
-    import os
     from sc_mining.navigation import navigate as n
     from sc_mining.tasks import mining as t_mining
 
@@ -4335,7 +4334,6 @@ def test_city_nav(monkeypatch, tmp_path):
     ]
     f = tmp_path / "city_places.json"
     f.write_text(json.dumps(rows, ensure_ascii=False), encoding="utf-8")
-    monkeypatch.setattr(n, "DATA", tmp_path)
     _nav_db(monkeypatch, tmp_path)
     ps = n.city_places()
     assert (
@@ -4347,8 +4345,6 @@ def test_city_nav(monkeypatch, tmp_path):
     assert not n.is_city({"t": "Outpost"}) and not n.is_city(None)
     rows[0]["zh"] = "改过"
     f.write_text(json.dumps(rows[:1], ensure_ascii=False), encoding="utf-8")
-    st = f.stat()
-    os.utime(f, ns=(st.st_atime_ns, st.st_mtime_ns + 10_000_000))
     _nav_db(monkeypatch, tmp_path)  # 数据更新时会重建库
     assert n.city_places()[0]["zh"] == "改过"
 
@@ -4414,7 +4410,6 @@ def test_city_nav_review(monkeypatch, tmp_path):
     (tmp_path / "city_places.json").write_text(
         json.dumps(rows, ensure_ascii=False), encoding="utf-8"
     )
-    monkeypatch.setattr(n, "DATA", tmp_path)
     _nav_db(monkeypatch, tmp_path)
     ps = n.city_places()
     assert [p["id"] for p in ps] == ["a", "b", "d"] and ps[2]["cat"] == ""
@@ -4685,7 +4680,6 @@ def test_nav_nearest(monkeypatch, tmp_path):
     (tmp_path / "place_amenities.json").write_text(
         json.dumps(amen, ensure_ascii=False), encoding="utf-8"
     )
-    monkeypatch.setattr(n, "DATA", tmp_path)
     _nav_db(monkeypatch, tmp_path)
     now = time.time()
     arc = next(p for p in data["points"] if p["n"] == "ARC L1")
@@ -4809,7 +4803,6 @@ def test_city_route(monkeypatch, tmp_path):
     (tmp_path / "city_places.json").write_text(
         json.dumps(city, ensure_ascii=False), encoding="utf-8"
     )
-    monkeypatch.setattr(n, "DATA", tmp_path)
     _nav_db(monkeypatch, tmp_path)
     ps = {q["n"]: q for q in n.city_places()}
     assert set(n._metro_lines("Lorville")) == {
@@ -4944,7 +4937,6 @@ def test_site_menu(monkeypatch, tmp_path):
     (tmp_path / "city_places.json").write_text(
         json.dumps(rows, ensure_ascii=False), encoding="utf-8"
     )
-    monkeypatch.setattr(n, "DATA", tmp_path)
     _nav_db(monkeypatch, tmp_path)
     data = {"bodies": {}, "pois": [], "points": []}
     ps = n.city_places()
