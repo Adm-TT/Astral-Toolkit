@@ -2,8 +2,8 @@
 
 试点（批 1）用到的表。各列对应的源字段见 docs/superpowers/specs/2026-11-02-gamedata-callsites.md。"""
 
-SCHEMA_VERSION = 2  # 2：加星图 / 城市地点 / 设施 / 空间站电梯 / 地名对照 / 挖矿点（批 2 公共层，2026-11-02）
-IMPORTER_VERSION = 2
+SCHEMA_VERSION = 3  # 2：导航表（批 2 公共层）；3：shop_items 商店物品目录原样（批 1 要求，2026-11-02）
+IMPORTER_VERSION = 3
 
 DDL: list[str] = [
     # 清单和版本：schema_version / importer_version / data_version / generation_id / build_time / src:<文件名>=sha256
@@ -42,6 +42,14 @@ DDL: list[str] = [
         external_id TEXT NOT NULL,
         item_id TEXT NOT NULL REFERENCES items(item_id),
         PRIMARY KEY (source, external_id)
+    )""",
+    # shops.json 的 items 原样：uex 编号 → 英文名、类别，按字典顺序。shops.find / variants / where_by_name 在它上面扫，
+    # 不能用合并后的 items 表代替（同一折叠名两种写法只会留一个，如 Synergy / Synergy+）
+    """CREATE TABLE shop_items (
+        uex_item_id INTEGER PRIMARY KEY,
+        en TEXT NOT NULL,
+        cat TEXT NOT NULL DEFAULT '',
+        source_order INTEGER NOT NULL
     )""",
     # shops.json 的 rows 原样 7 列
     """CREATE TABLE shop_rows (

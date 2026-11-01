@@ -187,6 +187,15 @@ def import_items(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> N
 
 
 def import_shops(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> None:
+    items = _d(sources, "shops.json", {}).get("items") or {}
+    conn.executemany(
+        "insert or ignore into shop_items values (?,?,?,?)",
+        [
+            (int(iid), v[0], (v[1] if len(v) > 1 and v[1] is not None else "") or "", i)
+            for i, (iid, v) in enumerate(items.items())
+            if isinstance(v, (list, tuple)) and v and isinstance(v[0], str)
+        ],
+    )
     rows = _d(sources, "shops.json", {}).get("rows") or []
     conn.executemany(
         "insert into shop_rows values (?,?,?,?,?,?,?,?,?,?,?,?,?)",
