@@ -515,3 +515,153 @@ def test_data_version_depends_on_missing_flag(tmp_path):
     (tmp_path / "prices.json").write_text("{}", encoding="utf-8")
     v_present = data_version(read_sources(tmp_path))
     assert v_missing != v_present
+
+
+# ---------------------------------------------------------------- Task 6：对外入口、并发、清理、接入
+
+
+def test_rebuild_concurrent_same_process(monkeypatch, tmp_path):
+    import threading
+
+    import sc_mining.gamedata as G
+    from sc_mining.gamedata._paths import gamedata_dir
+
+    _data_root(monkeypatch, tmp_path)
+    _write_min_sources(tmp_path)
+    results, errors = [], []
+
+    def go():
+        try:
+            results.append(G.rebuild())
+        except Exception as e:  # noqa: BLE001
+            errors.append(e)
+
+    ts = [threading.Thread(target=go) for _ in range(4)]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join()
+    assert not errors and len(results) == 4
+    assert (
+        len({m.generation_id for m in results}) == 1
+    )  # 只建了一代，其余等锁后发现没变
+    assert len(list(gamedata_dir().glob("gamedata-*.db"))) == 1
+
+
+def test_updating_rebuilds_once_at_outermost(monkeypatch, tmp_path):
+    import sc_mining.gamedata as G
+    from sc_mining.gamedata import _build
+    from sc_mining.gamedata._manifest import Manifest
+
+    _data_root(monkeypatch, tmp_path)
+    calls = []
+    monkeypatch.setattr(
+        _build,
+        "rebuild_if_needed",
+        lambda force=False: calls.append(1) or Manifest("g", "v", 1, "gamedata-g.db"),
+    )
+    with G.updating():
+        with G.updating():
+            pass
+    assert calls == [1]
+
+
+def test_updating_swallows_build_error_and_records_it(monkeypatch, tmp_path):
+    import sc_mining.gamedata as G
+    from sc_mining.gamedata import BuildError, _build
+
+    _data_root(monkeypatch, tmp_path)
+
+    def boom(force=False):
+        raise BuildError("坏了")
+
+    monkeypatch.setattr(_build, "rebuild_if_needed", boom)
+    with G.updating():  # 源已写入、建库失败：不抛，记下来
+        pass
+    assert "坏了" in (G.last_error() or "")
+
+
+def test_updating_skips_rebuild_when_body_raises(monkeypatch, tmp_path):
+    import sc_mining.gamedata as G
+    from sc_mining.gamedata import _build
+    from tests.minipytest import raises
+
+    _data_root(monkeypatch, tmp_path)
+    calls = []
+    monkeypatch.setattr(
+        _build, "rebuild_if_needed", lambda force=False: calls.append(1)
+    )
+    with raises(ValueError):
+        with G.updating():
+            raise ValueError("写源文件失败")
+    assert calls == []
+
+
+def test_cleanup_skips_when_other_instance_running(monkeypatch, tmp_path):
+    from sc_mining.gamedata import _lock
+    from sc_mining.gamedata._build import cleanup_old_generations
+    from sc_mining.gamedata._paths import gamedata_dir
+
+    _data_root(monkeypatch, tmp_path)
+    monkeypatch.setattr(_lock, "other_instance_running", lambda: True)
+    _make_db(tmp_path, "g1", "v1")
+    _make_db(tmp_path, "g2", "v2")
+    assert cleanup_old_generations() == []
+    assert len(list(gamedata_dir().glob("gamedata-*.db"))) == 2
+
+
+def test_cleanup_keeps_current_and_one_previous(monkeypatch, tmp_path):
+    import os
+    import time
+
+    from sc_mining.gamedata import _build, _lock
+    from sc_mining.gamedata._paths import db_path, gamedata_dir
+
+    _data_root(monkeypatch, tmp_path)
+    monkeypatch.setattr(_lock, "other_instance_running", lambda: False)
+    monkeypatch.setattr(_build, "other_instance_running", lambda: False)
+    for i, g in enumerate(("g1", "g2", "g3")):
+        _make_db(tmp_path, g, f"v{i}")
+        t = time.time() - (3 - i) * 10
+        os.utime(db_path(g), (t, t))
+    removed = _build.cleanup_old_generations(keep=1)
+    assert [p.name for p in removed] == ["gamedata-g1.db"]
+    assert sorted(p.name for p in gamedata_dir().glob("gamedata-*.db")) == [
+        "gamedata-g2.db",
+        "gamedata-g3.db",
+    ]
+
+
+def test_warm_up_swallows_errors(monkeypatch, tmp_path):
+    import sc_mining.gamedata as G
+    from sc_mining.gamedata._manifest import read_manifest
+
+    _data_root(monkeypatch, tmp_path)  # 没有 shops.json：建库必失败
+    t = G.warm_up()
+    t.join(10)
+    assert not t.is_alive()
+    assert read_manifest() is None
+    assert G.last_error()
+
+
+def test_refresh_closes_thread_connection(monkeypatch, tmp_path):
+    import sc_mining.gamedata as G
+    from sc_mining.gamedata import _db
+
+    _data_root(monkeypatch, tmp_path)
+    _make_db(tmp_path, "g1", "v1")
+    with G.snapshot():
+        pass
+    assert getattr(_db._tls, "conn", None) is not None
+    G.refresh()
+    assert getattr(_db._tls, "conn", None) is None
+
+
+def test_data_pack_clear_caches_calls_refresh(monkeypatch):
+    import sc_mining.gamedata as G
+    from sc_mining.update import data_pack
+
+    called = []
+    monkeypatch.setattr(G, "refresh", lambda: called.append(1))
+    data_pack.clear_caches()
+    assert called == [1]
