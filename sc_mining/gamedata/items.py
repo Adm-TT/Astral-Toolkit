@@ -151,3 +151,30 @@ def search(fragment: str, limit: int | None = None, snap=None) -> tuple[ItemRow,
         params += (int(limit),)
     with use(snap) as s:
         return tuple(_row(r) for r in s.execute(sql, params))
+
+
+def names_by_kind(
+    kinds: tuple[str, ...], snap=None
+) -> dict[str, tuple[tuple[str, str, str], ...]]:
+    """item_id → 这几种名字 (kind, name, norm)，按导入时的插入顺序；itemsearch 建索引一次取全"""
+    out: dict[str, list[tuple[str, str, str]]] = {}
+    marks = ",".join("?" * len(kinds))
+    with use(snap) as s:
+        for item_id, k, n, m in s.execute(
+            f"select item_id, kind, name, norm from item_names where kind in ({marks}) order by rowid",
+            tuple(kinds),
+        ):
+            out.setdefault(item_id, []).append((k, n, m))
+    return {k: tuple(v) for k, v in out.items()}
+
+
+def first_source_ids(source: str, snap=None) -> dict[str, str]:
+    """item_id → 这个来源里登记的第一个外部编号（导入顺序）；uex 就是以前索引里的「商店 id」（同名多个 id 取第一个）"""
+    out: dict[str, str] = {}
+    with use(snap) as s:
+        for item_id, x in s.execute(
+            "select item_id, external_id from item_source_ids where source = ? order by rowid",
+            (source,),
+        ):
+            out.setdefault(item_id, x)
+    return out

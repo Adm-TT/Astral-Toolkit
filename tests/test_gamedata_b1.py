@@ -565,3 +565,220 @@ def test_where_by_name_first_buyable(monkeypatch, tmp_path):
         == "可买：Shop C2（Pyro · Z）900 aUEC"
     )
     assert shops.where_by_name("nothing") == ""
+
+
+# ---------------------------------------------------------------- Task 6：物品搜索索引改从数据层建
+
+
+def _legacy_build(monkeypatch, tmp_path):
+    """迁移前 itemsearch._build_locked() 的合并规则（只在测试里留一份，对照用）：直接读最小源 JSON"""
+    import json
+
+    from sc_mining.core.i18n import gear_zh_of_item
+    from sc_mining.crafting.itemsearch import (
+        _has_cjk,
+        _trigrams,
+        _variant,
+        _wiki_noise,
+        en_key,
+        zh_key,
+    )
+    from sc_mining.gamedata._import import _names_table
+    from sc_mining.gamedata._sources import read_sources
+
+    src = read_sources(tmp_path)
+    data = json.loads((tmp_path / "shops.json").read_text(encoding="utf-8"))
+    idx = json.loads((tmp_path / "loot_index.json").read_text(encoding="utf-8"))
+    table = _names_table(src)
+    wiki = json.loads((tmp_path / "wiki_items.json").read_text(encoding="utf-8"))[
+        "items"
+    ]
+    aliases = json.loads((tmp_path / "name_aliases.json").read_text(encoding="utf-8"))
+    by_en, rows = {}, []
+
+    def entry(en):
+        ek = en_key(en)
+        if not ek:
+            return None
+        e = by_en.get(ek)
+        if e is None:
+            e = by_en[ek] = {
+                "en": en.replace("\xa0", " "),
+                "ek": ek,
+                "zh": "",
+                "zh_loot": "",
+                "zks": set(),
+                "shop": None,
+                "cat": "",
+                "loot": False,
+                "loc": False,
+            }
+            rows.append(e)
+        return e
+
+    for iid, (en, cat) in data["items"].items():
+        e = entry(en)
+        if e and e["shop"] is None:
+            e["shop"], e["cat"] = int(iid), cat or ""
+    for r in idx["rows"]:
+        en, zh = r[1], r[5] or ""
+        if _has_cjk(en) and not _has_cjk(zh):
+            en, zh = zh or en, en
+        if not _has_cjk(zh):
+            zh = ""
+        e = entry(en)
+        if e:
+            e["loot"] = True
+            if zh:
+                e["zh_loot"] = e["zh_loot"] or zh
+                e["zks"].add(zh_key(zh))
+    for zh, en in table.items():
+        e = entry(en)
+        if e:
+            e["loc"] = True
+            e["zh"] = e["zh"] or zh
+            e["zks"].add(zh_key(zh))
+    for w in wiki:
+        e = entry(w["n"])
+        if e:
+            e.setdefault("wiki", True)
+            e["wtype"], e["wsize"], e["desc"] = (
+                w.get("t") or "",
+                w.get("s"),
+                w.get("d") or "",
+            )
+    for old, real in aliases.items():
+        e = by_en.get(en_key(real))
+        if e and en_key(old) not in by_en:
+            e.setdefault("aka", []).append(old)
+    taken = {k for e in rows if e["shop"] is not None or e["loot"] for k in e["zks"]}
+    rows = [
+        e for e in rows if e["shop"] is not None or e["loot"] or not (e["zks"] & taken)
+    ]
+    rows = [
+        e
+        for e in rows
+        if e["shop"] is not None or e["loot"] or e["loc"] or not _wiki_noise(e)
+    ]
+    by_en = {e["ek"]: e for e in rows}
+    for e in rows:
+        for old in e.get("aka") or []:
+            by_en.setdefault(en_key(old), e)
+    by_char, by_tri = {}, {}
+    for i, e in enumerate(rows):
+        e["zh"] = e["zh"] or e["zh_loot"]
+        gz = gear_zh_of_item(e["en"])
+        if gz:
+            e["zh"] = gz
+            e["zks"] = tuple(dict.fromkeys((*e["zks"], zh_key(gz))))
+        e["zks"] = tuple(k for k in e["zks"] if k)
+        e["zlen"] = min((len(k) for k in e["zks"]), default=99)
+        e["variant"] = _variant(e["en"], e["zh"])
+        e["has_data"] = e["shop"] is not None or e["loot"]
+        for c in set("".join(e["zks"])):
+            by_char.setdefault(c, set()).add(i)
+        for t in _trigrams(e["ek"]):
+            by_tri.setdefault(t, set()).add(i)
+        for old in e.get("aka") or []:
+            for t in _trigrams(en_key(old)):
+                by_tri.setdefault(t, set()).add(i)
+    return {"rows": rows, "by_char": by_char, "by_tri": by_tri, "by_en": by_en}
+
+
+def _fresh_search(monkeypatch):
+    from sc_mining.crafting import itemsearch as IS
+
+    monkeypatch.setattr(IS, "_cache", {"key": None, "index": None})
+    return IS
+
+
+_QUERIES = [
+    "医疗笔",
+    "Medpen",
+    "Medi Pen",
+    "Lawson",
+    "荣誉勋章",
+    "Venture",
+    "夹克",
+    "xyz",
+    "law min",
+]
+
+
+def test_itemsearch_find_matches_json_build_on_sample(monkeypatch, tmp_path):
+    _setup(monkeypatch, tmp_path)
+    IS = _fresh_search(monkeypatch)
+    new = [IS.find(q) for q in _QUERIES]
+    new_rows = [dict(e, zks=sorted(e["zks"])) for e in (IS._build() or {})["rows"]]
+    legacy = _legacy_build(monkeypatch, tmp_path)
+    monkeypatch.setattr(IS, "_build", lambda: legacy)
+    assert new_rows == [dict(e, zks=sorted(e["zks"])) for e in legacy["rows"]]
+    assert [IS.find(q) for q in _QUERIES] == new
+    assert any(new)  # 不是全空的比对
+
+
+def test_itemsearch_cache_keyed_by_version(monkeypatch, tmp_path):
+    import json
+
+    import sc_mining.gamedata as G
+
+    _setup(monkeypatch, tmp_path)
+    IS = _fresh_search(monkeypatch)
+    first = IS._build()
+    G.rebuild(force=True)  # 新一代、内容版本不变：不重建索引
+    assert IS._build() is first
+    # 只改 name_aliases.json（以前缓存键漏了它，改了不刷新）
+    (tmp_path / "name_aliases.json").write_text(
+        json.dumps({"Medi Pen": "Medpen", "MedPack X": "Medpen"}), encoding="utf-8"
+    )
+    G.rebuild()
+    second = IS._build()
+    assert second is not first and IS.lookup("MedPack X")["ek"] == "medpen"
+
+
+def test_query_during_rebuild_sees_old_or_new_never_error(monkeypatch, tmp_path):
+    import threading
+
+    import sc_mining.gamedata as G
+
+    _setup(monkeypatch, tmp_path)
+    IS = _fresh_search(monkeypatch)
+    IS._build()
+    errors, empty = [], []
+
+    def worker():
+        for _ in range(200):
+            try:
+                if not IS.find("Medpen"):
+                    empty.append(1)
+            except Exception as e:  # noqa: BLE001 —— 测试要看到任何异常
+                errors.append(e)
+
+    th = threading.Thread(target=worker)
+    th.start()
+    G.rebuild(force=True)
+    G.rebuild(force=True)
+    th.join(60)
+    assert not errors and not empty
+
+
+def test_itemsearch_does_not_read_json(monkeypatch, tmp_path):
+    import sc_mining.gamedata as G
+
+    _setup(monkeypatch, tmp_path)
+    G.ensure()
+    for p in tmp_path.glob("*.json"):  # 库建好后把源 JSON 全删掉：索引只从库建
+        p.unlink()
+    IS = _fresh_search(monkeypatch)
+    assert IS.lookup("Medpen")["zh"] == "医疗笔"
+
+
+def test_itemsearch_empty_when_db_unavailable(monkeypatch, tmp_path):
+    from sc_mining.core import paths
+
+    _setup(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        paths, "DATA", tmp_path / "empty"
+    )  # 建不出库：和以前没有数据一样搜不到，不报错
+    IS = _fresh_search(monkeypatch)
+    assert IS.find("Medpen") == [] and IS.lookup("Medpen") is None
