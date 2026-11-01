@@ -193,7 +193,7 @@ def _fake_localization(monkeypatch, tmp_path, aliases, zh_names=None, with_build
 
 
 def test_localization_rebuild_runs_inside_updating(monkeypatch, tmp_path):
-    """汉化重建写的四份源文件在 updating() 里、边界只进一次；蓝图 / 维科洛重建（不是库的源）在边界之外、只拿 BUILD_LOCK"""
+    """汉化重建写的四份源文件在一个 updating() 里；蓝图 / 维科洛重建（schema 4 起是库的源）在**另一个** updating() 里、BUILD_LOCK 在它里面（锁顺序 写锁 → BUILD_LOCK，GD-B3 请求）"""
     from sc_mining.crafting import build_crafting
     from sc_mining.update import localization as L
 
@@ -208,7 +208,7 @@ def test_localization_rebuild_runs_inside_updating(monkeypatch, tmp_path):
         lambda *a, **k: inside_build.append(state["inside"]) or real_build(*a, **k),
     )
     L.rebuild(progress=lambda *_: None)
-    assert state["n"] == 1
+    assert state["n"] == 2  # 名字文件一段、蓝图重建一段，各自重建一次
     assert [p.name for p, _ in state["writes"]] == [
         "zh_names.json",
         "name_aliases.json",
@@ -216,13 +216,13 @@ def test_localization_rebuild_runs_inside_updating(monkeypatch, tmp_path):
         "place_codes_zh.json",
     ]
     assert all(inside for _, inside in state["writes"])
-    assert built == ["bp", "wk"] and inside_build == [False]
+    assert built == ["bp", "wk"] and inside_build == [True]
 
 
 def test_localization_rebuild_db_rebuilt_even_if_crafting_build_fails(
     monkeypatch, tmp_path
 ):
-    """四份源文件写完库就重建了；之后蓝图重建抛异常也不影响（以前靠 clear_caches 里的钩子兜，现在不需要）"""
+    """四份源文件写完就在第一个 updating() 出口重建了库；之后蓝图重建抛异常只影响第二段（以前靠 clear_caches 里的钩子兜，现在不需要）"""
     import json
 
     import sc_mining.gamedata as G

@@ -2,8 +2,8 @@
 
 各列对应的源字段见 docs/superpowers/specs/ 下各批矩阵：2026-11-02-gamedata-callsites.md（批 1）、-b2（导航）、-b3（制造 / 维科洛 / 物品属性）、gd-b4（掉落）、gd-b6（名字对照）。"""
 
-SCHEMA_VERSION = 4  # 2：导航表（批 2 公共层）；3：shop_items 商店物品目录原样（批 1 要求）；4：制造 / 维科洛 / 物品属性（批 3 公共层，2026-11-02）
-IMPORTER_VERSION = 4
+SCHEMA_VERSION = 5  # 2：导航表；3：shop_items；4：制造 / 维科洛 / 物品属性等；5：可空文本列存 NULL 不存 ''、wikelo_requirements.q 保留 int/float（批 3 还原 dict 要逐字一致，2026-11-02）
+IMPORTER_VERSION = 5
 
 DDL: list[str] = [
     # 清单和版本：schema_version / importer_version / data_version / generation_id / build_time / src:<文件名>=sha256
@@ -245,19 +245,19 @@ DDL: list[str] = [
         source_order INTEGER NOT NULL
     )""",
     # ---------------------------------------------------------------- schema 4：制造 / 维科洛 / 物品属性（批 3 公共层，2026-11-02）
-    # crafting.json blueprints：标量列原样；slots（含每槽的改装列表）、src 整段存 JSON——消费方吃嵌套树，拆表无查询收益；
+    # crafting.json blueprints：标量列原样（源里是 null 的存 NULL，不存 ''——消费方 GEAR_ZH[(g, None)] 这类键靠它）；slots（含每槽的改装列表）、src 整段存 JSON——消费方吃嵌套树，拆表无查询收益；
     # u（实体 uuid）真实数据里有重复和空值，不作主键，用自增 id。bp_key = crafting.assign_keys 的「名字#序号」规则；
     # norm_n / norm_z = crafting._fold_name（for_item 规则），search_n / search_z = crafting._search_norm（search 规则）；
     # item_id = itemsearch.en_key(n) 且在 items 表里才填（批 1 物品身份）
     """CREATE TABLE blueprints (
         id INTEGER PRIMARY KEY,
-        u TEXT NOT NULL DEFAULT '',
+        u TEXT,
         n TEXT NOT NULL,
-        z TEXT NOT NULL DEFAULT '',
-        g TEXT NOT NULL DEFAULT '',
-        t TEXT NOT NULL DEFAULT '',
-        s TEXT NOT NULL DEFAULT '',
-        m TEXT NOT NULL DEFAULT '',
+        z TEXT,
+        g TEXT,
+        t TEXT,
+        s TEXT,
+        m TEXT,
         sec INTEGER,
         d INTEGER NOT NULL DEFAULT 0,
         nsrc INTEGER,
@@ -288,13 +288,14 @@ DDL: list[str] = [
         PRIMARY KEY (blueprint_id, slot_idx, opt_idx)
     )""",
     "CREATE INDEX idx_bp_materials_material ON blueprint_materials(material)",
-    # wikelo.json contracts：标量原样；rewards / req / systems 各一张子表，idx 保序；req.norm_n = wikelo._fold（uses 的比较规则）
+    # wikelo.json contracts：标量原样（可空文本存 NULL；q 不声明类型，源里 int 就是 int、float 就是 float——goals 要原样乘数量）；
+    # rewards / req / systems 各一张子表，idx 保序；req.norm_n = wikelo._fold（uses 的比较规则）
     """CREATE TABLE wikelo_contracts (
         id TEXT PRIMARY KEY,
-        type TEXT NOT NULL DEFAULT '',
-        t TEXT NOT NULL DEFAULT '',
-        te TEXT NOT NULL DEFAULT '',
-        rz TEXT NOT NULL DEFAULT '',
+        type TEXT,
+        t TEXT,
+        te TEXT,
+        rz TEXT,
         source_order INTEGER NOT NULL
     )""",
     """CREATE TABLE wikelo_rewards (
@@ -306,10 +307,10 @@ DDL: list[str] = [
     """CREATE TABLE wikelo_requirements (
         contract_id TEXT NOT NULL REFERENCES wikelo_contracts(id),
         idx INTEGER NOT NULL,
-        n TEXT NOT NULL,
-        z TEXT NOT NULL DEFAULT '',
-        q REAL,
-        u TEXT NOT NULL DEFAULT '',
+        n TEXT,
+        z TEXT,
+        q,
+        u TEXT,
         norm_n TEXT NOT NULL,
         norm_z TEXT NOT NULL DEFAULT '',
         PRIMARY KEY (contract_id, idx)
@@ -324,16 +325,16 @@ DDL: list[str] = [
     # item_stats.json items：标量原样；s（属性字典，形状不一：{min,max} / {value} / 各种嵌套键）整段存 JSON，itemstats._get 按路径取
     """CREATE TABLE item_stats (
         uuid TEXT PRIMARY KEY,
-        n TEXT NOT NULL DEFAULT '',
+        n TEXT,
         size INTEGER,
-        grade TEXT NOT NULL DEFAULT '',
-        cls TEXT NOT NULL DEFAULT '',
-        type TEXT NOT NULL DEFAULT '',
-        sub TEXT NOT NULL DEFAULT '',
+        grade TEXT,
+        cls TEXT,
+        type TEXT,
+        sub TEXT,
         mass REAL,
-        ver TEXT NOT NULL DEFAULT '',
-        mfr TEXT NOT NULL DEFAULT '',
-        cn TEXT NOT NULL DEFAULT '',
+        ver TEXT,
+        mfr TEXT,
+        cn TEXT,
         stats_json TEXT NOT NULL,
         source_order INTEGER NOT NULL
     )""",
@@ -341,8 +342,8 @@ DDL: list[str] = [
     # print_spots.json items：打印机打印的物品在哪打
     """CREATE TABLE print_spots (
         item_name TEXT PRIMARY KEY,
-        zh TEXT NOT NULL DEFAULT '',
-        cls TEXT NOT NULL DEFAULT '',
+        zh TEXT,
+        cls TEXT,
         source_order INTEGER NOT NULL
     )""",
     """CREATE TABLE print_spot_places (

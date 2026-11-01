@@ -268,8 +268,9 @@ def places(ini):
 
 def rebuild(progress=print):
     """按汉化重建四份中文名 / 地名源文件（在 gamedata.updating() 里写，出口重建游戏数据库），
-    再用本机构建输入重建蓝图 + 维科洛（只拿 BUILD_LOCK，不在写锁里联网 / 久算；crafting.json、wikelo.json 不是库的源）。
-    转换在写锁外先算好，锁里只写文件（收口 1，复审第 2、8 条）"""
+    再用本机构建输入重建蓝图 + 维科洛。schema 4 起 crafting.json / wikelo.json 也是库的源，所以重建蓝图那一段也在
+    updating() 里，BUILD_LOCK 在它里面（锁顺序和 data_pack.install 一致：写锁 → BUILD_LOCK，GD-B3 请求 2026-11-02）。
+    两段各自一个 updating()：名字文件写完就重建库，蓝图重建失败不影响它。转换在写锁外先算好，锁里只写文件"""
     src = names_source()
     if src.suffix != ".ini":
         return
@@ -279,10 +280,12 @@ def rebuild(progress=print):
 
     with gamedata.updating():
         _write_name_files(zh_names, places_zh, codes_zh)
-    from .data_pack import clear_caches
+    try:
+        _rebuild_crafting(src, progress)
+    finally:
+        from .data_pack import clear_caches
 
-    clear_caches()
-    _rebuild_crafting(src, progress)
+        clear_caches()
 
 
 def _write_name_files(zh_names, places_zh, codes_zh):
@@ -311,7 +314,8 @@ def _write_name_files(zh_names, places_zh, codes_zh):
 
 
 def _rebuild_crafting(src, progress):
-    """制造蓝图和维科洛兑换：用本地已有的数据 + 新汉化重建（2026-10-28 审查：先看本机构建输入，没有才用 scmdb）"""
+    """制造蓝图和维科洛兑换：用本地已有的数据 + 新汉化重建（2026-10-28 审查：先看本机构建输入，没有才用 scmdb）。
+    在自己的 updating() 里（schema 4 起这两份是库的源）"""
     from ..crafting.build_crafting import (
         latest_live,
         live_version,
@@ -332,14 +336,16 @@ def _rebuild_crafting(src, progress):
         )  # 和蓝图同一个版本
         merged = merged if merged and merged.exists() else None
     if bp and merged:
+        from .. import gamedata
         from ..crafting.build_crafting import build
         from ..crafting.wikelo import build as build_wikelo
 
         with (
-            BUILD_LOCK
-        ):  # 和 build_crafting.update 可能同时跑（run.update 并行），别一起写同一个文件
-            build(bp, merged, src, DATA / "crafting.json")
-            progress(f"维科洛兑换：{build_wikelo(merged, src)} 个")
+            gamedata.updating()
+        ):  # crafting.json / wikelo.json 是库的源：两份写完出口重建一次
+            with BUILD_LOCK:  # 和 build_crafting.update 可能同时跑（run.update 并行），别一起写同一个文件；在写锁里面，顺序和 install 一致
+                build(bp, merged, src, DATA / "crafting.json")
+                progress(f"维科洛兑换：{build_wikelo(merged, src)} 个")
 
 
 GAME_STAMP = DATA / "loc" / "game_version.txt"
