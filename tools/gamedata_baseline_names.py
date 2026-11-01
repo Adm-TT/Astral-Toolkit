@@ -2,18 +2,21 @@
 
 用法（在项目根目录）：.venv\\Scripts\\python.exe -X utf8 tools\\gamedata_baseline_names.py --out <输出.json>
   查询列表写死在下面；旧写法、涂装名运行时从 data/ 里的源文件取第一条。
-  只读 data/，不联网、不写 userdata。输出格式同 tools/gamedata_baseline.py。
+  只读 data/，不联网、不写 userdata。输出格式同 tools/gamedata_baseline.py（_git_head 从它 import）。
+迁移专用：批 6 合并、真实数据 before / after 比对通过后，由游戏数据层收口批次删掉（或并进 gamedata_baseline.py）。
 """
 
 import argparse
 import hashlib
 import json
-import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from gamedata_baseline import _git_head  # noqa: E402
 
 TABLE_KEYS = ["视差步枪", "医疗笔", "荣誉勋章", "锡", "铁"]
 TO_ENGLISH = [
@@ -37,29 +40,9 @@ SUGGEST = ["医疗", "lawson"]
 GAMEKEY = ["Medpen", "Lawson Mining Laser", "zzz"]
 
 
-def _git_head():
-    try:
-        return subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        ).stdout.strip()
-    except Exception:
-        return ""
-
-
-def _read(data, name):
-    try:
-        return json.loads((data / name).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-
-
 def collect():
     from sc_mining.core import i18n
-    from sc_mining.core.paths import DATA, file_stamp
+    from sc_mining.core.paths import DATA, cached_json, file_stamp
     from sc_mining.trade import gamekey, names
 
     out = {}
@@ -84,10 +67,10 @@ def collect():
         out[f"names.suggest({q!r})"] = names.suggest(q)
 
     queries = list(GAMEKEY)
-    aliases = _read(DATA, "name_aliases.json") or {}
+    aliases = cached_json(DATA / "name_aliases.json", default={}) or {}
     if aliases:
         queries.append(next(iter(aliases)))  # 旧写法：文件第一条
-    wiki = (_read(DATA, "wiki_items.json") or {}).get("items") or []
+    wiki = (cached_json(DATA / "wiki_items.json", default={}) or {}).get("items") or []
     paint = next((w.get("n") for w in wiki if w.get("t") == "Paints"), None)
     if paint:
         queries.append(paint)  # 只在 wiki 里的涂装

@@ -35,7 +35,10 @@ def _cache(name):
 
 
 def _with_clear(fn: Callable[[], _R], name: str) -> _Cached[_R]:
-    """给 fn 挂上 cache_clear（清掉 name 那份缓存）；版本变了本来就会自己失效"""
+    """给 fn 挂上 cache_clear（清掉 name 那份缓存）。过渡：缓存按版本 + 对象身份失效以后，cache_clear 已是空操作，
+    留着只是因为 update/localization._write_name_files、update/data_pack.clear_caches、tests/test_trade、tests/test_goals
+    还按名字调它（不在批 6 文件清单里）。删除条件：这几处调用删掉后连同 _Cached / _with_clear 一起删；
+    归属：游戏数据层收口批次（GD-B6 PR「需要控制台改」第 2 条）"""
     setattr(fn, "cache_clear", lambda: _cache(name).clear())
     return cast(_Cached[_R], fn)
 
