@@ -68,6 +68,7 @@ MODULES = [
     "tests.test_inspector",
     "tests.test_ocr_module",
     "tests.test_nav_modules",
+    "tests.test_system_modules",
 ]
 
 if __name__ == "__main__":

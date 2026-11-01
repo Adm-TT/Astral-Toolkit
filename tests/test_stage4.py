@@ -50,10 +50,13 @@ def test_system_controller_routes():
 
 
 def test_system_tasks_no_services():
-    """tasks/system.py 不再反过来引用 app.services"""
-    text = (ROOT / "sc_mining" / "tasks" / "system.py").read_text(encoding="utf-8")
-    for bad in ("app import services", "_services()", "@api"):
-        assert bad not in text, bad
+    """tasks/system 不再反过来引用 app.services"""
+    pkg = ROOT / "sc_mining" / "tasks" / "system"
+    files = list(pkg.glob("*.py")) if pkg.is_dir() else [ROOT / "sc_mining" / "tasks" / "system.py"]
+    for p in files:
+        text = p.read_text(encoding="utf-8")
+        for bad in ("app import services", "_services()", "@api"):
+            assert bad not in text, f"{p.name}: {bad}"
 
 
 def test_system_router_roundtrip():
