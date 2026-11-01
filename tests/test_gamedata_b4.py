@@ -536,22 +536,33 @@ def _fake_details(monkeypatch):
     return seen
 
 
-def test_mine_info_cls_prefix_literal_and_skips_pure(monkeypatch, tmp_path):
+def _mine(key, online):
+    """mine_info 的结果，断言不是 None（类型检查要知道下面能取下标）"""
+    from typing import Any
+
     from sc_mining.crafting import loot
+
+    d = loot.mine_info(key, online=online)
+    assert d is not None
+    out: dict[str, Any] = d
+    return out
+
+
+def test_mine_info_cls_prefix_literal_and_skips_pure(monkeypatch, tmp_path):
 
     _setup(monkeypatch, tmp_path, **_loot_src(_ROCKS))
     _detail_env(monkeypatch, tmp_path)
     seen = _fake_details(monkeypatch)
-    d = loot.mine_info("carinite", online=False)
+    d = _mine("carinite", online=False)
     assert seen == ["r1"] and d["groups"] == [
         {"p": 0.25, "box": "", "regions": ["区域-r1"]}
     ]
     assert d["name"] == "科力晶" and d["mine"] is True and d["more"] == 0
     seen.clear()
-    d = loot.mine_info("carinitepure", online=False)
+    d = _mine("carinitepure", online=False)
     assert seen == ["r2"] and d["groups"][0]["regions"] == ["区域-r2"]
     seen.clear()
-    assert loot.mine_info("janalite", online=False)["groups"] == [] and seen == []
+    assert _mine("janalite", online=False)["groups"] == [] and seen == []
 
 
 def test_mine_info_online_downloads_when_no_index(monkeypatch, tmp_path):
@@ -579,7 +590,7 @@ def test_mine_info_online_downloads_when_no_index(monkeypatch, tmp_path):
 
     monkeypatch.setattr(loot, "update", update)
     assert loot.mine_info("carinite", online=False) is None and calls == []
-    d = loot.mine_info("carinite", online=True)
+    d = _mine("carinite", online=True)
     assert calls == [1] and d["groups"][0]["regions"] == ["区域-r1"]
 
 
@@ -606,7 +617,7 @@ def test_mine_info_empty_rows_does_not_download(monkeypatch, tmp_path):
     _detail_env(monkeypatch, tmp_path)
     calls = []
     monkeypatch.setattr(loot, "update", lambda *a, **kw: calls.append(1))
-    d = loot.mine_info("carinite", online=True)
+    d = _mine("carinite", online=True)
     assert calls == [] and d["groups"] == [] and d["more"] == 0
 
 
