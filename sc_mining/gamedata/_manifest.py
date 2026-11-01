@@ -11,6 +11,10 @@ from ._paths import manifest_path, tmp_dir
 from ._types import GamedataUnavailable
 
 _FIELDS = ("generation_id", "data_version", "schema_version", "file")
+_RETRY_TIMES = (
+    10  # 读清单撞上换名瞬间的重试：10 × 20 ms（批 1 实测边搜边发布会撞到，2026-11-02）
+)
+_RETRY_SLEEP = 0.02
 
 
 @dataclass(frozen=True)
@@ -24,12 +28,20 @@ class Manifest:
 def read_manifest() -> Manifest | None:
     """没有清单返回 None；清单坏了（不是 JSON、缺字段、类型不对）抛 GamedataUnavailable"""
     p = manifest_path()
-    try:
-        raw = p.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return None
-    except OSError as e:
-        raise GamedataUnavailable(f"读不了游戏数据清单 {p}：{e}") from e
+    raw = None
+    for i in range(_RETRY_TIMES):
+        try:
+            raw = p.read_text(encoding="utf-8")
+            break
+        except FileNotFoundError:
+            return None
+        except PermissionError as e:  # Windows：发布端正在 os.replace 换清单，几十毫秒的共享冲突；和写端一样重试
+            if i == _RETRY_TIMES - 1:
+                raise GamedataUnavailable(f"读不了游戏数据清单 {p}：{e}") from e
+            time.sleep(_RETRY_SLEEP)
+        except OSError as e:
+            raise GamedataUnavailable(f"读不了游戏数据清单 {p}：{e}") from e
+    assert raw is not None
     try:
         d = json.loads(raw)
         if not isinstance(d, dict) or any(k not in d for k in _FIELDS):
