@@ -21,8 +21,50 @@ def test_audit_record_and_read(tmp_path, monkeypatch):
     assert "[READ_SCREEN]" in records[0]
     assert "[ITEM_SEARCH]" in records[0]
     assert "螺旋 Helix II" in records[0]
+    assert "[prev:0000000000000000]" in records[0]
+    assert "[hash:" in records[0]
     assert "[MINING]" in records[1]
     assert '"mass": 5000' in records[1]
+
+
+def test_audit_hash_chain_tamper_detection(tmp_path, monkeypatch):
+    """测试哈希链校验与防篡改能力：修改字、删行均能精准捕获"""
+    from sc_mining.core import audit, paths
+
+    logs_dir = tmp_path / "logs"
+    monkeypatch.setattr(paths, "LOGS", logs_dir)
+    today = time.strftime("%Y-%m-%d")
+
+    audit.record("SYSTEM", "系统启动", tag="LOCAL_SERVER")
+    audit.record("ITEM_SEARCH", "F8识别", "原始物品A", tag="READ_SCREEN")
+    audit.record("NAV", "规划路线", "地点B", tag="OFFLINE_CALC")
+
+    # 1. 正常未篡改校验通过
+    ok, count, msg = audit.verify_chain(today)
+    assert ok is True
+    assert count == 3
+    assert "通过" in msg
+
+    # 2. 篡改第 2 行内容（把 A 改成 Z）
+    log_file = audit.audit_path(today)
+    lines = log_file.read_text(encoding="utf-8").splitlines()
+    tampered_lines = list(lines)
+    tampered_lines[1] = tampered_lines[1].replace("原始物品A", "篡改物品Z")
+    log_file.write_text("\n".join(tampered_lines) + "\n", encoding="utf-8")
+
+    ok, bad_idx, msg = audit.verify_chain(today)
+    assert ok is False
+    assert bad_idx == 2
+    assert "校验不符" in msg or "篡改" in msg
+
+    # 3. 删掉第 2 行（导致第 3 行的 prev 指向断裂）
+    tampered_lines_del = [lines[0], lines[2]]
+    log_file.write_text("\n".join(tampered_lines_del) + "\n", encoding="utf-8")
+
+    ok, bad_idx, msg = audit.verify_chain(today)
+    assert ok is False
+    assert bad_idx == 2
+    assert "断裂" in msg
 
 
 def test_audit_cleanup_retention(tmp_path, monkeypatch):
@@ -75,6 +117,12 @@ def test_audit_concurrent_writes(tmp_path, monkeypatch):
 
     records = audit.read_records(limit=200)
     assert len(records) == 100
+
+    # 验证并发写入后的整条哈希链依旧严丝合缝
+    today = time.strftime("%Y-%m-%d")
+    ok, count, msg = audit.verify_chain(today)
+    assert ok is True
+    assert count == 100
 
 
 def test_migration_reexports():
