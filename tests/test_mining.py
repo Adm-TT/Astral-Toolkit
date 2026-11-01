@@ -1642,7 +1642,7 @@ def test_mining_area_from_position():
     assert keeger["name"] == "Keeger Belt" and keeger["minerals"]["Bexalite"] == 18
     assert M.area((15.0e9, 0, 1e6), "Nyx")["name"] == "Glaciem Ring"
     assert M.area((30e9, 0, 0), "Nyx")["minerals"] == {}  # 尼克斯的空旷太空
-    # 派罗「小行星群 FSN-704」用的是深空小行星表（2026-10-27 解物件容器）；阿克罗团单独一张表
+    # 派罗「小行星群 FSN-704」用的是深空小行星表（2026-10-27 核对游戏数据）；阿克罗团单独一张表
     assert M.area((0, 0, 0), "Pyro", location="AsteroidCluster_Pyro_RegionC_FSN-704")[
         "name"
     ] in ("Deep Space Asteroids", "Akiro Cluster")
@@ -1786,7 +1786,7 @@ def test_review_104_rocks_reload_and_order(monkeypatch, tmp_path):
 
 
 def test_game_mining_spots_and_pyro_areas():
-    """2026-10-27 解物件容器：派罗 15 个小行星群、86 个远矿站能量子、刷深空小行星（以前当成阿克罗团）；
+    """2026-10-27 核对游戏数据：派罗 15 个小行星群、86 个远矿站能量子、刷深空小行星（以前当成阿克罗团）；
     派罗拉格朗日点有子云（派1/派2 暖带 01、派3 暖带 02、派5 冷带 01、派6 冷带 02）；导航「挖矿点」能按矿搜"""
     from sc_mining.navigation import navigate as n
     from sc_mining.mining import mining_area as M

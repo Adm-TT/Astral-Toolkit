@@ -121,7 +121,7 @@ def area(g, system, body=None, ground=None, location="", zone=""):
         flat = text.replace(" ", "_")
         if "akiro" in flat:
             return _named("Akiro Cluster")
-        # 派罗「小行星群 FSN-704」这些和远矿站：游戏里用的是深空小行星表（2026-10-27 解物件容器，以前当成阿克罗团）
+        # 派罗「小行星群 FSN-704」这些和远矿站：游戏里用的是深空小行星表（2026-10-27 核对游戏数据，以前当成阿克罗团）
         if re.search(r"asteroidcluster_pyro|ab_mine_pyro|miningbase_pyro", flat):
             return _named(DEEP)
         if g:
@@ -135,7 +135,7 @@ def area(g, system, body=None, ground=None, location="", zone=""):
             t6 = _body_xyz("Terminus") or _body_xyz("Pyro6")
             if (
                 t6 and math.dist(g, t6) <= 2_000_000_000
-            ):  # 派6 附近有一圈矿（物件容器引用了耶拉环带的刷矿表），范围还没解出来：不过滤
+            ):  # 派6 附近有一圈矿（游戏数据里引用了耶拉环带的刷矿表），范围还没弄清：不过滤
                 return None
             spots = _spots_raw()
             clusters = [
