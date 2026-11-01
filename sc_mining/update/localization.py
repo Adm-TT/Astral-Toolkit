@@ -167,7 +167,7 @@ def zh2en_items(ini, wiki_cls=None):
         )  # item_Cargo_…_Name、item_Mining_…_Name、item_fuelpod_…_Name（1.6.48）
         mining = kl.startswith(
             "item_mining_"
-        )  # 采矿模组 / 激光器有一半的键不带 _Name（item_Mining_Modules_Passive_Rieger_C3；2026-10-28 老大 F8 反馈）
+        )  # 采矿模组 / 激光器有一半的键不带 _Name（item_Mining_Modules_Passive_Rieger_C3；2026-10-28 F8 反馈）
         if (
             not (
                 kl.startswith("item_name")
@@ -232,7 +232,7 @@ PLACE_SKIP = re.compile(r"desc|mission|contract|_title|_obj", re.I)
 
 def place_codes(ini):
     """地点代号 → 中文名（RR_P1_L2、Pyro5d、Pyro_JumpPoint_Stanton…），只要中文第一行。随安装包带一份
-    data/place_codes_zh.json：新装还没下汉化包时，派罗地名也不显示成 PYR3 这种代号（Codex 2026-10-27 补审）"""
+    data/place_codes_zh.json：新装还没下汉化包时，派罗地名也不显示成 PYR3 这种代号（2026-10-27 补审）"""
     return {
         k.lower(): v.split("\\n")[0].strip()
         for k, v in ini.items()

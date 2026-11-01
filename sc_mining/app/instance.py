@@ -1,4 +1,4 @@
-"""只开一个 AT（从 server.py 拆出来，2026-10-31 控制台指令第 1 批）：锁住 userdata/instance.lock；已经开着就叫它打开窗口或退出"""
+"""只开一个 AT（从 server.py 拆出来，2026-10-31 整改第 1 批）：锁住 userdata/instance.lock；已经开着就叫它打开窗口或退出"""
 
 import sys
 import time

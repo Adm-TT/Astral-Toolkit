@@ -26,7 +26,7 @@ OUT = ROOT / "data" / "print_spots.json"
 EN_INI = WORK / "p4k_out" / "Data" / "Localization" / "english" / "global.ini"
 ZH_INI = ROOT / "data" / "loc" / "global_zh.ini"
 SYSTEMS = {"pyrosystem", "stantonsystem", "nyxsystem"}
-# 汉化组没翻、我们自己翻的词（都在 翻译对照\自译对照_词表.csv 里给老大纠错）
+# 汉化组没翻、我们自己翻的词（都在 翻译对照\自译对照_词表.csv 里给负责人纠错）
 SELF = {"Contested Zone Rewards Room": "争夺区奖励房"}
 
 PRINTER = re.compile(rb"gpi_itemspawner_printcooldown[a-z0-9_]*", re.I)

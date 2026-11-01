@@ -198,7 +198,7 @@ const HOTKEYS = [["live_key", "F5", "采矿助手开关", "开启后 120 秒未�
 const state = {
   status: null, hud: {}, scan: null, scans: [], signals: null, nav: { active: false }, hover: null,
   logs: {}, tasks: {}, item: null, itemFrom: "", plan: null,
-  sel: 0, priceReq: 0,          // 物品选择序号 / 价格请求序号：异步结果回来时核对，旧的丢掉（老大 2026-10-28 定）
+  sel: 0, priceReq: 0,          // 物品选择序号 / 价格请求序号：异步结果回来时核对，旧的丢掉（负责人 2026-10-28 定）
 };
 
 // ================================================================ 实时消息
@@ -1046,7 +1046,7 @@ PAGES.craft = () => {
     ? `<label class="field" style="flex-direction:row;align-items:center;gap:6px">${label}<select class="input" id="${id}"><option value="">全部</option>${items.map((x) => `<option value="${esc(x.key)}"${x.key === val ? " selected" : ""}>${esc(x.label)}（${x.count}）</option>`).join("")}</select></label>` : "";
   const row = (r) => `<button data-k="${esc(r.key)}"${r.key === state.craftKey ? ' class="on"' : ""}><span>${esc(r.name)}</span><span class="${r.ok === false ? "tag noqt" : r.ok ? "tag qt" : "faint"}">${r.ok === false ? "品质未达标" : r.ok ? "品质达标" : esc(r.kind)}</span><span class="l2">${r.need ? esc(r.need) + " · " : ""}${esc([r.tags, r.maker].filter(Boolean).join(" · "))}${r.unlocked ? " · 默认已解锁" : ""}</span></button>`;
   const load = async (more) => {
-    if (more && busy) return;                // 「加载更多」点两下：第二下不算（Codex 二审：会重复追加、跳过后面的）
+    if (more && busy) return;                // 「加载更多」点两下：第二下不算（二审：会重复追加、跳过后面的）
     const my = more ? batch : ++batch, offset = more ? shown : 0;
     busy = true; $("#cmore").disabled = true;
     let r;
@@ -1341,7 +1341,7 @@ function navSearchView() {
     } catch (e) { toast(e.message); }
   };
   document.querySelectorAll("#navbody [data-near]").forEach((b) => b.onclick = () => near(b.dataset.near));
-  // 主城 / 空间站导航：分类按钮常驻；在主城 / 空间站里点一下去最近的，不在就提示（2026-10-27 老大定）
+  // 主城 / 空间站导航：分类按钮常驻；在主城 / 空间站里点一下去最近的，不在就提示（2026-10-27 负责人定）
   const SITE_ALL = ["取船", "交易", "货梯", "医院", "武器", "护甲", "服装", "部件", "吃喝", "精炼", "行政", "罚款", "租船", "买船", "地铁"];
   const site = async () => {
     const box = $("#nsite");

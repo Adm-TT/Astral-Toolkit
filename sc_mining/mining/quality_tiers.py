@@ -53,7 +53,7 @@ def _norm(name):
             n = n[: -len(suf)]
     return {"ice": "pressurized ice"}.get(
         n.lower(), n.lower()
-    )  # 制造表里叫 Ice（老大审查 2026-10-28）
+    )  # 制造表里叫 Ice（审查 2026-10-28）
 
 
 _BY = {_norm(k): v for k, v in TIERS.items()}

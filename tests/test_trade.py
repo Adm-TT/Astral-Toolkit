@@ -976,7 +976,7 @@ def test_inventory_cell_labels_real_screens():
 
 
 def test_tooltip_zh_only_medal_not_description():
-    """2026-10-27 老大 F8：勋章 / 计算板说明框只有中文名、最下面是「容量：1.00SCU」。以前按「容量」往上找，
+    """2026-10-27 F8 反馈：勋章 / 计算板说明框只有中文名、最下面是「容量：1.00SCU」。以前按「容量」往上找，
     把说明最后一截「越。」当成名字；只有中文名的也查不到英文名"""
     from sc_mining.trade.console import tooltip_pick
     from sc_mining.trade.names import canonical
@@ -1007,7 +1007,7 @@ def test_tooltip_zh_only_medal_not_description():
 
 
 def test_tooltip_double_picks_bright():
-    """2026-10-27 老大：两个说明框叠在一起（上面亮的是鼠标指着的，下面暗的是身上装备的对比框）只认亮的那个。
+    """2026-10-27 负责人：两个说明框叠在一起（上面亮的是鼠标指着的，下面暗的是身上装备的对比框）只认亮的那个。
     以前认成了下面的「焦焰 RYT “血统红” 多功能工具」"""
     from sc_mining.trade.inspector import _read_tooltip
     from sc_mining.trade.names import canonical

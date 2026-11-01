@@ -474,7 +474,7 @@ def main():
         indent=1,
     )
     print(f"✅ 空间站电梯 {len(stations)} 个站 → {dst}")
-    # 自译的电梯线名写进对照表（已经有的不重复写），老大在「改成」列改
+    # 自译的电梯线名写进对照表（已经有的不重复写），负责人在「改成」列改
     csv = ROOT / "翻译对照" / "自译对照_词表.csv"
     if csv.exists():
         import csv as _csv

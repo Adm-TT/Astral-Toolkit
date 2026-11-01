@@ -47,7 +47,7 @@ PROGRAM_EXT = (
     ".js",
     ".css",
     ".html",
-)  # 这些算程序文件：装完必须和安装包一字不差（老大审查 2026-10-28 第 3 条）
+)  # 这些算程序文件：装完必须和安装包一字不差（审查 2026-10-28 第 3 条）
 REQUIRED = (
     "sc_mining/__init__.py",
     "sc_mining/run.py",
@@ -105,13 +105,13 @@ def zip_name(version):
 
 def _file_version(p):
     """Dubhe_1.5.0-beta.2.zip → "1.5.0-beta.2"（文件名已经过 NAME 检查）。
-    比新旧都用 vkey 比完整版本号：以前 NAME 只认三位数，beta 版的备份打好了回滚列表里却看不到（S5 审查 2026-10-31）"""
+    比新旧都用 vkey 比完整版本号：以前 NAME 只认三位数，beta 版的备份打好了回滚列表里却看不到（审查 2026-10-31）"""
     return Path(p).name[len("Dubhe_") : -len(".zip")]
 
 
 def vkey(text):
     """可比较大小的版本号（semver 规则）：x.y.z-beta.N 比同号 x.y.z 旧，beta.10 比 beta.9 新；认不出的最小。
-    ver() 只取 x.y.z（安装包文件名、latest.json 里都只有三位）；比「新不新」要算上 beta 时用这个（S5 审查 2026-10-31：
+    ver() 只取 x.y.z（安装包文件名、latest.json 里都只有三位）；比「新不新」要算上 beta 时用这个（审查 2026-10-31：
     以前 Velopack 比版本丢掉 beta 后缀，装着 1.1.2-beta.1 的玩家收不到 1.1.2 正式版）"""
     m = re.match(r"^\s*v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?", str(text or ""))
     if not m:
@@ -234,7 +234,7 @@ def check(path):
 
 def apply(path, progress=print):
     """装上这个安装包（覆盖程序文件，升级、回滚都用它）。返回 {"from", "to", "deps"}；deps=True 表示装了新组件
-    先把要装的包复制一份再装：回滚到最早那份自动备份时，备份清理会删掉它（Codex 复审 2026-10-23）"""
+    先把要装的包复制一份再装：回滚到最早那份自动备份时，备份清理会删掉它（复审 2026-10-23）"""
     import tempfile
 
     top, v = check(path)
@@ -332,7 +332,7 @@ def _install(path, top, v, progress, restoring=False):
     )
     bad = verify(
         path, top
-    )  # 逐个对账（CRC）：程序文件没换上、换错了都算没装成，装回备份时也一样（老大审查 2026-10-28 第 3 条）
+    )  # 逐个对账（CRC）：程序文件没换上、换错了都算没装成，装回备份时也一样（审查 2026-10-28 第 3 条）
     if bad:  # 数据 json 换不上留旧的无害，verify 只看程序文件
         what = "装回" if restoring else "升级"
         raise RuntimeError(

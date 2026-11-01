@@ -247,7 +247,7 @@ def task_running(task_id):
 
 
 def run_task_once(task_id, fn, *args, title="", **kw):
-    """同一个任务已经在跑就不再起（查和起在同一把锁里，两个请求同时到也只起一个，老大审查 2026-10-28）；起了返回线程，没起返回 None"""
+    """同一个任务已经在跑就不再起（查和起在同一把锁里，两个请求同时到也只起一个，审查 2026-10-28）；起了返回线程，没起返回 None"""
     with _run_lock:
         if task_running(task_id):
             return None

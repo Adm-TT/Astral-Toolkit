@@ -101,7 +101,7 @@ class _CamFilter:
                 return None
         if (
             self.count >= self.AGREE
-        ):  # 以前拒了一次就永远跟旧值比，姿态真变成镜像会一直卡住（S2 审查 2026-10-31）
+        ):  # 以前拒了一次就永远跟旧值比，姿态真变成镜像会一直卡住（审查 2026-10-31）
             _T("navigation")._wp_log(
                 f"镜头朝向：连着 {self.AGREE} 帧字模读数一致，收下 {cam}（之前是 {prev}）"
             )
@@ -191,7 +191,7 @@ class _Nav:
                 ev.wait(1)
 
     def _commit(self, sess, here=None, ref=None, state=None, hud=None, marker=None):
-        """导航线程每轮的「落账」（老大审查 2026-10-28 第 6 条）：在锁里核对 session，仍是这次导航才一起
+        """导航线程每轮的「落账」（审查 2026-10-28 第 6 条）：在锁里核对 session，仍是这次导航才一起
         记位置（last_here / ref）、发窗口（state）、改悬浮窗（hud）、画记号（marker=(目标, data, state, mk_seen)）。
         stop() / 换目标也在这把锁里改 session，所以停了以后旧线程算完的结果不会再冒出来。
         返回 (是否仍有效, 记号这轮画的截图时间)"""
@@ -381,7 +381,7 @@ class _Nav:
                 and time.time() - cur[0] < _T("navigation").LIVE_STALE
             ):
                 # 还没算出位置（停着开始导航、或在 AT 里选完目标才切回游戏）：latest 只在坐标变了才换，
-                # 用最近一次读到的完整一份马上算（Codex 2026-10-27）
+                # 用最近一次读到的完整一份马上算（审查 2026-10-27）
                 got = (cur[1], cur[2] or {}, False)
             elif _E().pos.latest[0] != seen and _E().pos.latest[1]:
                 seen, g_di, info = _E().pos.latest
@@ -391,7 +391,7 @@ class _Nav:
                 g_clip = n.parse_clip(clip)
                 live_ok = (
                     time.time() - _E().pos.read_at < _T("navigation").LIVE_STALE
-                )  # 右上角读得到：剪贴板的坐标只记下不用（Codex 2026-10-27）
+                )  # 右上角读得到：剪贴板的坐标只记下不用（审查 2026-10-27）
                 if g_clip and clip != clip_seen and not live_ok:
                     got = (tuple(g_clip), {"t": time.time()}, True)
                 clip_seen = clip if g_clip else clip_seen
@@ -522,7 +522,7 @@ class _Nav:
                 if fresh:  # 只有真读到新位置才改「几点更新」（以前状态文字一变就改，看着像刚更新过）
                     state["at"] = time.strftime("%H:%M:%S")
                 pub = state
-            # 算的时候被停掉 / 换了目标：_commit 在锁里核对 session，不对就什么都不发、记号不画（老大审查 2026-10-28）
+            # 算的时候被停掉 / 换了目标：_commit 在锁里核对 session，不对就什么都不发、记号不画（审查 2026-10-28）
             ok, mk_seen = self._commit(
                 sess,
                 here=here if fresh else None,

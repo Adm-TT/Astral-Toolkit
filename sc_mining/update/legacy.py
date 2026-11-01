@@ -163,7 +163,7 @@ def import_from(path):
             old = json.loads(
                 s.read_text(encoding="utf-8-sig")
             )  # 手改过的文件可能带 BOM（记事本另存）
-            with settings._LOCK:  # AT 开着，别的线程也在改设置：读-改-写连着做，写原子的（S5 审查 2026-10-31）
+            with settings._LOCK:  # AT 开着，别的线程也在改设置：读-改-写连着做，写原子的（审查 2026-10-31）
                 try:
                     cur = (
                         json.loads(d.read_text(encoding="utf-8-sig"))

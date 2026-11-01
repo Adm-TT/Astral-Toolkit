@@ -72,7 +72,7 @@ class _Pos:
     def start(self):
         from ...navigation import navigate as n
 
-        n.HINTS = self.hints  # 太空导航定星系要用右上角线索（S2 审查 2026-10-31）
+        n.HINTS = self.hints  # 太空导航定星系要用右上角线索（审查 2026-10-31）
         if WIN and not self.thread:
             self.thread = threading.Thread(
                 target=self._run, daemon=True, name="displayinfo"
@@ -131,7 +131,7 @@ class _Pos:
             try:
                 seen = self.reader.ok_at
                 self.reader.poll()
-                # 坐标、详情、截图时间都取同一次读数（另一个线程可能在中间读过一次，不能拼两帧，Codex 2026-10-27 复审）
+                # 坐标、详情、截图时间都取同一次读数（另一个线程可能在中间读过一次，不能拼两帧，2026-10-27 复审）
                 ok_at, info = self.reader.snapshot()
                 info = info or {}
                 if ok_at != seen and info.get("global"):
@@ -167,7 +167,7 @@ class _Pos:
                     moved = (
                         moved or bool(zb) and zb != _zone_base(self.latest[2])
                     )  # 读不到（空）不算变
-                    # 停着不动也算读到了（read_at 更新）：以前停车扫描 10 秒后就被当成「位置过期」（Codex 2026-10-27 复审）。
+                    # 停着不动也算读到了（read_at 更新）：以前停车扫描 10 秒后就被当成「位置过期」（2026-10-27 复审）。
                     # latest 照旧只在坐标变了才换（导航按它重算，停着不用每 0.2 秒重算一遍）
                     self.read_at = info.get("t") or ok_at
                     self.current = (

@@ -39,7 +39,7 @@
 :root[data-theme="light"] {
   --ink: #F2EFE8;
   --side: #ffffff;
-  --primary: #D5A45A;          /* 浅色主题不改（2026-10-27 老大定）：还是琥珀金 */
+  --primary: #D5A45A;          /* 浅色主题不改（2026-10-27 负责人定）：还是琥珀金 */
   --on-primary: #172538;
   --steel: #71869C;
   --panel: #ffffff;

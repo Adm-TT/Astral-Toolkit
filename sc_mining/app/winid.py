@@ -236,7 +236,7 @@ def profile_pids(profile, exes=("msedge.exe", "chrome.exe")):
 
 def close_windows(pids, title=TITLE, exes=("msedge.exe", "chrome.exe", "atshell.exe")):
     """关掉 AT 自己开的 Edge / Chrome 窗口（AT 退出时用；不碰 WebView2 的新窗口）。返回关了几个。
-    只关进程号在 pids 里的：用户在自己的浏览器里开着 AT 页面时，标题一样，但不能把用户的整个浏览器窗口关掉（Codex 2026-10-27 补审）"""
+    只关进程号在 pids 里的：用户在自己的浏览器里开着 AT 页面时，标题一样，但不能把用户的整个浏览器窗口关掉（2026-10-27 补审）"""
     if sys.platform != "win32" or not pids:
         return 0
     n = 0

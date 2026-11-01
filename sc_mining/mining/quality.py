@@ -60,9 +60,7 @@ def _key(material):
     for suffix in (" (ore)", " (raw)", " ore", " raw"):
         if low.endswith(suffix):
             low = low[: -len(suffix)]
-    low = {"ice": "pressurized ice"}.get(
-        low, low
-    )  # 制造表里叫 Ice（老大审查 2026-10-28）
+    low = {"ice": "pressurized ice"}.get(low, low)  # 制造表里叫 Ice（审查 2026-10-28）
     return _LOWER.get(low)
 
 

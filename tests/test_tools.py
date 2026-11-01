@@ -2027,7 +2027,7 @@ def test_craft_blueprint_dictionary():
 
 
 def test_craft_same_name_blueprints_distinct():
-    """同名两份配方（比如 Main Powerplant）：列表编号不同，点开看到各自的材料（Codex 二审 2026-10-23 发现的 bug）"""
+    """同名两份配方（比如 Main Powerplant）：列表编号不同，点开看到各自的材料（二审 2026-10-23 发现的 bug）"""
     import pytest
     from collections import Counter
     from sc_mining import crafting
@@ -2143,7 +2143,7 @@ def _rock(mass, res, instab, scu, comp):
 
 
 def test_vote_needs_stable_composition_and_same_rock_checks_resistance():
-    """成分没读稳（两帧百分比对不上）不算稳定；质量差不多但抗性不同的是两块石头（Codex 审查建议 2026-10-23）"""
+    """成分没读稳（两帧百分比对不上）不算稳定；质量差不多但抗性不同的是两块石头（审查建议 2026-10-23）"""
     from sc_mining.mining import screen
 
     a = _rock(
@@ -2227,7 +2227,7 @@ def test_live_session_isolation(monkeypatch, tmp_path):
 
 
 def test_live_stop_during_compute_publishes_nothing(monkeypatch, tmp_path):
-    """算破碎方案的时候用户按了停止：算完不能再把旧结果推到窗口和悬浮窗（Codex 复审 2026-10-23）"""
+    """算破碎方案的时候用户按了停止：算完不能再把旧结果推到窗口和悬浮窗（复审 2026-10-23）"""
     import threading
     from sc_mining.tasks import mining as t_mining
 
@@ -2542,7 +2542,7 @@ def test_space_fix_navigation(monkeypatch, tmp_path):
 
 
 def test_space_fix_dedupe_and_session(monkeypatch, tmp_path):
-    """Codex 审查 1.6.23：剪贴板监听和 F9 拿到同一份坐标只算一次；导航结束 / 换目标后，旧的定位结果不再发出来"""
+    """审查 1.6.23：剪贴板监听和 F9 拿到同一份坐标只算一次；导航结束 / 换目标后，旧的定位结果不再发出来"""
     import time as _t
     from sc_mining.navigation import navigate as n
     from sc_mining.core import paths, settings
@@ -2792,7 +2792,7 @@ def test_halo_routes_match_scminer():
 
 
 def test_halo_services(monkeypatch, tmp_path):
-    """小行星带页的接口：选项、路线、挂到悬浮窗；挂着方案时按 F9 或自己输 /showlocation 核对在不在带里（Codex 复审 1.6.24 补的情形）"""
+    """小行星带页的接口：选项、路线、挂到悬浮窗；挂着方案时按 F9 或自己输 /showlocation 核对在不在带里（复审 1.6.24 补的情形）"""
     import time as _t
     from sc_mining.navigation import halo
     from sc_mining.core import paths, settings
@@ -3820,7 +3820,7 @@ def test_item_search_wiki_gap_fill_and_tail_name_keys():
         and hit["src"] == "loc"
         and hit["zh"] == "哈特莫尔转换器密码"
         and hit["category"] == "钥匙卡"
-    )  # 2026-10-27 老大定：芯片卡（DCHS 计算板、密钥）归钥匙卡一类
+    )  # 2026-10-27 负责人定：芯片卡（DCHS 计算板、密钥）归钥匙卡一类
     assert (
         t_trade.item_search("Biological Samples")[0]["zh"] == "生物样本"
         and t_trade.item_search("生物样本")[0]["name"] == "Biological Samples"
@@ -4185,7 +4185,7 @@ def test_nav_marker_projection():
 
 
 def test_game_events_from_log(tmp_path):
-    """游戏日志事件（2026-10-27，按老大 4.10.2 的真实日志行）：选量子目标、量子到达、管辖区、禁火区、监管区域、重生；
+    """游戏日志事件（2026-10-27，按 4.10.2 的真实日志行）：选量子目标、量子到达、管辖区、禁火区、监管区域、重生；
     只读打开以后新写的部分；游戏重开（日志变小）从头读"""
     from sc_mining.system.gamelog import GameEvents, EventTail
 
@@ -4311,7 +4311,7 @@ def test_city_nav(monkeypatch, tmp_path):
 
 
 def test_city_nav_review(monkeypatch, tmp_path):
-    """Codex 二审城内导航的 5 个问题：同名地点串号、记号没校准、手动定位到达标准、坏数据、详情页叫人量子跳"""
+    """二审城内导航的 5 个问题：同名地点串号、记号没校准、手动定位到达标准、坏数据、详情页叫人量子跳"""
     import json  # noqa: F811
     from datetime import datetime, timezone  # noqa: F401
     from sc_mining.navigation import navigate as n
@@ -4492,7 +4492,7 @@ def test_feedback_upload_pack_send_retry(tmp_path, monkeypatch):
 
 
 def test_signal_harvestable_2000():
-    """地面 2,000 的倍数是可采集物（植物、菌菇等）：老大 2026-10-27 实测 10,000 = 5 个"""
+    """地面 2,000 的倍数是可采集物（植物、菌菇等）：2026-10-27 实测 10,000 = 5 个"""
     from sc_mining.mining import signals
 
     lines = signals.describe_all([(10000, False, "10000", None)], where="ground")

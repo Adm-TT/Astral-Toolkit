@@ -1,7 +1,7 @@
 """游戏窗口相关的小工具：找游戏窗口、游戏在不在最前面、管理员身份、当前按着哪些键
 
 自定义路标只用 /showlocation 的坐标：玩家自己在聊天框输入 /showlocation，游戏把坐标复制到剪贴板，AT 读剪贴板。
-比 OCR 右上角调试信息可靠（不会认错数字）。AT 不模拟任何键盘 / 鼠标输入（老大定，1.1.2 起；控制台指令第 4 批）。
+比 OCR 右上角调试信息可靠（不会认错数字）。AT 不模拟任何键盘 / 鼠标输入（负责人定，1.1.2 起；整改第 4 批）。
 导航实时方位仍然读右上角
 """
 
@@ -79,7 +79,7 @@ def _window_text(hwnd, fn):
 
 def _is_game_window(hwnd):
     """以进程名为准（StarCitizen.exe）；读不到进程名才看标题 / 类名，标题要正好是「Star Citizen」。
-    以前标题以 star citizen 开头就算：浏览器开着「Star Citizen …」的网页会被当成游戏，按键打进浏览器（S2 审查 2026-10-31）"""
+    以前标题以 star citizen 开头就算：浏览器开着「Star Citizen …」的网页会被当成游戏，按键打进浏览器（审查 2026-10-31）"""
     exe = _exe_of(hwnd)
     if exe:
         return exe == GAME_EXE

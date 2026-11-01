@@ -83,7 +83,7 @@ _game_events = _M.game_events
 def _place_row(p):
     from ..navigation.navigate import label, body_label, TYPE_ZH, QT_ZH
 
-    key = f"{p['b']}|{p['t']}|{p.get('id') or p['n']}"  # 城里同名地点靠 id 区分（Codex 2026-10-27）
+    key = f"{p['b']}|{p['t']}|{p.get('id') or p['n']}"  # 城里同名地点靠 id 区分（审查 2026-10-27）
     _places[key] = p
     typ = (
         (p.get("area") or p.get("city_zh") or TYPE_ZH["City"])
@@ -112,7 +112,7 @@ def nav_search(q=""):
 
 def nav_near(kind=""):
     """导航页「医院 / 空港 / 买船」：知道当前位置就直接导航到最近的那个，列表按远近排；
-    位置不知道就只列出来让玩家自己挑（2026-10-27 老大定）"""
+    位置不知道就只列出来让玩家自己挑（2026-10-27 负责人定）"""
     from ..navigation import navigate as n
 
     if kind not in n.NEAR_KINDS and kind not in n.SITE_KINDS:
@@ -253,7 +253,7 @@ def nav_plan(key=""):
         }
     lat, lon, r = latlon(pos(p))
     b = data["bodies"][p["b"]]
-    if p.get("t") == "City":  # 城里：不给量子跳的参照点（Codex 2026-10-27）
+    if p.get("t") == "City":  # 城里：不给量子跳的参照点（审查 2026-10-27）
         return {
             **_place_row(p),
             "city": True,
@@ -510,7 +510,7 @@ def _where_now():
 def _area_now():
     """玩家现在在哪个产矿区（mining_area.area），认不出返回 None。雷达信号只报当地会刷的矿（2026-10-27 用户要求
     「位置和矿种对得上号」）。只用后台 10 秒内读到的位置；星系必须是右上角线索定下的（只靠坐标猜的不算，
-    三个星系坐标系重叠，猜错会把真矿判成「不刷」，Codex 2026-10-27 补审）。同一次读数只算一次"""
+    三个星系坐标系重叠，猜错会把真矿判成「不刷」，2026-10-27 补审）。同一次读数只算一次"""
     from ..navigation import navigate as n
     from ..mining import mining_area
 
@@ -619,7 +619,7 @@ def settings_key(k, default):
 
 
 # ---------------------------------------------------------------- 路标保存与快捷记录
-# nav_log.txt 会打进问题反馈包上传：用户目录（C:\Users\<用户名>）换成 ~（S2 审查 2026-10-31）
+# nav_log.txt 会打进问题反馈包上传：用户目录（C:\Users\<用户名>）换成 ~（审查 2026-10-31）
 _HOME_RE = re.compile(r"\b[A-Za-z]:[\\/]+Users[\\/]+[^\\/:*?\"'<>|\r\n]+", re.I)
 
 
@@ -644,7 +644,7 @@ def _surface_limit(here):
 
 def _hints_near(g, km=100):
     """右上角线索（定星系用）只在 g 就是你现在的位置时才可信：粘贴别人给的坐标、事后补存的原矿坐标，
-    线索说的是你现在在哪个星系，不是那个坐标在哪个星系（S2 审查 2026-10-31）"""
+    线索说的是你现在在哪个星系，不是那个坐标在哪个星系（审查 2026-10-31）"""
     try:
         _, live, _ = _pos.current
         if live is None or math.dist(live, g) > km * 1000:
@@ -706,7 +706,7 @@ def _start_here_watch():
                     _wp_log(f"剪贴板读到 {clip!r}")
                     try:
                         _saved(name, _save_here(name, g))
-                    except Exception as e:  # 路标文件读不到 / 坏了：和 mark_here 一样提示，不让线程悄悄退出（S2 审查 2026-10-31）
+                    except Exception as e:  # 路标文件读不到 / 坏了：和 mark_here 一样提示，不让线程悄悄退出（审查 2026-10-31）
                         _note_hud("路标", f"未保存：{e}", 8)
                         _wp_log(f"失败：{e}")
                 return
@@ -720,7 +720,7 @@ def _start_here_watch():
 
 
 def _wait_showloc():
-    """等玩家自己在聊天框输入 /showlocation（AT 不替你输入，控制台指令第 4 批）：先在悬浮窗上提示一下"""
+    """等玩家自己在聊天框输入 /showlocation（AT 不替你输入，整改第 4 批）：先在悬浮窗上提示一下"""
     from ..system import showloc
 
     if (
@@ -873,7 +873,7 @@ def ore_go(id=""):
         name = f"原矿 {rec.get('rock') or ''} {(rec.get('at') or '')[5:16]}".strip()
         if (
             name in rows
-        ):  # 同一分钟记了两块同种矿：同名会覆盖别的记录的路标（S2 审查 2026-10-31）
+        ):  # 同一分钟记了两块同种矿：同名会覆盖别的记录的路标（审查 2026-10-31）
             name = f"{name} #{(rec.get('id') or '')[:4]}"
         _save_here(name, tuple(rec["coords"]), system=rec.get("system"))
         ore_log.update(id, waypoint=name)
@@ -980,7 +980,7 @@ def _halo_watch(sess, ev):
                 arr, prev, live_at = _game_events.arrived_at, None, 0.0
             t, g_live, _ = (
                 _pos.current
-            )  # 每次读到都更新（停着不动也有新的一份），latest 只在坐标变了才换（Codex 2026-10-27）
+            )  # 每次读到都更新（停着不动也有新的一份），latest 只在坐标变了才换（审查 2026-10-27）
             if (
                 g_live
                 and t != seen_live
@@ -1026,7 +1026,7 @@ def halo_check(g, clip=None, sess=None):
         _HALO["last"] = w
         _hud().set(
             "小行星带", p["text"] + "\n" + w["text"]
-        )  # 退出距离、安全区间一直留着（Codex 2026-10-27：自动核对不能把它盖掉）
+        )  # 退出距离、安全区间一直留着（审查 2026-10-27：自动核对不能把它盖掉）
         bus.publish("halo", w)
     _wp_log(f"小行星带核对：{w['text']}")
     return w

@@ -143,7 +143,7 @@ class HttpTransport:
                 if r.status_code == 429:
                     raw = r.headers.get(
                         "retry-after", "3600"
-                    )  # 头名统一小写（老大审查 2026-10-28）
+                    )  # 头名统一小写（审查 2026-10-28）
                     try:
                         at = datetime.now(timezone.utc) + timedelta(
                             seconds=max(1, int(raw))

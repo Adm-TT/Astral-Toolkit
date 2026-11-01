@@ -181,7 +181,7 @@ _kill = {
     "list": None,
     "at": 0.0,
     "key": None,
-}  # key = (kill_rev, 版本)：比已经用上的旧的清单不改（Codex 2026-10-27）
+}  # key = (kill_rev, 版本)：比已经用上的旧的清单不改（审查 2026-10-27）
 
 
 def _in_range(spec, v):
@@ -240,7 +240,7 @@ def _set_kill(raw_list, key=(0, (0, 0, 0))):
             )
     _kill.update(list=rows, key=key)
     try:
-        # 先写临时文件再换名：写到一半被结束会留下半个文件，读不出来就当没关、离线时被关的功能又开了（S5 审查 2026-10-31）
+        # 先写临时文件再换名：写到一半被结束会留下半个文件，读不出来就当没关、离线时被关的功能又开了（审查 2026-10-31）
         paths.write_json(KILL_FILE, {"rev": key[0], "ver": list(key[1]), "list": rows})
     except OSError:
         pass
@@ -294,7 +294,7 @@ def _rev(v):
 
 
 def fetch(timeout=TIMEOUT):
-    """到网上读版本说明。几处都问，取版本最新的一份（Codex 2026-10-27：一处的清单旧了不能挡住别处的新版本）。
+    """到网上读版本说明。几处都问，取版本最新的一份（审查 2026-10-27：一处的清单旧了不能挡住别处的新版本）。
     返回 (info, 哪里读到的)；都读不到返回 (None, 原因)。
     顺便更新远程关功能的列表：取 kill_rev 最大（同样大取版本新）的那份清单里的 disabled"""
     from .upgrade import ver
@@ -304,7 +304,7 @@ def fetch(timeout=TIMEOUT):
         if isinstance(raw, Exception):
             errs.append(f"{where}：{raw}")
             continue
-        try:  # 是像样的版本说明才算关功能列表；错误页面、格式不对就不用（Codex 2026-10-27）
+        try:  # 是像样的版本说明才算关功能列表；错误页面、格式不对就不用（审查 2026-10-27）
             d = json.loads(raw)
             v = ver(str(d.get("version") or "")) if isinstance(d, dict) else (0, 0, 0)
             if v != (0, 0, 0) and isinstance(d.get("disabled", []), list):
@@ -356,7 +356,7 @@ def check(force=False):
 
 
 def refresh_kill():
-    """只更新远程关功能清单，不管新版本：玩家关了「启动时检查更新」也照常查（控制台指令第 2 批选 A，2026-10-31：
+    """只更新远程关功能清单，不管新版本：玩家关了「启动时检查更新」也照常查（整改第 2 批选 A，2026-10-31：
     远程关是游戏更新后防止给出错误识别结果的兜底）。一小时最多联网一次；读不到就继续用本地存的清单"""
     if not enabled():
         return
@@ -478,7 +478,7 @@ def make_manifest(zip_path, notes=(), date="", installer=None, keep=None):
     zip_path：Dubhe_x.y.z.zip；压缩包版停止维护后可以给 None，只发安装程序：这时顶层不写 file / size / sha256 / urls，
     版本号取安装程序文件名，源码版读到会当作没有新版本（不会出现版本是新号、file 却指向旧压缩包）。
     installer：同一版本的独立安装程序 AT_Setup_x.y.z.exe（有压缩包时可选，没压缩包时必须给）。
-    keep：网上现在的 latest.json——远程关功能的 kill_rev 和 disabled 原样带上（Codex 2026-10-27：发新版不能把旧版的禁用清掉）"""
+    keep：网上现在的 latest.json——远程关功能的 kill_rev 和 disabled 原样带上（审查 2026-10-27：发新版不能把旧版的禁用清掉）"""
     from .upgrade import check as check_pkg, ver
 
     if zip_path:

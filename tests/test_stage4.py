@@ -207,7 +207,7 @@ def test_all_api_names_routed():
     r = router.routes()
     assert (
         len(_OLD_API_NAMES) == len(set(_OLD_API_NAMES)) == 108
-    )  # 109 个减去 cockpit_check（自动跑删了，控制台第 5 批）
+    )  # 109 个减去 cockpit_check（自动跑删了，整改第 5 批）
     missing = [n for n in _OLD_API_NAMES if n not in r]
     assert not missing, missing
     for n in _OLD_API_NAMES:
@@ -237,7 +237,7 @@ def test_no_services_module():
 
 def test_feedback_scrub_personal_info(monkeypatch, tmp_path):
     """反馈包里的日志、情况.json：AT / 数据 / userdata 文件夹换成占位符，别的 C:\\Users\\<名字> 也抹掉，网址里的口令换掉
-    （S5 审查 2026-10-31：日志尾巴原样进反馈包、默认自动上传，会带出 Windows 用户名）"""
+    （审查 2026-10-31：日志尾巴原样进反馈包、默认自动上传，会带出 Windows 用户名）"""
     from sc_mining.core import paths
     from sc_mining.tasks import system as t_sys
 

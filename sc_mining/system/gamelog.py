@@ -162,7 +162,7 @@ class GameLog:
 
 
 # ================================================================ 量子、管辖区、禁火区、重生（2026-10-27）
-# 规则按老大电脑上 4.10.2 的真实 Game.log 定；思路参考 all-slain、sc-companion（都是 MIT）读日志的做法
+# 规则按 4.10.2 的真实 Game.log 定；思路参考 all-slain、sc-companion（都是 MIT）读日志的做法
 QT_TARGET = re.compile(r"Player has selected point (\S+) as their destination")
 QT_ARRIVED = "Quantum Drive has arrived at final destination"
 NOTE = re.compile(r"Added notification \"([^\"]+?)(?::\s*)?\"")
@@ -252,7 +252,7 @@ class EventTail:
                 return []
             if (
                 ident != self.ident or size < self.pos
-            ):  # 换了文件（游戏重开）：从头读新日志（Codex 2026-10-27）
+            ):  # 换了文件（游戏重开）：从头读新日志（审查 2026-10-27）
                 self.pos, self.buf, self.ident = 0, b"", ident
             if size == self.pos:
                 return []

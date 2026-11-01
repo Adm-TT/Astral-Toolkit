@@ -1,4 +1,4 @@
-"""解包：导航星图整表（2026-10-28，老大定：不等 starmap.space）。
+"""解包：导航星图整表（2026-10-28，负责人定：不等 starmap.space）。
 
 用法：.venv\\Scripts\\python.exe -X utf8 tools\\unpack_starmap.py [--write]
 读：E:\\Game3\\unpack\\oc_x（unpack_all 解开的星系 / 星球物件容器）、dcb 的星图记录、游戏英文文本、现有 data\\starmap.json

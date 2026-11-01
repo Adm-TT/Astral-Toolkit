@@ -150,7 +150,7 @@ def _count_review(place, items):
         "missing": missing,
         "at": time.strftime("%H:%M:%S"),
         "revision": rev,
-    }  # 确认时核对：中间改过账就不按这份旧账改（老大审查 2026-10-28 第 8 条）
+    }  # 确认时核对：中间改过账就不按这份旧账改（审查 2026-10-28 第 8 条）
 
 
 # ================================================================ 盘点控制与对账 API
@@ -186,7 +186,7 @@ def count_apply(zero=None):
             )
         targets[key] = n
 
-    # 先把每一行要改成多少算清楚（不写库），再一笔事务写进去：要么全改、要么一行不改（老大审查 2026-10-28 第 8 条）
+    # 先把每一行要改成多少算清楚（不写库），再一笔事务写进去：要么全改、要么一行不改（审查 2026-10-28 第 8 条）
     targets, crafts = {}, []
     try:
         for r in rv["rows"]:
@@ -209,7 +209,7 @@ def count_apply(zero=None):
                 continue
             if r.get("craft"):
                 crafts.append((keys[0].item_id, keys[0].quality, r["craft"]))
-            # 好几个仓位都有：多出来的记在第一个仓位；少了的从各仓位依次扣（老大审查 2026-10-28：以前只扣第一个、不够就截成 0，总数对不上）
+            # 好几个仓位都有：多出来的记在第一个仓位；少了的从各仓位依次扣（审查 2026-10-28：以前只扣第一个、不够就截成 0，总数对不上）
             qs = [t.inventory._quantity_of(k) for k in keys]
             total, target = sum(qs), r["raw_game"]
             if target >= total:

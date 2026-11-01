@@ -58,7 +58,7 @@ def _fix_numbers(line):
     # 数字之间多认出的点、重复的减号（「km.21.7491km」「km--23.2650km」）先清掉；认错了也不怕，两行坐标还要对得上
     tail = re.sub(
         r"-{2,}(?=\d)", "-", tail
-    )  # 先并减号，再清点号（「km.--23」两样一起出现也认得，Codex 审查 2026-10-30）
+    )  # 先并减号，再清点号（「km.--23」两样一起出现也认得，审查 2026-10-30）
     tail = re.sub(r"(?<=[mM])[.,]+(?=-?\d)", " ", tail)
     tail = re.sub(
         r"(?<=[\d.])[sSoOlI|]|[sSoOlI|](?=[\d.])|(?<=[-+\s])[lIO|](?=[\d.lIO|])",
@@ -115,7 +115,7 @@ def parse(lines, need_both=False):
         pre = raw.replace("：", ":").replace("_", " ").strip()
         line = _fix_numbers(pre)
         # 单位后面直接「.数字」：可能是多认的点，也可能是认丢的负号（分不清）。这一行做了记号，
-        # 两行都这样（或只有这一行）就不采用，免得 z 坐标符号反了（S2 审查 2026-10-31）
+        # 两行都这样（或只有这一行）就不采用，免得 z 坐标符号反了（审查 2026-10-31）
         dotted = bool(_DOT_SIGN.search(pre))
         m = POS.search(line)
         units = [m.group(u).lower() for u in ("u1", "u2", "u3")] if m else []
@@ -160,7 +160,7 @@ def parse(lines, need_both=False):
             # 只在不挨着数字的字母处截断：「-1B6」是数字认成了字母，截断会剩下 -1 凑够三个数（第 3 轮复审）
             rest = re.split(r"(?<![\d.,+-])[A-Za-z]", rest, 1)[0]
             nums = re.findall(r"[-+]?\d+(?:[.,]\d+)?", rest)
-            # 认不出的格子（#）或多出 / 少了数：这一行残缺，宁可不要（丢了负号转向提示就反了，S2 审查 2026-10-31）
+            # 认不出的格子（#）或多出 / 少了数：这一行残缺，宁可不要（丢了负号转向提示就反了，审查 2026-10-31）
             if len(nums) == 3 and not re.search(
                 r"[#A-Za-z]", rest
             ):  # 还剩字母 = 挨着数字的字母（数字认岔了）
@@ -183,7 +183,7 @@ def parse(lines, need_both=False):
         if m and not out["planet"]:
             out["planet"] = m.group("p").strip()
     # 两行星系坐标一致才采用。need_both=False（识别引擎那条老路）只有一行时也收，但要求数值像样；
-    # 字模这条路必须两行都完整读出来而且一致（Codex 2026-10-27 补审：只看一行，读错的数字会直接进导航）
+    # 字模这条路必须两行都完整读出来而且一致（2026-10-27 补审：只看一行，读错的数字会直接进导航）
     cand = None
     if sys_pos and root_pos:
         if all(abs(a - b) < 0.01 for a, b in zip(sys_pos, root_pos)) and not (
@@ -320,7 +320,7 @@ def _full_read(piece, screen_h=None):
     texts = [" ".join(t.text for t in ts) for ts in rows]
     info = parse(
         texts, need_both=True
-    )  # 实时位置：两行星系坐标都要读出来而且一致（Codex 2026-10-27 复审）
+    )  # 实时位置：两行星系坐标都要读出来而且一致（2026-10-27 复审）
     boxes = _need_boxes(rows, UPSCALE) if info["global"] else None
     cam = _cam_box(rows, UPSCALE)
     _layout.update(at=time.time(), boxes=boxes, cam=cam)
@@ -380,13 +380,13 @@ _LOST_SIGN = re.compile(
 
 def grid_text(t):
     """字模认出的一行 → 给 parse 的文字：数字旁边认不出的格子（?）写成 #，让这个坐标解析失败（以前当空格删掉，
-    「?2462326.4853km」会变成少一位的坐标，Codex 2026-10-27 补审）；别处的 ? 多半是邻格漏进来的墨，当空格。
+    「?2462326.4853km」会变成少一位的坐标，2026-10-27 补审）；别处的 ? 多半是邻格漏进来的墨，当空格。
     负号只有一小横，字模有时把它当空格丢掉，两行会一起丢、照样「一致」：Pos: 后面出现双空格接数字就作废这一帧（2026-10-30）"""
     t = _NUM_Q.sub("#", t).replace("?", " ")
     c = t.find("CamDir:")
     if (
         c >= 0
-    ):  # CamDir 三个数也是一个空格隔开：双空格接数字 = 负号丢了（S2 审查 2026-10-31）
+    ):  # CamDir 三个数也是一个空格隔开：双空格接数字 = 负号丢了（审查 2026-10-31）
         f = t.find("FOV", c)
         f = len(t) if f < 0 else f
         t = t[:c] + _CAM_LOST_SIGN.sub(" #", t[c:f]) + t[f:]
@@ -654,7 +654,7 @@ def read(img=None, allow_yield=True):
 
 class Reader:
     """导航/位置用：定时读右上角，有新坐标就返回；读不到（没开 r_DisplayInfo）就慢慢试。
-    后台位置线程和采矿扫描线程都会调 poll：整个读取加锁，同一时间只读一次，旧帧不会盖掉新帧（Codex 2026-10-27 补审）"""
+    后台位置线程和采矿扫描线程都会调 poll：整个读取加锁，同一时间只读一次，旧帧不会盖掉新帧（2026-10-27 补审）"""
 
     def __init__(self, every=1.0):
         import threading

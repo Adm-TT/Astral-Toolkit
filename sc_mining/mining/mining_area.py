@@ -128,7 +128,7 @@ def area(g, system, body=None, ground=None, location="", zone=""):
             hit = _pyro_spot(g)
             if (
                 hit is _KNOWN_SPOT_NO_TABLE
-            ):  # 在挖矿点附近、但这里的石头表缺了：不知道刷什么，不能说「不刷」（Codex 2026-10-27）
+            ):  # 在挖矿点附近、但这里的石头表缺了：不知道刷什么，不能说「不刷」（审查 2026-10-27）
                 return None
             if hit is not None:
                 return hit
@@ -145,7 +145,7 @@ def area(g, system, body=None, ground=None, location="", zone=""):
             ]
             if (
                 not spots and not clusters
-            ):  # 旧星图、没有挖矿点数据：不知道星团在哪，不能说「不刷」（Codex 2026-10-27 补审）
+            ):  # 旧星图、没有挖矿点数据：不知道星团在哪，不能说「不刷」（2026-10-27 补审）
                 return None
             for p in clusters:
                 if math.dist(g, (p["x"], p["y"], p["z"])) <= CLUSTER_KM * 1000:

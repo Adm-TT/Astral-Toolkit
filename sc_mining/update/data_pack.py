@@ -125,7 +125,7 @@ def parse(raw):
 
 
 def fetch(timeout=8):
-    """读 data.json：几处同时问，取版本最新的一份（Codex 2026-10-27）。(info, None) 或 (None, 原因)"""
+    """读 data.json：几处同时问，取版本最新的一份（审查 2026-10-27）。(info, None) 或 (None, 原因)"""
     errs, best = [], None
     for where, raw in U._fetch_all(manifest_urls(), timeout):
         try:
@@ -231,7 +231,7 @@ def clear_caches():
 def install(zip_path, info=None):
     """把数据包里列在 FILES 的文件装进 data/（先全部解到临时目录、检查是合法 JSON，再逐个替换）。返回装了几个。
     每个文件记一行账（原来有没有、备份在哪、换上没）；中途出错按账本回退：原来有的换回备份，原来没有的删掉；
-    回退也没成的文件，备份留在临时目录里不删、报错时写明路径（老大审查 2026-10-28 第 4 条）"""
+    回退也没成的文件，备份留在临时目录里不删、报错时写明路径（审查 2026-10-28 第 4 条）"""
     tmp = Path(tempfile.mkdtemp(prefix="at_data_"))
     keep = False
     try:
@@ -363,7 +363,7 @@ def update(progress=print):
     cur = local_version()
     if (
         cur and cur > info["version"]
-    ):  # 网上的比本地还旧：掉落整包也别跟着退回去（Codex 2026-10-27）
+    ):  # 网上的比本地还旧：掉落整包也别跟着退回去（审查 2026-10-27）
         progress(f"数据已是最新（数据包 {cur}）")
         return True
     if cur and cur == info["version"]:

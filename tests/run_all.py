@@ -25,7 +25,7 @@ _nav.LAST = _cel.LAST = (
 )  # locate(record=True) 记的最近位置也一样（2026-10-28 审查：以前写进真实 userdata）
 _nav.WAYPOINTS = _wp.WAYPOINTS = (
     _tmp / "waypoints.json"
-)  # 读路标的测试别读到老大的真实路标
+)  # 读路标的测试别读到本机的真实路标
 from sc_mining.core import paths as _paths  # noqa: E402
 
 _OLD_USER = _paths.USER

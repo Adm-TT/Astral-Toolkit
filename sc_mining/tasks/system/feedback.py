@@ -23,7 +23,7 @@ def _fb_dir():
 
 def _scrub(text):
     """反馈包里的文字去掉个人信息：AT、数据、userdata、用户主目录、临时文件夹换成占位符，别的 C:\\Users\\<名字> 也抹掉，
-    网址里的口令（#t= / ?token= / X-Token）换掉。S5 审查 2026-10-31：日志尾巴原样进反馈包、默认自动上传，会带出 Windows 用户名"""
+    网址里的口令（#t= / ?token= / X-Token）换掉。审查 2026-10-31：日志尾巴原样进反馈包、默认自动上传，会带出 Windows 用户名"""
     from ...core import paths
 
     forms = []

@@ -467,7 +467,7 @@ def build():
         zh_desc = zh.get((r["desc_key"] or "@")[1:].lower(), "")
         mp = r.get("mfr_path") or (
             "prefix:" + r["cn"].split("_", 1)[0].lower()
-        )  # 没填厂商的按类名前缀推，键要带前缀（老大审查 2026-10-28）
+        )  # 没填厂商的按类名前缀推，键要带前缀（审查 2026-10-28）
         if mp not in mfr_cache:
             mfr_cache[mp] = manufacturer(
                 loc,

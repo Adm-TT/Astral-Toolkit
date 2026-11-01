@@ -460,7 +460,7 @@ def _digit_context(out, sc_of, SK, keys):
                         out[j], sc_of[j] = (
                             "?",
                             sc,
-                        )  # 挑出来的数字也不像：不硬猜（Codex 2026-10-27 补审）
+                        )  # 挑出来的数字也不像：不硬猜（2026-10-27 补审）
                     else:
                         out[j], sc_of[j] = keys[k], sc
             seg = []
@@ -585,7 +585,7 @@ class Glyphs:
             return cls._from_font(grid, tm)
         finally:
             # 高清大图只在画字模时用：画完就放掉（字模已经在 g 里、也存了文件）。
-            # 以前一直留着，1440p 约一百多 MB、4K 三百多 MB 常驻（S2 审查 2026-10-31）
+            # 以前一直留着，1440p 约一百多 MB、4K 三百多 MB 常驻（审查 2026-10-31）
             _HIRES.clear()
 
     @classmethod
@@ -745,7 +745,7 @@ def ready(h):
 
 def note(ok):
     """读完一次告诉这里字模好不好用：字模读不出、识别引擎却读得出，连续 GRID_FAILS 次就扔掉这套字模马上重画
-    （改了游戏缩放 / 分辨率后旧字模会一直失效，以前不会重画，只会每 0.2 秒退回识别引擎占 CPU，Codex 2026-10-27 补审）"""
+    （改了游戏缩放 / 分辨率后旧字模会一直失效，以前不会重画，只会每 0.2 秒退回识别引擎占 CPU，2026-10-27 补审）"""
     if ok:
         _state["fails"] = 0
         return

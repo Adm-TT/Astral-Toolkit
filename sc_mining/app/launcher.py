@@ -1,4 +1,4 @@
-"""打开 AT 窗口（从 server.py 拆出来，2026-10-31 控制台指令第 1 批）：有外壳 ATShell 用外壳，没有或打不开用 Edge 应用窗口；退出时一起关掉"""
+"""打开 AT 窗口（从 server.py 拆出来，2026-10-31 整改第 1 批）：有外壳 ATShell 用外壳，没有或打不开用 Edge 应用窗口；退出时一起关掉"""
 
 import os
 import subprocess

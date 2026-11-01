@@ -620,7 +620,7 @@ def test_city_leg_orbital_station(monkeypatch, tmp_path):
 
 
 def test_showlocation_only_waits_for_player(monkeypatch):
-    """AT 不替玩家打字（控制台指令第 4 批）：showlocation 只等剪贴板出现新坐标；同一时间只等一份"""
+    """AT 不替玩家打字（整改第 4 批）：showlocation 只等剪贴板出现新坐标；同一时间只等一份"""
     import threading
     from sc_mining.navigation import navigate as n
     from sc_mining.system import showloc
@@ -654,7 +654,7 @@ def test_showlocation_only_waits_for_player(monkeypatch):
 
 
 def test_no_synthetic_input_in_nav_files():
-    """导航负责的文件里不能有合成输入（控制台指令第 4 批）"""
+    """导航负责的文件里不能有合成输入（整改第 4 批）"""
     import re
     from pathlib import Path
 
@@ -681,7 +681,7 @@ def test_no_synthetic_input_in_nav_files():
 
 
 def test_browser_page_titled_star_citizen_is_not_game(monkeypatch):
-    """标题以「Star Citizen」开头的浏览器窗口不是游戏：读得到进程名就以进程名为准（S2 审查 2026-10-31）"""
+    """标题以「Star Citizen」开头的浏览器窗口不是游戏：读得到进程名就以进程名为准（审查 2026-10-31）"""
     from sc_mining.system import showloc
 
     if not showloc.WIN:
@@ -700,7 +700,7 @@ def test_browser_page_titled_star_citizen_is_not_game(monkeypatch):
 
 
 def test_space_guide_uses_top_right_hints(monkeypatch):
-    """太空导航定星系带上右上角线索（不再只按最近星球猜）；不给就用位置线程登记的来源（S2 审查 2026-10-31）"""
+    """太空导航定星系带上右上角线索（不再只按最近星球猜）；不给就用位置线程登记的来源（审查 2026-10-31）"""
     from sc_mining.navigation import navigate as n
 
     seen = []
@@ -725,7 +725,7 @@ def test_space_guide_uses_top_right_hints(monkeypatch):
 
 
 def test_ore_go_name_clash_and_recorded_system(monkeypatch):
-    """原矿「去这里」：同一分钟同种矿不撞名；用记录时定下的星系（S2 审查 2026-10-31）"""
+    """原矿「去这里」：同一分钟同种矿不撞名；用记录时定下的星系（审查 2026-10-31）"""
     from sc_mining.tasks import navigation as t_nav
     from sc_mining.mining import ore_log
 
@@ -754,7 +754,7 @@ def test_ore_go_name_clash_and_recorded_system(monkeypatch):
 
 
 def test_here_hints_only_for_where_you_are(monkeypatch):
-    """右上角线索只用在「坐标就是你现在的位置」时：粘贴的远处坐标不套用当前星系（S2 审查 2026-10-31）"""
+    """右上角线索只用在「坐标就是你现在的位置」时：粘贴的远处坐标不套用当前星系（审查 2026-10-31）"""
     from sc_mining.tasks import navigation as t_nav
 
     pos = type("P", (), {})()
@@ -768,7 +768,7 @@ def test_here_hints_only_for_where_you_are(monkeypatch):
 
 
 def test_here_watch_save_error_is_reported(monkeypatch):
-    """「用当前位置新建」存路标出错：悬浮窗提示、写日志，线程不悄悄退出（S2 审查 2026-10-31）"""
+    """「用当前位置新建」存路标出错：悬浮窗提示、写日志，线程不悄悄退出（审查 2026-10-31）"""
     import time as _t
     from sc_mining.tasks import navigation as t_nav
     from sc_mining.navigation import navigate as n
@@ -795,7 +795,7 @@ def test_here_watch_save_error_is_reported(monkeypatch):
 
 
 def test_nav_log_has_no_user_folder():
-    """nav_log.txt 会进反馈包：用户目录换成 ~（S2 审查 2026-10-31）"""
+    """nav_log.txt 会进反馈包：用户目录换成 ~（审查 2026-10-31）"""
     from sc_mining.tasks.navigation import _no_home
 
     s = _no_home(
@@ -806,7 +806,7 @@ def test_nav_log_has_no_user_folder():
 
 
 def test_last_position_written_at_most_every_30s(monkeypatch, tmp_path):
-    """last_position.json 最多 30 秒写一次、原子写（以前 0.2 秒一次，S2 审查 2026-10-31）"""
+    """last_position.json 最多 30 秒写一次、原子写（以前 0.2 秒一次，审查 2026-10-31）"""
     from sc_mining.navigation import navigate as n
 
     monkeypatch.setattr(n, "LAST", tmp_path / "last_position.json")
@@ -818,7 +818,7 @@ def test_last_position_written_at_most_every_30s(monkeypatch, tmp_path):
 
 
 def test_read_forward_returns_end_of_last_full_line(monkeypatch, tmp_path):
-    """分块读 Game.log：返回最后一个完整行的结尾，下次不重读半行（S2 审查 2026-10-31）"""
+    """分块读 Game.log：返回最后一个完整行的结尾，下次不重读半行（审查 2026-10-31）"""
     from sc_mining.navigation import position as P
 
     p = tmp_path / "Game.log"

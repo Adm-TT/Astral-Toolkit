@@ -355,7 +355,7 @@ def _read_forward(path, start, state):
                     state.feed(raw.decode("utf-8", "replace").strip())
             pos += (
                 cut + 1
-            )  # pos = block 第一个字节（即上一轮剩下的 rest）在文件里的位置；以前多减了 len(rest)（S2 审查 2026-10-31）
+            )  # pos = block 第一个字节（即上一轮剩下的 rest）在文件里的位置；以前多减了 len(rest)（审查 2026-10-31）
             rest = block[cut + 1 :]
     return pos
 

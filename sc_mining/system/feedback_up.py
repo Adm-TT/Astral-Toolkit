@@ -1,4 +1,4 @@
-"""问题反馈自动发给作者（2026-10-27 老大定：按了就自动发，设置页能关）。
+"""问题反馈自动发给作者（2026-10-27 负责人定：按了就自动发，设置页能关）。
 
 F10 / 「报告问题」存好的反馈文件夹 → 截图转成 JPG 重新打包（29 MB 左右 → 两三 MB）→ POST 到 AT 服务器。
 发成功写 .sent；没发成的留 .pending，下次启动再发。服务器只收 zip、≤20 MB、每个 IP 每分钟 6 次。
@@ -122,7 +122,7 @@ def _send(d, kind):
     with _lock:
         if (d / ".sent").exists():
             return True, "已发送", False
-        if not enabled():  # 玩家刚关掉自动发送：排着队的也不发（Codex 2026-10-27）
+        if not enabled():  # 玩家刚关掉自动发送：排着队的也不发（审查 2026-10-27）
             return False, "自动发送已关闭", False
         if not d.is_dir():
             return False, "反馈已删除", False

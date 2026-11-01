@@ -62,7 +62,7 @@ var
 
 procedure ShowProgress(const Msg: String; Marquee: Boolean);
 begin
-  // 进度小窗口（2026-10-27 老大要「安装程序显示进度」）：老版在线升级是静默运行的，以前下载 150 MB 时屏幕上什么都没有
+  // 进度小窗口（2026-10-27 负责人要「安装程序显示进度」）：老版在线升级是静默运行的，以前下载 150 MB 时屏幕上什么都没有
   if ProgForm = nil then
   begin
     ProgForm := CreateCustomForm(ScaleX(420), ScaleY(96), False, False);
@@ -239,7 +239,7 @@ var
 begin
   Result := True;
   // 老版 data 里下载来的东西（汉化包 loc、掉落明细、scmdb 原始数据）不在安装包里，卸老版会一起删：先复制到新位置
-  //（2026-10-27 在老大电脑上发现升级完「汉化包：未下载」）。安装包自带的那些新版第一次启动会用自带的覆盖
+  //（2026-10-27 实测发现升级完「汉化包：未下载」）。安装包自带的那些新版第一次启动会用自带的覆盖
   if not DirExists(OldDir() + '\data') then
     exit;
   // robocopy 返回 0–7 是成功（有没有复制、有没有多出的文件），8 以上是有文件没复制成（二审 2026-10-27）
