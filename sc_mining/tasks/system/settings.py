@@ -136,8 +136,26 @@ def set_settings(**kw):
 def update_data():
     from ...run import update
 
+    try:
+        from ...core import run_records
+
+        run_records.record("UPDATE", "开始更新数据", ui_tag="UPDATE")
+    except Exception:
+        pass
+
+    def _wrap():
+        try:
+            return update()
+        finally:
+            try:
+                from ...core import run_records
+
+                run_records.record("UPDATE", "更新数据结束", ui_tag="UPDATE")
+            except Exception:
+                pass
+
     if (
-        bus.run_task_once("update", update, title="更新数据") is None
+        bus.run_task_once("update", _wrap, title="更新数据") is None
     ):  # 已经在更新：不再起第二份
         return {"started": False, "running": True}
     return {"started": True}
