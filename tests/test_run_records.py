@@ -82,7 +82,7 @@ def test_path_for_default_today(monkeypatch, tmp_path):
 def test_perfmon_start_off_by_default(monkeypatch):
     from sc_mining.core import perfmon
 
-    monkeypatch.delenv("DUBHE_PERFMON", raising=False)
+    monkeypatch.setenv("DUBHE_PERFMON", "0")  # 非 1 即不启动
     m = perfmon.Monitor()
     m.start()
     assert m.thread is None
