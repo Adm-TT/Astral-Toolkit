@@ -74,6 +74,11 @@ def main(open_ui=True, port=0, restart=False):
     _sys_task.start_background()  # = EngineManager.get_instance().start_all()
     print(f"AT 已启动（端口 {server.server_address[1]}）")
     try:
+        from ..core import audit
+        audit.record("SYSTEM", "服务启动", f"端口 {server.server_address[1]}", tag="LOCAL_SERVER")
+    except Exception:
+        pass
+    try:
         from ..core import paths
 
         (paths.USER / "window_url.txt").write_text(url, encoding="utf-8")

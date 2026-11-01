@@ -345,6 +345,14 @@ def _hover_log(crop, tokens, name, note=""):
             f.write(
                 f"{time.strftime('%F %T')} 名字={name} {note} 文字={[k.text for k in tokens][:40]}\n"
             )
+        try:
+            from ..core import audit
+
+            audit.record(
+                "ITEM_SEARCH", "F8识图查询", f"目标: {name} | {note}", tag="READ_SCREEN"
+            )
+        except Exception:
+            pass
         for old in sorted(d.glob("*.*"), key=lambda p: p.stat().st_mtime)[
             :-20
         ]:  # 按时间留最新的（以前按名字排，过了午夜把最新的删了）

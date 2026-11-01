@@ -225,6 +225,14 @@ def nav_plan(key=""):
     p = _places.get(key)
     if not p:
         return {"error": "未找到此地点，需重新搜索"}
+    try:
+        from ..core import audit
+
+        audit.record(
+            "NAV", "路线规划", f"目标: {key} ({p.get('name', '')})", tag="OFFLINE_CALC"
+        )
+    except Exception:
+        pass
     data = load()
     if p.get("space"):
         from ..navigation.navigate import space_landmarks
@@ -289,6 +297,14 @@ def nav_start(key=""):
     p = _places.get(key)
     if not p:
         return {"error": "未找到此地点，需重新搜索"}
+    try:
+        from ..core import audit
+
+        audit.record(
+            "NAV", "开始导航", f"目标: {key} ({p.get('name', '')})", tag="OFFLINE_CALC"
+        )
+    except Exception:
+        pass
     _nav.start(p)
     return {"ok": True}
 
@@ -686,6 +702,14 @@ def _take_here_name():
 def _saved(name, desc):
     _note_hud("路标", f"📍 已保存：{name}\n{desc}", 6)
     bus.publish("waypoints", {"changed": True})
+    try:
+        from ..core import audit
+
+        audit.record(
+            "WAYPOINT", "保存路标", f"名称: {name} | {desc}", tag="USER_CLIPBOARD"
+        )
+    except Exception:
+        pass
 
 
 def _start_here_watch():

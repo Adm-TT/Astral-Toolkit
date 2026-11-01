@@ -166,17 +166,6 @@ def _cmdline(pid):
         ctypes.windll.kernel32.CloseHandle(h)
 
 
-def _tree(root, kids):
-    todo, seen = [root], set()
-    while todo:
-        pid = todo.pop()
-        if pid in seen:
-            continue
-        seen.add(pid)
-        todo += kids.get(pid, [])
-    return seen
-
-
 def _groups():
     """{名字: [pid…]}：天枢自己、窗口（用天枢自己那个 Edge 配置文件夹的 Edge 进程）"""
     me = os.getpid()
@@ -209,6 +198,9 @@ class Monitor:
         self.prev = {}
 
     def start(self):
+        # 默认不启动全系统进程快照轮询；仅在显式设置 DUBHE_PERFMON=1 时开启
+        if os.environ.get("DUBHE_PERFMON") != "1":
+            return
         if not self.thread:
             self.thread = threading.Thread(
                 target=self._run, daemon=True, name="perfmon"

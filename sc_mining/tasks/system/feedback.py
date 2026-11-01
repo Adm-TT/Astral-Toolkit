@@ -163,6 +163,17 @@ def feedback_report(kind="auto", note="", img=None):
                 )  # 抹掉用户名、口令再进反馈包
             except OSError:
                 pass
+    today_audit = paths.LOGS / f"audit_{time.strftime('%Y-%m-%d')}.log"
+    if today_audit.exists():
+        try:
+            lines = today_audit.read_text(
+                encoding="utf-8", errors="replace"
+            ).splitlines()[-150:]
+            (d / today_audit.name).write_text(
+                _scrub("\n".join(lines)), encoding="utf-8"
+            )
+        except OSError:
+            pass
     (d / "说明.txt").write_text(
         f"AT 问题反馈 {info['time']}（{kind}）\n{note or '（无备注）'}\n\n"
         "屏幕.png = 按下反馈键时的截图；live_*.png = 采矿助手最近几帧；情况.json = 当时的识别文字和显示结果。\n"

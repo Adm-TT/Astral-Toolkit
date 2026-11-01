@@ -267,6 +267,13 @@ class _Live:
         from ...mining import screen
         from ...mining.signals import find_signatures, describe_all, match_signature
 
+        try:
+            from ...core import audit
+
+            audit.record("MINING", "采矿助手引擎启动", tag="READ_SCREEN")
+        except Exception:
+            pass
+
         ev = ev or self.stop_ev
         alive = lambda: not ev.is_set()  # 只看本会话的开关  # noqa: E731
         shots = paths.shots("live")

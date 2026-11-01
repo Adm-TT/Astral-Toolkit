@@ -217,8 +217,12 @@ def export_logs():
     files = 0
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         for p in (
-            sorted(paths.LOGS.glob("*.txt*")) if paths.LOGS.exists() else []
-        ):  # 含轮换下来的 .txt.old
+            sorted(
+                set(paths.LOGS.glob("*.txt*")).union(paths.LOGS.glob("*.log*"))
+            )
+            if paths.LOGS.exists()
+            else []
+        ):  # 含轮换下来的 .txt.old 与按日保存的证据日志 .log
             z.write(p, f"logs/{p.name}")
             files += 1
         for name in ("settings.json", "goals.json"):

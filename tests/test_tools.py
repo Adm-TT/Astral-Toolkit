@@ -1458,7 +1458,6 @@ def test_perf_log_line_format():
         and "窗口(Edge)" in line
         and "识别" in line
     )
-    assert perfmon._tree(1, {1: [2, 3], 3: [4]}) == {1, 2, 3, 4}
 
 
 def test_displayinfo_local_cross_checked_with_campos():
