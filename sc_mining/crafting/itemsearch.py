@@ -13,7 +13,6 @@
 - 英文：完全一样 > 开头对得上 > 包含 > 每个词都有（顺序不限）
 """
 
-import json
 import re
 import unicodedata
 
@@ -65,117 +64,60 @@ def warm_up():
     threading.Thread(target=run, daemon=True, name="search-warmup").start()
 
 
+def _empty_index():
+    return {"rows": [], "by_char": {}, "by_tri": {}, "by_en": {}}
+
+
 def _build_locked():
-    from . import loot
-    from ..core.i18n import gear_zh_of_item
-    from ..trade import names
+    """从游戏数据层的物品目录建内存索引（合并规则在 gamedata/_import.import_items，和以前这里的一样）；
+    缓存键是库的内容版本：五份源（商店、掉落、汉化、旧写法、wiki）哪份变了都会重建"""
+    from .. import gamedata
+    from ..gamedata import items as gd_items
 
-    data = shops.load(auto_update=False)
-    idx = loot.load_index(False) or {}
-    table = names.table()
-    from ..core.paths import DATA as _D, file_stamp
-
-    key = (
-        file_stamp(_D / "shops.json"),
-        file_stamp(_D / "loot_index.json"),
-        file_stamp(_D / "zh_names.json"),
-        id(table),
-    )  # 地址会被复用（细查 2026-10-28）
-    if _cache["key"] == key:
-        return _cache["index"]
-    by_en, rows = {}, []
-
-    def entry(en):
-        ek = en_key(en)
-        if not ek:
-            return None
-        e = by_en.get(ek)
-        if e is None:
-            e = by_en[ek] = {
-                "en": en.replace("\xa0", " "),
-                "ek": ek,
-                "zh": "",
-                "zh_loot": "",
-                "zks": set(),
-                "shop": None,
-                "cat": "",
-                "loot": False,
-                "loc": False,
-            }
-            rows.append(e)
-        return e
-
-    for iid, (en, cat) in (data.get("items") or {}).items():
-        e = entry(en)
-        if e and e["shop"] is None:
-            e["shop"], e["cat"] = int(iid), cat or ""
-    for r in idx.get("rows") or []:
-        en, zh = r[1], r[5] or ""
-        if _has_cjk(en) and not _has_cjk(
-            zh
-        ):  # 掉落数据里个别中英文填反了（「DYL - 夹克 - 名称」）
-            en, zh = zh or en, en
-        if not _has_cjk(zh):  # 「PH - hdh_boots_01_01_13」这种占位名不算中文名
-            zh = ""
-        e = entry(en)
-        if e:
-            e["loot"] = True
-            if zh:
-                e["zh_loot"] = e["zh_loot"] or zh
-                e["zks"].add(zh_key(zh))
-    for zh, en in table.items():  # 汉化包（和游戏里看到的名字一样）
-        e = entry(en)
-        if e:
-            e["loc"] = True
-            e["zh"] = e["zh"] or zh
-            e["zks"].add(zh_key(zh))
-    for w in wiki_items():  # 英文 wiki 的物品清单（1.6.48）：只补别处都没有的英文名，带类型 / 尺寸 / 描述；中文名只信汉化包
-        e = entry(w["n"])
-        if e:
-            e.setdefault("wiki", True)
-            e["wtype"], e["wsize"], e["desc"] = (
-                w.get("t") or "",
-                w.get("s"),
-                w.get("d") or "",
-            )
-    aliases = {}  # 汉化包里写错 / 过时的英文（1.6.49，localization.rebuild 写的 name_aliases.json）：搜旧写法也能找到正名
     try:
-        from ..core.paths import DATA
-
-        aliases = json.loads((DATA / "name_aliases.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        pass
-    for old, real in aliases.items():
-        e = by_en.get(en_key(real))
-        if e and en_key(old) not in by_en:
-            e.setdefault("aka", []).append(old)
-    # 只有汉化包里有、中文名又和一件有数据的物品一样的：是同一件东西的另一种英文写法（「劳森采矿激光器」→ Lawson），不单列
-    taken = {k for e in rows if e["shop"] is not None or e["loot"] for k in e["zks"]}
-    rows = [
-        e for e in rows if e["shop"] is not None or e["loot"] or not (e["zks"] & taken)
-    ]
-    rows = [
-        e
-        for e in rows
-        if e["shop"] is not None or e["loot"] or e["loc"] or not _wiki_noise(e)
-    ]
+        gamedata.ensure()
+        with gamedata.snapshot() as snap:
+            key = (snap.data_version,)
+            if _cache["key"] == key:
+                return _cache["index"]
+            items = gd_items.all(snap)
+            zks_of = gd_items.zh_keys_of_all(snap)
+            names = gd_items.names_by_kind(("zh_loot", "aka"), snap)
+            shop_of = gd_items.first_source_ids("uex", snap)
+    except gamedata.GamedataError:
+        return (
+            _empty_index()
+        )  # 库建不出来：和以前没有数据文件一样，搜不到东西，不报错（不缓存，下次再试）
+    rows = []
+    for it in items:
+        e = {
+            "en": it.en,
+            "ek": it.item_id,
+            "zh": it.zh,
+            "zh_loot": next(
+                (n for k, n, _m in names.get(it.item_id, ()) if k == "zh_loot"), ""
+            ),
+            "zks": zks_of.get(it.item_id, ()),
+            "shop": int(shop_of[it.item_id]) if it.item_id in shop_of else None,
+            "cat": it.cat,
+            "loot": it.has_loot,
+            "loc": it.loc,
+        }
+        if it.wiki:  # 以前只有对上 wiki 清单的才有这几个键
+            e.update(wiki=True, wtype=it.wtype, wsize=it.wsize, desc=it.desc)
+        aka = [n for k, n, _m in names.get(it.item_id, ()) if k == "aka"]
+        if aka:
+            e["aka"] = aka
+        e["zlen"] = it.zlen
+        e["variant"] = it.variant
+        e["has_data"] = e["shop"] is not None or e["loot"]
+        rows.append(e)
     by_en = {e["ek"]: e for e in rows}
     for e in rows:
         for old in e.get("aka") or []:
             by_en.setdefault(en_key(old), e)
     by_char, by_tri = {}, {}
     for i, e in enumerate(rows):
-        e["zh"] = e["zh"] or e["zh_loot"]
-        gz = gear_zh_of_item(
-            e["en"]
-        )  # 采矿装备：中文写不带型号的名字（霍夫斯泰德），中文也搜得到（2026-10-26）
-        if gz:
-            e["zh"] = gz
-            e["zks"] = tuple(dict.fromkeys((*e["zks"], zh_key(gz))))
-        e["zks"] = tuple(k for k in e["zks"] if k)
-        e["zlen"] = min((len(k) for k in e["zks"]), default=99)
-        e["variant"] = _variant(e["en"], e["zh"])
-        e["has_data"] = e["shop"] is not None or e["loot"]
         for c in set("".join(e["zks"])):
             by_char.setdefault(c, set()).add(i)
         for t in _trigrams(e["ek"]):
@@ -188,8 +130,31 @@ def _build_locked():
     return index
 
 
+def _on_data_changed():
+    """data_pack.clear_caches() 调（数据文件换了之后）：汉化包重建（zh_names / name_aliases）、掉落索引更新这几处
+    还没经过 gamedata.updating() 写文件，库不会自己重建，索引按库的内容版本缓存就会一直是旧的——这里补建一次库
+    （源没变就是空操作）。过渡代码：等 GD-B4（汉化 / 掉落）把 localization.rebuild、loot.update 的写入套进 updating()
+    之后，由 GD-B4 删掉这个钩子和下面的登记（审查 2026-11-02 第 2 条；控制台复审第 7 条：登记在队首，先补库再让别的钩子重填缓存）"""
+    from .. import gamedata
+
+    try:
+        gamedata.rebuild()
+    except Exception:  # noqa: BLE001 —— 清缓存的钩子不能让更新流程报失败；建不出来下次查询再试
+        pass
+
+
+try:
+    from ..update.data_pack import CACHE_HOOKS as _CACHE_HOOKS
+
+    _CACHE_HOOKS.insert(
+        0, _on_data_changed
+    )  # 排最前：先补建库，后面 goals 等钩子重填缓存时读到的才是新库
+except Exception:  # noqa: BLE001 —— 和 tasks/goals.py 登记钩子的写法一样
+    pass
+
+
 def wiki_items():
-    """data/wiki_items.json：star-citizen.wiki（游戏解包）的物品清单 [{n, t, s, mfr}]；没有这份数据就是空的"""
+    """data/wiki_items.json：star-citizen.wiki 的物品清单 [{n, t, s, mfr}]；没有这份数据就是空的"""
     from ..core.paths import DATA, cached_json
 
     return cached_json(DATA / "wiki_items.json", lambda d: d.get("items") or [], [])

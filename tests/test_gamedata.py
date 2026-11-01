@@ -315,14 +315,19 @@ def test_version_outside_snapshot_follows_manifest(monkeypatch, tmp_path):
 def test_snapshot_connection_is_readonly(monkeypatch, tmp_path):
     import sqlite3
 
-    from sc_mining.gamedata import snapshot
+    from sc_mining.gamedata import GamedataUnavailable, snapshot
     from tests.minipytest import raises
 
     _data_root(monkeypatch, tmp_path)
     _make_db(tmp_path, "g1", "v1")
     with snapshot() as s:
-        with raises(sqlite3.OperationalError):
+        with raises(
+            GamedataUnavailable
+        ) as got:  # sqlite 错误统一包成 GamedataUnavailable（复审第 10 条）
             s.execute("insert into meta values ('x', 'y')")
+    assert got.value is not None and isinstance(
+        got.value.__cause__, sqlite3.OperationalError
+    )
 
 
 # ---------------------------------------------------------------- Task 5：导入与建库
@@ -681,6 +686,9 @@ def test_data_pack_clear_caches_calls_refresh(monkeypatch):
 
     called = []
     monkeypatch.setattr(G, "refresh", lambda: called.append(1))
+    monkeypatch.setattr(
+        G, "rebuild", lambda: None
+    )  # CACHE_HOOKS 里 itemsearch 的钩子会补建库：不碰真实 data/
     data_pack.clear_caches()
     assert called == [1]
 

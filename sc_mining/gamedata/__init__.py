@@ -8,6 +8,7 @@
   snapshot()     一次业务操作钉在一个版本上
   rebuild()      按需重建（阻塞，放工作线程）
   ensure_ready() 启动用：按需重建 + 清旧代
+  ensure()       查询前用：库没好就等后台 warm_up，再不行就同步建一次（topic 内部调）
   warm_up()      后台线程跑 ensure_ready()，失败只记 last_error()
   refresh()      数据文件换了之后调：关掉本线程连接，下次快照重读清单
   updating()     改源文件的边界：拿写锁，最外层退出时重建一次
@@ -17,10 +18,12 @@ import threading
 from contextlib import contextmanager
 from typing import Iterator
 
-from . import _build, _db
+from . import _build, _db, items, prices, shops
 from ._db import current_version as version, snapshot
 from ._lock import write_lock
 from ._manifest import Manifest
+from . import _ready
+from ._ready import ensure
 from ._types import (
     BuildError,
     GamedataError,
@@ -44,23 +47,29 @@ __all__ = [
     "ShopDistance",
     "ShopRow",
     "Vec3",
+    "ensure",
     "ensure_ready",
+    "items",
     "last_error",
+    "prices",
     "rebuild",
     "refresh",
+    "shops",
     "snapshot",
     "updating",
     "version",
     "warm_up",
 ]
 
-_state: dict = {"last_error": None}
+_state: dict = {"last_error": None, "warm_thread": None}
 _tls = threading.local()
 
 
 def rebuild(force: bool = False) -> Manifest:
     """源没变就返回当前清单；变了建新代并发布。阻塞几百毫秒到几秒，别在界面线程调"""
-    return _build.rebuild_if_needed(force=force)
+    m = _build.rebuild_if_needed(force=force)
+    _ready.forget_failure()
+    return m
 
 
 def ensure_ready() -> Manifest:
@@ -86,6 +95,7 @@ def warm_up() -> threading.Thread:
             _state["last_error"] = f"游戏数据库没建好：{e}"
 
     t = threading.Thread(target=run, daemon=True, name="gamedata-warmup")
+    _state["warm_thread"] = t  # ensure() 看到它在跑就等它，不自己再建一遍
     t.start()
     return t
 
@@ -93,6 +103,7 @@ def warm_up() -> threading.Thread:
 def refresh() -> None:
     """数据文件换了：关掉本线程的连接缓存，下次 snapshot() 重读清单。快照进行中不动"""
     _db.close_thread_connections()
+    _ready.forget_failure()  # 源可能刚换好：建库失败的退避不再算数
 
 
 @contextmanager
@@ -108,6 +119,7 @@ def updating() -> Iterator[None]:
                 try:
                     _build.rebuild_if_needed()
                     _state["last_error"] = None
+                    _ready.forget_failure()
                 except Exception as e:  # noqa: BLE001 —— 源已经写好了，建库失败只记录，不让更新流程报失败
                     _state["last_error"] = (
                         f"数据已更新，但游戏数据库重建失败，仍在用旧数据：{e}"

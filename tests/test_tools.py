@@ -248,7 +248,34 @@ def test_unrelated_search_results_dropped(tmp_path):
 # ======================================================================
 
 
-def fake_shops(monkeypatch):
+def _shops_db(monkeypatch, tmp_path, data):
+    """商店查询走游戏数据层（批 1）：把假商店表写成 shops.json、在临时目录建库，只把库目录指过去；
+    paths.DATA 不动（别的数据照旧读真实 data/）。shops._data 也照旧换掉，给还在用 load() 的地方"""
+    from sc_mining import gamedata
+    from sc_mining.core import paths
+    from sc_mining.gamedata import _build, _paths, _ready
+
+    src = tmp_path / "gamedata_src"
+    src.mkdir(exist_ok=True)
+    (src / "shops.json").write_text(
+        json.dumps(data, ensure_ascii=False), encoding="utf-8"
+    )
+    monkeypatch.setattr(_paths, "gamedata_dir", lambda: src / "gamedata")
+    monkeypatch.setattr(
+        _build, "gamedata_dir", lambda: src / "gamedata"
+    )  # _build 在 import 时绑了名字：清理旧库的 glob 不能扫到真实 data/gamedata（控制台复审第 11 条）
+    monkeypatch.setattr(shops, "_data", data)
+    real = paths.DATA
+    paths.DATA = src  # 只在建库这一下读临时目录的源
+    try:
+        gamedata.rebuild()
+    finally:
+        paths.DATA = real
+    # 记成已核对：查询时 ensure() 会按 paths.DATA（真实 data/）的源核对，别拿真实源把临时库重建掉
+    monkeypatch.setattr(_ready, "_state", {"done": str(src / "gamedata")})
+
+
+def fake_shops(monkeypatch, tmp_path):
     data = {
         "fmt": shops.FMT,
         "fetched": time.time(),
@@ -283,11 +310,11 @@ def fake_shops(monkeypatch):
             ],
         ],
     }
-    monkeypatch.setattr(shops, "_data", data)
+    _shops_db(monkeypatch, tmp_path, data)
 
 
-def test_finder_cheapest_first(monkeypatch):
-    fake_shops(monkeypatch)
+def test_finder_cheapest_first(monkeypatch, tmp_path):
+    fake_shops(monkeypatch, tmp_path)
     assert shops.find("SureGrip S1")[0][0] == 1600
     buy, sell = shops.where(1600)
     assert buy[0][0] == 4500 and "Orison" in buy[0][2] and not sell
@@ -314,10 +341,10 @@ def test_wikelo_data_and_lookup():
     assert "× 50 个" in text and "可买：某店" in text
 
 
-def test_console_commands(monkeypatch):
+def test_console_commands(monkeypatch, tmp_path):
     if not wikelo.OUT.exists():
         pytest.skip("没有维科洛数据")
-    fake_shops(monkeypatch)
+    fake_shops(monkeypatch, tmp_path)
     out = []
     monkeypatch.setattr(
         "builtins.print", lambda *a, **k: out.append(" ".join(map(str, a)))
@@ -438,7 +465,7 @@ def setup(monkeypatch, tmp_path):
             ],
         ],
     }
-    monkeypatch.setattr(shops, "_data", data)
+    _shops_db(monkeypatch, tmp_path, data)
 
 
 def test_shop_point_and_nearest(monkeypatch, tmp_path):
@@ -536,6 +563,7 @@ def test_nearest_distinct_places_and_loot_grouping(monkeypatch, tmp_path):
             ["Stanton", "microTech", "", "", "", "New Babbage"],
         ]
     )
+    _shops_db(monkeypatch, tmp_path, shops._data)  # 加了一行：重建临时库
     near = shops.nearest(1700, dict(POINTS[3], label="", age=0), 3)
     assert (
         len({r[3] for r in near}) == 3 and near[0][2] == "Shop NB 2"
@@ -1641,10 +1669,14 @@ def test_update_log_reaches_window(monkeypatch):
     ):
         monkeypatch.setattr(m, n, lambda name=m.__name__: print(f"{name} ok"))
     from sc_mining.update import data_pack
+    import sc_mining.gamedata as G
 
     monkeypatch.setattr(
         data_pack, "update", lambda progress=print: None
     )  # 不联网：当作数据包下不到，走各数据网站
+    monkeypatch.setattr(
+        G, "rebuild", lambda: None
+    )  # 收尾 clear_caches 会补建游戏数据库：不碰真实 data/
     old = sys.stdout
     bus.install_router()
     try:
