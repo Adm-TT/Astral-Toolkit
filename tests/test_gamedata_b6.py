@@ -478,3 +478,134 @@ def test_names_does_not_read_json_or_call_loaders(monkeypatch, tmp_path):
     names._index.cache_clear()
     assert names.table()["医疗笔"] == "Medpen"
     assert names.canonical("", "Medpen") == ("医疗笔", "Medpen")
+
+
+# ---------------------------------------------------------------- Task 3：trade/gamekey
+
+
+def _legacy_gamekey_index(d):
+    """迁移前 trade/gamekey._index() 的函数体原样，wiki_items() 换成直接读 d/wiki_items.json"""
+    from sc_mining.trade.gamekey import _fold
+
+    rows = (_read(d, "wiki_items.json") or {}).get("items") or []
+    by_name = {}
+    for w in rows:
+        by_name.setdefault(_fold(w.get("n")), w)
+    uuid = {}
+    try:
+        for u, en, cls, *_ in _read(d, "loot_index.json").get("rows") or []:
+            uuid.setdefault((cls or "").lower(), u)
+    except (OSError, ValueError):
+        pass
+    alias = {}
+    try:
+        for old, new in (_read(d, "name_aliases.json") or {}).items():
+            alias[_fold(old)] = new
+    except (OSError, ValueError):
+        pass
+    return {"by_name": by_name, "uuid": uuid, "alias": alias}
+
+
+def _legacy_resolve(idx, name_en):
+    """迁移前 trade/gamekey.resolve() 的函数体原样"""
+    from sc_mining.trade.gamekey import _fold
+
+    k = _fold(name_en)
+    if not k:
+        return None
+    w = idx["by_name"].get(k) or idx["by_name"].get(_fold(idx["alias"].get(k, "")))
+    if not w or not w.get("cls"):
+        return None
+    cls = w["cls"].lower()
+    u = idx["uuid"].get(cls) or next(
+        (
+            idx["uuid"][a.lower()]
+            for a in w.get("alt") or []
+            if a.lower() in idx["uuid"]
+        ),
+        "",
+    )
+    return cls, u
+
+
+_GK_QUERIES = [
+    "Medpen",
+    "MEDPEN",
+    "Lawson Mining Laser",
+    "Lawson Mining Iaser",
+    "Some Paint",
+    "Medi Pen",
+    "Venture Arms",
+    "No Class Thing",
+    "",
+    "zzz",
+]
+
+
+def test_gamekey_resolve_equals_legacy_on_sample(monkeypatch, tmp_path):
+    from sc_mining.trade import gamekey
+
+    _b6(monkeypatch, tmp_path)
+    idx = _legacy_gamekey_index(tmp_path)
+    got = [gamekey.resolve(q) for q in _GK_QUERIES]
+    assert got == [_legacy_resolve(idx, q) for q in _GK_QUERIES]
+    assert got[:5] == [
+        ("medpen_01", "u1"),  # 同折叠名首个 wiki 行；同类名首个掉落行（G2、G4）
+        ("medpen_01", "u1"),
+        ("laser_s0", ""),
+        ("klein_s0", "u3"),
+        ("paint_01", ""),  # 涂装：物品目录丢掉的噪声行照样能解析（G3）
+    ]
+    assert got[7:] == [None, None, None]  # 没类名（G7）、空、对不上
+
+
+def test_gamekey_fold_does_not_merge_l_and_i(monkeypatch, tmp_path):
+    from sc_mining.trade import gamekey
+
+    _b6(monkeypatch, tmp_path)
+    assert gamekey.resolve("Lawson Mining Laser") == ("laser_s0", "")  # G1：不做 l→i
+    assert gamekey.resolve("Lawson Mining Iaser") == ("klein_s0", "u3")
+
+
+def test_gamekey_alias_last_wins_and_unfiltered(monkeypatch, tmp_path):
+    from sc_mining.trade import gamekey
+
+    _b6(monkeypatch, tmp_path)
+    assert gamekey.resolve("Medi Pen") == ("laser_s0", "")  # G5：同折叠旧写法后写覆盖
+    assert gamekey.resolve("Venture Arms") == (
+        "laser_s0",
+        "",
+    )  # 旧写法本身是商店物品也照收
+
+
+def test_gamekey_alt_class_fallback_in_order(monkeypatch, tmp_path):
+    from sc_mining.trade import gamekey
+
+    _b6(monkeypatch, tmp_path)
+    # klein_s0 掉落里没有 → alt 按顺序：nope_x 没有、klein_s0_b（掉落里是大写）有 → u3，不看后面的 medpen_01（G8）
+    assert gamekey.resolve("Lawson Mining Iaser") == ("klein_s0", "u3")
+
+
+def test_gamekey_none_when_db_unavailable(monkeypatch, tmp_path):
+    from sc_mining.core import paths
+    from sc_mining.trade import gamekey
+
+    _b6(monkeypatch, tmp_path)
+    monkeypatch.setattr(paths, "DATA", tmp_path / "empty")
+    assert gamekey.resolve("Medpen") is None  # G9：不往外抛
+    paths.DATA = tmp_path
+    assert gamekey.resolve("Medpen") == ("medpen_01", "u1")  # 失败没被缓存
+
+
+def test_gamekey_refreshes_after_alias_change(monkeypatch, tmp_path):
+    import sc_mining.gamedata as G
+    from sc_mining.trade import gamekey
+
+    _b6(monkeypatch, tmp_path)
+    assert gamekey.resolve("Zed Pen") is None
+    (tmp_path / "name_aliases.json").write_text(  # 只改这一份，wiki_items.json 不动
+        json.dumps({"Zed Pen": "Medpen"}), encoding="utf-8"
+    )
+    G.rebuild()  # 只改了旧写法：以前的索引只认 wiki_items 那份 list，不会刷新（G10，允许差异）
+    assert gamekey.resolve("Zed Pen") == ("medpen_01", "u1")
+    assert gamekey.resolve("Medi Pen") is None
