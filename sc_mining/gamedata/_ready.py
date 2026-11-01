@@ -1,7 +1,7 @@
 """首次查询前确保库已建好：库没好就等后台 warm_up；没在跑就自己同步建一次
 
-各 topic 查询前调 ensure()。进程里确认过一次库能用之后直接返回（以后换代由 snapshot() 读清单跟上），
-不在每次查询都开一次库校验。真的建不出库才抛 BuildError，不把「还没建好」抛给调用方。"""
+各 topic 查询前调 ensure()。进程里对同一个库目录确认过一次能用之后直接返回（以后换代由 snapshot() 读清单跟上），
+不在每次查询都开一次库校验；库目录换了（测试换 paths.DATA）就重新确认。真的建不出库才抛 BuildError。"""
 
 import threading
 from contextlib import contextmanager
@@ -12,7 +12,7 @@ from ._types import GamedataUnavailable
 if TYPE_CHECKING:
     from ._db import Snapshot
 
-_state: dict = {"done": False}
+_state: dict = {"done": None}  # 确认过能用的库目录
 _lock = threading.Lock()
 
 
@@ -29,7 +29,10 @@ def _usable() -> bool:
 
 def ensure(timeout: float = 30.0) -> None:
     """库能用就返回；后台 warm_up 在跑就等它（最多 timeout 秒）；还不行就同步 rebuild()（阻塞）"""
-    if _state["done"]:
+    from ._paths import gamedata_dir
+
+    where = str(gamedata_dir())
+    if _state["done"] == where:
         return
     if not _usable():
         from . import _state as pkg_state
@@ -43,7 +46,7 @@ def ensure(timeout: float = 30.0) -> None:
                     from ._build import rebuild_if_needed
 
                     rebuild_if_needed()
-    _state["done"] = True
+    _state["done"] = where
 
 
 @contextmanager

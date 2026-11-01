@@ -13,7 +13,7 @@ def _setup(monkeypatch, tmp_path, **override):
 
     tmp_path.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(paths, "DATA", tmp_path)
-    monkeypatch.setattr(_ready, "_state", {"done": False})
+    monkeypatch.setattr(_ready, "_state", {"done": None})
     monkeypatch.setattr(G, "_state", {"last_error": None, "warm_thread": None})
     _write_min_sources(tmp_path, **override)
     return tmp_path
@@ -56,7 +56,9 @@ def test_ensure_raises_when_no_sources(monkeypatch, tmp_path):
     monkeypatch.setattr(paths, "DATA", tmp_path / "empty")  # 没有 shops.json：建不出库
     with raises(G.BuildError):
         G.ensure()
-    assert not _ready._state["done"]  # 建失败不能记成已就绪，下次还要再试
+    assert _ready._state["done"] != str(
+        tmp_path / "empty" / "gamedata"
+    )  # 建失败不能记成已就绪
 
 
 def test_ensure_fast_path_after_first_success(monkeypatch, tmp_path):
@@ -448,3 +450,118 @@ def test_shops_update_runs_inside_updating(monkeypatch, tmp_path):
     monkeypatch.setattr(shops, "_data", None)
     shops.update(progress=None)
     assert state["n"] == 1 and len(state["writes"]) == 1 and state["writes"][0][1]
+
+
+# ---------------------------------------------------------------- Task 2 补：商店物品目录；Task 3：商店查询改走数据层
+
+_F2 = ["Pyro", "Pyro I", "", "", "", "W"]
+
+
+def _shop_setup(monkeypatch, tmp_path):
+    from sc_mining.crafting import shops
+
+    rows = [
+        [171, "Shop D", "Stanton · D", 500.0, 0.0, "4.10", _F2],
+        [171, "Shop E", "Stanton · E", 0.0, 400.0, "4.10", _F2],
+        [200, "Shop C2", "Pyro · Z", 900.0, 0.0, "4.10", _F2],
+        [200, "Shop W", "Pyro · W", 1100.0, 0.0, "4.10", _F2],
+    ]
+    _setup(monkeypatch, tmp_path, **_shops_with_rows(*rows))
+    # 查询路径一律不许再读 shops.json（load 只留给更新流程）
+    monkeypatch.setattr(
+        shops,
+        "load",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("查询读了 JSON")),
+    )
+    return shops
+
+
+def test_catalog_verbatim_and_folded(monkeypatch, tmp_path):
+    from sc_mining.crafting.shops import _fold
+    from sc_mining.gamedata import shops as gs
+
+    _setup(monkeypatch, tmp_path)
+    c = gs.catalog()
+    assert [(x.uex_item_id, x.en, x.cat) for x in c] == [
+        (171, "Venture Arms", "Arms"),
+        (200, "Lawson Mining Laser", "Mining"),
+        (201, "Lawson Mining Laser", "Mining"),
+    ]
+    assert c[1].folded == _fold("Lawson Mining Laser") and gs.catalog() is c
+
+
+def test_find_exact_before_partial_and_limit(monkeypatch, tmp_path):
+    shops = _shop_setup(monkeypatch, tmp_path)
+    assert shops.find("Lawson") == [
+        (200, "Lawson Mining Laser", "Mining"),
+        (201, "Lawson Mining Laser", "Mining"),
+    ]
+    assert len(shops.find("arms", limit=1)) == 1
+    assert shops.find("") == [] and shops.find("zzz") == []
+
+
+def test_find_keeps_source_order_for_duplicate_names(monkeypatch, tmp_path):
+    shops = _shop_setup(monkeypatch, tmp_path)
+    assert [r[0] for r in shops.find("Lawson Mining Laser")] == [200, 201]
+
+
+def test_find_close_still_folds_l_to_i(monkeypatch, tmp_path):
+    shops = _shop_setup(monkeypatch, tmp_path)
+    assert shops.find_close("Lawson Mining Iaser") == (
+        200,
+        "Lawson Mining Laser",
+        "Mining",
+    )
+    assert shops.find_close("abc") is None
+
+
+def test_where_sorts_buy_asc_sell_desc(monkeypatch, tmp_path):
+    shops = _shop_setup(monkeypatch, tmp_path)
+    buy, sell = shops.where(171)
+    assert buy == [(500.0, "Shop D", "Stanton · D"), (586.0, "Shop A", "Stanton · X")]
+    assert sell == [(400.0, "Shop E", "Stanton · E"), (300.0, "Shop B", "Stanton · Y")]
+    assert shops.where("171") == ([], []) and shops.where(None) == (
+        [],
+        [],
+    )  # 以前按 == 比，字符串对不上
+    assert "500 aUEC｜Shop D" in shops.where_text(171)
+
+
+def test_nearest_dedups_place(monkeypatch, tmp_path):
+    from sc_mining.navigation import position
+
+    shops = _shop_setup(monkeypatch, tmp_path)
+    monkeypatch.setattr(shops, "shop_point", lambda f: {"i": f[5]})
+    monkeypatch.setattr(
+        position, "distance", lambda a, b: {"W": 10.0, "New Babbage": 20.0}[b["i"]]
+    )
+    near = shops.nearest(200, {"x": 0}, 3)
+    assert near == [
+        (10.0, 900.0, "Shop C2", "Pyro · Z"),
+        (10.0, 1100.0, "Shop W", "Pyro · W"),
+    ]  # 同一地点只留最便宜的
+    assert shops.nearest(200, None, 1) == [(float("inf"), 900.0, "Shop C2", "Pyro · Z")]
+
+
+def test_buyable(monkeypatch, tmp_path):
+    shops = _shop_setup(monkeypatch, tmp_path)
+    assert shops.buyable(171) and shops.buyable(200)
+    assert (
+        not shops.buyable(201) and not shops.buyable("171") and not shops.buyable(None)
+    )
+
+
+def test_variants_prefers_buyable(monkeypatch, tmp_path):
+    shops = _shop_setup(monkeypatch, tmp_path)
+    assert shops.variants('Lawson Mining Laser "Red"') == [
+        (200, "Lawson Mining Laser", "Mining")
+    ]
+
+
+def test_where_by_name_first_buyable(monkeypatch, tmp_path):
+    shops = _shop_setup(monkeypatch, tmp_path)
+    assert (
+        shops.where_by_name("Lawson Mining Laser")
+        == "可买：Shop C2（Pyro · Z）900 aUEC"
+    )
+    assert shops.where_by_name("nothing") == ""
