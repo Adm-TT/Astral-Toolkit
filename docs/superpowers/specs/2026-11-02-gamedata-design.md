@@ -16,6 +16,7 @@
 | 2026-11-02 | v2 未采纳的复审意见：① 多文件更新的暂存 / 批次恢复协议（§4.2 只保留写锁 + 逐文件原子写 + 失败保留旧库，完整批次恢复列为二期候选）；② 价格一律 `Decimal`（改为按源数据实际类型定，见 §3.1）；③ 删除“变更记录”表（已恢复） | 第一期控制复杂度；现有更新器本就是逐文件写，批次恢复是现状之外的新需求 |
 | 2026-11-02 | 原“第七个清理 PR”从本文件移出，单独排期 | 与数据层迁移无关，不混在一起审 |
 | 2026-11-02 | v3，按源码复审纠正现状描述（已逐条对源码核实）：① 撤回“navigate 按值导入导致缓存过期”——`navigate.py:60` 的 `_data` 是死导入，实际走 `load()`；② 撤回“uex 只在 import 时应用”——`data_pack.clear_caches()` 会再调 `uex.apply_live`；③ “全部线性扫描”改为“商店/星图/城市点/wikelo/crafting 线性扫描，物品搜索已有字符索引和三元组索引”；④ 新增已知缺陷：`itemsearch.py:78` 缓存键漏了 `wiki_items.json`、`name_aliases.json`，只更新这两个文件时索引不刷新；⑤ 新增约束：与用户库存库 `dubhe_inventory.db`（`trade/storage.py`）严格分开；⑥ 新增地基任务：物品身份映射（uex:/scm:/local: 来源编号、游戏类名、实体 uuid）；⑦ 建库发布接在现有 `paths.cached_json / write_json / clear_json_cache / CACHE_HOOKS` 上，不另起一套；⑧ 批 1 试点范围补齐 loot_index、zh_names、name_aliases、wiki_items | 外部复审对照 `release/1.1.4-beta.1` 源码的发现，本文件据此修正 §1.1、§1.3、§2、§4.2、§4.3、§5.1 |
+| 2026-11-02 | 地基 PR 实现完成（分支 feat/gamedata-foundation）：包结构、表名、清单字段、入口函数以 `sc_mining/gamedata/` 代码为准。与 §3.1 示例的两处差异：`ShopRow` 按 shops.json 的 7 列原样映射（源里没有 shop_id/place_id/body）；价格是源里的 float 原样。`updating()` 建库失败不抛、记到 `last_error()`。试点批次接口签名在批 1 开工前按调用点矩阵定稿 | 实施反馈 |
 
 ---
 

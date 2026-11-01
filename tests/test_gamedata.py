@@ -665,3 +665,45 @@ def test_data_pack_clear_caches_calls_refresh(monkeypatch):
     monkeypatch.setattr(G, "refresh", lambda: called.append(1))
     data_pack.clear_caches()
     assert called == [1]
+
+
+# ---------------------------------------------------------------- Task 7：命令行建库工具
+
+
+def test_cli_build_and_check(monkeypatch, tmp_path):
+    import importlib
+    import sys
+    from pathlib import Path
+
+    from sc_mining.gamedata._manifest import read_manifest
+    from sc_mining.gamedata._paths import db_path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
+    T = importlib.import_module("build_gamedata")
+
+    _data_root(monkeypatch, tmp_path)
+    _write_min_sources(tmp_path)
+    assert T.main(["--data", str(tmp_path)]) == 0
+    m = read_manifest()
+    assert m is not None
+    assert T.main(["--data", str(tmp_path), "--check"]) == 0
+    assert T.main(["--data", str(tmp_path)]) == 0  # 没变：不重建
+    assert read_manifest() == m
+    assert T.main(["--data", str(tmp_path), "--force"]) == 0
+    assert read_manifest() != m
+    m2 = read_manifest()
+    assert m2 is not None
+    db_path(m2.generation_id).write_bytes(b"garbage")
+    assert T.main(["--data", str(tmp_path), "--check"]) == 2
+
+
+def test_cli_check_without_db_returns_2(monkeypatch, tmp_path):
+    import importlib
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
+    T = importlib.import_module("build_gamedata")
+
+    _data_root(monkeypatch, tmp_path)
+    assert T.main(["--data", str(tmp_path), "--check"]) == 2
