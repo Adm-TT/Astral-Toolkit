@@ -300,3 +300,22 @@ def test_uses_matches_legacy_on_sample(monkeypatch, tmp_path):
     assert "锡" in crafting.uses_report("Tin") and crafting.uses_report(
         "Medpen"
     ).endswith("没有蓝图用到它。")
+
+
+def test_queries_empty_when_db_unavailable(monkeypatch, tmp_path):
+    """库不可用：for_item → None，search / uses → []，mat_summary 计 0（照批 1 shops 的做法，不往外抛）"""
+    import sc_mining.gamedata as G
+    from sc_mining.crafting import crafting
+
+    _setup(monkeypatch, tmp_path)
+
+    def boom(*a, **k):
+        raise G.GamedataUnavailable("坏了")
+
+    for name in ("catalog", "for_item", "containing", "using_material"):
+        monkeypatch.setattr(G.crafting, name, boom)
+    monkeypatch.setattr(crafting, "_WARNED", {"游戏数据库不可用：坏了"})
+    assert crafting.for_item("Medpen") is None
+    assert crafting.search("med") == [] and crafting.uses("Tin") == []
+    assert crafting.mat_summary("Tin")["count"] == 0
+    assert crafting.by_key("Medpen") is None

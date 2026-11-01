@@ -368,25 +368,41 @@ def _search_norm(s):
 
 
 def for_item(name_en="", name_zh=""):
-    """做这件东西的蓝图（英文名一样，或者中文名一样）；没有返回 None"""
-    fold = _fold_name
-    en, zh = fold(name_en), fold(name_zh)
-    return next((b for b in blueprints() if en and fold(b["n"]) == en), None) or next(
-        (b for b in blueprints() if zh and b["z"] and fold(b["z"]) == zh), None
-    )
+    """做这件东西的蓝图（英文名折叠后一样的第一份，没有再按中文名）；没有返回 None。比较键导入时算好（blueprints.norm_n / norm_z）"""
+    from .. import gamedata
+
+    try:
+        return gamedata.crafting.for_item(_fold_name(name_en), _fold_name(name_zh))
+    except gamedata.GamedataError:  # 库不可用：当成没有蓝图
+        return None
+
+
+def _using(mineral):
+    """用到这种原料的蓝图（按源顺序，每份一次）；库不可用当成没有"""
+    from .. import gamedata
+
+    try:
+        return gamedata.crafting.using_material(mineral)
+    except gamedata.GamedataError:
+        return []
 
 
 def search(query: str, limit: int = 20):
-    """按中文或英文名搜索蓝图：完全匹配优先，再按包含匹配"""
+    """按中文或英文名搜索蓝图：完全匹配优先，再按包含匹配（候选由库按搜索键筛，分法和排序照旧）"""
+    from .. import gamedata
+
     q = _search_norm(query.strip())
     if not q:
         return []
+    try:
+        rows = gamedata.crafting.containing(q)
+    except gamedata.GamedataError:
+        return []
     exact, part = [], []
-    for bp in blueprints():
-        names = [_search_norm(bp["n"]), _search_norm(bp["z"])]
-        if q in names:
+    for bp in rows:
+        if q in (_search_norm(bp["n"]), _search_norm(bp["z"])):
             exact.append(bp)
-        elif any(q in n for n in names if n):
+        else:
             part.append(bp)
     part.sort(key=lambda b: (len(b["n"]), b["n"]))
     return (exact + part)[:limit]
@@ -481,7 +497,7 @@ def needs(bp, mineral):
 
 def mat_summary(mineral, q=None):
     """多少份蓝图用到这种矿；给了品质再算其中多少份品质够（每个槽的最低品质都满足）"""
-    rows = [bp for bp in blueprints() if needs(bp, mineral)]
+    rows = [bp for bp in _using(mineral) if needs(bp, mineral)]
     ok = (
         None
         if q is None
@@ -622,7 +638,7 @@ def describe(bp, with_locations: bool = True) -> str:
 def uses(mineral: str):
     """某种矿能做什么：返回 [(蓝图, 数量, 最低品质)]"""
     out = []
-    for bp in blueprints():
+    for bp in _using(mineral):
         for slot, opts, mods in bp["slots"]:
             for kind_, name, qty, minq in opts:
                 if kind_ == "r" and name == mineral:
