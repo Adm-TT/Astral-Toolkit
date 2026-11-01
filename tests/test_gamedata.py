@@ -41,3 +41,85 @@ def test_exceptions_hierarchy():
 
     assert issubclass(GamedataUnavailable, GamedataError)
     assert issubclass(BuildError, GamedataError)
+
+
+# ---------------------------------------------------------------- Task 2：写锁与清单
+
+
+def test_write_lock_reentrant_in_process(monkeypatch, tmp_path):
+    from sc_mining.gamedata import _lock
+
+    _data_root(monkeypatch, tmp_path)
+    with _lock.write_lock():
+        with _lock.write_lock():  # 同线程可重入
+            pass
+    assert _lock.lock_path().exists()
+
+
+def test_write_lock_blocks_other_process(monkeypatch, tmp_path):
+    import subprocess
+    import sys
+    import time
+
+    from sc_mining.gamedata import GamedataError, _lock
+    from tests.minipytest import raises
+
+    _data_root(monkeypatch, tmp_path)
+    code = (
+        "import sys, time; sys.path.insert(0, sys.argv[1]);"
+        "from sc_mining.core import paths; from pathlib import Path;"
+        "paths.DATA = Path(sys.argv[2]);"
+        "from sc_mining.gamedata import _lock;"
+        "l = _lock.write_lock(); l.__enter__(); print('locked', flush=True); time.sleep(3)"
+    )
+    import os
+
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    p = subprocess.Popen(
+        [sys.executable, "-c", code, root, str(tmp_path)],
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert p.stdout is not None
+        assert p.stdout.readline().strip() == "locked"
+        t = time.perf_counter()
+        with raises(GamedataError):
+            with _lock.write_lock(timeout=0.3):
+                pass
+        assert time.perf_counter() - t < 2.5
+    finally:
+        p.kill()
+        p.wait()
+
+
+def test_manifest_roundtrip(monkeypatch, tmp_path):
+    from sc_mining.gamedata._manifest import Manifest, read_manifest, write_manifest
+
+    _data_root(monkeypatch, tmp_path)
+    m = Manifest("g1", "v1", 1, "gamedata-g1.db")
+    write_manifest(m)
+    assert read_manifest() == m
+
+
+def test_manifest_missing_is_none(monkeypatch, tmp_path):
+    from sc_mining.gamedata._manifest import read_manifest
+
+    _data_root(monkeypatch, tmp_path)
+    assert read_manifest() is None
+
+
+def test_manifest_corrupt_raises(monkeypatch, tmp_path):
+    from sc_mining.gamedata import GamedataUnavailable
+    from sc_mining.gamedata._manifest import read_manifest
+    from sc_mining.gamedata._paths import manifest_path
+    from tests.minipytest import raises
+
+    _data_root(monkeypatch, tmp_path)
+    manifest_path().parent.mkdir(parents=True)
+    manifest_path().write_text("{", encoding="utf-8")
+    with raises(GamedataUnavailable):
+        read_manifest()
+    manifest_path().write_text('{"generation_id": "g"}', encoding="utf-8")  # 缺字段
+    with raises(GamedataUnavailable):
+        read_manifest()
