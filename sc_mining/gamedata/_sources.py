@@ -42,7 +42,7 @@ class SourceBytes:
     name: str
     present: bool
     sha256: str  # 不存在时 ""
-    data: Any  # 解析后的 JSON；不存在时 None
+    data: Any  # 解析后的 JSON；不存在、或可选源解析失败时 None
 
 
 def read_sources(data_dir: Path) -> dict[str, SourceBytes]:
@@ -62,9 +62,11 @@ def read_sources(data_dir: Path) -> dict[str, SourceBytes]:
         try:
             data = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, ValueError) as e:
-            raise BuildError(
-                f"{src.name} 不是完整的 JSON（{e}），重新「更新数据」"
-            ) from e
+            if src.required:
+                raise BuildError(
+                    f"{src.name} 不是完整的 JSON（{e}），重新「更新数据」"
+                ) from e
+            data = None  # 可选源坏了：哈希照算（版本会变）、内容当作没有，别的表照建（审查 2026-11-02）
         out[src.name] = SourceBytes(
             src.name, True, hashlib.sha256(raw).hexdigest(), data
         )

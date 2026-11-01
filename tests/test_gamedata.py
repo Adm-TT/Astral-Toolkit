@@ -135,6 +135,18 @@ _TABLES = {
     "shop_rows",
     "loot_rows",
     "mineral_prices",
+    # schema 2（导航）
+    "bodies",
+    "pois",
+    "points",
+    "city_places",
+    "city_place_kinds",
+    "amenities",
+    "amenity_kinds",
+    "station_lifts",
+    "place_names",
+    "place_codes",
+    "mining_spots",
 }
 
 
@@ -151,7 +163,7 @@ def test_ddl_creates_all_tables(tmp_path):
         r[0] for r in c.execute("select name from sqlite_master where type='table'")
     }
     c.close()
-    assert _TABLES <= names  # 批 1 的表一张不少；导航表另测
+    assert names == _TABLES  # 多一张少一张都不行
 
 
 def test_read_sources_hash_matches_bytes(tmp_path):

@@ -91,7 +91,7 @@ DDL: list[str] = [
         n TEXT NOT NULL,
         t TEXT NOT NULL DEFAULT '',
         x REAL NOT NULL, y REAL NOT NULL, z REAL NOT NULL,
-        qt INTEGER NOT NULL DEFAULT 0,
+        qt INTEGER,
         norm_n TEXT NOT NULL,
         source_order INTEGER NOT NULL
     )""",
@@ -138,15 +138,18 @@ DDL: list[str] = [
         PRIMARY KEY (place_id, kind)
     )""",
     "CREATE INDEX idx_city_place_kinds_kind ON city_place_kinds(kind)",
-    # place_amenities.json：城外设施；ref 三种引用拆三列，读时回查星图
+    # place_amenities.json：城外设施；ref 的六种键（transit.amenity_targets 实际读的）原样拆列，读时回查星图
     """CREATE TABLE amenities (
         id INTEGER PRIMARY KEY,
         en TEXT NOT NULL,
         zh TEXT NOT NULL DEFAULT '',
         rec_lower TEXT NOT NULL DEFAULT '',
         ref_poi TEXT NOT NULL DEFAULT '',
+        ref_body TEXT NOT NULL DEFAULT '',
+        ref_local_x REAL, ref_local_y REAL, ref_local_z REAL,
         ref_point TEXT NOT NULL DEFAULT '',
-        ref_internal TEXT NOT NULL DEFAULT '',
+        ref_point_id TEXT NOT NULL DEFAULT '',
+        ref_city TEXT NOT NULL DEFAULT '',
         source_order INTEGER NOT NULL
     )""",
     """CREATE TABLE amenity_kinds (
@@ -165,12 +168,13 @@ DDL: list[str] = [
         payload_json TEXT NOT NULL,
         source_order INTEGER NOT NULL
     )""",
-    # places_zh.json + places_extra_zh.json（extra 覆盖）：规范化键 → 中文；src = zh / extra
+    # places_zh.json + places_extra_zh.json：两份都存，src = zh / extra；names.poi_zh 读时 extra 优先，position 那一路只看 zh
     """CREATE TABLE place_names (
-        norm_key TEXT PRIMARY KEY,
+        norm_key TEXT NOT NULL,
         zh TEXT NOT NULL,
         src TEXT NOT NULL,
-        source_order INTEGER NOT NULL
+        source_order INTEGER NOT NULL,
+        PRIMARY KEY (norm_key, src)
     )""",
     # place_codes_zh.json：小写地点代码 → 中文
     """CREATE TABLE place_codes (
@@ -178,9 +182,10 @@ DDL: list[str] = [
         zh TEXT NOT NULL,
         source_order INTEGER NOT NULL
     )""",
-    # mining_spots.json：挖矿点，坐标存原始米（navigate 自己 /1000）
+    # mining_spots.json：挖矿点，坐标存原始米（navigate 自己 /1000）；每行都留（无 id、重复 id 也留），spot_id 是源里的 id
     """CREATE TABLE mining_spots (
-        id TEXT PRIMARY KEY,
+        id INTEGER PRIMARY KEY,
+        spot_id TEXT,
         sys TEXT NOT NULL DEFAULT '',
         zh TEXT NOT NULL DEFAULT '',
         en TEXT NOT NULL DEFAULT '',

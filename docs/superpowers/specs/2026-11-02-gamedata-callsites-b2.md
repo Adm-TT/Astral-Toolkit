@@ -26,8 +26,8 @@
 | 源字段 | 读它的函数 | 转换 | 目标表.列 | 顺序 |
 |---|---|---|---|---|
 | `bodies[name]` 9 个数值 | `celestial.*`（自转相位用 `rot/adj`）、`navigate.where_am_i/_find_body`、`transit.target_system`、`mining_area` | 原样 float | `bodies(name PK, sys, x, y, z, rot, adj, r, om, grid, source_order)` | dict 顺序 |
-| `pois[i]` | `transit.amenity_targets`（按 `_norm(n)` 首个）、`navigate.search`（遍历）、`transit.nearest` | 原样 | `pois(id, b, n, t, x, y, z, qt, norm_n, source_order)`；索引 `(b)`、`(norm_n)` | 列表顺序 |
-| `points[i]` | `position.find_point`（按 `i` 小写 / `n` 规范化）、`shops.shop_point`、`transit.amenity_targets`（`pts` by `n`、`pts_id` by `i`）、`navigate.space_points` | `_apply_fixes` 先套坐标修正 | `points(id, n, i, sys, t, x, y, z, norm_n, i_lower, source_order)`；索引 `(norm_n)`、`(i_lower)` | 列表顺序；`find_point` 是**首个**命中 |
+| `pois[i]` | `transit.amenity_targets`（按 `_norm(n)` 首个）、`navigate.search`（遍历）、`transit.nearest` | 原样；**`qt` 可能是 `None`**（无 QTMarker，显示「信标未确认」，真实数据 1020/1961 条），列允许 NULL，不能压成 0 | `pois(id, b, n, t, x, y, z, qt NULL, norm_n, source_order)`；索引 `(b)`、`(norm_n)` | 列表顺序 |
+| `points[i]` | `position.find_point`（按 `i` 小写 / `n` 规范化）、`shops.shop_point`、`transit.amenity_targets`（`pts` by `n`、`pts_id` by `i`）、`navigate.space_points` | `_apply_fixes` 先套坐标修正 | `points(id, n, i, sys, t, x, y, z, norm_n, i_lower, source_order)`；索引 `(norm_n)`、`(i_lower)` | 列表顺序；`find_point` 是**首个**命中（`ORDER BY source_order LIMIT 1`）；但 `amenity_targets` 里的 `pts` / `pts_id` 是字典推导，**后者胜出**（`ORDER BY source_order DESC LIMIT 1`）——两处语义不同，批 2 分别写 |
 | `fetched` | `navigate` L443 打印“星图数据：starmap.space（日期）” | 入 `meta`：`starmap_fetched` | — |
 | 其他顶层元数据键 | 没人读 | 不入库 | — |
 
@@ -47,13 +47,13 @@
 
 ## 3. place_amenities.json（53 KB，258 条）
 
-结构：`[{en, zh, kinds[], rec, ref: {poi | point | internal}}]`。
+结构：`[{en, zh, kinds[], rec, ref: {poi?, body?, local?[3], point?, point_id?, city?}}]`。真实数据里 ref 键分布：poi 211、point 42、point_id 16、city 5、body 4、local 4。
 
 | 源字段 | 读它的函数 | 转换 | 目标表.列 |
 |---|---|---|---|
-| `en, zh, rec` | `transit.amenity_targets` L170-242 | strip；`rec.lower()` 与 `city_targets(kind)` 的 `city` 比对 | `amenities(id, en, zh, rec_lower, ref_poi, ref_point, ref_internal, source_order)` |
+| `en, zh, rec` | `transit.amenity_targets` L170-242 | strip；`rec.lower()` 与 `city_targets(kind)` 的 `city` 比对 | `amenities(id, en, zh, rec_lower, ref_*, source_order)` |
 | `kinds[]` | 同上，`kind in kinds` 筛 | — | `amenity_kinds(amenity_id, kind)`；索引 `(kind)` |
-| `ref.*` | 回查 `pois`（`_norm`）/ `points`（`n`）/ `points`（`i`） | 读时回查，不在导入时解析（星图和设施可能分开更新） | 三列原样 |
+| `ref.*` | `transit.amenity_targets` L196-235：`poi` → `pois` 按 `_norm` 首个，找不到且 `body in bodies` 且 `local` 是三元组 → 用 `body+local` 造轨道站；否则 `point_id`（`pts_id`）或 `point`（`pts`）或 `body`（`bodies`）取坐标 /1000 造空间点 | 读时回查，不在导入时解析（星图和设施可能分开更新） | `ref_poi, ref_body, ref_local_x/y/z, ref_point, ref_point_id, ref_city` 六种键原样拆列（`city` 现在没人读，也存着） |
 
 ## 4. station_lifts.json（663 KB，40 站）
 
@@ -70,7 +70,7 @@
 
 | 源 | 读它的函数 | 转换 | 目标表.列 |
 |---|---|---|---|
-| `places_zh` + `places_extra_zh` | `navigation/names.poi_zh` L122-160（合并，**extra 覆盖**，只收非空字符串）；`position._places_zh/_zh_name`（只读 `places_zh`，按 `k` 或去 `station` 后缀的 `k`）；`position.place_name` 按前缀取最短键；`stockplaces.places` 经 `poi_zh` | 合并规则按 `poi_zh`；`position` 只读 `places_zh` 这一点是差异——批 2 核对两处是否可统一（若 `position` 必须只看 `places_zh`，表里加 `src` 列区分） | `place_names(norm_key PK, zh, src, source_order)`；索引默认主键；前缀查询用 `WHERE norm_key LIKE ? ORDER BY length(norm_key) LIMIT 1` |
+| `places_zh` + `places_extra_zh` | `navigation/names.poi_zh` L122-160（合并，**extra 覆盖**，只收非空字符串）；`position._places_zh/_zh_name`（只读 `places_zh`，按 `k` 或去 `station` 后缀的 `k`）；`position.place_name` 按前缀取最短键；`stockplaces.places` 经 `poi_zh` | **两份都存**（主键 `(norm_key, src)`），读的一方决定：`poi_zh` → `extra` 优先再 `zh`；`position` 那一路 → 只查 `src='zh'`。导入只收非空字符串（两处原代码规则一致） | `place_names(norm_key, zh, src, source_order, PK(norm_key, src))`；`poi_zh` 用 `ORDER BY CASE src WHEN 'extra' THEN 0 ELSE 1 END LIMIT 1`；前缀查询 `WHERE src='zh' AND norm_key LIKE ? ORDER BY length(norm_key), source_order LIMIT 1` |
 | `place_codes_zh` | `position` L184-195（`table.update` 后再被 `read_ini()` 的值覆盖） | 键已是小写 | `place_codes(code PK, zh, source_order)` |
 | 脏键（含 `nnn`、`\n`） | 现在都原样进 dict，查不到就是查不到 | 导入**不过滤**，保持行为 | — |
 
@@ -82,7 +82,7 @@
 
 | 源字段 | 读它的函数 | 转换 | 目标表.列 |
 |---|---|---|---|
-| 整条 | `navigate.mining_spots()` L197-271（坐标 `/1000`，再和石头表、星图合并，缓存键含 `rocks_stamp()` 和 `_data_stamp`）；`mining_area._spots_raw()`（原样，每次读盘——批 5） | 表里存**原始**坐标（米），`/1000` 留在 `navigate` 的变换里（两处消费单位不同） | `mining_spots(id PK, sys, zh, en, kind, area, x, y, z, source_order)` |
+| 整条 | `navigate.mining_spots()` L197-271（坐标 `/1000`，再和石头表、星图合并，缓存键含 `rocks_stamp()` 和 `_data_stamp`）；`mining_area._spots_raw()`（原样，每次读盘——批 5） | 表里存**原始**坐标（米），`/1000` 留在 `navigate` 的变换里（两处消费单位不同）；**每行都留**（无 id、重复 id 也留——两处消费方都不去重），`spot_id` 是源里的 id，可为空 | `mining_spots(id 自增, spot_id, sys, zh, en, kind, area, x, y, z, source_order)` |
 
 ## 7. 更新流程
 
@@ -90,11 +90,13 @@
 - `city_places / place_amenities / station_lifts / places_extra_zh / mining_spots`：随数据包 `data_pack.install()` 来（已在更新边界内）。
 - `places_zh.json`、`place_codes_zh.json`、`name_aliases.json`、`zh_names.json`：由 `localization.rebuild()`（L270-282）用 `write_json` 写，它持有 `BUILD_LOCK`——本批给 `rebuild()` 最外层套 `gamedata.updating()`，**顺序必须是 updating 在外、BUILD_LOCK 在内**（与 `data_pack.install` 一致，否则死锁）。
 
-## 8. 公共层先行 PR 要做的（schema 2）
+## 8. 公共层先行 PR 要做的（schema 2）——已实现（feat/gamedata-schema2）
+
+导航源全部可选：JSON 坏了当作“在但读不出”（哈希照算，表为空），单条坏行跳过，不拖垮物品 / 商店表。
 
 新表：`bodies`、`pois`、`points`、`city_places`、`city_place_kinds`、`amenities`、`amenity_kinds`、`station_lifts`、`place_names`、`place_codes`、`mining_spots`。`SOURCES` 加 9 个可选源。`_import` 新增 `import_starmap / import_city_places / import_amenities / import_station_lifts / import_place_names / import_mining_spots`，变换逻辑**直接 import 复用** `transit._city_rows`、`transit._lift_rows`、`starmap._apply_fixes`（不抄）。`SCHEMA_VERSION = 2`、`IMPORTER_VERSION = 2`。
 
 ## 9. 批 2 开工前必须补的核对
 
-- `position._places_zh` 只读 `places_zh` 而 `poi_zh` 合并 extra：是现状差异还是 bug。
+- `position._places_zh` 只读 `places_zh` 而 `poi_zh` 合并 extra：是现状差异还是 bug（表里两份都在，迁移时先保持各读各的）。
 - `navigate.search`、`transit.nearest` 对 `pois` 遍历的排序键（同距离时的次序）。
