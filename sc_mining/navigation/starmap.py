@@ -51,11 +51,7 @@ def _fetch(path: str, tries: int = 3) -> Any:
         except urllib.error.HTTPError as e:
             last = RuntimeError(
                 f"starmap.space 拒绝了请求（HTTP {e.code}"
-                + (
-                    "，被网站防护拦截，过一会再试"
-                    if e.code in (403, 429, 503)
-                    else ""
-                )
+                + ("，被网站防护拦截，过一会再试" if e.code in (403, 429, 503) else "")
                 + "）"
             )
         except Exception as e:

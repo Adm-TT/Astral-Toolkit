@@ -9,7 +9,6 @@
 
 import json
 import re
-from pathlib import Path
 
 from ..core.paths import DATA
 

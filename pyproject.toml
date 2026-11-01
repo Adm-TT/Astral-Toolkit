@@ -4,6 +4,7 @@
 [tool.ruff]
 target-version = "py312"
 extend-exclude = [
+    "docs",  # 文档里的代码块是原样引用的旧代码，不能格式化
     "tests/fixtures",
     "tools/shell/ATShell/bin",
     "tools/shell/ATShell/obj",
@@ -13,6 +14,11 @@ extend-exclude = [
 [tool.ruff.lint]
 # E4 导入位置、E7 语句、E9 语法 / IO 错误、F pyflakes（未定义名字、没用的导入等）
 select = ["E4", "E7", "E9", "F"]
+
+[tool.ruff.lint.per-file-ignores]
+# 门面模块（2026-11-01 PR #6 拆模块后保留的旧入口）：import 进来就是为了让 navigate.X / tasks.system.X 的老写法继续可用
+"sc_mining/navigation/navigate.py" = ["F401", "E402"]
+"sc_mining/tasks/system/__init__.py" = ["F401"]
 
 [tool.basedpyright]
 pythonVersion = "3.12"

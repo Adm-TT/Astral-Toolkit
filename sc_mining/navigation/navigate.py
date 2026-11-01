@@ -200,9 +200,9 @@ def mining_spots(data=None):
     - 星图里有刷矿表的拉格朗日点（斯坦顿 20 个、派罗 25 个，data/mining_rocks.json 里有表的才算）
     每个点带 rocks：这里刷哪几种石头（搜「贝沙电气石」能搜到会刷它的点）"""
     from ..mining.mining_area import rocks_stamp, area_for_spot
-    from ..core.paths import DATA
+    from ..core import paths as _paths  # 调用时现取 paths.DATA（测试会换掉它）
 
-    p = DATA / "mining_spots.json"
+    p = _paths.DATA / "mining_spots.json"
     data = data or load()
     try:
         mt = p.stat().st_mtime_ns
@@ -560,7 +560,13 @@ def waypoint_menu(data):
 class _NavigateModule(sys.modules[__name__].__class__):
     def __setattr__(self, name, value):
         super().__setattr__(name, value)
-        from . import celestial as _celestial, names as _names, starmap as _starmap, transit as _transit, waypoints as _waypoints
+        from . import (
+            celestial as _celestial,
+            names as _names,
+            starmap as _starmap,
+            transit as _transit,
+            waypoints as _waypoints,
+        )
 
         for sub in (_celestial, _names, _starmap, _transit, _waypoints):
             if hasattr(sub, name):

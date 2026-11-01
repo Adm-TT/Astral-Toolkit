@@ -12,17 +12,14 @@
 from datetime import datetime, timezone
 import json
 import math
-from pathlib import Path
 import re
 import statistics
 import threading
 import time
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 from ..core.paths import USER, cached_json, clear_json_cache, write_json
 from .names import (
-    BODY_ZH,
-    CITY_ZH,
     POINT_ZH,
     QT_ZH,
     SYS_ZH,

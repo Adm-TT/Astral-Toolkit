@@ -186,5 +186,3 @@ def test_transit_facade_reexport():
     assert navigate.site_at is transit.site_at
     assert navigate.nearest is transit.nearest
     assert navigate.amenity_targets is transit.amenity_targets
-
-

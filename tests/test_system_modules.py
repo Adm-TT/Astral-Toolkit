@@ -57,6 +57,7 @@ def test_dynamic_setattr_sync_to_submodules():
     # 2. 测试同步到 feedback._scrub
     old_scrub = m_feedback._scrub
     try:
+
         def dummy_scrub(text):
             return "SCRUBBED"
 
@@ -69,6 +70,7 @@ def test_dynamic_setattr_sync_to_submodules():
     status_mod = sys.modules.get("sc_mining.tasks.system.status")
     old_gt = status_mod._gridtext_status
     try:
+
         def dummy_gt():
             return {"mock": True}
 

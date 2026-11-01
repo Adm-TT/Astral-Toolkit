@@ -9,15 +9,12 @@
 
 from difflib import SequenceMatcher
 import math
-from pathlib import Path
 import re
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from ..core.paths import DATA, cached_json
 from .celestial import (
-    CITY_ARRIVE_M,
     CITY_FLOOR_M,
-    CITY_LEAVE_M,
     CITY_NEAR_M,
     bearing,
     city_arrived,
@@ -31,7 +28,6 @@ from .names import (
     CITY_ZH,
     _norm,
     label,
-    poi_zh,
 )
 from .starmap import load
 from .waypoints import is_space
@@ -109,9 +105,7 @@ def _city_rows(raw: Any) -> List[Dict[str, Any]]:
     return out
 
 
-def city_metrics(
-    here: Dict[str, Any], target: Dict[str, Any]
-) -> Tuple[float, float]:
+def city_metrics(here: Dict[str, Any], target: Dict[str, Any]) -> Tuple[float, float]:
     """城里：直线距离（米）、目标比你高多少米（正数在上方）"""
     a, t = pos(here), pos(target)
     d = math.dist(a, t) * 1000
@@ -738,7 +732,9 @@ def station_route(
         return []
     t = pos(target)
 
-    def gates(stop: Dict[str, Any], ref: Sequence[float]) -> List[Tuple[float, float, float]]:
+    def gates(
+        stop: Dict[str, Any], ref: Sequence[float]
+    ) -> List[Tuple[float, float, float]]:
         if stop["area"] == "hangar":
             g = _hangar_lift(st, ref, size)
             return [g] if g else []
