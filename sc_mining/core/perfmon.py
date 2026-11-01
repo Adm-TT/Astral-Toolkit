@@ -209,9 +209,6 @@ class Monitor:
         self.prev = {}
 
     def start(self):
-        # 默认不启：分钟级全进程采样作用有限；需要时设 DUBHE_PERFMON=1
-        if os.environ.get("DUBHE_PERFMON") != "1":
-            return
         if not self.thread:
             self.thread = threading.Thread(
                 target=self._run, daemon=True, name="perfmon"

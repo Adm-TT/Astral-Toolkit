@@ -31,7 +31,12 @@ def _get_delete_list():
         ]
         + [
             paths.CODE / n
-            for n in ("glossary_names.py", "signature.py", "sigscreen.py", "calibrate.py")
+            for n in (
+                "glossary_names.py",
+                "signature.py",
+                "sigscreen.py",
+                "calibrate.py",
+            )
         ]
         + [paths.ROOT / "tests" / "test_core.py", paths.ROOT / "tests" / "trade"]
         + [paths.USER / "restart_request"]

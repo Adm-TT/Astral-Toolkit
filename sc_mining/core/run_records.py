@@ -110,9 +110,12 @@ def record(
             detail_str = f" | {details}"
         line = f"{timestamp_str} [{level}] [{mod}] {act}{detail_str}\n"
         path = path_for(today)
-        with _LOCK:
-            with open(path, "a", encoding="utf-8") as f:
-                f.write(line)
+        try:
+            with _LOCK:
+                with open(path, "a", encoding="utf-8") as f:
+                    f.write(line)
+        except OSError:
+            pass  # 写不进文件也别丢面板那条
 
         if mirror_ui:
             try:
@@ -138,3 +141,12 @@ def read_tail(date_str: Optional[str] = None, limit: int = 100) -> list[str]:
             return lines[-limit:] if limit > 0 else lines
         except Exception:
             return []
+
+
+def read_recent(limit: int = 150) -> list[str]:
+    """最近 N 条：今天不够就从昨天的文件末尾补（刚过零点按 F10 也能带上前一晚的）"""
+    today = read_tail(limit=limit)
+    if len(today) >= limit:
+        return today
+    yday = time.strftime("%Y-%m-%d", time.localtime(time.time() - 86400))
+    return read_tail(yday, limit=limit - len(today)) + today

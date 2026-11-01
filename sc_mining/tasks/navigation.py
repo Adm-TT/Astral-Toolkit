@@ -225,17 +225,14 @@ def nav_plan(key=""):
     p = _places.get(key)
     if not p:
         return {"error": "未找到此地点，需重新搜索"}
-    try:
-        from ..core import run_records
+    from ..core import run_records
 
-        run_records.record(
-            "NAV",
-            "开始路线规划",
-            p.get("name") or key,
-            ui_tag="NAV",
-        )
-    except Exception:
-        pass
+    run_records.record(
+        "NAV",
+        "开始路线规划",
+        p.get("t"),  # 只记地点类型：自定义路标名是玩家自己起的，会随 F10 上传
+        ui_tag="NAV",
+    )
     data = load()
     if p.get("space"):
         from ..navigation.navigate import space_landmarks
@@ -300,17 +297,14 @@ def nav_start(key=""):
     p = _places.get(key)
     if not p:
         return {"error": "未找到此地点，需重新搜索"}
-    try:
-        from ..core import run_records
+    from ..core import run_records
 
-        run_records.record(
-            "NAV",
-            "开始导航",
-            p.get("name") or key,
-            ui_tag="NAV",
-        )
-    except Exception:
-        pass
+    run_records.record(
+        "NAV",
+        "开始导航",
+        p.get("t"),  # 只记地点类型：自定义路标名是玩家自己起的，会随 F10 上传
+        ui_tag="NAV",
+    )
     _nav.start(p)
     return {"ok": True}
 
@@ -348,12 +342,9 @@ def sig_names():
 
 
 def nav_stop():
-    try:
-        from ..core import run_records
+    from ..core import run_records
 
-        run_records.record("NAV", "停止导航", ui_tag="NAV")
-    except Exception:
-        pass
+    run_records.record("NAV", "停止导航", ui_tag="NAV")
     _nav.stop()
     return {"ok": True}
 
@@ -714,12 +705,9 @@ def _take_here_name():
 def _saved(name, desc):
     _note_hud("路标", f"📍 已保存：{name}\n{desc}", 6)
     bus.publish("waypoints", {"changed": True})
-    try:
-        from ..core import run_records
+    from ..core import run_records
 
-        run_records.record("NAV", "保存路标", name, ui_tag="NAV")
-    except Exception:
-        pass
+    run_records.record("NAV", "保存路标", ui_tag="NAV")
 
 
 def _start_here_watch():

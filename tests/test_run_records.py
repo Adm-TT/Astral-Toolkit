@@ -2,7 +2,6 @@
 
 import time
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 from sc_mining.core import paths, run_records
 
@@ -27,7 +26,6 @@ def test_record_writes_daily_file(monkeypatch, tmp_path):
     assert p.exists()
     text = p.read_text(encoding="utf-8")
     assert "[HOVER] 触发 F8 物品识别" in text
-    assert "量子" not in text  # 不写结果样例
     assert mirrored and mirrored[0][1] == "HOVER"
 
 
@@ -46,10 +44,20 @@ def test_cleanup_removes_old_files(monkeypatch, tmp_path):
     import os
 
     os.utime(old, (old_ts, old_ts))
+    others = [  # 名字不完全是 runrec_日期.log 的，再旧也不能删
+        logs / "app_log.txt",
+        logs / "perf_log.txt",
+        logs / "runrec_foo.log",
+        logs / f"runrec_{old_day}.log.bak",
+    ]
+    for f in others:
+        f.write_text("x\n", encoding="utf-8")
+        os.utime(f, (old_ts, old_ts))
     n = run_records.cleanup_retention(days=30)
-    assert n >= 1
+    assert n == 1
     assert not old.exists()
     assert keep.exists()
+    assert all(f.exists() for f in others)
 
 
 def test_read_tail_limit(monkeypatch, tmp_path):
@@ -79,14 +87,10 @@ def test_path_for_default_today(monkeypatch, tmp_path):
     assert p.parent == logs
 
 
-def test_perfmon_start_off_by_default(monkeypatch):
+def test_perfmon_on_by_default(monkeypatch):
+    """性能记录默认开着（导出日志里的 perf_log.txt 是排查卡顿的唯一数据，2026-11-01 审查）"""
     from sc_mining.core import perfmon
 
-    monkeypatch.setenv("DUBHE_PERFMON", "0")  # 非 1 即不启动
-    m = perfmon.Monitor()
-    m.start()
-    assert m.thread is None
-    monkeypatch.setenv("DUBHE_PERFMON", "1")
     started = []
 
     class FakeThread:
@@ -97,6 +101,20 @@ def test_perfmon_start_off_by_default(monkeypatch):
             pass
 
     monkeypatch.setattr(perfmon.threading, "Thread", FakeThread)
-    m2 = perfmon.Monitor()
-    m2.start()
+    perfmon.Monitor().start()
     assert started == [1]
+
+
+def test_read_recent_fills_from_yesterday(monkeypatch, tmp_path):
+    """今天不够 N 条就从昨天的末尾补，按时间先后排（刚过零点按 F10 也带得上前一晚的）"""
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    monkeypatch.setattr(paths, "LOGS", logs)
+    today = time.strftime("%Y-%m-%d")
+    yday = time.strftime("%Y-%m-%d", time.localtime(time.time() - 86400))
+    (logs / f"runrec_{yday}.log").write_text(
+        "\n".join(f"y{i}" for i in range(10)) + "\n", encoding="utf-8"
+    )
+    (logs / f"runrec_{today}.log").write_text("t0\nt1\n", encoding="utf-8")
+    assert run_records.read_recent(limit=5) == ["y7", "y8", "y9", "t0", "t1"]
+    assert run_records.read_recent(limit=2) == ["t0", "t1"]

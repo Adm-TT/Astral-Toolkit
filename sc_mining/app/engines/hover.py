@@ -134,20 +134,11 @@ class _Hover:
                         elif not self.busy:
                             self.busy = True
                             if name == "trade_capture_key":
-                                try:
-                                    from ...core import run_records
-
-                                    run_records.record(
-                                        "HOVER",
-                                        f"捕获到 {label[name]} 快捷键",
-                                        ui_tag="HOVER",
-                                    )
-                                except Exception:
-                                    bus.runtime_log(
-                                        f"捕获到 {label[name]} 快捷键，触发悬停识别...",
-                                        tag="HOVER",
-                                        level="INFO",
-                                    )
+                                bus.runtime_log(
+                                    f"捕获到 {label[name]} 快捷键，触发悬停识别...",
+                                    tag="HOVER",
+                                    level="INFO",
+                                )
                             act()
                         elif name == "trade_capture_key":
                             bus.runtime_log(

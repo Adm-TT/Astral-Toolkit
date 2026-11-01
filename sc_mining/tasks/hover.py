@@ -233,12 +233,9 @@ def hover_once(img=None):
     t0 = time.time()
     _last_hover.clear()
     _last_hover["seq"] = None  # 上一次 F8 后台还没查完的价格，不再往悬浮窗上写
-    try:
-        from ..core import run_records
+    from ..core import run_records
 
-        run_records.record("HOVER", "触发 F8 物品识别", ui_tag="HOVER")
-    except Exception:
-        bus.runtime_log("触发 F8 物品悬停识别，截取画面...", tag="HOVER", level="INFO")
+    run_records.record("HOVER", "触发 F8 物品识别", ui_tag="HOVER")
     t_grab_0 = time.time()
     img = img or grab()
     t_grab = time.time()
@@ -264,12 +261,6 @@ def hover_once(img=None):
             tag="HOVER",
             level="WARN",
         )
-        try:
-            from ..core import run_records
-
-            run_records.record("HOVER", "F8 识别流程结束", ui_tag="HOVER")
-        except Exception:
-            pass
         bus.publish("hover", {"state": "miss", "msg": msg})
         _item_hud("未识别到物品\n鼠标停在物品上，等说明框出现后再按", 10)
         threading.Thread(
@@ -320,12 +311,6 @@ def hover_once(img=None):
         tag="HOVER",
         level="INFO",
     )
-    try:
-        from ..core import run_records
-
-        run_records.record("HOVER", "F8 识别流程结束", ui_tag="HOVER")
-    except Exception:
-        pass
     bus.publish(
         "hover",
         {

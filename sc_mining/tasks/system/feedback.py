@@ -166,12 +166,10 @@ def feedback_report(kind="auto", note="", img=None):
     try:
         from ...core import run_records
 
-        runrec_lines = run_records.read_tail(limit=150)
+        runrec_lines = run_records.read_recent(limit=150)
         if runrec_lines:
             name = run_records.path_for().name
-            (d / name).write_text(
-                _scrub("\n".join(runrec_lines)), encoding="utf-8"
-            )
+            (d / name).write_text(_scrub("\n".join(runrec_lines)), encoding="utf-8")
         run_records.record("FEEDBACK", "本地已生成反馈包", ui_tag="SYS")
     except Exception:
         pass

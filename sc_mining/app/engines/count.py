@@ -65,12 +65,9 @@ class _Count:
         )
         self.thread.start()
         self._show()
-        try:
-            from ...core import run_records
+        from ...core import run_records
 
-            run_records.record("COUNT", "触发 F6 盘点", ui_tag="COUNT")
-        except Exception:
-            pass
+        run_records.record("COUNT", "触发 F6 盘点", ui_tag="COUNT")
         bus.publish("count", {"running": True, "place": place})
         return {"running": True, "place": place}
 
@@ -78,12 +75,9 @@ class _Count:
         """手动结束（F6 / 窗口里的按钮）：识别线程自己收尾"""
         if self.ev:
             self.ev.set()
-        try:
-            from ...core import run_records
+        from ...core import run_records
 
-            run_records.record("COUNT", "F6 盘点结束", ui_tag="COUNT")
-        except Exception:
-            pass
+        run_records.record("COUNT", "F6 盘点结束", ui_tag="COUNT")
         return {"running": False}
 
     def _key(self, r):  # 制造出来的同名东西，各槽品质不一样就分开记
