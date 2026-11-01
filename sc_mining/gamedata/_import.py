@@ -14,13 +14,19 @@ def _d(sources: dict[str, SourceBytes], name: str, default: Any) -> Any:
     return default if s is None or s.data is None else s.data
 
 
-def _txt(v: Any) -> str:
-    """标量文本列：不是字符串就存空串（可选源里一个字段类型不对，不能让整库建不出来）"""
+def _txt(v: Any) -> str | None:
+    """可空文本列：字符串原样、其它（含 None）存 NULL——读端还原 dict 时 None 和 '' 分得开（批 3 要求）；
+    类型不对也只是这一列为 NULL，不让整库建不出来"""
+    return v if isinstance(v, str) else None
+
+
+def _s(v: Any) -> str:
+    """要算折叠键 / 不可空的地方：不是字符串当空串"""
     return v if isinstance(v, str) else ""
 
 
-def _num(v: Any) -> float | None:
-    """数值列：int / float（不含 bool）原样，其它 None"""
+def _num(v: Any) -> int | float | None:
+    """数值列：int / float（不含 bool）原样（int 就存 int，列不声明类型时 SQLite 也保留），其它 None"""
     return v if isinstance(v, (int, float)) and not isinstance(v, bool) else None
 
 
@@ -104,7 +110,7 @@ def import_wiki_rows(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) 
     for i, w in enumerate(items if isinstance(items, list) else []):
         if not isinstance(w, dict) or not isinstance(w.get("n"), str):
             continue
-        rows.append((i, w["n"], _txt(w.get("cls"))))
+        rows.append((i, w["n"], _s(w.get("cls"))))
         alts.extend(
             (i, j, c) for j, c in enumerate(_lst(w.get("alt"))) if isinstance(c, str)
         )
@@ -666,9 +672,9 @@ def import_crafting(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -
                 _int(b.get("nsrc")),
                 key,
                 _fold_name(b["n"]),
-                _fold_name(_txt(b.get("z"))),
+                _fold_name(_s(b.get("z"))),
                 _search_norm(b["n"]),
-                _search_norm(_txt(b.get("z"))),
+                _search_norm(_s(b.get("z"))),
                 ek if ek in known else None,
                 slots_json,
                 src_json,
@@ -691,7 +697,7 @@ def import_crafting(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -
                     or not isinstance(o[1], str)
                 ):
                     continue
-                mats.append((i, si, _txt(slot[0]), oi, o[0], o[1], float(qty), min_q))
+                mats.append((i, si, _s(slot[0]), oi, o[0], o[1], float(qty), min_q))
     conn.executemany(
         "insert into blueprints values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows
     )
@@ -765,8 +771,8 @@ def import_wikelo(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> 
                 _txt(r.get("z")),
                 _num(r.get("q")),
                 _txt(r.get("u")),
-                _fold(_txt(r.get("n"))),
-                _fold(_txt(r.get("z"))),
+                _fold(_s(r.get("n"))),
+                _fold(_s(r.get("z"))),
             )
             for _i, cid, c in ok
             for k, r in enumerate(_lst(c.get("req")))
@@ -873,5 +879,86 @@ def import_ship_items(
             for k, ships in (items.items() if isinstance(items, dict) else ())
             for j, ship in enumerate(_lst(ships))
             if isinstance(ship, str)
+        ],
+    )
+
+
+# ---------------------------------------------------------------- schema 6：采矿（批 5 公共层，2026-11-02）
+# 三份都存原样 JSON：消费方（mining_area.rocks_table / area_for_spot、shipsig.match、uex.apply_live 的 yields）吃的就是整段 dict，
+# 拆表没有查询收益还会改数值类型。「源文件在不在」看 meta 的 src:<文件名> 是否为空串
+
+
+def import_mining_rocks(
+    conn: sqlite3.Connection, sources: dict[str, SourceBytes]
+) -> None:
+    import json
+
+    raw = _d(sources, "mining_rocks.json", None)
+    if not isinstance(raw, dict):
+        return  # 缺失 / 坏 / 不是 dict：没有表行、没有 meta 键（批 5 据此判「没有石头表」）
+    sections, extra, rows = [], {}, []
+    for name, sec in raw.items():
+        if isinstance(sec, dict):
+            sections.append(name)
+            for i, (k, v) in enumerate(sec.items()):
+                rows.append(
+                    (
+                        str(name),
+                        str(k),
+                        json.dumps(v, ensure_ascii=False, separators=(",", ":")),
+                        i,
+                    )
+                )
+        else:
+            extra[str(name)] = sec
+    conn.executemany("insert or ignore into mining_rock_entries values (?,?,?,?)", rows)
+    conn.execute(
+        "insert or replace into meta values ('mining_rocks_meta', ?)",
+        (
+            json.dumps(
+                {"sections": sections, "extra": extra},
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
+        ),
+    )
+
+
+def import_ship_signatures(
+    conn: sqlite3.Connection, sources: dict[str, SourceBytes]
+) -> None:
+    import json
+
+    raw = _d(sources, "ship_signatures.json", None)
+    ships = raw.get("ships") if isinstance(raw, dict) else None
+    conn.executemany(
+        "insert into ship_signatures values (?,?)",
+        [
+            (i, json.dumps(s, ensure_ascii=False, separators=(",", ":")))
+            for i, s in enumerate(ships if isinstance(ships, list) else [])
+            if isinstance(s, dict)
+        ],
+    )
+
+
+def import_refinery_yields(
+    conn: sqlite3.Connection, sources: dict[str, SourceBytes]
+) -> None:
+    import json
+
+    raw = _d(sources, "prices.json", None)
+    yields = raw.get("yields") if isinstance(raw, dict) else None
+    conn.executemany(
+        "insert or ignore into refinery_yields values (?,?,?)",
+        [
+            (
+                str(station),
+                json.dumps(bonus, ensure_ascii=False, separators=(",", ":")),
+                i,
+            )
+            for i, (station, bonus) in enumerate(
+                yields.items() if isinstance(yields, dict) else ()
+            )
+            if isinstance(bonus, dict)
         ],
     )
