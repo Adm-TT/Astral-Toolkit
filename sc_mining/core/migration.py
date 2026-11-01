@@ -5,13 +5,16 @@
 - 启动时按需执行，从 paths 抽离以免路径模块兼当搬家脚本
 """
 
-from pathlib import Path
 import shutil
 
-from . import paths
+_SAMPLES = ["scan1.png", "sig1.png", "turret1.png", "pilot_fov.png", "inv_sample.png"]
+_INNO_SKIP_DIRS = {"window", "updates", "shell"}
+_INNO_SKIP_FILES = {"window_url.txt", "instance.lock", "install.log"}
 
 
 def _get_delete_list():
+    from . import paths
+
     return (
         [
             paths.ROOT / n
@@ -35,12 +38,9 @@ def _get_delete_list():
     )
 
 
-_SAMPLES = ["scan1.png", "sig1.png", "turret1.png", "pilot_fov.png", "inv_sample.png"]
-_INNO_SKIP_DIRS = {"window", "updates", "shell"}
-_INNO_SKIP_FILES = {"window_url.txt", "instance.lock", "install.log"}
-
-
 def _get_moves():
+    from . import paths
+
     return [
         (paths.CODE / "starmap.json", paths.DATA / "starmap.json"),
         (paths.CODE / "shops.json", paths.DATA / "shops.json"),
@@ -65,14 +65,20 @@ def _get_moves():
     ]
 
 
-# 兼容既有直接引用
-_MOVES = _get_moves()
-_DELETE = _get_delete_list()
+def __getattr__(name):
+    """兼容 paths._MOVES / _DELETE 等旧引用：按需计算，避免与 paths 循环导入"""
+    if name == "_MOVES":
+        return _get_moves()
+    if name == "_DELETE":
+        return _get_delete_list()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def import_inno() -> int:
     """Velopack 版：老的 Inno 安装版（%LOCALAPPDATA%\\Programs\\AT\\userdata）还在、还没搬过，就复制过来
     （同名文件新的留着，不拿旧的盖）。搬完写标记，以后不再搬。返回复制了几个文件"""
+    from . import paths
+
     if (
         not paths.VELOPACK
         or not paths.INNO_USER
@@ -97,8 +103,7 @@ def import_inno() -> int:
             shutil.copy2(p, dest)
             n += 1
         except OSError:
-            return n  # 没搬完：不写标记，下次启动接着搬
-    # 老版 data 里下载来的汉化包（loc）不在安装包里：新位置没有的就复制过来
+            return n
     old_loc = paths.INNO_USER.parent / "data" / "loc"
     if old_loc.is_dir():
         for p in old_loc.rglob("*"):
@@ -116,6 +121,8 @@ def import_inno() -> int:
 
 def migrate() -> int:
     """把旧位置的文件搬到新位置；返回做了几件事。重复调用没关系"""
+    from . import paths
+
     done = 0
     for old, new in _get_moves():
         if old.exists() and not new.exists():

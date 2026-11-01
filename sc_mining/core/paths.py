@@ -210,13 +210,28 @@ def seed_data():
     return n
 
 
-# 历史版本迁移逻辑（抽离至 core.migration，原样重导出保持兼容）
-from .migration import (  # noqa: E402, F401
-    _DELETE,
-    _INNO_SKIP_DIRS,
-    _INNO_SKIP_FILES,
-    _MOVES,
-    _SAMPLES,
-    import_inno,
-    migrate,
-)
+# 历史版本迁移（core.migration）：懒重导出，避免与 migration 循环导入
+def import_inno():
+    from .migration import import_inno as _import_inno
+
+    return _import_inno()
+
+
+def migrate():
+    from .migration import migrate as _migrate
+
+    return _migrate()
+
+
+def __getattr__(name):
+    if name in (
+        "_DELETE",
+        "_INNO_SKIP_DIRS",
+        "_INNO_SKIP_FILES",
+        "_MOVES",
+        "_SAMPLES",
+    ):
+        from . import migration
+
+        return getattr(migration, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
