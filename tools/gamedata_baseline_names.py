@@ -67,10 +67,12 @@ def collect():
         out[f"names.suggest({q!r})"] = names.suggest(q)
 
     queries = list(GAMEKEY)
-    aliases = cached_json(DATA / "name_aliases.json", default={}) or {}
+    aliases = cached_json(DATA / "name_aliases.json", default={})
+    aliases = aliases if isinstance(aliases, dict) else {}
     if aliases:
         queries.append(next(iter(aliases)))  # 旧写法：文件第一条
-    wiki = (cached_json(DATA / "wiki_items.json", default={}) or {}).get("items") or []
+    raw = cached_json(DATA / "wiki_items.json", default={})
+    wiki = (raw.get("items") if isinstance(raw, dict) else None) or []
     paint = next((w.get("n") for w in wiki if w.get("t") == "Paints"), None)
     if paint:
         queries.append(paint)  # 只在 wiki 里的涂装
