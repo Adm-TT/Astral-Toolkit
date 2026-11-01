@@ -69,7 +69,7 @@ def from_code(code):
     return None
 
 
-def _place_zh(key=None, prefix=None):
+def _place_zh(key="", prefix=None):
     """places_zh 里的中文（只看这一份，不看 places_extra_zh——以前就只读 places_zh.json）：key 精确查；
     prefix 取以它开头的最短键。查不到、游戏数据库不可用返回 None（以前读不到文件就是空表）"""
     from ..gamedata import GamedataError, places

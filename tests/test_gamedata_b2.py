@@ -157,7 +157,7 @@ def test_find_point_internal_case_insensitive_first_match(monkeypatch, tmp_path)
     _setup(monkeypatch, tmp_path)
     p = position.find_point(internal="dup_x")
     assert p == dict(n="Dup A", i="DUP_X", sys="Pyro", t="Outpost", x=1.0, y=1.0, z=1.0)
-    assert position.find_point(internal="Hur_L1")["x"] == 9.0  # 坐标改正后的
+    assert (position.find_point(internal="Hur_L1") or {})["x"] == 9.0  # 坐标改正后的
     assert position.find_point(internal="nope") is None
 
 
@@ -165,11 +165,10 @@ def test_find_point_name_norm(monkeypatch, tmp_path):
     from sc_mining.navigation import position
 
     _setup(monkeypatch, tmp_path)
-    assert position.find_point(name="hurston-L1")["i"] == "HUR_L1"
-    assert position.find_point(name="Dup B")["n"] == "Dup B"
-    assert (
-        position.find_point(internal="nope", name="Stanton Star")["n"] == "Stanton Star"
-    )
+    assert (position.find_point(name="hurston-L1") or {})["i"] == "HUR_L1"
+    assert (position.find_point(name="Dup B") or {})["n"] == "Dup B"
+    p = position.find_point(internal="nope", name="Stanton Star")
+    assert (p or {})["n"] == "Stanton Star"
     assert position.find_point(name="Nowhere") is None
 
 
@@ -177,14 +176,14 @@ def test_find_point_pyro_roman(monkeypatch, tmp_path):
     from sc_mining.navigation import position
 
     _setup(monkeypatch, tmp_path, **_more_points())
-    assert position.find_point(name="Pyro III")["n"] == "Bloom"
+    assert (position.find_point(name="Pyro III") or {})["n"] == "Bloom"
 
 
 def test_from_code_lagrange(monkeypatch, tmp_path):
     from sc_mining.navigation import position
 
     _setup(monkeypatch, tmp_path, **_more_points())
-    assert position.from_code("RR_P1_L1")["n"] == "PYR1 L1"
+    assert (position.from_code("RR_P1_L1") or {})["n"] == "PYR1 L1"
     assert (
         position.from_code("RR_HUR_L1") is None
     )  # 斯坦顿按 Stanton1_L1 找，最小数据里没有

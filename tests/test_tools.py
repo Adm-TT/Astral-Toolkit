@@ -841,7 +841,7 @@ def test_log_place_is_specific(monkeypatch):
         "checkmate": "死局空间站",
     }
 
-    def place_zh(key=None, prefix=None):  # 代替查库的 places_zh（批 2 起走游戏数据层）
+    def place_zh(key="", prefix=None):  # 代替查库的 places_zh（批 2 起走游戏数据层）
         if prefix is not None:
             keys = sorted((k for k in zh if k.startswith(prefix)), key=len)
             return zh[keys[0]] if keys else None
