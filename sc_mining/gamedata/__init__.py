@@ -8,6 +8,7 @@
   snapshot()     一次业务操作钉在一个版本上
   rebuild()      按需重建（阻塞，放工作线程）
   ensure_ready() 启动用：按需重建 + 清旧代
+  ensure()       查询前用：库没好就等后台 warm_up，再不行就同步建一次（topic 内部调）
   warm_up()      后台线程跑 ensure_ready()，失败只记 last_error()
   refresh()      数据文件换了之后调：关掉本线程连接，下次快照重读清单
   updating()     改源文件的边界：拿写锁，最外层退出时重建一次
@@ -21,6 +22,7 @@ from . import _build, _db
 from ._db import current_version as version, snapshot
 from ._lock import write_lock
 from ._manifest import Manifest
+from ._ready import ensure
 from ._types import (
     BuildError,
     GamedataError,
@@ -44,6 +46,7 @@ __all__ = [
     "ShopDistance",
     "ShopRow",
     "Vec3",
+    "ensure",
     "ensure_ready",
     "last_error",
     "rebuild",
@@ -54,7 +57,7 @@ __all__ = [
     "warm_up",
 ]
 
-_state: dict = {"last_error": None}
+_state: dict = {"last_error": None, "warm_thread": None}
 _tls = threading.local()
 
 
@@ -86,6 +89,7 @@ def warm_up() -> threading.Thread:
             _state["last_error"] = f"游戏数据库没建好：{e}"
 
     t = threading.Thread(target=run, daemon=True, name="gamedata-warmup")
+    _state["warm_thread"] = t  # ensure() 看到它在跑就等它，不自己再建一遍
     t.start()
     return t
 

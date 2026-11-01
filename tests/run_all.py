@@ -73,6 +73,7 @@ MODULES = [
     "tests.test_gamedata",
     "tests.test_gamedata_nav",
     "tests.test_feedback_guard",
+    "tests.test_gamedata_b1",
 ]
 
 if __name__ == "__main__":
