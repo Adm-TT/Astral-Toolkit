@@ -10,23 +10,38 @@ updating() 里装数据，就要等它装完。mining/data.py 在 import 时就�
 同步重建一次（约 0.5 秒）。"""
 
 import threading
+import time
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Iterator
 
 if TYPE_CHECKING:
     from ._db import Snapshot
 
-_state: dict = {"done": None}  # 核对过的库目录
+_state: dict = {
+    "done": None,
+    "failed": None,
+}  # 核对过的库目录；最近一次建库失败 (库目录, 时刻, 错误)
+_RETRY_AFTER = 30.0  # 建库失败后这么多秒内不再重试，直接抛上次的错
 
 
 def ensure(timeout: float = 30.0) -> None:
-    """后台 warm_up 在跑就先等它（最多 timeout 秒）；再 rebuild_if_needed()：源没变、表结构一致、库打得开就直接返回，
-    否则同步重建（阻塞，真实数据约 0.5 秒）"""
+    """后台 warm_up 在跑就先等它（最多 timeout 秒，之后 rebuild_if_needed 自己还要等数据目录写锁，最多再 30 秒）；
+    再 rebuild_if_needed()：源没变、表结构一致、库打得开就直接返回，否则同步重建（阻塞，真实数据约 0.5 秒）。
+    建库失败（缺源文件等）记下来，_RETRY_AFTER 秒内再来直接抛同一个错，不每次查询都拿锁、读源算哈希再失败一遍
+    （控制台复审 2026-11-02 第 5、6 条）"""
     from ._paths import gamedata_dir
+    from ._types import GamedataError
 
     where = str(gamedata_dir())
     if _state["done"] == where:
         return
+    failed = _state.get("failed")
+    if failed is not None and failed[0] == where:
+        if time.monotonic() - failed[1] < _RETRY_AFTER:
+            raise GamedataError(
+                f"游戏数据库暂不可用（{_RETRY_AFTER:.0f} 秒内不重试）：{failed[2]}"
+            )
+        _state["failed"] = None
     from . import _state as pkg_state
 
     t = pkg_state.get("warm_thread")
@@ -34,8 +49,18 @@ def ensure(timeout: float = 30.0) -> None:
         t.join(timeout)
     from ._build import rebuild_if_needed
 
-    rebuild_if_needed()
+    try:
+        rebuild_if_needed()
+    except Exception as e:
+        _state["failed"] = (where, time.monotonic(), e)
+        raise
     _state["done"] = where
+    _state["failed"] = None
+
+
+def forget_failure() -> None:
+    """数据文件换了 / 有人成功建了库：忘掉上次的失败，下次查询立刻重试（refresh / rebuild / updating 调）"""
+    _state["failed"] = None
 
 
 @contextmanager

@@ -13,7 +13,7 @@ def _setup(monkeypatch, tmp_path, **override):
 
     tmp_path.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(paths, "DATA", tmp_path)
-    monkeypatch.setattr(_ready, "_state", {"done": None})
+    monkeypatch.setattr(_ready, "_state", {"done": None, "failed": None})
     monkeypatch.setattr(G, "_state", {"last_error": None, "warm_thread": None})
     _write_min_sources(tmp_path, **override)
     return tmp_path
@@ -59,6 +59,55 @@ def test_ensure_raises_when_no_sources(monkeypatch, tmp_path):
     assert _ready._state["done"] != str(
         tmp_path / "empty" / "gamedata"
     )  # 建失败不能记成已就绪
+
+
+def test_shops_queries_empty_when_db_unavailable(monkeypatch, tmp_path):
+    """库建不出来（没有 shops.json）：F8 / 哪买 / 可买 查不到东西，但不往外抛（和以前读不到文件一样）"""
+    from sc_mining.core import paths
+    from sc_mining.crafting import shops
+
+    _setup(monkeypatch, tmp_path)
+    monkeypatch.setattr(paths, "DATA", tmp_path / "empty")
+    assert shops.find("Lawson") == []
+    assert shops.find_close("Lawson Arms") is None
+    assert shops.where(200) == ([], [])
+    assert shops.where_by_name("Lawson") == ""
+    assert shops.nearest(200, None) == []
+    assert shops.buyable(200) is False
+    assert shops.variants("Lawson Arms") == []
+    assert shops.buyable(float("nan")) is False and shops.where(float("inf")) == (
+        [],
+        [],
+    )
+
+
+def test_ensure_backs_off_after_failure(monkeypatch, tmp_path):
+    """建库失败后 30 秒内再查：直接抛，不再拿锁读源重试；过了时限再试一次"""
+    import sc_mining.gamedata as G
+    from sc_mining.core import paths
+    from sc_mining.gamedata import _build, _ready
+    from tests.minipytest import raises
+
+    _setup(monkeypatch, tmp_path)
+    monkeypatch.setattr(paths, "DATA", tmp_path / "empty")
+    calls = []
+    real = _build.rebuild_if_needed
+
+    def counting():
+        calls.append(1)
+        return real()
+
+    monkeypatch.setattr(_build, "rebuild_if_needed", counting)
+    with raises(G.GamedataError):
+        G.ensure()
+    with raises(G.GamedataError):
+        G.ensure()
+    assert calls == [1]  # 第二次没重试
+    w, _t, e = _ready._state["failed"]
+    _ready._state["failed"] = (w, -(10**9), e)  # 当作过了时限
+    with raises(G.GamedataError):
+        G.ensure()
+    assert calls == [1, 1]
 
 
 def test_ensure_fast_path_after_first_success(monkeypatch, tmp_path):
@@ -286,7 +335,12 @@ def test_places_cache_clear_still_works(monkeypatch, tmp_path):
     from sc_mining.crafting import stockplaces as SP
     from sc_mining.update.data_pack import clear_caches
 
+    from sc_mining.update import uex
+
     _setup(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        uex, "apply_live", lambda m: False
+    )  # 真 clear_caches 会读真实 prices.json、改 mining.data
     monkeypatch.setattr(SP, "_PLACES", {"ver": None, "list": None})
     monkeypatch.setattr(SP, "_INDEX", {"of": None, "idx": None})
     first = SP.places()
@@ -746,10 +800,16 @@ def test_query_during_rebuild_sees_old_or_new_never_error(monkeypatch, tmp_path)
     IS._build()
     errors, empty = [], []
 
+    from sc_mining.crafting import shops
+
     def worker():
         for _ in range(200):
             try:
                 if not IS.find("Medpen"):
+                    empty.append(1)
+                if (
+                    not shops.find("Lawson") or not shops.where(200)[0]
+                ):  # F8 实际走的是 shops
                     empty.append(1)
             except Exception as e:  # noqa: BLE001 —— 测试要看到任何异常
                 errors.append(e)
@@ -799,7 +859,7 @@ def test_ensure_rebuilds_stale_db(monkeypatch, tmp_path):
     (tmp_path / "prices.json").write_text(
         json.dumps({"prices": {"Aluminum": {"Area18": 987654}}}), encoding="utf-8"
     )
-    monkeypatch.setattr(_ready, "_state", {"done": None})  # 新进程
+    monkeypatch.setattr(_ready, "_state", {"done": None, "failed": None})  # 新进程
     assert prices.city_prices()["Aluminum"]["Area18"] == 987654.0
 
 
@@ -816,7 +876,7 @@ def test_ensure_rebuilds_old_schema(monkeypatch, tmp_path):
     m = json.loads(manifest_path().read_text(encoding="utf-8"))
     m["schema_version"] = 2
     manifest_path().write_text(json.dumps(m), encoding="utf-8")
-    monkeypatch.setattr(_ready, "_state", {"done": None})
+    monkeypatch.setattr(_ready, "_state", {"done": None, "failed": None})
     assert len(shops.catalog()) == 3
     assert (
         json.loads(manifest_path().read_text(encoding="utf-8"))["generation_id"]
@@ -854,9 +914,13 @@ def test_clear_caches_rebuilds_for_writers_outside_updating(monkeypatch, tmp_pat
     import json
 
     import sc_mining.gamedata as G
+    from sc_mining.update import uex
     from sc_mining.update.data_pack import clear_caches
 
     _setup(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        uex, "apply_live", lambda m: False
+    )  # 真 clear_caches 会读真实 prices.json、改 mining.data
     IS = _fresh_search(monkeypatch)
     G.ensure()
     assert IS.lookup("MedPack X") is None

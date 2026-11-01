@@ -85,6 +85,7 @@ def apply_live(data_module):
         live_prices = gamedata.prices.city_prices()
     except gamedata.GamedataError:
         # 库建不出来（如 shops.json 缺了）：矿价退回直接读 prices.json，和迁移前一样（审查 2026-11-02 第 3 条、复审第 1 条）
+        # 过渡：下面 yields 迁库（批 5 / GD-B5）时，这条退路和读 prices.json 的 live 一起删，改成库读不到就不覆盖内置表
         live_prices = live.get("prices") or {}
     prices = {
         m: dict(c) for m, c in data_module.CITY_PRICES.items()

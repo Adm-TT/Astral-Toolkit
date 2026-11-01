@@ -27,8 +27,12 @@ class Snapshot:
         return self.manifest.data_version
 
     def execute(self, sql: str, params: tuple = ()) -> list[tuple]:
-        """包内各 topic 用；不对功能模块开放"""
-        return self._conn.execute(sql, params).fetchall()
+        """包内各 topic 用；不对功能模块开放。库文件中途坏了 / 磁盘出错等 sqlite 错误统一包成 GamedataUnavailable，
+        调用方只用接 GamedataError 一种（控制台复审 2026-11-02 第 10 条）"""
+        try:
+            return self._conn.execute(sql, params).fetchall()
+        except sqlite3.Error as e:
+            raise GamedataUnavailable(f"读游戏数据库出错：{e}") from e
 
 
 def _open_readonly(m: Manifest) -> sqlite3.Connection:

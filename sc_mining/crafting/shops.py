@@ -150,10 +150,28 @@ def _fold(s):
 
 
 def _folded_items():
-    """[(id, 英文名, 类别, 折叠后的名字)]，按 shops.json 的顺序；来自游戏数据层的商店物品目录（按内容版本缓存）"""
+    """[(id, 英文名, 类别, 折叠后的名字)]，按 shops.json 的顺序；来自游戏数据层的商店物品目录（按内容版本缓存）。
+    库建不出来（没有 shops.json 等）就是空表：和以前读不到文件一样，查不到但不报错（控制台审查 2026-11-02 第 1 条）"""
+    from ..gamedata import GamedataError
     from ..gamedata import shops as gd_shops
 
-    return [(c.uex_item_id, c.en, c.cat, c.folded) for c in gd_shops.catalog()]
+    try:
+        return [(c.uex_item_id, c.en, c.cat, c.folded) for c in gd_shops.catalog()]
+    except GamedataError:
+        return []
+
+
+def _rows_for(item_id):
+    """这件物品的商店价格行；不是编号或库建不出来 → 空"""
+    if not _is_id(item_id):
+        return ()
+    from ..gamedata import GamedataError
+    from ..gamedata import shops as gd_shops
+
+    try:
+        return gd_shops.rows_for_item(item_id)
+    except GamedataError:
+        return ()
 
 
 def find(query, limit=12):
@@ -192,9 +210,7 @@ def find_close(name, cutoff=0.88):
 
 def where(item_id):
     """这件东西在哪买/卖：(买的地方 [(价格, 商店, 位置)], 收的地方 [...])，各按价格排好"""
-    from ..gamedata import shops as gd_shops
-
-    rows = gd_shops.rows_for_item(item_id) if _is_id(item_id) else ()
+    rows = _rows_for(item_id)
     buy = sorted(
         (r.price_buy, r.shop_name, r.place_text) for r in rows if r.price_buy > 0
     )
@@ -210,7 +226,7 @@ def _is_id(item_id):
     return (
         isinstance(item_id, (int, float))
         and not isinstance(item_id, bool)
-        and item_id == int(item_id)
+        and float(item_id).is_integer()  # nan / inf 也只是对不上，不报错
     )
 
 
@@ -279,11 +295,10 @@ def shop_point(fields):
 
 def nearest(item_id, here, n=3):
     """离 here 最近的 n 个买点：[(距离米, 价格, 商店, 位置)]"""
-    from ..gamedata import shops as gd_shops
     from ..navigation.position import distance
 
     out = []
-    for r in gd_shops.rows_for_item(item_id) if _is_id(item_id) else ():
+    for r in _rows_for(item_id):
         if r.price_buy <= 0:
             continue
         p = (
@@ -315,9 +330,16 @@ def base_names(name):
 
 
 def buyable(item_id):
+    """有没有商店卖；库建不出来当没有"""
+    from ..gamedata import GamedataError
     from ..gamedata import shops as gd_shops
 
-    return _is_id(item_id) and gd_shops.buyable(item_id)
+    if not _is_id(item_id):
+        return False
+    try:
+        return gd_shops.buyable(item_id)
+    except GamedataError:
+        return False
 
 
 def variants(name, limit=3):

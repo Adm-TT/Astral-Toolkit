@@ -133,7 +133,8 @@ def _build_locked():
 def _on_data_changed():
     """data_pack.clear_caches() 调（数据文件换了之后）：汉化包重建（zh_names / name_aliases）、掉落索引更新这几处
     还没经过 gamedata.updating() 写文件，库不会自己重建，索引按库的内容版本缓存就会一直是旧的——这里补建一次库
-    （源没变就是空操作）。那几处的写入改进更新边界后（批 4 / 批 6）可以删掉这个钩子（审查 2026-11-02 第 2 条）"""
+    （源没变就是空操作）。过渡代码：等 GD-B4（汉化 / 掉落）把 localization.rebuild、loot.update 的写入套进 updating()
+    之后，由 GD-B4 删掉这个钩子和下面的登记（审查 2026-11-02 第 2 条；控制台复审第 7 条：登记在队首，先补库再让别的钩子重填缓存）"""
     from .. import gamedata
 
     try:
@@ -145,13 +146,15 @@ def _on_data_changed():
 try:
     from ..update.data_pack import CACHE_HOOKS as _CACHE_HOOKS
 
-    _CACHE_HOOKS.append(_on_data_changed)
+    _CACHE_HOOKS.insert(
+        0, _on_data_changed
+    )  # 排最前：先补建库，后面 goals 等钩子重填缓存时读到的才是新库
 except Exception:  # noqa: BLE001 —— 和 tasks/goals.py 登记钩子的写法一样
     pass
 
 
 def wiki_items():
-    """data/wiki_items.json：star-citizen.wiki（游戏解包）的物品清单 [{n, t, s, mfr}]；没有这份数据就是空的"""
+    """data/wiki_items.json：star-citizen.wiki 的物品清单 [{n, t, s, mfr}]；没有这份数据就是空的"""
     from ..core.paths import DATA, cached_json
 
     return cached_json(DATA / "wiki_items.json", lambda d: d.get("items") or [], [])

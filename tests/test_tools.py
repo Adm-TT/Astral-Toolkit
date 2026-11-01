@@ -253,7 +253,7 @@ def _shops_db(monkeypatch, tmp_path, data):
     paths.DATA 不动（别的数据照旧读真实 data/）。shops._data 也照旧换掉，给还在用 load() 的地方"""
     from sc_mining import gamedata
     from sc_mining.core import paths
-    from sc_mining.gamedata import _paths, _ready
+    from sc_mining.gamedata import _build, _paths, _ready
 
     src = tmp_path / "gamedata_src"
     src.mkdir(exist_ok=True)
@@ -261,6 +261,9 @@ def _shops_db(monkeypatch, tmp_path, data):
         json.dumps(data, ensure_ascii=False), encoding="utf-8"
     )
     monkeypatch.setattr(_paths, "gamedata_dir", lambda: src / "gamedata")
+    monkeypatch.setattr(
+        _build, "gamedata_dir", lambda: src / "gamedata"
+    )  # _build 在 import 时绑了名字：清理旧库的 glob 不能扫到真实 data/gamedata（控制台复审第 11 条）
     monkeypatch.setattr(shops, "_data", data)
     real = paths.DATA
     paths.DATA = src  # 只在建库这一下读临时目录的源
@@ -1666,10 +1669,14 @@ def test_update_log_reaches_window(monkeypatch):
     ):
         monkeypatch.setattr(m, n, lambda name=m.__name__: print(f"{name} ok"))
     from sc_mining.update import data_pack
+    import sc_mining.gamedata as G
 
     monkeypatch.setattr(
         data_pack, "update", lambda progress=print: None
     )  # 不联网：当作数据包下不到，走各数据网站
+    monkeypatch.setattr(
+        G, "rebuild", lambda: None
+    )  # 收尾 clear_caches 会补建游戏数据库：不碰真实 data/
     old = sys.stdout
     bus.install_router()
     try:
