@@ -111,52 +111,60 @@ _VARIANT = re.compile(
 
 
 def _wiki_classes(name_en):
-    """物品查询（wiki）里这个英文名对应的全部游戏类名；没有返回空集"""
+    """物品查询（wiki）里这个英文名对应的全部游戏类名（含 alt）；没有返回空集。在 find 里调时用 find 钉住的快照"""
     try:
-        from .itemsearch import wiki_items
+        from ..gamedata import loot as gd_loot
 
-        k = _fold(name_en)
-        out = set()
-        for w in wiki_items():
-            if _fold(w.get("n")) == k:
-                out.add((w.get("cls") or "").lower())
-                out.update(c.lower() for c in w.get("alt") or [])
-        return out - {""}
+        return set(gd_loot.wiki_classes(_fold(name_en)))
     except Exception:
         return set()
+
+
+def _partial(ke, kz, r):
+    """名字只是开头像 / 包含：英文 ≥6 前缀、≥5 子串，中文 ≥3 子串"""
+    return (
+        (ke and len(ke) >= 6 and r.norm_en.startswith(ke))
+        or (ke and len(ke) >= 5 and ke in r.norm_en)
+        or (kz and len(kz) >= 3 and kz in r.norm_zh)
+    )
 
 
 def find(name_en="", name_zh=""):
     """按名字找物品：[(uuid, 英文名, 中文名, 稀有度)]，完全同名的排前面。
     同名的有好几个实体时，先要物品查询（wiki）里这个名字的类名，再去掉 NPC 专用、测试这些变体，有掉落的在前。
-    名字只是开头像 / 包含的（Zeus 探索头盔 → Zeus 探索头盔 Echo）：物品查询里本来就有这个物品时不算"""
-    idx = load_index(False)  # 索引缺了也不在 F8 / 物品页里联网下（更新数据会下）
-    if not idx:
-        return []
+    名字只是开头像 / 包含的（Zeus 探索头盔 → Zeus 探索头盔 Echo）：物品查询里本来就有这个物品时不算。
+    数据来自游戏数据库（掉落索引缺了也不在 F8 / 物品页里联网下，更新数据会下）；库不可用时返回空"""
+    from .. import gamedata
+    from ..gamedata import loot as gd_loot
+
     ke, kz = _fold(name_en), _fold(name_zh)
-    exact, part = [], []
-    for u, en, zh, rar, fe, fz, cls, n in _folded_rows(idx):
-        if (ke and fe == ke) or (kz and fz == kz):
-            exact.append((u, en, zh, rar, cls, n))
-        elif (
-            (ke and len(ke) >= 6 and fe.startswith(ke))
-            or (ke and len(ke) >= 5 and ke in fe)
-            or (kz and len(kz) >= 3 and kz in fz)
-        ):
-            part.append((u, en, zh, rar, cls, n))
-    if exact:
-        good = _wiki_classes(name_en or (exact[0][1] if not name_en else ""))
-        pick = (
-            [h for h in exact if h[4] in good]
-            or [h for h in exact if not _VARIANT.search(h[4])]
-            or exact
-        )
-        pick.sort(key=lambda h: -h[5])
-        return [h[:4] for h in pick]
-    if name_en and _wiki_classes(name_en):
+    try:
+        gamedata.ensure()
+        with gamedata.snapshot() as s:  # 精确、wiki 类名、部分匹配钉在同一个版本上
+            exact = [
+                (r.uuid, r.en, r.zh, r.rarity, r.cls_lower, r.n)
+                for r in gd_loot.exact(ke, kz, s)
+            ]
+            if exact:
+                good = _wiki_classes(name_en or exact[0][1])  # 源顺序第一个，排序前取
+                pick = (
+                    [h for h in exact if h[4] in good]
+                    or [h for h in exact if not _VARIANT.search(h[4])]
+                    or exact
+                )
+                pick.sort(key=lambda h: -h[5])
+                return [h[:4] for h in pick]
+            if name_en and _wiki_classes(name_en):
+                return []
+            part = []
+            for r in gd_loot.rows(s):
+                if _partial(ke, kz, r) and not _VARIANT.search(r.cls_lower):
+                    part.append((r.uuid, r.en, r.zh, r.rarity))
+                    if len(part) == 5:
+                        break
+            return part
+    except gamedata.GamedataError:
         return []
-    part = [h for h in part if not _VARIANT.search(h[4])]
-    return [h[:4] for h in part[:5]]
 
 
 _failed = {}  # 下载失败的物品 → 时间：10 分钟内不再重试（断网时每次都要等超时）
