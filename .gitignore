@@ -34,6 +34,8 @@
 !/docs/shot_mining.jpg
 !/docs/shot_nav.jpg
 !/docs/1.1.1_自动化与注入说明.md
+!/docs/superpowers/
+!/docs/superpowers/**
 # 和开源导出脚本 oss_export.py 一致的排除
 __pycache__/
 codex_out/
@@ -57,3 +59,4 @@ windows_mcp_log.txt
 release_check_结果.txt
 test_recorder.py
 测试录制.bat
+/data/gamedata/

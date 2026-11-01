@@ -221,6 +221,12 @@ def clear_caches():
         shops._data = None  # 商店表（shops.load 只在 _data 为 None 时读文件）
     except Exception:
         pass
+    try:
+        from .. import gamedata
+
+        gamedata.refresh()  # 游戏数据库：关掉本线程旧连接，下次查询重读清单（数据层地基 2026-11-02）
+    except Exception:
+        pass
     for fn in list(CACHE_HOOKS):
         try:
             fn()
@@ -245,34 +251,36 @@ def install(zip_path, info=None):
                 json.loads((tmp / f).read_text(encoding="utf-8"))  # 坏文件不装
         DATA.mkdir(parents=True, exist_ok=True)
         from ..crafting.build_crafting import BUILD_LOCK
+        from .. import gamedata
 
-        with BUILD_LOCK:  # 和汉化包重建制造表不同时写同一批文件（二审 2026-10-28）
-            table = {
-                f: {"existed": (DATA / f).exists(), "backup": None, "replaced": False}
-                for f in got
-            }
-            try:
-                for f in got:
-                    row = table[f]
-                    if row["existed"]:
-                        shutil.copyfile(DATA / f, tmp / f"{f}.old")
-                        row["backup"] = tmp / f"{f}.old"
-                    shutil.copyfile(tmp / f, DATA / f".{f}.new")
-                    _replace_retry(DATA / f".{f}.new", DATA / f)
-                    row["replaced"] = True
-            except Exception as e:
-                failed = _restore(table, got)
+        with gamedata.updating():  # 数据目录写锁；装完在最外层重建游戏数据库（数据层地基 2026-11-02）
+            with BUILD_LOCK:  # 和汉化包重建制造表不同时写同一批文件（二审 2026-10-28）
+                table = {
+                    f: {"existed": (DATA / f).exists(), "backup": None, "replaced": False}
+                    for f in got
+                }
                 try:
-                    clear_caches()  # 换回去的也要让程序重读
-                except Exception:
-                    pass
-                if failed:
-                    keep = True  # 没换回去的文件，备份留着别删
-                    raise ValueError(
-                        f"数据装到一半出错（{e}），其中 {len(failed)} 个文件没能换回旧的（{'、'.join(failed[:3])}），"
-                        f"旧文件留在 {tmp}，再点一次「更新数据」通常能修好"
-                    ) from e
-                raise
+                    for f in got:
+                        row = table[f]
+                        if row["existed"]:
+                            shutil.copyfile(DATA / f, tmp / f"{f}.old")
+                            row["backup"] = tmp / f"{f}.old"
+                        shutil.copyfile(tmp / f, DATA / f".{f}.new")
+                        _replace_retry(DATA / f".{f}.new", DATA / f)
+                        row["replaced"] = True
+                except Exception as e:
+                    failed = _restore(table, got)
+                    try:
+                        clear_caches()  # 换回去的也要让程序重读
+                    except Exception:
+                        pass
+                    if failed:
+                        keep = True  # 没换回去的文件，备份留着别删
+                        raise ValueError(
+                            f"数据装到一半出错（{e}），其中 {len(failed)} 个文件没能换回旧的（{'、'.join(failed[:3])}），"
+                            f"旧文件留在 {tmp}，再点一次「更新数据」通常能修好"
+                        ) from e
+                    raise
         if info:
             STAMP.write_text(
                 json.dumps(

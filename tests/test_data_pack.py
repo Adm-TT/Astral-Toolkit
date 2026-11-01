@@ -18,6 +18,9 @@ def _setup(monkeypatch, tmp_path, pages):
     monkeypatch.setattr(U, "GITHUB", "at/at")
     monkeypatch.setattr(P, "DATA", tmp_path / "data")
     monkeypatch.setattr(P, "STAMP", tmp_path / "data" / "data_pack.json")
+    from sc_mining.core import paths
+
+    monkeypatch.setattr(paths, "DATA", tmp_path / "data")  # 装完会重建游戏数据库：也指向临时目录，别碰真实 data/
     (tmp_path / "data").mkdir(exist_ok=True)
 
     def fake_open(url, timeout):
