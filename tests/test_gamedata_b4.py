@@ -395,3 +395,226 @@ def test_clear_caches_still_safe(monkeypatch, tmp_path):
     data_pack.clear_caches()
     assert isinstance(loot._folded, dict)
     assert [h[0] for h in loot.find("Combat Knife")] == ["k2"]
+
+
+# ---------------------------------------------------------------- Task 3：detail 的版本、mine_info
+
+
+def _detail_env(monkeypatch, tmp_path):
+    """明细相关路径都换到 tmp_path；_from_zip / _get 换成记录器（不联网、不读真实整包）"""
+    from sc_mining.crafting import loot
+
+    rec = {"zip": [], "get": []}
+    monkeypatch.setattr(loot, "DETAILS", tmp_path / "loot_details.zip")
+    monkeypatch.setattr(loot, "CACHE_DIR", tmp_path / "loot")
+    monkeypatch.setattr(loot, "INDEX", tmp_path / "loot_index.json")
+    monkeypatch.setattr(loot, "_index", None)
+    monkeypatch.setattr(loot, "_failed", {})
+    monkeypatch.setattr(
+        loot, "_from_zip", lambda u, v: rec["zip"].append((u, v)) or None
+    )
+
+    def get(url, timeout=60):
+        rec["get"].append(url)
+        return {"url": url}
+
+    monkeypatch.setattr(loot, "_get", get)
+    return rec
+
+
+def test_detail_version_from_meta_matches_legacy(monkeypatch, tmp_path):
+    import json
+
+    import sc_mining.gamedata as G
+    from sc_mining.crafting import loot
+    from tests.minipytest import raises
+
+    _setup(monkeypatch, tmp_path)
+    rec = _detail_env(monkeypatch, tmp_path)
+
+    def legacy_version():
+        f = tmp_path / "loot_index.json"
+        idx = json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
+        return (idx or {}).get("version", "4.10.2LIVE")
+
+    cases = [
+        _MIN_SOURCES["loot_index.json"],  # 有版本
+        {"rows": []},  # 有索引、没有 version 键
+        {"version": "4.11.0PTU", "rows": []},
+        None,  # 没有索引
+    ]
+    for i, src in enumerate(cases):
+        if src is None:
+            (tmp_path / "loot_index.json").unlink()
+        else:
+            _write_min_sources(tmp_path, **{"loot_index.json": src})
+        G.rebuild()
+        u = f"u{i}"
+        want = legacy_version()
+        assert loot.detail(u, online=True) == {"url": f"{loot.BASE}{want}/q/{u}.json"}
+        assert rec["zip"][-1] == (u, want)
+        assert (tmp_path / "loot" / f"{want}_{u}.json").exists()
+        assert loot.detail(u, online=False) == {
+            "url": f"{loot.BASE}{want}/q/{u}.json"
+        }  # 读缓存
+    _write_min_sources(tmp_path, **{"loot_index.json": {"version": 4.1, "rows": []}})
+    G.rebuild()
+    with raises(ValueError):  # 版本不是字符串：和以前一样拒绝（原值类型照存）
+        loot.detail("u9", online=False)
+
+
+def test_detail_online_write_not_in_updating(monkeypatch, tmp_path):
+    from sc_mining.crafting import loot
+    from tests.test_gamedata_b1 import _count_updating
+
+    _setup(monkeypatch, tmp_path)
+    _detail_env(monkeypatch, tmp_path)
+    state = _count_updating(monkeypatch)
+    assert loot.detail("u1", online=True)
+    assert state["n"] == 0
+    assert state["writes"] == [(tmp_path / "loot" / "4.10.2LIVE_u1.json", False)]
+
+
+def test_detail_does_not_read_index_json(monkeypatch, tmp_path):
+    from sc_mining.crafting import loot
+
+    def boom(*a, **kw):
+        raise AssertionError("detail 不该再读 loot_index.json")
+
+    _setup(monkeypatch, tmp_path)
+    rec = _detail_env(monkeypatch, tmp_path)
+    monkeypatch.setattr(loot, "load_index", boom)
+    assert loot.detail("u1", online=True)
+    assert rec["zip"] == [("u1", "4.10.2LIVE")]
+
+
+def test_detail_default_version_when_db_unavailable(monkeypatch, tmp_path):
+    from sc_mining.core import paths
+    from sc_mining.crafting import loot
+
+    _setup(monkeypatch, tmp_path)
+    rec = _detail_env(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        paths, "DATA", tmp_path / "empty"
+    )  # 库建不出来：当没有索引，用默认版本
+    assert loot.detail("u1", online=True)
+    assert rec["zip"] == [("u1", "4.10.2LIVE")]
+
+
+_ROCKS = [
+    ["r1", "Carinite", "MineableRock_FPS_Carinite_01", "", 1, "科力晶"],
+    [
+        "r2",
+        "Carinite (Pure)",
+        "mineablerock_fps_carinite_pure_01",
+        "",
+        1,
+        "科力晶（纯）",
+    ],
+    [
+        "r3",
+        "Fake",
+        "mineablerockXfpsXcarinite",
+        "",
+        1,
+        "",
+    ],  # 下划线换成别的字符：LIKE 会误中
+    ["r4", "Carinite", "harvestable_mineral_1h_carinite", "rare", 17, "科力晶"],
+]
+
+
+def _fake_details(monkeypatch):
+    from sc_mining.crafting import loot
+
+    seen = []
+
+    def detail(u, online=True):
+        seen.append(u)
+        return {"regions": [{"name": f"区域-{u}", "best": 0.25, "containers": []}]}
+
+    monkeypatch.setattr(loot, "detail", detail)
+    return seen
+
+
+def test_mine_info_cls_prefix_literal_and_skips_pure(monkeypatch, tmp_path):
+    from sc_mining.crafting import loot
+
+    _setup(monkeypatch, tmp_path, **_loot_src(_ROCKS))
+    _detail_env(monkeypatch, tmp_path)
+    seen = _fake_details(monkeypatch)
+    d = loot.mine_info("carinite", online=False)
+    assert seen == ["r1"] and d["groups"] == [
+        {"p": 0.25, "box": "", "regions": ["区域-r1"]}
+    ]
+    assert d["name"] == "科力晶" and d["mine"] is True and d["more"] == 0
+    seen.clear()
+    d = loot.mine_info("carinitepure", online=False)
+    assert seen == ["r2"] and d["groups"][0]["regions"] == ["区域-r2"]
+    seen.clear()
+    assert loot.mine_info("janalite", online=False)["groups"] == [] and seen == []
+
+
+def test_mine_info_online_downloads_when_no_index(monkeypatch, tmp_path):
+    import json
+
+    import sc_mining.gamedata as G
+    from sc_mining.crafting import loot
+
+    _setup(monkeypatch, tmp_path, **_loot_src(_ROCKS))
+    (tmp_path / "loot_index.json").unlink()
+    G.rebuild()
+    _detail_env(monkeypatch, tmp_path)
+    _fake_details(monkeypatch)
+    calls = []
+
+    def update(version=None, progress=print):
+        calls.append(1)
+        data = {"version": "4.10.2LIVE", "rows": _ROCKS}
+        with G.updating():
+            (tmp_path / "loot_index.json").write_text(
+                json.dumps(data, ensure_ascii=False), encoding="utf-8"
+            )
+        loot._index = data
+        return data
+
+    monkeypatch.setattr(loot, "update", update)
+    assert loot.mine_info("carinite", online=False) is None and calls == []
+    d = loot.mine_info("carinite", online=True)
+    assert calls == [1] and d["groups"][0]["regions"] == ["区域-r1"]
+
+
+def test_mine_info_none_when_download_fails(monkeypatch, tmp_path):
+    import sc_mining.gamedata as G
+    from sc_mining.crafting import loot
+
+    _setup(monkeypatch, tmp_path)
+    (tmp_path / "loot_index.json").unlink()
+    G.rebuild()
+    _detail_env(monkeypatch, tmp_path)
+
+    def update(version=None, progress=print):
+        raise OSError("断网")
+
+    monkeypatch.setattr(loot, "update", update)
+    assert loot.mine_info("carinite", online=True) is None
+
+
+def test_mine_info_empty_rows_does_not_download(monkeypatch, tmp_path):
+    from sc_mining.crafting import loot
+
+    _setup(monkeypatch, tmp_path, **_loot_src([]))
+    _detail_env(monkeypatch, tmp_path)
+    calls = []
+    monkeypatch.setattr(loot, "update", lambda *a, **kw: calls.append(1))
+    d = loot.mine_info("carinite", online=True)
+    assert calls == [] and d["groups"] == [] and d["more"] == 0
+
+
+def test_mine_info_none_when_db_unavailable(monkeypatch, tmp_path):
+    from sc_mining.core import paths
+    from sc_mining.crafting import loot
+
+    _setup(monkeypatch, tmp_path, **_loot_src(_ROCKS))
+    _detail_env(monkeypatch, tmp_path)
+    monkeypatch.setattr(paths, "DATA", tmp_path / "empty")
+    assert loot.mine_info("carinite", online=False) is None

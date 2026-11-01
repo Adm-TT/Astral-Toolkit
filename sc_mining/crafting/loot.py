@@ -86,20 +86,20 @@ def load_index(auto=True):
     return _index
 
 
+# 无人读取：只给 update/data_pack.clear_caches 写（它还在 `loot._folded.update(...)`）。
+# 删除条件：整合清理时随 clear_caches 里那两行一起删（控制台，批 6 合并后；掉落查询已改走游戏数据库，批 4）
 _folded = {"of": None, "rows": []}
 
 
-def _folded_rows(idx):
-    """索引里每个物品的名字先折叠好存着（以前每查一次要折叠 2 万多次）"""
-    if _folded["of"] is not idx:
-        _folded.update(
-            of=idx,
-            rows=[
-                (u, en, zh, rar, _fold(en), _fold(zh), (cls or "").lower(), n or 0)
-                for u, en, cls, rar, n, zh in idx["rows"]
-            ],
-        )
-    return _folded["rows"]
+def _index_meta():
+    """游戏数据库里掉落索引的版本信息 {"version": …}；没有掉落索引、或库不可用返回 None"""
+    from .. import gamedata
+    from ..gamedata import loot as gd_loot
+
+    try:
+        return gd_loot.index_meta()
+    except gamedata.GamedataError:
+        return None
 
 
 # 同名的「变体」：NPC 专用、不显示的、测试 / 枪械游戏模式、低模、模板……玩家拿不到，掉落不算它的（2026-10-24 全量核对：
@@ -295,8 +295,7 @@ _VER_RE = re.compile(r"\w[\w.\-]{0,63}")
 
 
 def detail(uuid, online=True):
-    idx = load_index(False) or {}
-    version = idx.get("version", "4.10.2LIVE")
+    version = (_index_meta() or {}).get("version", "4.10.2LIVE")
     # 要拼进缓存路径和网址：只认字母数字、点、横线，别让 ..\ 之类跑到缓存目录外面
     if not isinstance(uuid, str) or not _UUID_RE.fullmatch(uuid):
         raise ValueError("物品编号格式不对")
@@ -401,19 +400,28 @@ def instance_ore(name_en="", name_zh=""):
 
 def mine_info(key, top=5, online=True):
     """副本专属矿的开采点：{name, mine: True, note, groups: [{p, box, regions}], more}"""
-    idx = load_index(online)
-    if not idx:
-        return None
+    from .. import gamedata
+    from ..gamedata import loot as gd_loot
+
+    if _index_meta() is None:  # 没有掉落索引（有索引、只是没有行不算）
+        if not online:
+            return None
+        load_index(True)  # 联网下一份：update() 在更新边界里，写完重建库
+        if _index_meta() is None:
+            return None
     want, skip = INSTANCE_ORES[key]
-    rocks = [
-        r
-        for r in _folded_rows(idx)
-        if r[6].startswith(want) and not (skip and r[6].startswith(skip))
-    ]
+    try:
+        rocks = [
+            r
+            for r in gd_loot.by_cls_prefix(want)
+            if not (skip and r.cls_lower.startswith(skip))
+        ]
+    except gamedata.GamedataError:
+        return None
     best = {}  # 地区 → (概率, 位置说明)
     for r in rocks:
         try:
-            d = detail(r[0], online)
+            d = detail(r.uuid, online)
         except Pending:
             return {"pending": True}
         except Exception as e:
