@@ -31,6 +31,8 @@
 | `fetched` | `navigate` L443 打印“星图数据：starmap.space（日期）” | 入 `meta`：`starmap_fetched` | — |
 | 其他顶层元数据键 | 没人读 | 不入库 | — |
 
+**`points.i` 不唯一**（真实数据里 `ab_pyro_final_set_dungeon-001` 对应两个不同的点），所以 `i_lower` 不是主键；`find_point(internal=…)` 取首个 → 查询必须 `ORDER BY source_order LIMIT 1`。同理 `norm_n` 也按首个。
+
 `position.find_point` 的规范化：`re.sub(r"[^a-z0-9]", "", name.lower())`；`transit` 用的 `_norm` 来自 `navigation/names.py:118`，已核对：两者是同一规则（`re.sub(r"[^a-z0-9]", "", s.lower())`），`norm_n` 一列够用。
 
 ## 2. city_places.json（447 KB，928 条）

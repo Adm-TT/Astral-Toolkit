@@ -24,6 +24,16 @@ SOURCES: tuple[Source, ...] = (
     Source("name_aliases.json", False),
     Source("wiki_items.json", False),
     Source("prices.json", False),
+    # schema 2：导航
+    Source("starmap.json", False),
+    Source("starmap_fixes.json", False),
+    Source("city_places.json", False),
+    Source("place_amenities.json", False),
+    Source("station_lifts.json", False),
+    Source("places_zh.json", False),
+    Source("places_extra_zh.json", False),
+    Source("place_codes_zh.json", False),
+    Source("mining_spots.json", False),
 )
 
 

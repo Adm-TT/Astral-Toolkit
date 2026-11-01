@@ -241,3 +241,210 @@ def import_prices(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> 
             if price is not None
         ],
     )
+
+
+# ---------------------------------------------------------------- schema 2：导航（批 2 公共层，2026-11-02）
+# 变换规则直接 import 复用 navigation 里的现有函数，不抄：transit._city_rows、transit._lift_rows、starmap.fix_points、names._norm
+
+
+def _xyz(r):
+    return float(r["x"]), float(r["y"]), float(r["z"])
+
+
+def import_starmap(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> None:
+    import copy
+
+    from ..navigation.names import _norm
+    from ..navigation.starmap import fix_points
+
+    raw = _d(sources, "starmap.json", None)
+    if not isinstance(raw, dict):
+        return
+    data = copy.deepcopy(raw)
+    fix_points(data, _d(sources, "starmap_fixes.json", None))
+    conn.executemany(
+        "insert or ignore into bodies values (?,?,?,?,?,?,?,?,?,?,?)",
+        [
+            (
+                name,
+                b.get("sys") or "",
+                *_xyz(b),
+                b.get("rot"),
+                b.get("adj"),
+                b.get("r"),
+                b.get("om"),
+                b.get("grid"),
+                i,
+            )
+            for i, (name, b) in enumerate((data.get("bodies") or {}).items())
+            if isinstance(b, dict)
+        ],
+    )
+    conn.executemany(
+        "insert into pois (b, n, t, x, y, z, qt, norm_n, source_order) values (?,?,?,?,?,?,?,?,?)",
+        [
+            (
+                q["b"],
+                q["n"],
+                q.get("t") or "",
+                *_xyz(q),
+                int(q.get("qt") or 0),
+                _norm(q["n"]),
+                i,
+            )
+            for i, q in enumerate(data.get("pois") or [])
+        ],
+    )
+    conn.executemany(
+        "insert into points (n, i, sys, t, x, y, z, norm_n, i_lower, source_order) values (?,?,?,?,?,?,?,?,?,?)",
+        [
+            (
+                p["n"],
+                p.get("i") or "",
+                p.get("sys") or "",
+                p.get("t") or "",
+                *_xyz(p),
+                _norm(p["n"]),
+                (p.get("i") or "").lower(),
+                i,
+            )
+            for i, p in enumerate(data.get("points") or [])
+        ],
+    )
+    if data.get("fetched"):
+        conn.execute(
+            "insert or replace into meta values ('starmap_fetched', ?)",
+            (str(data["fetched"]),),
+        )
+
+
+def import_city_places(
+    conn: sqlite3.Connection, sources: dict[str, SourceBytes]
+) -> None:
+    from ..navigation.transit import _city_rows
+
+    rows = _city_rows(_d(sources, "city_places.json", []))
+    conn.executemany(
+        "insert or ignore into city_places values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        [
+            (
+                q["id"],
+                q["b"],
+                q["n"],
+                q["zh"],
+                q["x"],
+                q["y"],
+                q["z"],
+                q["cat"],
+                q["area"],
+                q["city"],
+                q["city_zh"],
+                q["site_en"],
+                q["line"],
+                q["stop"],
+                int(bool(q.get("space"))),
+                q.get("sys") or "",
+                *(q["up"] if q.get("up") else (None, None, None)),
+                i,
+            )
+            for i, q in enumerate(rows)
+        ],
+    )
+    conn.executemany(
+        "insert or ignore into city_place_kinds values (?,?)",
+        [(q["id"], k) for q in rows for k in q.get("kinds") or []],
+    )
+
+
+def import_amenities(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> None:
+    raw = _d(sources, "place_amenities.json", [])
+    rows = [r for r in (raw if isinstance(raw, list) else []) if isinstance(r, dict)]
+    for i, r in enumerate(rows):
+        ref = r.get("ref") or {}
+        cur = conn.execute(
+            "insert into amenities (en, zh, rec_lower, ref_poi, ref_point, ref_internal, source_order) values (?,?,?,?,?,?,?)",
+            (
+                (r.get("en") or "").strip(),
+                (r.get("zh") or "").strip(),
+                str(r.get("rec") or "").lower(),
+                str(ref.get("poi") or ""),
+                str(ref.get("point") or ""),
+                str(ref.get("internal") or ""),
+                i,
+            ),
+        )
+        conn.executemany(
+            "insert or ignore into amenity_kinds values (?,?)",
+            [(cur.lastrowid, k) for k in (r.get("kinds") or []) if isinstance(k, str)],
+        )
+
+
+def import_station_lifts(
+    conn: sqlite3.Connection, sources: dict[str, SourceBytes]
+) -> None:
+    import json
+
+    from ..navigation.transit import _lift_rows
+
+    stations = _lift_rows(_d(sources, "station_lifts.json", None))
+    conn.executemany(
+        "insert or ignore into station_lifts values (?,?,?,?,?,?,?)",
+        [
+            (
+                key,
+                st.get("station") or key,
+                st.get("sys") or "",
+                int(bool(st.get("space"))),
+                st.get("worst_m"),
+                json.dumps(st, ensure_ascii=False, separators=(",", ":")),
+                i,
+            )
+            for i, (key, st) in enumerate(stations.items())
+        ],
+    )
+
+
+def import_place_names(
+    conn: sqlite3.Connection, sources: dict[str, SourceBytes]
+) -> None:
+    """navigation/names.poi_zh 的合并规则：places_zh 先、places_extra_zh 后覆盖，只收非空字符串"""
+    merged: dict[str, tuple[str, str]] = {}
+    for src, name in (("zh", "places_zh.json"), ("extra", "places_extra_zh.json")):
+        d = _d(sources, name, None)
+        if isinstance(d, dict):
+            for k, v in d.items():
+                if isinstance(v, str) and v:
+                    merged[k] = (v, src)
+    conn.executemany(
+        "insert or replace into place_names values (?,?,?,?)",
+        [(k, v, src, i) for i, (k, (v, src)) in enumerate(merged.items())],
+    )
+    codes = _d(sources, "place_codes_zh.json", None)
+    if isinstance(codes, dict):
+        conn.executemany(
+            "insert or replace into place_codes values (?,?,?)",
+            [(k, v, i) for i, (k, v) in enumerate(codes.items()) if isinstance(v, str)],
+        )
+
+
+def import_mining_spots(
+    conn: sqlite3.Connection, sources: dict[str, SourceBytes]
+) -> None:
+    raw = _d(sources, "mining_spots.json", [])
+    conn.executemany(
+        "insert or ignore into mining_spots values (?,?,?,?,?,?,?,?,?,?)",
+        [
+            (
+                r["id"],
+                r.get("sys") or "",
+                r.get("zh") or "",
+                r.get("en") or "",
+                r.get("kind") or "",
+                r.get("area") or "",
+                *_xyz(r),
+                i,
+            )
+            for i, r in enumerate(raw if isinstance(raw, list) else [])
+            if isinstance(r, dict) and r.get("id")
+        ],
+    )
