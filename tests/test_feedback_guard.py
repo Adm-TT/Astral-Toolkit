@@ -18,6 +18,8 @@ def _child(code):
         env=env,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=60,
     )
     assert r.returncode == 0, r.stderr
@@ -29,13 +31,17 @@ def test_importing_tests_package_forces_feedback_off():
     assert out == "1"
 
 
-def test_minipytest_run_module_forces_feedback_off():
+def test_minipytest_install_forces_feedback_off_without_package_import():
+    """不经过 tests 包（它自己也会设）直接加载 minipytest.py：install() 必须设变量"""
     out = _child(
-        "import os, sys; sys.path.insert(0, '.');"
-        "from tests import minipytest; minipytest.install();"
-        "print(os.environ.get('AT_FEEDBACK_OFF', ''))"
+        "import os, sys, importlib.util;"
+        "spec = importlib.util.spec_from_file_location('mp', r'tests/minipytest.py');"
+        "m = importlib.util.module_from_spec(spec); sys.modules['mp'] = m; spec.loader.exec_module(m);"
+        "before = os.environ.get('AT_FEEDBACK_OFF', '');"
+        "m.install();"
+        "print(before + '|' + os.environ.get('AT_FEEDBACK_OFF', ''))"
     )
-    assert out == "1"
+    assert out == "|1"
 
 
 def test_feedback_enabled_is_false_under_tests():
