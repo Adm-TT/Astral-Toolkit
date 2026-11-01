@@ -910,28 +910,6 @@ def test_apply_live_yields_when_db_unavailable(monkeypatch, tmp_path):
     assert m.REFINERIES["ARC-L1"] == ("弧 L1", {"Aluminum": 5})
 
 
-def test_clear_caches_rebuilds_for_writers_outside_updating(monkeypatch, tmp_path):
-    """汉化包重建 / 掉落更新还没经过 updating() 写文件：clear_caches 之后物品搜索也要看到新数据"""
-    import json
-
-    import sc_mining.gamedata as G
-    from sc_mining.update import uex
-    from sc_mining.update.data_pack import clear_caches
-
-    _setup(monkeypatch, tmp_path)
-    monkeypatch.setattr(
-        uex, "apply_live", lambda m: False
-    )  # 真 clear_caches 会读真实 prices.json、改 mining.data
-    IS = _fresh_search(monkeypatch)
-    G.ensure()
-    assert IS.lookup("MedPack X") is None
-    (tmp_path / "name_aliases.json").write_text(
-        json.dumps({"MedPack X": "Medpen"}), encoding="utf-8"
-    )
-    clear_caches()
-    assert (IS.lookup("MedPack X") or {}).get("ek") == "medpen"
-
-
 def test_query_while_new_content_is_published(monkeypatch, tmp_path):
     """边搜边发布内容不同的新库（索引也跟着重建）：不报错、结果不空"""
     import json

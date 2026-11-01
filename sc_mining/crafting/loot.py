@@ -61,9 +61,11 @@ def update(version=None, progress=print):
     manifest = _get(f"{BASE}{version}/manifest.json")
     rows = _get(f"{BASE}{version}/search.json", timeout=120)
     data = {"version": manifest.get("version", version), "rows": rows}
+    from .. import gamedata
     from ..core.paths import write_json
 
-    write_json(INDEX, data, separators=(",", ":"))
+    with gamedata.updating():  # 掉落索引是游戏数据库的源之一：写完在出口重建（收口 1）
+        write_json(INDEX, data, separators=(",", ":"))
     global _index
     _index = data
     if progress:

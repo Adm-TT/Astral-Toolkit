@@ -271,6 +271,17 @@ def rebuild(progress=print):
     if src.suffix != ".ini":
         return
     ini = read_ini(src)
+    from .. import gamedata
+
+    with gamedata.updating():  # 数据目录写锁；出口重建游戏数据库（updating 在外、BUILD_LOCK 在内，和 data_pack.install 一致；收口 1）
+        _rebuild_files(ini, src, progress)
+    from .data_pack import clear_caches
+
+    clear_caches()
+
+
+def _rebuild_files(ini, src, progress):
+    """四份中文名 / 地名源文件 + 本机有构建输入时的蓝图、维科洛重建；调用方已在 updating() 里"""
     from ..core.paths import write_json
 
     write_json(
@@ -321,9 +332,6 @@ def rebuild(progress=print):
         ):  # 和 build_crafting.update 可能同时跑（run.update 并行），别一起写同一个文件
             build(bp, merged, src, DATA / "crafting.json")
             progress(f"维科洛兑换：{build_wikelo(merged, src)} 个")
-    from .data_pack import clear_caches
-
-    clear_caches()
 
 
 GAME_STAMP = DATA / "loc" / "game_version.txt"
