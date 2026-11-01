@@ -149,7 +149,9 @@ def test_blueprints_rows_keys_and_norms(monkeypatch, tmp_path):
         and rows[0][10] == _search_norm("Main Powerplant") == "mainpowerplant"
     )
     assert rows[1][11] == _search_norm("主发电机 B") == "主发电机b"
-    assert [r[0] for r in rows] == [1, 2, 3] and [r[13] for r in rows] == [0, 1, 2]
+    assert (
+        [r[0] for r in rows] == [0, 1, 2] == [r[13] for r in rows]
+    )  # id = source_order = 源下标（和别的表一致）
 
 
 def test_blueprints_slots_src_json_roundtrip(monkeypatch, tmp_path):
@@ -173,12 +175,12 @@ def test_blueprint_materials_flattened(monkeypatch, tmp_path):
             "select blueprint_id from blueprint_materials where material = 'Tin' order by blueprint_id"
         )
     assert rows == [
-        (1, 0, "Core", 0, "r", "Hephaestanite", 0.03, 0),
-        (1, 0, "Core", 1, "i", "Medpen", 2.0, 1),
-        (1, 1, "Shell", 0, "r", "Tin", 1.0, 2),
-        (2, 0, "Core", 0, "r", "Tin", 5.0, 0),
+        (0, 0, "Core", 0, "r", "Hephaestanite", 0.03, 0),
+        (0, 0, "Core", 1, "i", "Medpen", 2.0, 1),
+        (0, 1, "Shell", 0, "r", "Tin", 1.0, 2),
+        (1, 0, "Core", 0, "r", "Tin", 5.0, 0),
     ]
-    assert [r[0] for r in by_tin] == [1, 2]
+    assert [r[0] for r in by_tin] == [0, 1]
     assert type(rows[2][7]) is int  # min_q 整数（mat_summary 的 gates 要 int）
 
 
@@ -326,9 +328,10 @@ def test_craft_sources_optional_and_bad_rows_skipped(monkeypatch, tmp_path):
             "Tin",
             None,
         )  # bool 不当数量
-        assert [
-            r[0] for r in s.execute("select uuid from item_stats order by uuid")
-        ] == ["w"]
+        assert s.execute("select uuid, size, mass from item_stats order by uuid") == [
+            ("u", None, None),
+            ("w", None, None),
+        ]  # size 坏了存 NULL，行保留（itemstats.item 照样返回这条）
         assert [r[0] for r in s.execute("select item_name from print_spots")] == ["B"]
         assert s.execute("select count(*) from print_spot_places")[0][0] == 0
         assert s.execute("select item_name, ship from ship_stock_items")[0] == (
@@ -504,3 +507,141 @@ def test_alias_pairs_unfiltered(monkeypatch, tmp_path):
         (1, "Venture Arms", "Lawson Mining Laser"),
         (3, "Zed", "Zed"),
     ]
+
+
+# ---------------------------------------------------------------- 复审补的：可选源里字段类型不对不能让整库建不出来
+
+
+def test_wiki_items_odd_types_do_not_break_build(monkeypatch, tmp_path):
+    """n 是数字、alt 是数字 / 字符串：旧 _wiki_classes 吞错返回空集，这里跳过 / 当空；n 缺失照旧折叠成 ''"""
+    from sc_mining.crafting.loot import _fold
+
+    wiki = {
+        "items": [
+            {"n": 5, "cls": "Num"},
+            {"n": "A", "cls": "ClsA", "alt": 3},
+            {"n": "B", "cls": "ClsB", "alt": "str"},
+            {"cls": "NoN"},
+        ]
+    }
+    snapshot = _built(monkeypatch, tmp_path, **{"wiki_items.json": wiki})
+    with snapshot() as s:
+        wc = s.execute(
+            "select norm_n, cls_lower from wiki_classes order by source_order"
+        )
+        wr = s.execute("select id, n from wiki_items order by id")
+        alts = s.execute("select count(*) from wiki_alt_classes")[0][0]
+    assert wc == [(_fold("A"), "clsa"), (_fold("B"), "clsb"), ("", "non")]
+    assert wr == [(1, "A"), (2, "B")] and alts == 0
+
+
+def test_schema4_scalar_type_mismatch_does_not_break_build(monkeypatch, tmp_path):
+    """z 是列表、type 是字典、sec 是字符串、size 是 bool……：全部存空 / NULL，库照建，items 照样有"""
+    bad = {
+        "crafting.json": {
+            "blueprints": [
+                {
+                    "n": "OK",
+                    "z": ["x"],
+                    "g": {},
+                    "sec": "ten",
+                    "nsrc": 2.0,
+                    "slots": [["S", [["r", "Tin", 1, 1.9], ["r", "Tin", 2, 1.0]], []]],
+                    "src": [],
+                }
+            ]
+        },
+        "wikelo.json": {
+            "contracts": [
+                {
+                    "id": "C",
+                    "type": {},
+                    "t": 5,
+                    "rewards": "RewardString",
+                    "req": [{"n": 3, "q": "2"}],
+                    "systems": [1, "Pyro"],
+                }
+            ]
+        },
+        "item_stats.json": {
+            "items": {
+                "u": {"n": ["list"], "size": True, "mass": "7", "s": "not-a-dict"}
+            }
+        },
+        "print_spots.json": {
+            "items": {"A": {"zh": 1, "class": None, "where": "Place"}}
+        },
+        "ship_items.json": {"items": {"A": [1, "Ship"]}},
+    }
+    snapshot = _built(monkeypatch, tmp_path, **bad)
+    with snapshot() as s:
+        assert s.execute("select count(*) from items")[0][0] > 0
+        assert s.execute("select z, g, sec, nsrc, norm_z from blueprints") == [
+            ("", "", None, 2, "")
+        ]
+        assert s.execute("select qty, min_q from blueprint_materials") == [
+            (2.0, 1)
+        ]  # 1.9 不是整数：跳过
+        assert s.execute("select type, t from wikelo_contracts") == [("", "")]
+        assert (
+            s.execute("select count(*) from wikelo_rewards")[0][0] == 0
+        )  # 字符串不是列表
+        assert s.execute("select n, q from wikelo_requirements") == [("", None)]
+        assert s.execute("select system from wikelo_contract_systems") == [("Pyro",)]
+        assert s.execute("select n, size, mass, stats_json from item_stats") == [
+            ("", None, None, "{}")
+        ]
+        assert (
+            s.execute("select zh, cls from print_spots") == [("", "")]
+            and s.execute("select count(*) from print_spot_places")[0][0] == 0
+        )
+        assert s.execute("select ship from ship_stock_items") == [("Ship",)]
+
+
+def test_wikelo_duplicate_id_keeps_first_only(monkeypatch, tmp_path):
+    w = {
+        "contracts": [
+            {"id": "C", "t": "first", "rewards": ["R1"], "req": [{"n": "A"}]},
+            {
+                "id": "C",
+                "t": "second",
+                "rewards": ["R2", "R3"],
+                "req": [{"n": "B"}, {"n": "D"}],
+            },
+        ]
+    }
+    snapshot = _built(monkeypatch, tmp_path, **{"wikelo.json": w})
+    with snapshot() as s:
+        assert s.execute("select t from wikelo_contracts") == [("first",)]
+        assert s.execute("select item from wikelo_rewards") == [("R1",)]
+        assert s.execute("select n from wikelo_requirements") == [("A",)]
+
+
+def test_blueprint_key_collision_skips_later(monkeypatch, tmp_path):
+    """源里真有一份叫「X#1」的名字又有两份「X」：编号撞车，后出现的那份跳过，库照建"""
+    bps = [
+        {**_BP, "n": "X", "u": "1"},
+        {**_BP, "n": "X", "u": "2"},
+        {**_BP, "n": "X#1", "u": "3"},
+    ]
+    snapshot = _built(monkeypatch, tmp_path, **{"crafting.json": {"blueprints": bps}})
+    with snapshot() as s:
+        assert s.execute("select bp_key, u from blueprints order by source_order") == [
+            ("X#1", "1"),
+            ("X#2", "2"),
+        ]
+
+
+def test_zh_name_pairs_src_zh_only_when_zh_names_value_was_junk(monkeypatch, tmp_path):
+    """zh_names 里某中文名的英文是假名被过滤，zh_only 用另一个英文补进来 → 标 zh_only"""
+    zh_names = {**_MIN_SOURCES["zh_names.json"], "某某某": "HD"}
+    zh_only = {**_MIN_SOURCES["zh_only_names.json"], "某某某": "Lawson Mining Laser"}
+    snapshot = _built(
+        monkeypatch,
+        tmp_path,
+        **{"zh_names.json": zh_names, "zh_only_names.json": zh_only},
+    )
+    with snapshot() as s:
+        assert s.execute("select en, src from zh_name_pairs where zh = '某某某'") == [
+            ("Lawson Mining Laser", "zh_only")
+        ]

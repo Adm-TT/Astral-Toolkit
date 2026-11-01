@@ -13,7 +13,7 @@
 | `needs / uses / mat_summary / uses_report` | 遍历所有 bp 的所有槽找某种矿 | 平铺表 `blueprint_materials(blueprint_u, slot_idx, slot_name, kind, material, qty, min_q)`，按 `material` 索引 |
 | `wikelo.load()`（`lru_cache(maxsize=1)`） | 71 份合同整表，`uses(name)` 遍历 `req`，`search` 遍历 | `wikelo_contracts` + `wikelo_requirements` + `wikelo_rewards` 三表；`load()` 保留 dict 形状按版本缓存 |
 | `wikelo.print_spots(name)` | `print_spots.json` 的 `items[name]` | `print_spots` + `print_spot_places` |
-| `itemstats.data()`（`lru_cache(maxsize=1)`） | 按 uuid 取一条（`item(uuid)`），字段里 `s` 是属性字典 | `item_stats(uuid PK, …)` + `item_stat_values(uuid, stat, min, max, value)`；`item(uuid)` 单条查询，不再整表常驻（1.1 MB） |
+| `itemstats.data()`（`lru_cache(maxsize=1)`） | 按 uuid 取一条（`item(uuid)`），字段里 `s` 是属性字典 | `item_stats(uuid PK, …, stats_json)`（**已废 `item_stat_values`，见开头修正 ③**）；`item(uuid)` 单条查询，不再整表常驻（1.1 MB） |
 | `acquire` 读 `ship_items.json` | `items[部件名]` → 船列表 | `ship_stock_items(item_name, ship, idx)` |
 
 ## 1. crafting.json（1.0 MB）
@@ -53,7 +53,7 @@
 | 源字段 | 读者 | 目标表.列 |
 |---|---|---|
 | `items[uuid]` 标量字段 | `itemstats.item(uuid)` → `crafting.stats/header`（按 `bp["u"]`） | `item_stats(uuid PK, n, size, grade, cls, type, sub, mass REAL, ver, mfr, cn, source_order)` |
-| `items[uuid].s` | `itemstats._get(d, *path)` 按属性键取 `min/max` 或数值 | `item_stat_values(uuid, stat, min REAL, max REAL, value REAL)`；读时拼回 `{stat: {min,max}}` / `{stat: value}` 的 dict（`_get` 不改） |
+| `items[uuid].s` | `itemstats._get(d, *path)` 按属性键取 `min/max` 或数值 | `item_stats.stats_json`（整段 JSON 原样，`json.loads` 后 `_get` 不改；**已废 `item_stat_values`，见开头修正 ③**） |
 | `version` | `itemstats.version()` | `meta: item_stats_version` |
 | `fetched` 等顶层键 | 没人读 | 不入库 |
 
@@ -71,7 +71,7 @@
 
 ## 6. 公共层先行 PR 要做的（schema 4）
 
-新表：`blueprints`、`blueprint_materials`、`wikelo_contracts`、`wikelo_rewards`、`wikelo_requirements`、`wikelo_contract_systems`、`item_stats`、`item_stat_values`、`print_spots`、`print_spot_places`、`ship_stock_items`。`SOURCES` 加 5 个可选源。导入：`bp_key` 规则**直接复用** `crafting._keys()` 的算法（抽成纯函数 `crafting.assign_keys(bps) -> dict[id, key]`，和 `_keys` 共用）；`for_item` 的 `fold` 抽成模块级 `_fold_name`；`norm` 规则不抄。
+新表：`blueprints`、`blueprint_materials`、`wikelo_contracts`、`wikelo_rewards`、`wikelo_requirements`、`wikelo_contract_systems`、`item_stats`、`item_stat_values`、`print_spots`、`print_spot_places`、`ship_stock_items`。`SOURCES` 加 5 个可选源。导入：`bp_key` 规则**直接复用** `crafting._keys()` 的算法（抽成纯函数 `crafting.assign_keys(bps) -> (keys: {id(bp): 编号}, index, total)`，和 `_keys` 共用（已做））；`for_item` 的 `fold` 抽成模块级 `_fold_name`；`norm` 规则不抄。
 
 ## 7. 批 3 开工前必须补的核对
 
