@@ -316,3 +316,135 @@ def test_station_at_uses_lagrange_rows(monkeypatch, tmp_path):
     )
     assert position._station_at("ARC_L1") == "Station X"
     assert position._station_at("ARC_L2") == ""
+
+
+# ---------------------------------------------------------------- Task 5：矿价和更新边界
+
+
+def _fake_data_module():
+    import types
+
+    m = types.SimpleNamespace()
+    m.CITY_PRICES = {"Aluminum": {"Area18": 1, "Lorville": 2}}
+    m.REFINERIES = {"ARC-L1": ("弧 L1", {})}
+    return m
+
+
+def test_apply_live_reads_gamedata(monkeypatch, tmp_path):
+    import json
+
+    import sc_mining.gamedata as G
+    from sc_mining.update import uex
+
+    _setup(monkeypatch, tmp_path)
+    monkeypatch.setattr(uex, "OUT", tmp_path / "prices.json")
+    G.ensure()
+    # 库建好后再改 prices.json 的矿价、不重建：读到的还是库里的（证明矿价不再直接读 JSON）
+    (tmp_path / "prices.json").write_text(
+        json.dumps(
+            {
+                "prices": {"Aluminum": {"Area18": 9999}},
+                "yields": {"ARC-L1": {"Aluminum": 5}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    m = _fake_data_module()
+    assert uex.apply_live(m) is True
+    assert m.CITY_PRICES["Aluminum"] == {"Area18": 3800, "Lorville": 3000}
+    assert type(m.CITY_PRICES["Aluminum"]["Area18"]) is int  # 和以前读 JSON 一样是整数
+    assert m.REFINERIES["ARC-L1"] == (
+        "弧 L1",
+        {"Aluminum": 5},
+    )  # 精炼站加成照旧读 prices.json
+
+
+def test_apply_live_zero_price_keeps_builtin(monkeypatch, tmp_path):
+    from sc_mining.update import uex
+
+    _setup(
+        monkeypatch,
+        tmp_path,
+        **{"prices.json": {"prices": {"Aluminum": {"Area18": 0, "Lorville": 3100}}}},
+    )
+    monkeypatch.setattr(uex, "OUT", tmp_path / "prices.json")
+    m = _fake_data_module()
+    uex.apply_live(m)
+    assert m.CITY_PRICES["Aluminum"] == {
+        "Area18": 1,
+        "Lorville": 3100,
+    }  # 0 价不盖内置价
+
+
+def test_apply_live_false_when_no_prices_file(monkeypatch, tmp_path):
+    from sc_mining.update import uex
+
+    _setup(monkeypatch, tmp_path)
+    (tmp_path / "prices.json").unlink()
+    monkeypatch.setattr(uex, "OUT", tmp_path / "prices.json")
+    m = _fake_data_module()
+    assert uex.apply_live(m) is False
+    assert m.CITY_PRICES["Aluminum"] == {"Area18": 1, "Lorville": 2}
+
+
+def _count_updating(monkeypatch):
+    """把 gamedata.updating 换成计数器；返回 (计数, 写文件时是不是在边界里)"""
+    from contextlib import contextmanager
+
+    import sc_mining.gamedata as G
+    from sc_mining.core import paths
+
+    state = {"n": 0, "inside": False, "writes": []}
+
+    @contextmanager
+    def fake():
+        state["n"] += 1
+        state["inside"] = True
+        try:
+            yield
+        finally:
+            state["inside"] = False
+
+    monkeypatch.setattr(G, "updating", fake)
+    monkeypatch.setattr(
+        paths,
+        "write_json",
+        lambda p, obj, **kw: state["writes"].append((p, state["inside"])),
+    )
+    return state
+
+
+def test_refresh_runs_inside_updating(monkeypatch, tmp_path):
+    from sc_mining.update import uex
+
+    _setup(monkeypatch, tmp_path)
+    state = _count_updating(monkeypatch)
+    monkeypatch.setattr(uex, "_get", lambda endpoint: [])
+    monkeypatch.setattr(uex, "OUT", tmp_path / "prices.json")
+    uex.refresh()
+    assert state["n"] == 1 and len(state["writes"]) == 1 and state["writes"][0][1]
+
+
+def test_shops_update_runs_inside_updating(monkeypatch, tmp_path):
+    from sc_mining.crafting import shops
+
+    _setup(monkeypatch, tmp_path)
+    state = _count_updating(monkeypatch)
+
+    def fake_get(path, params=None):
+        if path == "categories":
+            return [{"id": 1, "type": "item", "name": "Arms", "section": "S"}]
+        return [
+            {
+                "id_item": 5,
+                "item_name": "Gun",
+                "id_category": 1,
+                "price_buy": 10,
+                "terminal_name": "T",
+            }
+        ]
+
+    monkeypatch.setattr(shops, "_get", fake_get)
+    monkeypatch.setattr(shops, "_data", None)
+    shops.update(progress=None)
+    assert state["n"] == 1 and len(state["writes"]) == 1 and state["writes"][0][1]

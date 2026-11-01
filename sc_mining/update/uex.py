@@ -61,25 +61,34 @@ def refresh():
     for row in _get("refineries_yields"):
         station = row["terminal_name"].split(" - ", 1)[-1]
         yields.setdefault(station, {})[_base(row["commodity_name"])] = row["value"]
+    from .. import gamedata
     from ..core.paths import write_json
 
-    write_json(OUT, {"prices": prices, "yields": yields}, indent=1)
+    # 只把写文件这一步放进更新边界（拿数据目录写锁，退出时重建游戏数据库）：联网那十几秒不占着锁
+    with gamedata.updating():
+        write_json(OUT, {"prices": prices, "yields": yields}, indent=1)
     print(f"已更新 {len(prices)} 种矿的城市收购价、{len(yields)} 个精炼站 → {OUT}")
     for line in flagged:
         print("  ⚠ " + line)
 
 
 def apply_live(data_module):
-    """如果有 data/prices.json，用它覆盖内置数据"""
+    """如果有 data/prices.json，用它覆盖内置数据。
+    矿价从游戏数据层读（mineral_prices 表，由 prices.json 建）；精炼站加成 yields 地基还没建表，
+    等 mining 批次（批 5）建表后迁，这里先照旧读 prices.json"""
     if not OUT.exists():
         return False
+    from .. import gamedata
+
+    live_prices = gamedata.prices.city_prices()
     live = json.loads(OUT.read_text(encoding="utf-8"))
     prices = {
         m: dict(c) for m, c in data_module.CITY_PRICES.items()
     }  # 先组好新表再整体换：采矿线程可能正在遍历旧表
-    for m, cities in (live.get("prices") or {}).items():
+    for m, cities in live_prices.items():
         prices.setdefault(m, {}).update(
-            {c: p for c, p in cities.items() if p}
+            # 库里是 REAL：源里是整数（UEX 的价都是整数 aUEC）就还原成 int，和以前直接读 JSON 一样
+            {c: (int(p) if p.is_integer() else p) for c, p in cities.items() if p}
         )  # 0 价（UEX 没报价）不盖内置价
     data_module.CITY_PRICES = prices  # 整个换掉（best_price 调用时才取 data.CITY_PRICES；没人在 import 时绑定它）
     refs = (

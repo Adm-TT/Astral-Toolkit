@@ -111,11 +111,14 @@ def update(progress=print):
         "items": {str(k): v for k, v in items.items()},
         "rows": rows,
     }
+    from .. import gamedata
     from ..core.paths import write_json
 
-    write_json(CACHE, data, separators=(",", ":"))
     global _data
-    _data = data
+    # 只把写文件这一步放进更新边界（拿数据目录写锁，退出时重建游戏数据库）：联网那一两分钟不占着锁
+    with gamedata.updating():
+        write_json(CACHE, data, separators=(",", ":"))
+        _data = data
     if progress:
         progress(f"商店数据已更新：{len(items)} 种物品，{len(rows)} 条商店价格")
     return data
