@@ -523,6 +523,7 @@ def test_itemstats_item_shapes(monkeypatch, tmp_path):
 
     _setup(monkeypatch, tmp_path, **{"item_stats.json": copy.deepcopy(_STATS)})
     a = itemstats.item("uuid-a")
+    assert a is not None
     assert (
         a == _STATS["items"]["uuid-a"] and type(a["s"]["durability"]["health"]) is int
     )

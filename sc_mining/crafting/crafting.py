@@ -242,8 +242,9 @@ def header(bp):
         tags.append(f"S{size}")
     if t.get("grade") and str(t["grade"]).upper() in "ABCD":
         tags.append(f"{t['grade']} 级")
-    if t.get("cls"):
-        tags.append(cls_zh.get(t["cls"], t["cls"]))
+    cls = t.get("cls")
+    if cls:
+        tags.append(cls_zh.get(cls, cls))
     return {
         "zh": bp["z"] or "",
         "en": bp["n"],
