@@ -219,3 +219,100 @@ def test_topic_calls_share_outer_snapshot(monkeypatch, tmp_path):
         assert len(shops.place_fields()) == before  # 不传也复用外层快照（嵌套）
         assert items.get("medpen", s) is not None
     assert len(shops.place_fields()) == before + 1  # 出了快照读到新代
+
+
+# ---------------------------------------------------------------- Task 4：库存地点和拉格朗日站名
+
+
+def _shops_with_rows(*extra):
+    from tests.test_gamedata import _MIN_SOURCES
+
+    src = dict(_MIN_SOURCES["shops.json"])
+    src["rows"] = src["rows"] + [list(r) for r in extra]
+    return {"shops.json": src}
+
+
+def test_raw_places_from_gamedata(monkeypatch, tmp_path):
+    from sc_mining.crafting import stockplaces as SP
+
+    _setup(monkeypatch, tmp_path)
+    assert SP._raw_places() == [
+        ("Stanton", "MicroTech", "", "New Babbage", True)
+    ]  # 3 行同一地点 → 1 个
+
+
+def test_raw_places_fallback_when_no_db(monkeypatch, tmp_path):
+    from sc_mining.core import paths
+    from sc_mining.crafting import stockplaces as SP
+
+    _setup(monkeypatch, tmp_path)
+    monkeypatch.setattr(paths, "DATA", tmp_path / "empty")  # 建不出库：保底列表
+    assert SP._raw_places() == list(SP._FALLBACK)
+
+
+def test_places_refresh_after_version_change(monkeypatch, tmp_path):
+    import sc_mining.gamedata as G
+    from sc_mining.crafting import stockplaces as SP
+
+    _setup(monkeypatch, tmp_path)
+    monkeypatch.setattr(SP, "_PLACES", {"ver": None, "list": None})
+    monkeypatch.setattr(SP, "_INDEX", {"of": None, "idx": None})
+    first = SP.places()
+    assert [p["en"] for p in first] == [
+        "New Babbage"
+    ] and SP.places() is first  # 同一版本复用
+    assert (SP.match("NewBabbage") or {}).get("en") == "New Babbage"
+    row = [
+        171,
+        "Shop P",
+        "P",
+        1.0,
+        0.0,
+        "4.10",
+        ["Stanton", "Hurston", "", "", "", "Lorville"],
+    ]
+    _write_min_sources(tmp_path, **_shops_with_rows(row))
+    G.rebuild()
+    assert {p["en"] for p in SP.places()} == {
+        "New Babbage",
+        "Lorville",
+    }  # 不用 clear_caches
+    assert (SP.match("Lorville") or {}).get("en") == "Lorville"
+
+
+def test_places_cache_clear_still_works(monkeypatch, tmp_path):
+    from sc_mining.crafting import stockplaces as SP
+    from sc_mining.update.data_pack import clear_caches
+
+    _setup(monkeypatch, tmp_path)
+    monkeypatch.setattr(SP, "_PLACES", {"ver": None, "list": None})
+    monkeypatch.setattr(SP, "_INDEX", {"of": None, "idx": None})
+    first = SP.places()
+    clear_caches()  # 汉化包换了：data_pack 按名字清 places / _index
+    assert SP.places() is not first
+
+
+def test_station_at_uses_lagrange_rows(monkeypatch, tmp_path):
+    from sc_mining.crafting import shops
+    from sc_mining.navigation import position
+
+    row = [
+        171,
+        "Shop L",
+        "L1",
+        1.0,
+        0.0,
+        "4.10",
+        ["Stanton", "ArcCorp", "Lagrange Point 1", "", "Station X", ""],
+    ]
+    _setup(monkeypatch, tmp_path, **_shops_with_rows(row))
+    monkeypatch.setattr(
+        shops,
+        "load",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("不该读 JSON")),
+    )
+    monkeypatch.setattr(
+        shops, "shop_point", lambda f: {"i": "ARC_L1"} if f[4] == "Station X" else None
+    )
+    assert position._station_at("ARC_L1") == "Station X"
+    assert position._station_at("ARC_L2") == ""

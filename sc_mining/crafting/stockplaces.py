@@ -9,7 +9,6 @@
 
 import re
 from collections import Counter
-from functools import lru_cache
 
 SYS_ORDER = ("Stanton", "Pyro", "Nyx")
 SYS_ZH = {"Stanton": "斯坦顿", "Pyro": "派罗", "Nyx": "尼克斯"}
@@ -88,19 +87,16 @@ def _kind(en, city):
 
 
 def _raw_places():
-    """[(星系, 星球, 卫星, 英文名, 是城市)]：商店终端所在的空间站和城市"""
+    """[(星系, 星球, 卫星, 英文名, 是城市)]：商店终端所在的空间站和城市（游戏数据层的商店行，按源顺序）"""
     try:
-        from . import shops
+        from ..gamedata import shops as gd_shops
 
-        rows = shops.load(auto_update=False).get("rows") or []
+        fields = gd_shops.place_fields()
     except Exception:
-        rows = []
+        fields = ()  # 库建不出来：用下面的保底
     out, seen = [], set()
-    for r in rows:
-        f = r[6] if len(r) > 6 else None
-        if not f:
-            continue
-        system, planet, orbit, moon, station, city = (list(f) + [""] * 6)[:6]
+    for f in fields:
+        system, planet, orbit, moon, station, city = f
         name = station or city
         if not name or system not in SYS_ZH or (system, name) in seen:
             continue
@@ -117,9 +113,42 @@ def _raw_places():
     return out or list(_FALLBACK)
 
 
-@lru_cache(maxsize=1)
+def _data_version():
+    try:
+        from ..gamedata import version
+
+        return version()
+    except Exception:
+        return None
+
+
+# 按游戏数据内容版本缓存：更新数据后自己失效
+_PLACES: dict = {"ver": None, "list": None}
+_INDEX: dict = {"of": None, "idx": None}
+
+
+def _clear_cache():
+    """data_pack.clear_caches 按名字清（汉化包换了时地点中文名也要重算）"""
+    _PLACES.update(ver=None, list=None)
+    _INDEX.update(of=None, idx=None)
+
+
 def places():
     """所有地点：[{label, zh, en, sys, sys_zh, planet_zh, moon_zh, path, kind, keys}]，按星系、星球排好"""
+    v = _data_version()
+    hit = _PLACES["list"]
+    if hit is not None and _PLACES["ver"] == v:
+        return hit
+    out = _build_places()
+    # 第一次查询可能刚把库建好：记建好后的版本
+    _PLACES.update(ver=_data_version(), list=out)
+    return out
+
+
+setattr(places, "cache_clear", _clear_cache)
+
+
+def _build_places():
     from ..navigation.navigate import poi_zh
 
     items = []
@@ -171,13 +200,18 @@ def places():
     return tuple(items)
 
 
-@lru_cache(maxsize=1)
 def _index():
-    idx = {}
-    for p in places():
-        for k in p["keys"]:
-            idx.setdefault(k, []).append(p)
-    return idx
+    ps = places()
+    if _INDEX["of"] is not ps:  # 跟着 places() 那份走
+        idx = {}
+        for p in ps:
+            for k in p["keys"]:
+                idx.setdefault(k, []).append(p)
+        _INDEX.update(of=ps, idx=idx)
+    return _INDEX["idx"]
+
+
+setattr(_index, "cache_clear", _clear_cache)
 
 
 def match(text, system=None):

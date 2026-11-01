@@ -99,13 +99,13 @@ def _zh_name(name, zh):
 def _station_at(internal):
     try:
         from ..crafting import shops
+        from ..gamedata import shops as gd_shops
 
-        for r in shops.load(auto_update=False)["rows"]:
-            f = r[6] if len(r) > 6 else None
-            if f and "Lagrange" in (f[2] or "") and (f[4] or f[5]):
-                p = shops.shop_point(f)
-                if p and p["i"] == internal:
-                    return f[4] or f[5]
+        for r in gd_shops.lagrange_rows():  # 轨道带 Lagrange、有站名的商店行
+            f = r.fields
+            p = shops.shop_point(f)
+            if p and p["i"] == internal:
+                return f[4] or f[5]
     except Exception:
         pass
     return ""
