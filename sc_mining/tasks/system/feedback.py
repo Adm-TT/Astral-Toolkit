@@ -163,9 +163,22 @@ def feedback_report(kind="auto", note="", img=None):
                 )  # 抹掉用户名、口令再进反馈包
             except OSError:
                 pass
+    try:
+        from ...core import run_records
+
+        runrec_lines = run_records.read_tail(limit=150)
+        if runrec_lines:
+            name = run_records.path_for().name
+            (d / name).write_text(
+                _scrub("\n".join(runrec_lines)), encoding="utf-8"
+            )
+        run_records.record("FEEDBACK", "本地已生成反馈包", ui_tag="SYS")
+    except Exception:
+        pass
     (d / "说明.txt").write_text(
         f"AT 问题反馈 {info['time']}（{kind}）\n{note or '（无备注）'}\n\n"
         "屏幕.png = 按下反馈键时的截图；live_*.png = 采矿助手最近几帧；情况.json = 当时的识别文字和显示结果。\n"
+        "runrec_*.log = 近期功能调用记录，便于对照哪些模块被触发。\n"
         "自动发送开着时已发给作者；关着时将此文件夹（或同名 zip）发给作者即可。截图中可能有游戏聊天框。",
         encoding="utf-8",
     )
