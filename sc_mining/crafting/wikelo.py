@@ -115,7 +115,7 @@ def build(merged_path, names_path, out=OUT):
     for c in merged.get("contracts") or []:
         if (
             "wikelo" not in (c.get("contractorName") or "").lower()
-        ):  # scmdb 写 Wikelo，解包写 Wikelo Emporium（2026-10-28）
+        ):  # scmdb 写 Wikelo，游戏数据写 Wikelo Emporium（2026-10-28）
             continue
         req = []
         for h in c.get("haulingOrders") or []:
@@ -238,7 +238,7 @@ def req_label(r):
 
 
 def print_spots(name):
-    """打印机打印的物品在哪打（data/print_spots.json，tools/unpack_printers.py 从解包生成，2026-10-27）→ [地点]"""
+    """打印机打印的物品在哪打（data/print_spots.json，由数据构建脚本从游戏数据生成，2026-10-27）→ [地点]"""
     from ..core.paths import cached_json
 
     table = cached_json(

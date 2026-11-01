@@ -156,7 +156,7 @@ def resolve(name_en="", name_zh="", item_id=None):
 
 
 def ships_with(name):
-    """自带这个部件出厂的船（data/ship_items.json，tools/unpack_ship_data.py 从解包生成，2026-10-27）→ [船中文名]"""
+    """自带这个部件出厂的船（data/ship_items.json，由数据构建脚本从游戏数据生成，2026-10-27）→ [船中文名]"""
     import re
     from ..core.paths import DATA, cached_json
 

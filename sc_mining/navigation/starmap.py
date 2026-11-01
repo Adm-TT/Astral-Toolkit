@@ -177,7 +177,7 @@ def _files_stamp() -> Tuple[Optional[int], Optional[int]]:
 
 
 def _apply_fixes(data: Dict[str, Any]) -> None:
-    """解包核对出来的星图坐标改正（data/starmap_fixes.json：{点名: [x, y, z] 米}）：starmap.space 个别点的坐标不对
+    """和游戏数据核对出来的星图坐标改正（data/starmap_fixes.json：{点名: [x, y, z] 米}）：starmap.space 个别点的坐标不对
     （2026-10-27：QV 碎岩站 BRK-304 差了 53 万 km，和 BRK-204 重了）。文件坏了 / 条目不对就跳过，保留原坐标"""
     try:
         fixes = json.loads((DATA / "starmap_fixes.json").read_text(encoding="utf-8"))

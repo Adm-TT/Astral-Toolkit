@@ -1455,7 +1455,7 @@ def test_vote_partial_needs_two_frames():
 
 def test_craft_stats_and_detail_structure(monkeypatch, tmp_path):
     """制造页改版（1.6.47）：属性统计（基础 → 强化 → 变化，几个槽影响同一属性时相加）、标题标签（尺寸 / 等级 / 类别）、
-    结构化的材料槽位、去哪挖、蓝图来源带掉率。成品基础值来自 data/item_stats.json（star-citizen.wiki 解包数据，按 uuid 对上）"""
+    结构化的材料槽位、去哪挖、蓝图来源带掉率。成品基础值来自 data/item_stats.json（star-citizen.wiki 整理的游戏数据，按 uuid 对上）"""
     import json
     from sc_mining.crafting import crafting as C, itemstats
     from sc_mining.core import paths
@@ -1540,7 +1540,7 @@ def test_craft_stats_and_detail_structure(monkeypatch, tmp_path):
         ] in ([], ["S0"], ["S1"], ["S2"], ["S3"])
     finally:
         itemstats.data.cache_clear()
-    # 真数据：Helix II 的成品基础值（star-citizen.wiki 解包）和 SCM 一致；解包里没有的属性（后坐力）只有变化、没有绝对值
+    # 真数据：Helix II 的成品基础值（star-citizen.wiki）和 SCM 一致；wiki 数据里没有的属性（后坐力）只有变化、没有绝对值
     assert C.stats(bp, {1: 1000, 2: 1000})["props"][1]["base"] == 4930
     gun = next(
         b
@@ -1680,7 +1680,7 @@ def test_signatures_only_ores_that_spawn_here():
 
 
 def test_radar_uses_game_rock_types():
-    """2026-10-27 解包：雷达信号按「石头种类」给。SCMiner 的矿物表把石头里夹带的少量矿也算进去了：
+    """2026-10-27 游戏数据：雷达信号按「石头种类」给。SCMiner 的矿物表把石头里夹带的少量矿也算进去了：
     基格带按 SCMiner 有金 18%，但游戏里基格带根本不刷金石（金只夹在贝沙电气石石头里）→ 金 ×2（7,170）不能报成金"""
     from sc_mining.mining import mining_area as M, signals as S
 

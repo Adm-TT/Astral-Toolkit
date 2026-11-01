@@ -45,7 +45,7 @@ FILES = (
     "place_amenities.json",
     "places_extra_zh.json",
     "station_lifts.json",
-)  # 解包：雷达石头表、挖矿点、星图改正、城里目的地（2026-10-27）
+)  # 游戏数据：雷达石头表、挖矿点、星图改正、城里目的地（2026-10-27）
 STAMP = (
     DATA / "data_pack.json"
 )  # 本地数据包版本（随数据一起，升级装回安装包里的数据时也一起装回）

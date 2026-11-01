@@ -332,7 +332,7 @@ def _fix_by_tiers(comp, rock):
             ]
             cands = [m for m in room if q in (_tiers(m) or ())]
             count = lambda m: sum(1 for x, _, _ in out + named[k + 1 :] if x == m)  # noqa: E731
-            if not cands:  # 这种石头本来会出的矿（解包的成分表）里只有一种有这一档：火神石石头只出火神石、石英、硅，510 → 硅
+            if not cands:  # 这种石头本来会出的矿（游戏数据的成分表）里只有一种有这一档：火神石石头只出火神石、石英、硅，510 → 硅
                 can = [
                     m
                     for m in _rock_contains(rock)
@@ -371,7 +371,7 @@ def _fix_by_tiers(comp, rock):
 
 
 def _rock_contains(rock):
-    """这种石头里会出的矿（data/mining_rocks.json 的 contains，解包成分表）；不知道返回空"""
+    """这种石头里会出的矿（data/mining_rocks.json 的 contains，游戏数据的成分表）；不知道返回空"""
     if not rock:
         return []
     try:

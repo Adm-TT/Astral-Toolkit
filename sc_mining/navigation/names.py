@@ -125,7 +125,7 @@ def poi_zh(name: str) -> str:
     files = (
         "places_zh.json",
         "places_extra_zh.json",
-    )  # 后读的优先：解包对出的汉化名（extra）盖过旧表（二审 2026-10-27）
+    )  # 后读的优先：从游戏数据对出的汉化名（extra）盖过旧表（二审 2026-10-27）
     stamp = []
     for f in files:
         try:
@@ -134,7 +134,7 @@ def poi_zh(name: str) -> str:
             stamp.append(0)
     if _places_zh is None or _places_zh[0] != stamp:  # 更新数据后不用重启
         table = {}
-        # places_extra_zh.json（tools/unpack_place_names.py，2026-10-27）：汉化包里中文不带英文的地名（采矿基地 #IGB-FXW…）
+        # places_extra_zh.json（数据构建脚本生成，2026-10-27）：汉化包里中文不带英文的地名（采矿基地 #IGB-FXW…）
         for f in files:
             try:
                 d = json.loads((DATA / f).read_text(encoding="utf-8"))

@@ -3797,7 +3797,7 @@ def test_item_search_wiki_gap_fill_and_tail_name_keys():
     """物品查询查漏补缺（1.6.48，用户对照 starcitizen.tools 发现搜不到的）：
     ①汉化包里 item_Cargo_…_Name / item_Mining_…_Name / item_fuelpod_…_Name 这种结尾是 Name 的键也读（矿石吊舱、采矿模组、打捞头），
       采矿模组的英文补上 Module，燃料舱第二行的属性串不当中文名；
-    ②英文 wiki（游戏解包）的物品清单只补别处都没有的英文名（标 wiki），中文名只信汉化包；涂装、飞船内部通用件不补；
+    ②英文 wiki（游戏数据）的物品清单只补别处都没有的英文名（标 wiki），中文名只信汉化包；涂装、飞船内部通用件不补；
     ③只有掉落数据的物品也带上 wiki 的类型 / 尺寸当分类"""
     from sc_mining.update.localization import zh2en_items
     from sc_mining.crafting import itemsearch as I

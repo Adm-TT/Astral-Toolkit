@@ -57,7 +57,7 @@ _ROCKS = {}
 
 
 def rocks_table():
-    """解包出来的雷达石头表 data/mining_rocks.json（2026-10-27 起，tools/unpack_mining.py 生成，随数据包更新）：
+    """由游戏数据整理的雷达石头表 data/mining_rocks.json（2026-10-27 起，数据构建脚本生成，随数据包更新）：
     {"tiers": 稀有度 → 一团几块, "ores": 矿 → 信号、稀有度, "areas": 地点 → {石头种类: 百分比}}；没有这个文件返回 {}"""
     from ..core.paths import DATA, cached_json
 
@@ -89,7 +89,7 @@ def _result(row, system=None):
         "minerals": dict(row["minerals"]),
     }
     # 雷达信号是按「石头种类」给的：这里刷哪几种石头（SCMiner 的矿物表把石头里夹带的少量矿也算进去了，
-    # 基格带会多出硼砂、金这些——那里根本没有硼砂石、金石，2026-10-27 解包发现）
+    # 基格带会多出硼砂、金这些——那里根本没有硼砂石、金石，2026-10-27 核对游戏数据发现）
     rocks = (rocks_table().get("areas") or {}).get(row["name"])
     if rocks:
         out["rocks"] = dict(rocks)
@@ -156,7 +156,7 @@ def area(g, system, body=None, ground=None, location="", zone=""):
         if yela and YELA_RING[0] * 0.95 <= math.dist(g, yela) <= YELA_RING[1] * 1.05:
             return _result(
                 _table("Yela Asteroid Belt")
-            )  # 耶拉环带：星图记录里的环 482,000～782,000 km（解包）
+            )  # 耶拉环带：星图记录里的环 482,000～782,000 km（游戏数据）
         from ..navigation import halo
 
         try:
