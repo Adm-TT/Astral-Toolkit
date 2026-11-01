@@ -1849,24 +1849,21 @@ def test_review_104_final(monkeypatch, tmp_path):
         and latest_live(fs[:1]) is None
     )
     assert live_version(fs[2]) == "4.10.2-live.5"
-    # 4. 改正文件结构不对：跳过坏条目，不崩
-    monkeypatch.setattr(n, "DATA", tmp_path)
+    # 4. 改正文件结构不对：跳过坏条目，不崩（建库时套改正；文件不是 JSON 时建库当作没有，传进来是 None）
+    from sc_mining.navigation.starmap import fix_points
+
     pts = {
         "points": [
             {"n": "A", "x": 1, "y": 2, "z": 3},
             {"n": "B", "x": 1, "y": 2, "z": 3},
         ]
     }
-    for bad in ("[]", '{"A": 123}', '{"A": ["bad", 0, 0], "B": [7, 8, 9]}', "{坏"):
-        (tmp_path / "starmap_fixes.json").write_text(bad, encoding="utf-8")
+    for bad in ([], {"A": 123}, {"A": ["bad", 0, 0], "B": [7, 8, 9]}, None):
         d = {"points": [dict(p) for p in pts["points"]]}
-        n._apply_fixes(d)
+        fix_points(d, bad)
         assert (d["points"][0]["x"], d["points"][0]["y"]) == (1, 2)
     assert d["points"][1]["x"] == 1  # 最后一个是坏 JSON，整份不用
-    (tmp_path / "starmap_fixes.json").write_text(
-        '{"A": ["bad", 0, 0], "B": [7, 8, 9]}', encoding="utf-8"
-    )
-    n._apply_fixes(d)
+    fix_points(d, {"A": ["bad", 0, 0], "B": [7, 8, 9]})
     assert (d["points"][1]["x"], d["points"][1]["z"]) == (7.0, 9.0)
 
 

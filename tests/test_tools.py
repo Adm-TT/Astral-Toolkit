@@ -249,9 +249,10 @@ def test_unrelated_search_results_dropped(tmp_path):
 # ======================================================================
 
 
-def _shops_db(monkeypatch, tmp_path, data):
+def _shops_db(monkeypatch, tmp_path, data, starmap=None):
     """商店查询走游戏数据层（批 1）：把假商店表写成 shops.json、在临时目录建库，只把库目录指过去；
-    paths.DATA 不动（别的数据照旧读真实 data/）。shops._data 也照旧换掉，给还在用 load() 的地方"""
+    paths.DATA 不动（别的数据照旧读真实 data/）。shops._data 也照旧换掉，给还在用 load() 的地方。
+    starmap：假星图（批 2 起 find_point 走库），给了就一起写成 starmap.json 建进库"""
     from sc_mining import gamedata
     from sc_mining.core import paths
     from sc_mining.gamedata import _build, _paths, _ready
@@ -261,6 +262,10 @@ def _shops_db(monkeypatch, tmp_path, data):
     (src / "shops.json").write_text(
         json.dumps(data, ensure_ascii=False), encoding="utf-8"
     )
+    if starmap is not None:
+        (src / "starmap.json").write_text(
+            json.dumps(starmap, ensure_ascii=False), encoding="utf-8"
+        )
     monkeypatch.setattr(_paths, "gamedata_dir", lambda: src / "gamedata")
     monkeypatch.setattr(
         _build, "gamedata_dir", lambda: src / "gamedata"
@@ -411,7 +416,6 @@ POINTS = [
 
 
 def setup(monkeypatch, tmp_path):
-    monkeypatch.setattr(navigate, "_data", {"bodies": {}, "pois": [], "points": POINTS})
     data = {
         "fmt": shops.FMT,
         "fetched": time.time(),
@@ -466,7 +470,12 @@ def setup(monkeypatch, tmp_path):
             ],
         ],
     }
-    _shops_db(monkeypatch, tmp_path, data)
+    _shops_db(
+        monkeypatch,
+        tmp_path,
+        data,
+        starmap={"bodies": {}, "pois": [], "points": POINTS},
+    )
 
 
 def test_shop_point_and_nearest(monkeypatch, tmp_path):

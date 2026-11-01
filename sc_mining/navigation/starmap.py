@@ -3,18 +3,18 @@
 提供：
 1. starmap.space 接口数据拉取与失败重试（_fetch、update）；
 2. 原始星体与地点信息精简压缩（compact）；
-3. 本地星图缓存与改正补丁加载（load、_apply_fixes、CACHE）。
+3. 星图读取（load：从游戏数据层组装，坐标改正 fix_points 在建库时套）。
 """
 
 from datetime import datetime, timezone
 import json
 import math
-from pathlib import Path
 import time
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence
 import urllib.error
 import urllib.request
 
+from .. import gamedata
 from ..core.net import read
 from ..core.paths import DATA
 from .names import _POI_BODY
@@ -29,9 +29,6 @@ UA = {
     "Accept": "application/json",
     "Referer": "https://starmap.space/",
 }
-
-_data: Optional[Dict[str, Any]] = None
-_data_stamp: Optional[Tuple[Optional[int], Optional[int]]] = None
 
 
 def _fetch(path: str, tries: int = 3) -> Any:
@@ -151,12 +148,12 @@ def update() -> Dict[str, Any]:
     tmp = CACHE.with_suffix(
         ".tmp"
     )  # 先写临时文件再换上：导航正在读的时候不会读到半个文件
-    tmp.write_text(
-        json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
-    )
-    tmp.replace(CACHE)
-    global _data
-    _data = None  # 下次用时读新的
+    with gamedata.updating():  # 只套写文件这一步（联网不占数据目录写锁）；退出时重建游戏数据库，load() 跟着换代
+        tmp.write_text(
+            json.dumps(data, ensure_ascii=False, separators=(",", ":")),
+            encoding="utf-8",
+        )
+        tmp.replace(CACHE)
     n_no = sum(1 for p in data["pois"] if p.get("qt") != 1)
     print(
         f"星图数据已更新：{len(data['bodies'])} 个星球/卫星，{len(data['pois'])} 个地点（其中 {n_no} 个没有确认的量子信标）"
@@ -164,30 +161,10 @@ def update() -> Dict[str, Any]:
     return data
 
 
-def _files_stamp() -> Tuple[Optional[int], Optional[int]]:
-    """星图和坐标改正文件的修改时间：数据包换了文件，下次 load() 就重读（不用重启）"""
-
-    def mt(f: Path) -> Optional[int]:
-        try:
-            return f.stat().st_mtime_ns
-        except OSError:
-            return None
-
-    return mt(CACHE), mt(DATA / "starmap_fixes.json")
-
-
-def _apply_fixes(data: Dict[str, Any]) -> None:
-    """和游戏数据核对出来的星图坐标改正（data/starmap_fixes.json：{点名: [x, y, z] 米}）：starmap.space 个别点的坐标不对
-    （2026-10-27：QV 碎岩站 BRK-304 差了 53 万 km，和 BRK-204 重了）。文件坏了 / 条目不对就跳过，保留原坐标"""
-    try:
-        fixes = json.loads((DATA / "starmap_fixes.json").read_text(encoding="utf-8"))
-    except Exception:
-        return
-    fix_points(data, fixes)
-
-
 def fix_points(data: Dict[str, Any], fixes: Any) -> None:
-    """把坐标改正表套到 data["points"] 上（纯函数部分，游戏数据层建库时也用它；规则同 _apply_fixes）"""
+    """和游戏数据核对出来的星图坐标改正（data/starmap_fixes.json：{点名: [x, y, z] 米}）套到 data["points"] 上：
+    starmap.space 个别点的坐标不对（2026-10-27：QV 碎岩站 BRK-304 差了 53 万 km，和 BRK-204 重了）。
+    游戏数据层建库时调；改正表不是 dict / 条目不对就跳过，保留原坐标（文件坏了建库时当作没有）"""
     if not isinstance(fixes, dict):
         return
     good: Dict[str, List[float]] = {}
@@ -210,18 +187,9 @@ def fix_points(data: Dict[str, Any], fixes: Any) -> None:
 
 
 def load() -> Dict[str, Any]:
-    global _data, _data_stamp
-    stamp = _files_stamp()
-    if _data is None or (
-        _data_stamp is not None and stamp != _data_stamp and stamp[0] is not None
-    ):
-        if not CACHE.exists():
-            print("第一次使用导航，需要先下载星图数据。")
-            update()
-            stamp = _files_stamp()
-        data = json.loads(CACHE.read_text(encoding="utf-8"))
-        _apply_fixes(data)
-        for name, b in (data.get("bodies") or {}).items():
-            b["name"] = name  # 自转相位校准按名字存（rotation_deg 只拿到星球那个 dict）
-        _data, _data_stamp = data, stamp
-    return _data  # type: ignore[return-value]
+    """星图：{bodies, pois, points, fetched}，从游戏数据层组装（按内容版本缓存，更新数据后自动换新的）。
+    还没有 starmap.json 就先下载一次（和以前一样）"""
+    if not CACHE.exists():
+        print("第一次使用导航，需要先下载星图数据。")
+        update()
+    return gamedata.starmap.data_dict()

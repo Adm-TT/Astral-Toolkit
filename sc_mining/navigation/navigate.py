@@ -56,11 +56,7 @@ from .starmap import (
     API,
     CACHE,
     UA,
-    _apply_fixes,
-    _data,
-    _data_stamp,
     _fetch,
-    _files_stamp,
     compact,
     load,
     update,
@@ -212,7 +208,6 @@ def mining_spots(data=None):
         mt,
         rocks_stamp(),
         id(data),
-        _data_stamp,
     )  # 挖矿点文件、石头表、星图任何一个换了都重算（审查 2026-10-27）
     if _spots.get("stamp") == stamp and "list" in _spots:
         return _spots["list"]
