@@ -38,7 +38,14 @@ from .settings import (
     start_background,
     update_data,
 )
-from .status import _desktop, _gridtext_status, _system_info, export_logs, status
+from .status import (
+    _desktop,
+    _gridtext_status,
+    _system_info,
+    audit_verify,
+    export_logs,
+    status,
+)
 from .upgrade import (
     FROZEN_UPGRADE_MSG,
     VPK_PREV,
@@ -79,6 +86,7 @@ __all__ = [
     "legacy_skip",
     "legacy_quit",
     "export_logs",
+    "audit_verify",
     "feedback_report",
     "feedback_list",
     "feedback_export",

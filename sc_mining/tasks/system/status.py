@@ -239,3 +239,12 @@ def export_logs():
         except Exception:
             pass
     return {"path": str(out), "files": files, "kb": round(out.stat().st_size / 1024)}
+
+
+def audit_verify(date: str = ""):
+    """校验指定日期（默认当天）的功能证据日志哈希链完整性"""
+    from ...core import audit
+
+    ok, count, msg = audit.verify_chain(date or None)
+    return {"ok": ok, "count": count, "message": msg}
+

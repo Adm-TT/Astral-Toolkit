@@ -376,6 +376,7 @@ function updateRuntimePreview(meta) {
 
 function initRuntimeMonitor() {
   const clearBtn = document.getElementById("rt-clear-btn");
+  const verifyBtn = document.getElementById("rt-verify-btn");
   const toggleBtn = document.getElementById("rt-toggle-btn");
   const monitor = document.getElementById("rt-monitor");
   const container = document.getElementById("rt-screen-view");
@@ -406,6 +407,19 @@ function initRuntimeMonitor() {
       clearRuntimeLogsUi();
     } catch (e) {
       clearRuntimeLogsUi();
+    }
+  });
+
+  verifyBtn?.addEventListener("click", async () => {
+    try {
+      const r = await api("audit_verify");
+      if (r.ok) {
+        toast(`🛡️ 证据日志校验通过：${r.message}`);
+      } else {
+        toast(`⚠️ 证据日志异常：${r.message}`);
+      }
+    } catch (e) {
+      toast(e.message);
     }
   });
 
@@ -2772,6 +2786,9 @@ PAGES.settings = () => {
       <span id="ocr-state">${ocrStateHtml(s, c)}</span>
       </p></div>
       ${segH("ocr-device", [["gpu", "显卡 (GPU)"], ["cpu", "处理器 (CPU)"]], (c.ocr_device || (c.always_use_gpu !== false ? "gpu" : "cpu")), "文字识别硬件")}</div>
+    <div class="set"><div>功能运行证据与防伪校验
+      <p>自动按天记录客观操作证据（仅读屏/读剪贴板），采用防篡改哈希链（Hash Chaining）防伪。点击按钮可一键校验本地日志完整性，自证未曾修改或注入。</p></div>
+      <button class="btn" id="verify-audit">校验日志完整性</button></div>
     <div class="set" style="border:0;padding:0"><div>导出日志
       <p>将运行日志、设置和系统信息打包到桌面，发给作者用于排查问题。不含聊天记录、浏览数据等个人信息。识别类问题（扫描、F8、导航）建议附上出现问题时的游戏截图。</p></div>
       <button class="btn" id="export-logs">导出日志</button></div></div>
@@ -2811,6 +2828,24 @@ PAGES.settings = () => {
   $("#export-logs").onclick = async () => {
     try { const r = await api("export_logs"); toast(`已保存到桌面：${r.path.split("\\").pop()}（${r.kb} KB）`); }
     catch (e) { toast(e.message); }
+  };
+  $("#verify-audit").onclick = async () => {
+    try {
+      const r = await api("audit_verify");
+      if (r.ok) {
+        openModal({
+          title: "证据日志校验通过",
+          body: `<div style="padding:10px;line-height:1.6"><p style="color:#4caf50;font-weight:bold;font-size:15px">🛡️ 哈希链校验通过（未被篡改）</p><p class="muted" style="margin-top:8px">${esc(r.message)}</p><p style="margin-top:12px;font-size:12.5px;color:var(--text-muted, #8e8e93)">日志按天存储在本地 userdata/logs/，每行通过 SHA-256 紧密链接，任何改动或删行均会导致校验失败。</p></div>`
+        });
+      } else {
+        openModal({
+          title: "证据日志存在异常",
+          body: `<div style="padding:10px;line-height:1.6"><p style="color:#f44336;font-weight:bold;font-size:15px">⚠️ 检测到异常或篡改</p><p style="margin-top:8px">${esc(r.message)}</p></div>`
+        });
+      }
+    } catch (e) {
+      toast(e.message);
+    }
   };
   const fbList = async () => {
     const rows = await api("feedback_list").catch(() => []);

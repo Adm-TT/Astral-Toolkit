@@ -62,6 +62,10 @@ def export_logs(**kw):
     return _t.export_logs(**kw)
 
 
+def audit_verify(**kw):
+    return _t.audit_verify(**kw)
+
+
 def feedback_report(**kw):
     return _t.feedback_report(**kw)
 
@@ -149,6 +153,7 @@ ROUTES = {
     "upgrade_upload": upgrade_upload,
     "upgraded": upgraded,
     "export_logs": export_logs,
+    "audit_verify": audit_verify,
     "feedback_report": feedback_report,
     "feedback_list": feedback_list,
     "feedback_export": feedback_export,

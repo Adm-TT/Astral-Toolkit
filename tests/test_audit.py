@@ -151,3 +151,22 @@ def test_perfmon_on_demand_start(monkeypatch):
     m2.start()
     assert m2.thread is not None
     m2.thread.join(timeout=1.0)
+
+
+def test_audit_api_endpoint(tmp_path, monkeypatch):
+    """测试通过 API 路由调用 audit_verify"""
+    from sc_mining.app.api import router
+    from sc_mining.core import audit, paths
+
+    router.reset()
+    logs_dir = tmp_path / "logs"
+    monkeypatch.setattr(paths, "LOGS", logs_dir)
+
+    audit.record("SYSTEM", "API测试", tag="TEST")
+    res = router.call("audit_verify")
+    assert res["ok"] is True
+    data = res["data"]
+    assert data["ok"] is True
+    assert data["count"] >= 1
+    assert "通过" in data["message"]
+
