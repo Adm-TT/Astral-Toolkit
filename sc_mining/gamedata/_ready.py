@@ -4,8 +4,13 @@
 不在每次查询都开一次库校验。真的建不出库才抛 BuildError，不把「还没建好」抛给调用方。"""
 
 import threading
+from contextlib import contextmanager
+from typing import TYPE_CHECKING, Iterator
 
 from ._types import GamedataUnavailable
+
+if TYPE_CHECKING:
+    from ._db import Snapshot
 
 _state: dict = {"done": False}
 _lock = threading.Lock()
@@ -39,3 +44,16 @@ def ensure(timeout: float = 30.0) -> None:
 
                     rebuild_if_needed()
     _state["done"] = True
+
+
+@contextmanager
+def use(snap: "Snapshot | None" = None) -> Iterator["Snapshot"]:
+    """各 topic 用：传了快照就用它（调用方一次操作钉在一个版本上）；没传就先 ensure() 再开一个"""
+    if snap is not None:
+        yield snap
+        return
+    from ._db import snapshot
+
+    ensure()
+    with snapshot() as s:
+        yield s

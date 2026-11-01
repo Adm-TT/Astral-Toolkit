@@ -18,7 +18,7 @@ import threading
 from contextlib import contextmanager
 from typing import Iterator
 
-from . import _build, _db
+from . import _build, _db, items, prices, shops
 from ._db import current_version as version, snapshot
 from ._lock import write_lock
 from ._manifest import Manifest
@@ -48,9 +48,12 @@ __all__ = [
     "Vec3",
     "ensure",
     "ensure_ready",
+    "items",
     "last_error",
+    "prices",
     "rebuild",
     "refresh",
+    "shops",
     "snapshot",
     "updating",
     "version",
