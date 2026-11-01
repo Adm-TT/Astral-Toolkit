@@ -1455,7 +1455,7 @@ def test_vote_partial_needs_two_frames():
 
 def test_craft_stats_and_detail_structure(monkeypatch, tmp_path):
     """制造页改版（1.6.47）：属性统计（基础 → 强化 → 变化，几个槽影响同一属性时相加）、标题标签（尺寸 / 等级 / 类别）、
-    结构化的材料槽位、去哪挖、蓝图来源带掉率。成品基础值来自 data/item_stats.json（star-citizen.wiki 解包数据，按 uuid 对上）"""
+    结构化的材料槽位、去哪挖、蓝图来源带掉率。成品基础值来自 data/item_stats.json（star-citizen.wiki 整理的游戏数据，按 uuid 对上）"""
     import json
     from sc_mining.crafting import crafting as C, itemstats
     from sc_mining.core import paths
@@ -1540,7 +1540,7 @@ def test_craft_stats_and_detail_structure(monkeypatch, tmp_path):
         ] in ([], ["S0"], ["S1"], ["S2"], ["S3"])
     finally:
         itemstats.data.cache_clear()
-    # 真数据：Helix II 的成品基础值（star-citizen.wiki 解包）和 SCM 一致；解包里没有的属性（后坐力）只有变化、没有绝对值
+    # 真数据：Helix II 的成品基础值（star-citizen.wiki）和 SCM 一致；wiki 数据里没有的属性（后坐力）只有变化、没有绝对值
     assert C.stats(bp, {1: 1000, 2: 1000})["props"][1]["base"] == 4930
     gun = next(
         b
@@ -1642,7 +1642,7 @@ def test_mining_area_from_position():
     assert keeger["name"] == "Keeger Belt" and keeger["minerals"]["Bexalite"] == 18
     assert M.area((15.0e9, 0, 1e6), "Nyx")["name"] == "Glaciem Ring"
     assert M.area((30e9, 0, 0), "Nyx")["minerals"] == {}  # 尼克斯的空旷太空
-    # 派罗「小行星群 FSN-704」用的是深空小行星表（2026-10-27 解物件容器）；阿克罗团单独一张表
+    # 派罗「小行星群 FSN-704」用的是深空小行星表（2026-10-27 核对游戏数据）；阿克罗团单独一张表
     assert M.area((0, 0, 0), "Pyro", location="AsteroidCluster_Pyro_RegionC_FSN-704")[
         "name"
     ] in ("Deep Space Asteroids", "Akiro Cluster")
@@ -1679,8 +1679,8 @@ def test_signatures_only_ores_that_spawn_here():
     assert lines and "此地不刷" in lines[0]
 
 
-def test_radar_uses_unpacked_rock_types():
-    """2026-10-27 解包：雷达信号按「石头种类」给。SCMiner 的矿物表把石头里夹带的少量矿也算进去了：
+def test_radar_uses_game_rock_types():
+    """2026-10-27 游戏数据：雷达信号按「石头种类」给。SCMiner 的矿物表把石头里夹带的少量矿也算进去了：
     基格带按 SCMiner 有金 18%，但游戏里基格带根本不刷金石（金只夹在贝沙电气石石头里）→ 金 ×2（7,170）不能报成金"""
     from sc_mining.mining import mining_area as M, signals as S
 
@@ -1785,8 +1785,8 @@ def test_review_104_rocks_reload_and_order(monkeypatch, tmp_path):
     assert [l.split(" → ")[1].split("｜精炼后")[0] for l in lines] == order  # noqa: E741
 
 
-def test_unpacked_mining_spots_and_pyro_areas():
-    """2026-10-27 解物件容器：派罗 15 个小行星群、86 个远矿站能量子、刷深空小行星（以前当成阿克罗团）；
+def test_game_mining_spots_and_pyro_areas():
+    """2026-10-27 核对游戏数据：派罗 15 个小行星群、86 个远矿站能量子、刷深空小行星（以前当成阿克罗团）；
     派罗拉格朗日点有子云（派1/派2 暖带 01、派3 暖带 02、派5 冷带 01、派6 冷带 02）；导航「挖矿点」能按矿搜"""
     from sc_mining.navigation import navigate as n
     from sc_mining.mining import mining_area as M

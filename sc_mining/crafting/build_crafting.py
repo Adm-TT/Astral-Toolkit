@@ -318,9 +318,9 @@ def live_version(path):
     return m.group(1) if m else None
 
 
-def unpacked():
-    """我们自己解包出来的蓝图 + 任务文件（tools/unpack_crafting.py，2026-10-28 起优先于 scmdb）：(蓝图文件, 任务文件, 版本)；没有返回 None"""
-    d = paths.data("unpack")
+def source_rows():
+    """本机构建输入目录里由游戏数据整理出的蓝图 + 任务文件（数据构建脚本生成，2026-10-28 起优先于 scmdb）：(蓝图文件, 任务文件, 版本)；没有返回 None"""
+    d = paths.data(paths.BUILD_DIR)
     bp = latest_live(d.glob("crafting_blueprints-*.json")) if d.exists() else None
     if not bp:
         return None
@@ -329,13 +329,13 @@ def unpacked():
 
 
 def update():
-    """重建 crafting.json：有自己解包的数据就用它；没有才去 scmdb 看有没有新版本"""
+    """重建 crafting.json：有本机构建输入就用它；没有才去 scmdb 看有没有新版本"""
     with BUILD_LOCK:
         return _update()
 
 
 def _update():
-    own = unpacked()
+    own = source_rows()
     if own:
         bp, merged, ver = own
         out = paths.data("crafting.json")
@@ -344,16 +344,16 @@ def _update():
 
         if (
             old.get("version") == ver
-            and old.get("source") == "unpack"
+            and paths.from_game(old)
             and old.get("names") == _names_tag(names_source())
         ):
-            print(f"制造数据已是最新（解包 {ver}）")
+            print(f"制造数据已是最新（游戏数据 {ver}）")
             return
         build(bp, merged, names_source(), out)
         from .wikelo import build as build_wikelo
 
         print(f"维科洛兑换：{build_wikelo(merged, names_source())} 个")
-        print(f"制造数据已更新（解包 {ver}）")
+        print(f"制造数据已更新（游戏数据 {ver}）")
         return
     ver = pick_live([v["version"] for v in json.loads(_fetch("versions.json"))])
     if not ver:

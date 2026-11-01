@@ -17,6 +17,7 @@
 | 2026-11-02 | 原“第七个清理 PR”从本文件移出，单独排期 | 与数据层迁移无关，不混在一起审 |
 | 2026-11-02 | v3，按源码复审纠正现状描述（已逐条对源码核实）：① 撤回“navigate 按值导入导致缓存过期”——`navigate.py:60` 的 `_data` 是死导入，实际走 `load()`；② 撤回“uex 只在 import 时应用”——`data_pack.clear_caches()` 会再调 `uex.apply_live`；③ “全部线性扫描”改为“商店/星图/城市点/wikelo/crafting 线性扫描，物品搜索已有字符索引和三元组索引”；④ 新增已知缺陷：`itemsearch.py:78` 缓存键漏了 `wiki_items.json`、`name_aliases.json`，只更新这两个文件时索引不刷新；⑤ 新增约束：与用户库存库 `dubhe_inventory.db`（`trade/storage.py`）严格分开；⑥ 新增地基任务：物品身份映射（uex:/scm:/local: 来源编号、游戏类名、实体 uuid）；⑦ 建库发布接在现有 `paths.cached_json / write_json / clear_json_cache / CACHE_HOOKS` 上，不另起一套；⑧ 批 1 试点范围补齐 loot_index、zh_names、name_aliases、wiki_items | 外部复审对照 `release/1.1.4-beta.1` 源码的发现，本文件据此修正 §1.1、§1.3、§2、§4.2、§4.3、§5.1 |
 | 2026-11-02 | 地基 PR 实现完成（分支 feat/gamedata-foundation）：包结构、表名、清单字段、入口函数以 `sc_mining/gamedata/` 代码为准。与 §3.1 示例的两处差异：`ShopRow` 按 shops.json 的 7 列原样映射（源里没有 shop_id/place_id/body）；价格是源里的 float 原样。`updating()` 建库失败不抛、记到 `last_error()`。试点批次接口签名在批 1 开工前按调用点矩阵定稿 | 实施反馈 |
+| 2026-11-02 | 措辞：§1、§4 里构建输入目录不再写目录名，改指 `paths.BUILD_DIR`（数据来源字样清理） | 清理批 |
 
 ---
 
@@ -54,7 +55,7 @@
 - `navigate.py:60` `from .starmap import _data` 是死导入（全文件仅此一处），实际读取都走 `starmap.load()`，刷新后能读到新数据；不是缺陷，迁移时顺手删掉该导入即可。
 - 物品编号有多套体系（`trade/gamekey.py`）：查价来源编号 `uex:4741` / `scm:43475` / `local:…`、游戏类名、游戏实体 uuid；库存库用 `source_ids` 表把来源编号对到本地 `item_id`。
 - 已有一个用户数据 SQLite：`trade/storage.py` 的 `dubhe_inventory.db`（库存、流水、别名、市场缓存，schema 版本 2）。它是用户数据，与本设计无关，新库必须与它分开。
-- `data/scmdb`（约 33 MB）和 `data/unpack` 只是建数据用的输入目录，运行时模块不读。
+- `data/scmdb`（约 33 MB）和本机构建输入目录（`paths.BUILD_DIR`）只是建数据用的输入目录，运行时模块不读。
 
 以上数据规模、内存占用和调用点来自此前调研，本次修订未重新测量；地基阶段结合当前源码和真实数据核对。
 
@@ -280,7 +281,7 @@ loot / crafting / wikelo / places / mining / prices / names 按实际调用提�
 ### 4.1 建库与启动
 
 - `tools/build_gamedata.py` 和运行时 `rebuild()` 调用同一份 `_build.py`。
-- 使用显式运行时源清单，不把 `data/*.json` 中任意新增文件自动当输入；记录必需/可选文件、缺失规则。`data/scmdb`、`data/unpack` 不纳入运行时建库。
+- 使用显式运行时源清单，不把 `data/*.json` 中任意新增文件自动当输入；记录必需/可选文件、缺失规则。`data/scmdb`、本机构建输入目录不纳入运行时建库。
 - 对源文件读取一次字节，用同一份字节算 SHA-256 和解析，避免哈希与实际入库内容不一致。
 - 当前版本可用且 `data_version` 未变则不重建。相同输入和转换规则保证相同业务行、顺序和内容版本，不要求库文件字节相同。
 - 启动先校验清单、文件、schema/导入版本及源哈希；首次使用、兼容性变化或输入变化时重建。清单损坏或缺失时显式重建，不把目录中任意旧库自动认作当前版本。

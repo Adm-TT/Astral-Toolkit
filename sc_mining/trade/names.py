@@ -23,7 +23,7 @@ def table():
         return {}
     known = _known_names()
     out = {zh: en for zh, en in raw.items() if not _junk(en, known)}
-    try:  # 汉化包只写了中文名的物品（勋章、计算板…）：解包补的英文名（2026-10-27）
+    try:  # 汉化包只写了中文名的物品（勋章、计算板…）：从游戏数据补的英文名（2026-10-27）
         for zh, en in json.loads(
             (DATA / "zh_only_names.json").read_text(encoding="utf-8")
         ).items():

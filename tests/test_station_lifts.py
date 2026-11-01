@@ -362,14 +362,11 @@ def test_car_number_changed():
     assert n._car_changed("", "904902949036")
 
 
-def test_unpack_lifts_rotated_station():
+def test_lifts_rotated_station():
     """转了 90° 的 TransitManager：门要先转它的朝向再加位置；不转的话点离本区域的门几千米，自检能查出来（第 25 轮复审）"""
     import math
-    import sys
-    from pathlib import Path
 
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
-    import unpack_lifts as UL
+    from sc_mining.navigation import lifts_geom as UL
 
     q90 = (math.cos(math.pi / 4), 0.0, 0.0, math.sin(math.pi / 4))  # 绕 z 转 90°
     mp, rel = (1000.0, 0.0, 0.0), (2000.0, 0.0, 0.0)

@@ -36,7 +36,7 @@ _city: Dict[str, Any] = {}
 
 
 def city_places() -> List[Dict[str, Any]]:
-    """data/city_places.json（tools/unpack_city.py 解城市物件容器生成）→ 导航用的地点（星球坐标，千米）"""
+    """data/city_places.json（数据构建脚本从游戏数据生成）→ 导航用的地点（星球坐标，千米）"""
     return cached_json(DATA / "city_places.json", _city_rows, [])
 
 

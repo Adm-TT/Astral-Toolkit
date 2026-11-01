@@ -57,7 +57,7 @@ _ROCKS = {}
 
 
 def rocks_table():
-    """解包出来的雷达石头表 data/mining_rocks.json（2026-10-27 起，tools/unpack_mining.py 生成，随数据包更新）：
+    """由游戏数据整理的雷达石头表 data/mining_rocks.json（2026-10-27 起，数据构建脚本生成，随数据包更新）：
     {"tiers": 稀有度 → 一团几块, "ores": 矿 → 信号、稀有度, "areas": 地点 → {石头种类: 百分比}}；没有这个文件返回 {}"""
     from ..core.paths import DATA, cached_json
 
@@ -89,7 +89,7 @@ def _result(row, system=None):
         "minerals": dict(row["minerals"]),
     }
     # 雷达信号是按「石头种类」给的：这里刷哪几种石头（SCMiner 的矿物表把石头里夹带的少量矿也算进去了，
-    # 基格带会多出硼砂、金这些——那里根本没有硼砂石、金石，2026-10-27 解包发现）
+    # 基格带会多出硼砂、金这些——那里根本没有硼砂石、金石，2026-10-27 核对游戏数据发现）
     rocks = (rocks_table().get("areas") or {}).get(row["name"])
     if rocks:
         out["rocks"] = dict(rocks)
@@ -121,7 +121,7 @@ def area(g, system, body=None, ground=None, location="", zone=""):
         flat = text.replace(" ", "_")
         if "akiro" in flat:
             return _named("Akiro Cluster")
-        # 派罗「小行星群 FSN-704」这些和远矿站：游戏里用的是深空小行星表（2026-10-27 解物件容器，以前当成阿克罗团）
+        # 派罗「小行星群 FSN-704」这些和远矿站：游戏里用的是深空小行星表（2026-10-27 核对游戏数据，以前当成阿克罗团）
         if re.search(r"asteroidcluster_pyro|ab_mine_pyro|miningbase_pyro", flat):
             return _named(DEEP)
         if g:
@@ -135,7 +135,7 @@ def area(g, system, body=None, ground=None, location="", zone=""):
             t6 = _body_xyz("Terminus") or _body_xyz("Pyro6")
             if (
                 t6 and math.dist(g, t6) <= 2_000_000_000
-            ):  # 派6 附近有一圈矿（物件容器引用了耶拉环带的刷矿表），范围还没解出来：不过滤
+            ):  # 派6 附近有一圈矿（游戏数据里引用了耶拉环带的刷矿表），范围还没弄清：不过滤
                 return None
             spots = _spots_raw()
             clusters = [
@@ -156,7 +156,7 @@ def area(g, system, body=None, ground=None, location="", zone=""):
         if yela and YELA_RING[0] * 0.95 <= math.dist(g, yela) <= YELA_RING[1] * 1.05:
             return _result(
                 _table("Yela Asteroid Belt")
-            )  # 耶拉环带：星图记录里的环 482,000～782,000 km（解包）
+            )  # 耶拉环带：星图记录里的环 482,000～782,000 km（游戏数据）
         from ..navigation import halo
 
         try:

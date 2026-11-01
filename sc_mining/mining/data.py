@@ -43,7 +43,7 @@ SIGNATURES = {
 RARITY = {
     **dict.fromkeys(["Quantainium", "Stileron", "Savrilium"], "传说"),
     **dict.fromkeys(["Ouratite", "Riccite", "Lindinium"], "史诗"),
-    # 波射石：SCMiner 写史诗，游戏数据是稀有（rareshipmineables，一团 2～4 块），以解包为准（用户 2026-10-27）
+    # 波射石：SCMiner 写史诗，游戏数据是稀有（rareshipmineables，一团 2～4 块），以游戏数据为准（用户 2026-10-27）
     **dict.fromkeys(["Beryl", "Taranite", "Gold", "Bexalite", "Borase"], "稀有"),
     **dict.fromkeys(
         ["Laranite", "Aslarite", "Titanium", "Tungsten", "Agricium", "Torite"], "罕见"
@@ -69,14 +69,14 @@ MAX_CLUSTER = 10  # 一簇最多几块（SCMiner 列 1–10 块）
 # ---------------------------------------------------------------- 矿头
 # pmax/pmin: 最大/最小功率；res/instab/window/rate: 百分比修正（-30 表示 -30%）；slots: 模组槽数；size: 尺寸
 # S2 四个原有矿头：starcitizen.tools（4.10.2-LIVE.12881860）+ SCMiner + 汉化包三方一致，保留原值。
-# 其余（S1、Pitman、Impact II、Klein-S2）：erkul.games 解包数据（4.10.2-LIVE.12913470），已与 Wiki 抽查一致。
+# 其余（S1、Pitman、Impact II、Klein-S2）：erkul.games 的游戏数据（4.10.2-LIVE.12913470），已与 Wiki 抽查一致。
 HEADS = {
     "helix_ii": dict(
         name="Helix II",
         size=2,
         pmin=1479,
         pmax=4930,
-        slots=3,  # 解包 2026-10-27：最低 30%、没有充能速率加成
+        slots=3,  # 游戏数据 2026-10-27：最低 30%、没有充能速率加成
         res=-30,
         instab=0,
         window=-40,
@@ -98,7 +98,7 @@ HEADS = {
         size=2,
         pmin=1305,
         pmax=4350,
-        slots=2,  # 解包：最低 30%
+        slots=2,  # 游戏数据：最低 30%
         res=0,
         instab=-10,
         window=-60,
@@ -220,12 +220,12 @@ HEADS = {
 
 # ---------------------------------------------------------------- 被动模组（S1、S2 通用）
 # power: 功率修正 %；window: 绿区大小 %；rate: 充能速率 %；res: 抗性 %；instab: 不稳定 %
-# 原有三个（Rieger-C3、Focus III、Torrent III）三方一致；其余取 erkul 解包（4.10.2），与原有三个的数值一致。
+# 原有三个（Rieger-C3、Focus III、Torrent III）三方一致；其余取 erkul 的游戏数据（4.10.2），与原有三个的数值一致。
 MODULES = {
     "rieger": dict(name="Rieger", power=15, window=-10),
     "rieger_c2": dict(name="Rieger-C2", power=20, window=-3),
     "rieger_c3": dict(name="Rieger-C3", power=25, window=-1),
-    # Vaux / XTR / FLTR 改的是「提取」光束功率（extract），不是破碎功率（解包 2026-10-27；以前当成破碎功率算）
+    # Vaux / XTR / FLTR 改的是「提取」光束功率（extract），不是破碎功率（游戏数据 2026-10-27；以前当成破碎功率算）
     "vaux": dict(name="Vaux", extract=15, rate=-20),
     "vaux_c2": dict(name="Vaux-C2", extract=20, rate=-15),
     "vaux_c3": dict(name="Vaux-C3", extract=25, rate=-5),
@@ -250,7 +250,7 @@ GADGETS = {
     "sabir": dict(name="Sabir", res=-50, instab=15, window=50),
     "optimax": dict(
         name="OptiMax", res=-25, window=-30, cluster=60
-    ),  # 解包：抗性 -25%（以前 -30）
+    ),  # 游戏数据：抗性 -25%（以前 -30）
     "boremax": dict(name="BoreMax", res=10, instab=-70, cluster=30),
     "okunis": dict(name="Okunis", window=50, rate=100, cluster=-20),
     "waveshift": dict(name="WaveShift", instab=-35, window=100, rate=-30),

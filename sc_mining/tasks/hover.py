@@ -88,7 +88,7 @@ def _hover_lines(info, en, zh):
     if buy:
         lines.append(f"购买：{buy}")
     ships = info.get("ships") or []
-    if ships and not buy:  # 商店买不到、出厂自带在船上（2026-10-27 解包）
+    if ships and not buy:  # 商店买不到、出厂自带在船上（2026-10-27 游戏数据）
         lines.append(
             f"随船自带：{'、'.join(ships[:3])}"
             + (f" 等 {len(ships)} 条船" if len(ships) > 3 else "")

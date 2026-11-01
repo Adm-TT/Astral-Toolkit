@@ -130,6 +130,19 @@ def data(name):
     return DATA / name
 
 
+# 数据文件的 source 标记：由游戏数据构建的文件写 SRC_GAME，「更新数据」时不拿网站版盖掉它
+SRC_GAME = "game"
+# 旧写法：已发出的数据包、旧版客户端都只认它，构建脚本目前仍写它；等旧版客户端都淘汰再改写 SRC_GAME
+SRC_GAME_OLD = "unpack"
+# data/ 下放制造蓝图构建输入的目录名（只在作者电脑上有；不进安装包、不进升级备份）
+BUILD_DIR = "unpack"
+
+
+def from_game(d):
+    """读出来的数据文件内容是不是由游戏数据构建的"""
+    return isinstance(d, dict) and d.get("source") in (SRC_GAME, SRC_GAME_OLD)
+
+
 def user(name):
     USER.mkdir(parents=True, exist_ok=True)
     return USER / name

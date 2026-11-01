@@ -258,8 +258,8 @@ def run_entry(name):
     input("\n按回车关闭这个窗口")
 
 
-def _is_unpack(fn):
-    """这项更新对应的本地文件是不是我们自己解包的版本（source == "unpack"）：是就不用网站版覆盖"""
+def _is_game_source(fn):
+    """这项更新对应的本地文件是不是由游戏数据构建的版本（paths.from_game）：是就不用网站版覆盖"""
     import json as _j
     from .core import paths
 
@@ -270,18 +270,15 @@ def _is_unpack(fn):
         from .crafting import build_crafting
 
         if (
-            build_crafting.unpacked() is not None
-        ):  # 本机有解包原文件：交给它自己按解包版重编（不会去 scmdb），游戏更新后新蓝图才进得来（二十一审）
+            build_crafting.source_rows() is not None
+        ):  # 本机有构建输入：交给它自己按游戏数据重编（不会去 scmdb），游戏更新后新蓝图才进得来（二十一审）
             return False
     for f in {
         "sc_mining.navigation.navigate": ["starmap.json"],
         "sc_mining.crafting.build_crafting": ["crafting.json"],
     }.get(mod, []):
         try:
-            if (
-                _j.loads(paths.data(f).read_text(encoding="utf-8")).get("source")
-                == "unpack"
-            ):
+            if paths.from_game(_j.loads(paths.data(f).read_text(encoding="utf-8"))):
                 return True
         except Exception:
             pass
@@ -292,7 +289,7 @@ def update(direct=False, web_ok=()):
     """更新数据（2026-10-26 起）：汉化包照旧从 SC汉化盒子（国内服务器）下载；其余数据先从 AT 服务器（不通再 Gitee、GitHub）下 AT 发布的数据包，
     Gitee、GitHub 都连不上才改从各数据网站直接下载（矿价、商店 UEX，蓝图 scmdb，星图 starmap.space，掉落 scl.miao.network）。
     direct=True：跳过数据包、直接从各网站下载（作者发布数据包前用，tools/make_data_pack.py）。
-    web_ok：本机是解包版也照样从网站下的模块名（make_data_pack 下了 starmap.space 后会用 unpack_starmap 重新合并，只取自转相位和玩家补充的点）"""
+    web_ok：本机是游戏数据版也照样从网站下的模块名（make_data_pack 下了 starmap.space 后会用数据构建脚本重新合并，只取自转相位和玩家补充的点）"""
     from .crafting import build_crafting, loot, shops
     from .navigation import navigate
     from .update import data_pack, localization, uex
@@ -322,13 +319,13 @@ def update(direct=False, web_ok=()):
     own = [
         s
         for s in sources
-        if getattr(s[1], "__module__", "") not in web_ok and _is_unpack(s[1])
-    ]  # 本机已是自己解包的（星图、制造 + 维科洛）：网站版不再盖掉（2026-10-28 负责人定：自己解包的优先）
+        if getattr(s[1], "__module__", "") not in web_ok and _is_game_source(s[1])
+    ]  # 本机已是由游戏数据构建的（星图、制造 + 维科洛）：网站版不再盖掉（2026-10-28 负责人定：游戏数据优先）
     sources = tuple(s for s in sources if s not in own)
 
     def say_own():
         for s in own:
-            print(f"跳过{s[0]}：用自己解包的数据")
+            print(f"跳过{s[0]}：用游戏数据构建的版本")
 
     if direct:
         say_own()
@@ -371,7 +368,7 @@ def update(direct=False, web_ok=()):
         print("—— 改从各数据网站直接更新 ——")
         results = [r for r in results if r["title"] != "数据包"]
         say_own()
-        with ThreadPoolExecutor(len(sources)) as ex:  # 解包版的上面已经去掉了
+        with ThreadPoolExecutor(len(sources)) as ex:  # 游戏数据版的上面已经去掉了
             results += list(ex.map(run, sources))
     print("全部更新完成")
     try:

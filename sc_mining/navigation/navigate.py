@@ -189,14 +189,14 @@ from .transit import (
     zone_kind,
 )
 
-# ---------------------------------------------------------------- 挖矿点（2026-10-27 解包：能量子过去、而且刷船挖矿的太空地点）
+# ---------------------------------------------------------------- 挖矿点（2026-10-27 游戏数据：能量子过去、而且刷船挖矿的太空地点）
 
 _spots = {}
 
 
 def mining_spots(data=None):
     """导航里的「挖矿点」（太空目标，b = "@星系"，坐标千米）：
-    - data/mining_spots.json（tools/unpack_spots.py 解物件容器生成）：派罗 15 个小行星群、86 个远矿站，冰川环带中转点、QV 碎岩站
+    - data/mining_spots.json（数据构建脚本从游戏数据生成）：派罗 15 个小行星群、86 个远矿站，冰川环带中转点、QV 碎岩站
     - 星图里有刷矿表的拉格朗日点（斯坦顿 20 个、派罗 25 个，data/mining_rocks.json 里有表的才算）
     每个点带 rocks：这里刷哪几种石头（搜「贝沙电气石」能搜到会刷它的点）"""
     from ..mining.mining_area import rocks_stamp, area_for_spot
@@ -270,7 +270,7 @@ def mining_spots(data=None):
 
 
 def space_points(data=None):
-    """星图里的太空站、跳跃点（2026-10-28 解包星图后有了：拉格朗日点的站、派罗 / 尼克斯的门户站、INS Jericho）→ 导航的太空目标（b = "@星系"，千米）"""
+    """星图里的太空站、跳跃点（2026-10-28 用游戏数据补全星图后有了：拉格朗日点的站、派罗 / 尼克斯的门户站、INS Jericho）→ 导航的太空目标（b = "@星系"，千米）"""
     data = data or load()
     out = []
     for q in data.get("points") or []:

@@ -369,7 +369,7 @@ FONT_CASES = [
 def test_font_glyphs_read_coordinates_without_learning(
     monkeypatch, tmp_path, name, h, xyz
 ):
-    """2026-10-27：游戏调试字是 Vera Sans Mono（Data.p4k 里 Engine\\Fonts\\VeraMono.ttf），AT 带开源同款 DejaVu Sans Mono。
+    """2026-10-27：游戏调试字是 Vera Sans Mono（游戏引擎自带的 Engine\\Fonts\\VeraMono.ttf），AT 带开源同款 DejaVu Sans Mono。
     不学任何截图、不用识别引擎，自己试出字号画字模：两种分辨率、三张游戏实拍的坐标一个数字都不能错（含负号）"""
     from sc_mining.navigation.displayinfo import parse
 

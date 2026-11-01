@@ -1,4 +1,4 @@
-"""从 star-citizen.wiki API（游戏 p4k 解包）拉物品清单，存成 data/wiki_items.json（1.6.48 起随程序附带）
+"""从 star-citizen.wiki API（wiki 整理的游戏数据）拉物品清单，存成 data/wiki_items.json（1.6.48 起随程序附带）
 
 在你电脑上：python tools\\build_wiki_items.py      → 约 2～3 分钟（127 页，每页 100 个）
 每个物品记：英文名 n、类型 t、尺寸 s、厂商 mfr、游戏内部类名 cls（汉化包的键名里也有，按它把汉化包的英文名对到 wiki 正名）、
