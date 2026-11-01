@@ -131,12 +131,15 @@ class _Live:
 
     def _set_paused(self, ev, on, log, gap=0.0):
         """暂停 / 继续：记一行日志，告诉窗口（采矿助手页和左边的小灯）"""
-        msg = (
-            "游戏不在最前面，暂停识别"
-            if on
-            else f"回到游戏，继续识别（暂停了 {gap:.0f} 秒）"
+        from ...core import run_records
+
+        run_records.record(
+            "MINING",
+            "采矿助手已暂停" if on else "采矿助手已继续",
+            "游戏不在最前面" if on else f"暂停了 {gap:.0f} 秒",
+            level="WARN" if on else "INFO",
+            ui_tag="LIVE",
         )
-        bus.runtime_log(msg, tag="LIVE", level="WARN" if on else "INFO")
         try:
             log.write(
                 f"{time.strftime('%F %T')} "
@@ -161,7 +164,9 @@ class _Live:
         if self.running():
             return
         self.paused = False
-        bus.runtime_log("采矿助手实时识别引擎已启动", tag="LIVE", level="INFO")
+        from ...core import run_records
+
+        run_records.record("MINING", "采矿助手引擎已启动", ui_tag="LIVE")
         # 每次开始都是一个新的会话（自己的停止开关）：快速停了又开，旧线程哪怕还没退出也只认自己的开关，
         # 不会和新线程一起往悬浮窗写东西
         self.stop_ev = ev = threading.Event()
@@ -256,7 +261,9 @@ class _Live:
         with self.lock:
             self.paused = False
             _hud_clear("信号", "扫描", "矿袋")
-        bus.runtime_log("采矿助手实时识别引擎已停止", tag="LIVE", level="INFO")
+        from ...core import run_records
+
+        run_records.record("MINING", "采矿助手引擎已停止", ui_tag="LIVE")
         bus.publish("scan_hint", {"why": "", "text": ""})
         bus.publish("live", {"running": False})
 

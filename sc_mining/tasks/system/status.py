@@ -216,9 +216,12 @@ def export_logs():
     )  # 精确到秒，不会盖掉同一分钟导出的另一份
     files = 0
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
-        for p in (
-            sorted(paths.LOGS.glob("*.txt*")) if paths.LOGS.exists() else []
-        ):  # 含轮换下来的 .txt.old
+        log_files = []
+        if paths.LOGS.exists():
+            log_files = sorted(
+                set(paths.LOGS.glob("*.txt*")) | set(paths.LOGS.glob("runrec_*.log"))
+            )  # 含轮换 .txt.old 与运行记录
+        for p in log_files:
             z.write(p, f"logs/{p.name}")
             files += 1
         for name in ("settings.json", "goals.json"):

@@ -388,9 +388,7 @@ def test_startup_drops_stale_helper_files():
     """老版本留下的重启请求文件：启动时（paths.migrate）删掉，没有代码再读它"""
     from sc_mining.core import paths
 
-    names = [
-        p.name for p in paths._DELETE
-    ]  # 测试时 paths.USER 被换成临时目录，_DELETE 是导入时算好的，只比名字
+    names = [p.name for p in paths._DELETE]  # 清单在每次取的时候按当前的 paths 现算
     assert "restart_request" in names
 
 
@@ -437,3 +435,48 @@ def test_settings_ignore_removed_keys(monkeypatch, tmp_path):
     assert c["agreed"] is True and not any(
         k in c or k in settings.DEFAULTS for k in old
     )
+
+
+def test_migrate_moves_deletes_and_is_idempotent(monkeypatch, tmp_path):
+    """migrate()：旧位置的文件搬到新位置、要删的删掉、已有的新文件不覆盖、重复调用不出事"""
+    from sc_mining.core import paths
+
+    root, code = tmp_path / "root", tmp_path / "root" / "sc_mining"
+    user, data = tmp_path / "user", tmp_path / "data"
+    code.mkdir(parents=True)
+    for k, v in {
+        "ROOT": root,
+        "CODE": code,
+        "USER": user,
+        "DATA": data,
+        "LOGS": user / "logs",
+        "SHOTS": user / "shots",
+        "SAMPLES": root / "tests" / "samples",
+    }.items():
+        monkeypatch.setattr(paths, k, v)
+    (root / "settings.json").write_text('{"a": 1}', encoding="utf-8")
+    (root / "trade_log.txt").write_text("old", encoding="utf-8")
+    (code / "shops.json").write_text("old shops", encoding="utf-8")
+    data.mkdir()
+    (data / "shops.json").write_text(
+        "new shops", encoding="utf-8"
+    )  # 新位置已有：不拿旧的盖
+    (root / "1_安装.bat").write_text("x", encoding="utf-8")
+    user.mkdir()
+    (user / "restart_request").write_text("", encoding="utf-8")
+    (root / "shots").mkdir()
+    (root / "shots" / "scan1.png").write_bytes(b"png")
+    (root / "shots" / "debug.png").write_bytes(b"png")
+
+    n = paths.migrate()
+    assert n >= 5
+    assert (user / "settings.json").read_text(encoding="utf-8") == '{"a": 1}'
+    assert not (root / "settings.json").exists()
+    assert (user / "logs" / "trade_log.txt").exists()
+    assert (data / "shops.json").read_text(encoding="utf-8") == "new shops"
+    assert not (root / "1_安装.bat").exists()
+    assert not (user / "restart_request").exists()
+    assert (root / "tests" / "samples" / "scan1.png").exists()
+    assert (user / "shots" / "old" / "debug.png").exists()
+    assert not (root / "shots").exists()
+    assert paths.migrate() == 0  # 再来一次：没事可做

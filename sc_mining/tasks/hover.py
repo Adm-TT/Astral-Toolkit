@@ -233,7 +233,9 @@ def hover_once(img=None):
     t0 = time.time()
     _last_hover.clear()
     _last_hover["seq"] = None  # 上一次 F8 后台还没查完的价格，不再往悬浮窗上写
-    bus.runtime_log("触发 F8 物品悬停识别，截取画面...", tag="HOVER", level="INFO")
+    from ..core import run_records
+
+    run_records.record("HOVER", "触发 F8 物品识别", ui_tag="HOVER")
     t_grab_0 = time.time()
     img = img or grab()
     t_grab = time.time()

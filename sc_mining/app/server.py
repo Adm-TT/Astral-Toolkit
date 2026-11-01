@@ -73,6 +73,14 @@ def main(open_ui=True, port=0, restart=False):
     hud()
     _sys_task.start_background()  # = EngineManager.get_instance().start_all()
     print(f"AT 已启动（端口 {server.server_address[1]}）")
+    from ..core import run_records
+
+    run_records.record(
+        "SYSTEM",
+        "本机服务已启动",
+        f"端口 {server.server_address[1]}",
+        ui_tag="SYS",
+    )
     try:
         from ..core import paths
 

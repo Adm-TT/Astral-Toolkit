@@ -5,7 +5,7 @@ data/               下载和自动生成的数据：星图、商店、掉落、
 userdata/           你自己的东西：设置、路标、悬浮窗位置、最后位置、日志、截图记录（更新程序不会动）
 tests/              自检用（tests/samples 里是测试截图）
 
-旧版本的文件散在外层和 sc_mining 里，migrate() 会在启动时自动搬到新位置。
+旧版本的文件散在外层和 sc_mining 里，migrate()（见 core.migration）会在启动时自动搬到新位置。
 """
 
 import os
@@ -183,54 +183,6 @@ def shots(sub):
     return d
 
 
-# 旧位置 → 新位置
-_MOVES = [
-    (CODE / "starmap.json", DATA / "starmap.json"),
-    (CODE / "shops.json", DATA / "shops.json"),
-    (CODE / "loot_index.json", DATA / "loot_index.json"),
-    (ROOT / "loot_cache", DATA / "loot"),
-    (ROOT / "loc", DATA / "loc"),
-    (CODE / "crafting.json", DATA / "crafting.json"),
-    (CODE / "wikelo.json", DATA / "wikelo.json"),
-    (CODE / "live_data.json", DATA / "prices.json"),
-    (CODE / "places_zh.json", DATA / "places_zh.json"),
-    (CODE / "trade" / "zh_names.json", DATA / "zh_names.json"),
-    (ROOT / "settings.json", USER / "settings.json"),
-    (ROOT / "waypoints.json", USER / "waypoints.json"),
-    (ROOT / "last_position.json", USER / "last_position.json"),
-    (ROOT / "overlay_pos.json", USER / "overlay_pos.json"),
-    (CODE / "observations.csv", USER / "observations.csv"),
-    (ROOT / "helpers_log.txt", LOGS / "helpers_log.txt"),
-    (ROOT / "trade_log.txt", LOGS / "trade_log.txt"),
-    (ROOT / "live_log.txt", LOGS / "live_log.txt"),
-    (ROOT / "shots" / "hover", SHOTS / "hover"),
-    (ROOT / "shots" / "live", SHOTS / "live"),
-]
-_SAMPLES = ["scan1.png", "sig1.png", "turret1.png", "pilot_fov.png", "inv_sample.png"]
-# 已经合进主菜单的旧启动器、旧测试结果、合并掉的旧代码
-_DELETE = (
-    [
-        ROOT / n
-        for n in (
-            "1_安装.bat",
-            "2_截图测试.bat",
-            "3_实时读屏.bat",
-            "4_找矿点.bat",
-            "手动输入.bat",
-            "刷新矿价.bat",
-            "测试结果.txt",
-            "test_result.txt",
-        )
-    ]
-    + [
-        CODE / n
-        for n in ("glossary_names.py", "signature.py", "sigscreen.py", "calibrate.py")
-    ]
-    + [ROOT / "tests" / "test_core.py", ROOT / "tests" / "trade"]
-    + [USER / "restart_request"]
-)  # restart_request：以前远程重启用的请求文件，功能已删，启动时清掉残留
-
-
 def seed_data():
     """Velopack 安装版：换了版本（或第一次装）就把安装包自带的数据复制到外面的 data\（覆盖旧的），
     先删旧的数据包记录：安装包带了记录就复制成新的，没带就保持删除（下次「更新数据」重新下）——和以前 Inno 安装程序做的一样。返回复制了几个文件"""
@@ -258,80 +210,28 @@ def seed_data():
     return n
 
 
-_INNO_SKIP_DIRS = {"window", "updates", "shell"}
-_INNO_SKIP_FILES = {"window_url.txt", "instance.lock", "install.log"}
-
-
+# 历史版本迁移（core.migration）：懒重导出，避免与 migration 循环导入
 def import_inno():
-    """Velopack 版：老的 Inno 安装版（%LOCALAPPDATA%\\Programs\\AT\\userdata）还在、还没搬过，就复制过来
-    （同名文件新的留着，不拿旧的盖）。搬完写标记，以后不再搬。返回复制了几个文件"""
-    if not VELOPACK or not INNO_USER or MIGRATED.exists() or not INNO_USER.is_dir():
-        return 0
-    n = 0
-    for p in INNO_USER.rglob("*"):
-        rel = p.relative_to(INNO_USER)
-        if (
-            not p.is_file()
-            or rel.parts[0] in _INNO_SKIP_DIRS
-            or p.name in _INNO_SKIP_FILES
-        ):
-            continue
-        dest = USER / rel
-        try:
-            if dest.exists() and dest.stat().st_mtime >= p.stat().st_mtime:
-                continue
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(p, dest)
-            n += 1
-        except OSError:
-            return n  # 没搬完：不写标记，下次启动接着搬
-    # 老版 data 里下载来的汉化包（loc）不在安装包里：新位置没有的就复制过来，免得升级完显示「汉化包：未下载」
-    # （桥接安装程序会整个复制 data；这里是玩家直接装新版、老版还在的情况，2026-10-27）
-    old_loc = INNO_USER.parent / "data" / "loc"
-    if old_loc.is_dir():
-        for p in old_loc.rglob("*"):
-            dest = DATA / "loc" / p.relative_to(old_loc)
-            try:
-                if p.is_file() and not dest.exists():
-                    dest.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(p, dest)
-                    n += 1
-            except OSError:
-                pass
-    MIGRATED.write_text("import_inno", encoding="utf-8")
-    return n
+    from .migration import import_inno as _import_inno
+
+    return _import_inno()
 
 
 def migrate():
-    """把旧位置的文件搬到新位置；返回做了几件事。重复调用没关系"""
-    done = 0
-    for old, new in _MOVES:
-        if old.exists() and not new.exists():
-            new.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(old), str(new))
-            done += 1
-    for name in _SAMPLES:
-        old = ROOT / "shots" / name
-        if old.exists() and not (SAMPLES / name).exists():
-            SAMPLES.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(old), str(SAMPLES / name))
-            done += 1
-    for p in _DELETE:
-        if p.is_dir():
-            shutil.rmtree(p, ignore_errors=True)
-            done += 1
-        elif p.exists():
-            p.unlink()
-            done += 1
-    shots_dir = ROOT / "shots"  # 剩下的旧截图（调试用的裁剪图等）也收进 userdata
-    if shots_dir.exists():
-        for p in list(shots_dir.iterdir()):
-            dest = SHOTS / "old" / p.name
-            if not dest.exists():
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                shutil.move(str(p), str(dest))
-        try:
-            shots_dir.rmdir()
-        except OSError:
-            pass
-    return done
+    from .migration import migrate as _migrate
+
+    return _migrate()
+
+
+def __getattr__(name):
+    if name in (
+        "_DELETE",
+        "_INNO_SKIP_DIRS",
+        "_INNO_SKIP_FILES",
+        "_MOVES",
+        "_SAMPLES",
+    ):
+        from . import migration
+
+        return getattr(migration, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

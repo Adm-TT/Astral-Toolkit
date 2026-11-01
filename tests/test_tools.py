@@ -1870,6 +1870,9 @@ def test_export_logs(monkeypatch, tmp_path):
     (user / "logs").mkdir(parents=True)
     (user / "logs" / "app_log.txt").write_text("启动", encoding="utf-8")
     (user / "logs" / "nav_log.txt").write_text("导航", encoding="utf-8")
+    (user / "logs" / "runrec_2099-01-01.log").write_text(
+        "2099-01-01 00:00:00.000 [INFO] [SYSTEM] 本机服务已启动\n", encoding="utf-8"
+    )
     (user / "settings.json").write_text("{}", encoding="utf-8")
     (user / "window").mkdir()
     (user / "window" / "Cookies").write_text("隐私", encoding="utf-8")
@@ -1884,6 +1887,7 @@ def test_export_logs(monkeypatch, tmp_path):
     assert {
         "logs/app_log.txt",
         "logs/nav_log.txt",
+        "logs/runrec_2099-01-01.log",
         "settings.json",
         "系统信息.txt",
     } <= set(names)
@@ -3526,6 +3530,11 @@ def test_feedback_report_bundle(monkeypatch, tmp_path):
     (tmp_path / "logs" / "live_log.txt").write_text(
         "\n".join(f"line {i}" for i in range(300)), encoding="utf-8"
     )  # noqa: E702
+    import time as _time
+
+    (tmp_path / "logs" / f"runrec_{_time.strftime('%Y-%m-%d')}.log").write_text(
+        "2026-11-01 12:00:00.000 [INFO] [HOVER] 触发 F8 物品识别\n", encoding="utf-8"
+    )
     (tmp_path / "shots" / "live").mkdir(parents=True)
     for i in range(7):
         Image.new("RGB", (8, 8)).save(tmp_path / "shots" / "live" / f"{i}.png")
@@ -3563,6 +3572,8 @@ def test_feedback_report_bundle(monkeypatch, tmp_path):
         and "说明.txt" in names
         and "live_log.txt" in names
     )
+    assert any(n.startswith("runrec_") and n.endswith(".log") for n in names)
+    assert "runrec_" in (folder / "说明.txt").read_text(encoding="utf-8")
     assert (
         sum(n.startswith("live_") and n.endswith(".png") for n in names) == 5
     )  # 最近 5 帧
