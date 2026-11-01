@@ -895,3 +895,49 @@ def test_shop_items_keep_every_uex_entry_verbatim(monkeypatch, tmp_path):
         (1798, "Synergy+", "", 4),
         (1799, "Odd\xa0Name", "Misc", 5),
     ]
+
+
+# ---------------------------------------------------------------- 读清单的 Windows 共享冲突重试（批 1 实测：边搜边发布，读清单报拒绝访问）
+
+
+def test_read_manifest_retries_permission_error(monkeypatch, tmp_path):
+    from pathlib import Path
+
+    from sc_mining.gamedata import _manifest
+    from sc_mining.gamedata._manifest import Manifest, read_manifest, write_manifest
+
+    _data_root(monkeypatch, tmp_path)
+    m = Manifest("g1", "v1", 1, "gamedata-g1.db")
+    write_manifest(m)
+    real = Path.read_text
+    calls = {"n": 0}
+
+    def flaky(self, *a, **kw):
+        calls["n"] += 1
+        if calls["n"] <= 3:
+            raise PermissionError(13, "拒绝访问")  # 换名瞬间
+        return real(self, *a, **kw)
+
+    monkeypatch.setattr(Path, "read_text", flaky)
+    monkeypatch.setattr(_manifest, "_RETRY_SLEEP", 0.0)
+    assert read_manifest() == m
+    assert calls["n"] == 4
+
+
+def test_read_manifest_gives_up_after_retries(monkeypatch, tmp_path):
+    from pathlib import Path
+
+    from sc_mining.gamedata import GamedataUnavailable, _manifest
+    from sc_mining.gamedata._manifest import Manifest, read_manifest, write_manifest
+    from tests.minipytest import raises
+
+    _data_root(monkeypatch, tmp_path)
+    write_manifest(Manifest("g1", "v1", 1, "gamedata-g1.db"))
+
+    def always(self, *a, **kw):
+        raise PermissionError(13, "拒绝访问")
+
+    monkeypatch.setattr(Path, "read_text", always)
+    monkeypatch.setattr(_manifest, "_RETRY_SLEEP", 0.0)
+    with raises(GamedataUnavailable):
+        read_manifest()
