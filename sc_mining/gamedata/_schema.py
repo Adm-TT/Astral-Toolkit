@@ -2,8 +2,8 @@
 
 试点（批 1）用到的表。各列对应的源字段见 docs/superpowers/specs/2026-11-02-gamedata-callsites.md。"""
 
-SCHEMA_VERSION = 1
-IMPORTER_VERSION = 1
+SCHEMA_VERSION = 3  # 2：导航表（批 2 公共层）；3：shop_items 商店物品目录原样（批 1 要求，2026-11-02）
+IMPORTER_VERSION = 3
 
 DDL: list[str] = [
     # 清单和版本：schema_version / importer_version / data_version / generation_id / build_time / src:<文件名>=sha256
@@ -43,6 +43,14 @@ DDL: list[str] = [
         item_id TEXT NOT NULL REFERENCES items(item_id),
         PRIMARY KEY (source, external_id)
     )""",
+    # shops.json 的 items 原样：uex 编号 → 英文名、类别，按字典顺序。shops.find / variants / where_by_name 在它上面扫，
+    # 不能用合并后的 items 表代替（同一折叠名两种写法只会留一个，如 Synergy / Synergy+）
+    """CREATE TABLE shop_items (
+        uex_item_id INTEGER PRIMARY KEY,
+        en TEXT NOT NULL,
+        cat TEXT NOT NULL DEFAULT '',
+        source_order INTEGER NOT NULL
+    )""",
     # shops.json 的 rows 原样 7 列
     """CREATE TABLE shop_rows (
         uex_item_id INTEGER NOT NULL,
@@ -74,5 +82,124 @@ DDL: list[str] = [
         city TEXT NOT NULL,
         price REAL NOT NULL,
         PRIMARY KEY (mineral, city)
+    )""",
+    # ---- 以下 schema 2：导航（对应 docs/superpowers/specs/2026-11-02-gamedata-callsites-b2.md）
+    # starmap.json bodies：天体
+    """CREATE TABLE bodies (
+        name TEXT PRIMARY KEY,
+        sys TEXT NOT NULL,
+        x REAL NOT NULL, y REAL NOT NULL, z REAL NOT NULL,
+        rot REAL, adj REAL, r REAL, om REAL, grid REAL,
+        source_order INTEGER NOT NULL
+    )""",
+    # starmap.json pois：地表 / 轨道兴趣点；norm_n = 小写去非字母数字（names._norm）
+    """CREATE TABLE pois (
+        id INTEGER PRIMARY KEY,
+        b TEXT NOT NULL,
+        n TEXT NOT NULL,
+        t TEXT NOT NULL DEFAULT '',
+        x REAL NOT NULL, y REAL NOT NULL, z REAL NOT NULL,
+        qt INTEGER,
+        norm_n TEXT NOT NULL,
+        source_order INTEGER NOT NULL
+    )""",
+    "CREATE INDEX idx_pois_b ON pois(b)",
+    "CREATE INDEX idx_pois_norm ON pois(norm_n)",
+    # starmap.json points（已套 starmap_fixes）：星、行星、拉格朗日点、星门；i = 内部名
+    """CREATE TABLE points (
+        id INTEGER PRIMARY KEY,
+        n TEXT NOT NULL,
+        i TEXT NOT NULL,
+        sys TEXT NOT NULL,
+        t TEXT NOT NULL DEFAULT '',
+        x REAL NOT NULL, y REAL NOT NULL, z REAL NOT NULL,
+        norm_n TEXT NOT NULL,
+        i_lower TEXT NOT NULL,
+        source_order INTEGER NOT NULL
+    )""",
+    "CREATE INDEX idx_points_norm ON points(norm_n)",
+    "CREATE INDEX idx_points_i ON points(i_lower)",
+    # city_places.json 经 transit._city_rows 变换后的行（t='City'、qt=0 读时补）
+    """CREATE TABLE city_places (
+        id TEXT PRIMARY KEY,
+        b TEXT NOT NULL,
+        n TEXT NOT NULL,
+        zh TEXT NOT NULL DEFAULT '',
+        x REAL NOT NULL, y REAL NOT NULL, z REAL NOT NULL,
+        cat TEXT NOT NULL DEFAULT '',
+        area TEXT NOT NULL DEFAULT '',
+        city TEXT NOT NULL DEFAULT '',
+        city_zh TEXT NOT NULL DEFAULT '',
+        site_en TEXT NOT NULL DEFAULT '',
+        line TEXT NOT NULL DEFAULT '',
+        stop TEXT NOT NULL DEFAULT '',
+        space INTEGER NOT NULL DEFAULT 0,
+        sys TEXT NOT NULL DEFAULT '',
+        up_x REAL, up_y REAL, up_z REAL,
+        source_order INTEGER NOT NULL
+    )""",
+    "CREATE INDEX idx_city_places_city ON city_places(city)",
+    "CREATE INDEX idx_city_places_line ON city_places(city, line)",
+    """CREATE TABLE city_place_kinds (
+        place_id TEXT NOT NULL REFERENCES city_places(id),
+        kind TEXT NOT NULL,
+        PRIMARY KEY (place_id, kind)
+    )""",
+    "CREATE INDEX idx_city_place_kinds_kind ON city_place_kinds(kind)",
+    # place_amenities.json：城外设施；ref 的六种键（transit.amenity_targets 实际读的）原样拆列，读时回查星图
+    """CREATE TABLE amenities (
+        id INTEGER PRIMARY KEY,
+        en TEXT NOT NULL,
+        zh TEXT NOT NULL DEFAULT '',
+        rec_lower TEXT NOT NULL DEFAULT '',
+        ref_poi TEXT NOT NULL DEFAULT '',
+        ref_body TEXT NOT NULL DEFAULT '',
+        ref_local_x REAL, ref_local_y REAL, ref_local_z REAL,
+        ref_point TEXT NOT NULL DEFAULT '',
+        ref_point_id TEXT NOT NULL DEFAULT '',
+        ref_city TEXT NOT NULL DEFAULT '',
+        source_order INTEGER NOT NULL
+    )""",
+    """CREATE TABLE amenity_kinds (
+        amenity_id INTEGER NOT NULL REFERENCES amenities(id),
+        kind TEXT NOT NULL,
+        PRIMARY KEY (amenity_id, kind)
+    )""",
+    "CREATE INDEX idx_amenity_kinds_kind ON amenity_kinds(kind)",
+    # station_lifts.json：每站一行，payload_json 是 transit._lift_rows 校验通过的整站原样（路由算法消费嵌套树，拆表无收益）
+    """CREATE TABLE station_lifts (
+        station_key TEXT PRIMARY KEY,
+        station TEXT NOT NULL,
+        sys TEXT NOT NULL DEFAULT '',
+        space INTEGER NOT NULL DEFAULT 0,
+        worst_m INTEGER,
+        payload_json TEXT NOT NULL,
+        source_order INTEGER NOT NULL
+    )""",
+    # places_zh.json + places_extra_zh.json：两份都存，src = zh / extra；names.poi_zh 读时 extra 优先，position 那一路只看 zh
+    """CREATE TABLE place_names (
+        norm_key TEXT NOT NULL,
+        zh TEXT NOT NULL,
+        src TEXT NOT NULL,
+        source_order INTEGER NOT NULL,
+        PRIMARY KEY (norm_key, src)
+    )""",
+    # place_codes_zh.json：小写地点代码 → 中文
+    """CREATE TABLE place_codes (
+        code TEXT PRIMARY KEY,
+        zh TEXT NOT NULL,
+        source_order INTEGER NOT NULL
+    )""",
+    # mining_spots.json：挖矿点，坐标存原始米（navigate 自己 /1000）；每行都留（无 id、重复 id 也留），spot_id 是源里的 id
+    """CREATE TABLE mining_spots (
+        id INTEGER PRIMARY KEY,
+        spot_id TEXT,
+        sys TEXT NOT NULL DEFAULT '',
+        zh TEXT NOT NULL DEFAULT '',
+        en TEXT NOT NULL DEFAULT '',
+        kind TEXT NOT NULL DEFAULT '',
+        area TEXT NOT NULL DEFAULT '',
+        x REAL NOT NULL, y REAL NOT NULL, z REAL NOT NULL,
+        source_order INTEGER NOT NULL
     )""",
 ]

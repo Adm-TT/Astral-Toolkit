@@ -183,6 +183,11 @@ def _apply_fixes(data: Dict[str, Any]) -> None:
         fixes = json.loads((DATA / "starmap_fixes.json").read_text(encoding="utf-8"))
     except Exception:
         return
+    fix_points(data, fixes)
+
+
+def fix_points(data: Dict[str, Any], fixes: Any) -> None:
+    """把坐标改正表套到 data["points"] 上（纯函数部分，游戏数据层建库时也用它；规则同 _apply_fixes）"""
     if not isinstance(fixes, dict):
         return
     good: Dict[str, List[float]] = {}

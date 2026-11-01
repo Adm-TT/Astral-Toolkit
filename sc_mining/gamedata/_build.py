@@ -57,6 +57,12 @@ def build(sources: dict[str, SourceBytes], generation_id: str, dv: str) -> Path:
             _import.import_shops(conn, sources)
             _import.import_loot(conn, sources)
             _import.import_prices(conn, sources)
+            _import.import_starmap(conn, sources)
+            _import.import_city_places(conn, sources)
+            _import.import_amenities(conn, sources)
+            _import.import_station_lifts(conn, sources)
+            _import.import_place_names(conn, sources)
+            _import.import_mining_spots(conn, sources)
             meta = [
                 ("schema_version", str(SCHEMA_VERSION)),
                 ("importer_version", str(IMPORTER_VERSION)),
@@ -95,9 +101,21 @@ def _verify(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> None:
         "items",
         "item_names",
         "item_source_ids",
+        "shop_items",
         "shop_rows",
         "loot_rows",
         "mineral_prices",
+        "bodies",
+        "pois",
+        "points",
+        "city_places",
+        "city_place_kinds",
+        "amenities",
+        "amenity_kinds",
+        "station_lifts",
+        "place_names",
+        "place_codes",
+        "mining_spots",
     }
     if not need <= have:
         raise BuildError(f"游戏数据库缺表：{sorted(need - have)}")
