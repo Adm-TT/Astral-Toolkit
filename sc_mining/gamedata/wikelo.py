@@ -45,8 +45,8 @@ def _load(s) -> Contracts:
     for cid, idx, n, z, q, u in s.execute(
         "select contract_id, idx, n, z, q, u from wikelo_requirements order by contract_id, idx"
     ):
-        # 汉化包里个别名字末尾带了个反斜杠（「约曼迪之眼\」）：原 crafting.wikelo.load() 读完就地去掉，这里还原时去
-        r = {"n": n, "z": z.rstrip("\\ ").strip(), "q": q, "u": u}
+        # 汉化包里个别名字末尾带了个反斜杠（「约曼迪之眼\」）：原 crafting.wikelo.load() 读完就地去掉（没有中文名 → 空串），这里还原时做
+        r = {"n": n, "z": (z or "").rstrip("\\ ").strip(), "q": q, "u": u}
         by_id[cid]["req"].append(r)
         by_req[(cid, idx)] = (by_id[cid], r)
     for cid, system in s.execute(

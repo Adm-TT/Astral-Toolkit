@@ -781,3 +781,21 @@ def test_rebuild_still_rebuilds_db_when_wikelo_fails(monkeypatch, tmp_path):
         raise AssertionError("维科洛的错应该抛出来")
     assert n[0] == 1 and out == []
     assert crafting.by_key("Medpen Mk2") is not None
+
+
+def test_null_fields_and_int_qty_round_trip(monkeypatch, tmp_path):
+    """源里的 null 还原出来还是 None（不是 ''），维科洛数量 int 还是 int；材料没有中文名 → z 是 ''（同原 load()）"""
+    from sc_mining.crafting import crafting, wikelo
+
+    bp = copy.deepcopy(_CRAFT_SOURCES["crafting.json"])
+    bp["blueprints"][2]["t"] = None
+    bp["blueprints"][2]["s"] = None
+    w = copy.deepcopy(_WIKELO)
+    w["contracts"][0]["req"][0]["z"] = None
+    w["contracts"][0]["req"][0]["q"] = 10
+    _setup(monkeypatch, tmp_path, **{"crafting.json": bp, "wikelo.json": w})
+    got = crafting.blueprints()
+    assert got == bp["blueprints"]
+    assert got[2]["t"] is None and got[2]["s"] is None
+    r = next(c for c in wikelo.load() if c["id"] == w["contracts"][0]["id"])["req"][0]
+    assert r["z"] == "" and r["q"] == 10 and type(r["q"]) is int
