@@ -70,15 +70,15 @@
 - Create: `docs/superpowers/specs/2026-11-02-gamedata-callsites.md`
 
 **Interfaces:**
-- Produces: `测试数据/gamedata_baseline_<日期>.json`（写到 `E:\Claude公主的书\项目资料\测试数据\`，由 `--out` 指定，不进仓库）；矩阵文档被 Task 3/5 引用。
+- Produces: `测试数据/gamedata_baseline_<日期>.json`（写到仓库外的 `<项目资料>\测试数据\`，由 `--out` 指定，不进仓库）；矩阵文档被 Task 3/5 引用。
 
 - [ ] **Step 1: 建 worktree 和分支**
 
 ```bash
-cd E:\Game3\AstralToolkit
-git worktree add E:\Game3\AT_wt\gamedata -b feat/gamedata-foundation main
+cd <仓库根目录>
+git worktree add <worktree 目录> -b feat/gamedata-foundation main
 ```
-Expected: 新目录，`git -C E:\Game3\AT_wt\gamedata branch --show-current` 输出 `feat/gamedata-foundation`。后续所有命令在该 worktree 里跑，Python 用 `E:\Game3\AstralToolkit\.venv\Scripts\python.exe`。
+Expected: 新目录，`git -C <worktree> branch --show-current` 输出 `feat/gamedata-foundation`。后续所有命令在该 worktree 里跑，Python 用 `.venv\Scripts\python.exe`。
 
 - [ ] **Step 2: 写调用点矩阵**
 
@@ -104,7 +104,7 @@ Expected: 新目录，`git -C E:\Game3\AT_wt\gamedata branch --show-current` 输
 
 - [ ] **Step 4: 跑基线并存档**
 
-Run: `E:\Game3\AstralToolkit\.venv\Scripts\python.exe -X utf8 tools\gamedata_baseline.py --out "E:\Claude公主的书\项目资料\测试数据\gamedata_baseline_20261102.json"`
+Run: `.venv\Scripts\python.exe -X utf8 tools\gamedata_baseline.py --out "<项目资料>\测试数据\gamedata_baseline_20261102.json"`
 Expected: 退出码 0，文件存在，`results` 下每个查询都有值（不存在的物品是 `[]`）。
 
 - [ ] **Step 5: 记性能基线**
@@ -676,5 +676,5 @@ git commit -m "feat: 游戏数据库命令行建库工具"
 - [ ] **Step 1: 新上下文 subagent 读 `REVIEW.md` 后审完整 diff**（`git diff main...feat/gamedata-foundation`），按其摘要格式输出。
 - [ ] **Step 2: 在分支上跑 `/code-review` 和 `/security-review`**，逐条修或在 PR 说明里写明不修的理由。≤3 轮。
 - [ ] **Step 3: 复跑 Task 6 Step 8 的全量命令**，全绿。
-- [ ] **Step 4: 写 PR 说明草稿**（Testing / Risk / How to revert 三项），放 `E:\Claude公主的书\项目资料\记录\PR_gamedata_foundation.md`。Risk 必须写：本 PR 不改任何功能模块的读数据路径，运行时唯一可见变化是启动后台多建一个 `data/gamedata/` 目录和一次建库；How to revert：删分支合并提交 + 删 `data/gamedata/`。
+- [ ] **Step 4: 写 PR 说明草稿**（Testing / Risk / How to revert 三项），放 `<项目资料>\记录\PR_gamedata_foundation.md`。Risk 必须写：本 PR 不改任何功能模块的读数据路径，运行时唯一可见变化是启动后台多建一个 `data/gamedata/` 目录和一次建库；How to revert：删分支合并提交 + 删 `data/gamedata/`。
 - [ ] **Step 5: 停下等负责人**：实机跑一遍（启动 → 看 `data/gamedata/current.json` 出现 → 更新数据一次 → 清单换代 → 库存功能正常、`dubhe_inventory.db` 字节不变），签字后再推。
