@@ -292,15 +292,15 @@ def rebuild(progress=print):
         names._index.cache_clear()
     except Exception:
         pass
-    # 制造蓝图和维科洛兑换：用本地已有的数据 + 新汉化重建（2026-10-28 审查：先看自己解包的，没有才用 scmdb）
+    # 制造蓝图和维科洛兑换：用本地已有的数据 + 新汉化重建（2026-10-28 审查：先看本机构建输入，没有才用 scmdb）
     from ..crafting.build_crafting import (
         latest_live,
         live_version,
-        unpacked,
+        source_rows,
         BUILD_LOCK,
     )
 
-    own = unpacked()
+    own = source_rows()
     if own:
         bp, merged = own[0], own[1]
     else:

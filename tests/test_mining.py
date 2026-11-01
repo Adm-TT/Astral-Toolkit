@@ -1679,7 +1679,7 @@ def test_signatures_only_ores_that_spawn_here():
     assert lines and "此地不刷" in lines[0]
 
 
-def test_radar_uses_unpacked_rock_types():
+def test_radar_uses_game_rock_types():
     """2026-10-27 解包：雷达信号按「石头种类」给。SCMiner 的矿物表把石头里夹带的少量矿也算进去了：
     基格带按 SCMiner 有金 18%，但游戏里基格带根本不刷金石（金只夹在贝沙电气石石头里）→ 金 ×2（7,170）不能报成金"""
     from sc_mining.mining import mining_area as M, signals as S
@@ -1785,7 +1785,7 @@ def test_review_104_rocks_reload_and_order(monkeypatch, tmp_path):
     assert [l.split(" → ")[1].split("｜精炼后")[0] for l in lines] == order  # noqa: E741
 
 
-def test_unpacked_mining_spots_and_pyro_areas():
+def test_game_mining_spots_and_pyro_areas():
     """2026-10-27 解物件容器：派罗 15 个小行星群、86 个远矿站能量子、刷深空小行星（以前当成阿克罗团）；
     派罗拉格朗日点有子云（派1/派2 暖带 01、派3 暖带 02、派5 冷带 01、派6 冷带 02）；导航「挖矿点」能按矿搜"""
     from sc_mining.navigation import navigate as n

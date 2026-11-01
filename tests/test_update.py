@@ -852,3 +852,35 @@ def test_killswitch_refreshes_when_update_check_off(monkeypatch):
     U._kill["at"] = 0.0
     t_sys._online_info()
     assert calls == [1, 1]
+def test_game_source_marker(monkeypatch, tmp_path):
+    """数据文件的 source 标记：由游戏数据构建的（新写法、兼容旧数据包的旧写法）更新时不让网站版盖掉；网站来的照常更新"""
+    from sc_mining import run
+    from sc_mining.core import paths
+    from sc_mining.crafting import build_crafting
+
+    monkeypatch.setattr(paths, "DATA", tmp_path)
+    monkeypatch.setattr(build_crafting, "source_rows", lambda: None)
+    f = tmp_path / "crafting.json"
+    for src, want in ((paths.SRC_GAME, True), (paths.SRC_GAME_OLD, True), ("scmdb.net", False)):
+        f.write_text(json.dumps({"source": src}), encoding="utf-8")
+        assert run._is_game_source(build_crafting.update) is want, src
+    f.unlink()
+    assert run._is_game_source(build_crafting.update) is False
+    assert paths.from_game({"source": paths.SRC_GAME}) and not paths.from_game(None)
+
+
+def test_build_input_rows(monkeypatch, tmp_path):
+    """本机构建输入目录里同版本的蓝图 + 任务文件成对才算；不成对、没有目录都返回 None"""
+    from sc_mining.core import paths
+    from sc_mining.crafting import build_crafting
+
+    monkeypatch.setattr(paths, "DATA", tmp_path)
+    assert build_crafting.source_rows() is None
+    d = tmp_path / paths.BUILD_DIR
+    d.mkdir()
+    bp = d / "crafting_blueprints-4.10.2-live.12913470.json"
+    bp.write_text("{}", encoding="utf-8")
+    assert build_crafting.source_rows() is None
+    (d / "merged-4.10.2-live.12913470.json").write_text("{}", encoding="utf-8")
+    got = build_crafting.source_rows()
+    assert got and got[0] == bp and got[2] == "4.10.2-live.12913470"

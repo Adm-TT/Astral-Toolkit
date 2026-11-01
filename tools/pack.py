@@ -47,11 +47,13 @@ with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
             "LICENSE",
         ]
         skip_dirs = {"__pycache__"}
+        from sc_mining.core.paths import BUILD_DIR
+
         skip_data = {
             "scmdb",
             "loc",
-            "unpack",
-        }  # unpack：作者自己解包出的蓝图 / 任务原文件（2026-10-28），只在作者电脑上用                        # 原始大文件，更新数据时会自动下载
+            BUILD_DIR,
+        }  # BUILD_DIR：构建输入目录（2026-10-28），只在作者电脑上用                        # 原始大文件，更新数据时会自动下载
         n, size = 0, 0
         with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
             for f in top_files:
