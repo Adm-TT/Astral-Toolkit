@@ -2,8 +2,8 @@
 
 各列对应的源字段见 docs/superpowers/specs/ 下各批矩阵：2026-11-02-gamedata-callsites.md（批 1）、-b2（导航）、-b3（制造 / 维科洛 / 物品属性）、gd-b4（掉落）、gd-b6（名字对照）。"""
 
-SCHEMA_VERSION = 5  # 2：导航表；3：shop_items；4：制造 / 维科洛 / 物品属性等；5：可空文本列存 NULL 不存 ''、wikelo_requirements.q 保留 int/float（批 3 还原 dict 要逐字一致，2026-11-02）
-IMPORTER_VERSION = 5
+SCHEMA_VERSION = 6  # 2：导航表；3：shop_items；4：制造 / 维科洛 / 物品属性等；5：可空文本列存 NULL、q 保留类型；6：采矿石头表 / 舰船截面 / 精炼站加成（批 5 公共层，2026-11-02）
+IMPORTER_VERSION = 6
 
 DDL: list[str] = [
     # 清单和版本：schema_version / importer_version / data_version / generation_id / build_time / src:<文件名>=sha256
@@ -358,5 +358,27 @@ DDL: list[str] = [
         idx INTEGER NOT NULL,
         ship TEXT NOT NULL,
         PRIMARY KEY (item_name, idx)
+    )""",
+    # ---------------------------------------------------------------- schema 6：采矿（批 5 公共层，2026-11-02）
+    # mining_rocks.json：顶层每个 dict 段（tiers / ores / areas / contains）按「段 + 键」一行，值整条 JSON 原样
+    # （area_for_spot 要分得清 {} 和缺；百分比是 float、sig 是 int，JSON 原样不改类型；未知字段不丢）。
+    # 哪些段在、非 dict 顶层键 → meta 'mining_rocks_meta' = {"sections": [...], "extra": {...}}（源缺失 / 坏时没有这个键）
+    """CREATE TABLE mining_rock_entries (
+        section TEXT NOT NULL,
+        key TEXT NOT NULL,
+        value_json TEXT NOT NULL,
+        source_order INTEGER NOT NULL,
+        PRIMARY KEY (section, key)
+    )""",
+    # ship_signatures.json 的 ships[]：整条 JSON 原样（shipsig.match 把源 dict 的所有键带给调用方）；source_order = 源下标
+    """CREATE TABLE ship_signatures (
+        source_order INTEGER PRIMARY KEY,
+        ship_json TEXT NOT NULL
+    )""",
+    # prices.json 的 yields：精炼站 → {矿: 加成}，整站 JSON 原样（int / float 原样；{} 站也存——旧逻辑整站替换会清空该站）
+    """CREATE TABLE refinery_yields (
+        station TEXT PRIMARY KEY,
+        bonus_json TEXT NOT NULL,
+        source_order INTEGER NOT NULL
     )""",
 ]

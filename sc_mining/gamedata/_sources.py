@@ -40,6 +40,9 @@ SOURCES: tuple[Source, ...] = (
     Source("item_stats.json", False),
     Source("print_spots.json", False),
     Source("ship_items.json", False),
+    # schema 6：采矿（批 5 公共层）
+    Source("mining_rocks.json", False),
+    Source("ship_signatures.json", False),
 )
 
 
