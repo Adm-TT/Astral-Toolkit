@@ -15,6 +15,7 @@ from sc_mining.mining import screen, signals
 from sc_mining.mining.parse import Scan
 from sc_mining.runtime.results import MINING_SCAN, MINING_SIGNALS
 from sc_mining.tasks import mining as t_mining
+from sc_mining.tasks import navigation as t_nav
 
 WAIT = 10  # 等线程的上限：正常都是瞬间到，超时就是测试失败
 
@@ -148,6 +149,9 @@ def test_stop_between_analyze_and_commit_publishes_nothing(monkeypatch, tmp_path
         assert not [m for m in msgs if m["kind"] == "scan"]
         assert not [c for c in hud.calls if c[0] == "set"]
         assert live.results.get(MINING_SCAN) is None
+        monkeypatch.setattr(t_nav._M, "results", live.results)
+        monkeypatch.setattr(t_nav, "_note_hud", lambda *a, **k: None)
+        assert "暂无扫描结果" in t_nav.ore_record()["error"]
     finally:
         bus.unsubscribe(q)
 
@@ -384,3 +388,45 @@ def test_output_only_commit_needs_live_session(monkeypatch, tmp_path):
     live.session_id = 1
     run.ev.set()
     assert not live._commit(run)
+
+
+def test_feedback_context_reads_store():
+    """反馈包里的字段和以前一样：读全的带成分，面板被挡的带 cut；信号带 values；发到窗口的消息里没有 values"""
+    from sc_mining.runtime.results import ResultStore
+    from sc_mining.tasks.system.feedback import FeedbackContext
+
+    results = ResultStore()
+    empty = FeedbackContext.from_results(results)
+    assert empty.shown_signal is None and empty.shown_scan is None
+    view = {
+        "rock": "铜",
+        "mass": 1,
+        "resistance": 2,
+        "instability": 3,
+        "minerals": ["m"],
+        "at": "t",
+        "hud": "不要",
+    }
+    assert results.accept(MINING_SCAN, view, 1, 0, 1, 0.0, 0.0)
+    assert results.accept(
+        MINING_SIGNALS, {"view": {"lines": ["l"]}, "values": [7]}, 1, 0, 1, 0.0, 0.0
+    )
+    c = FeedbackContext.from_results(results)
+    assert list(c.shown_scan) == [
+        "rock",
+        "mass",
+        "resistance",
+        "instability",
+        "minerals",
+        "at",
+    ]
+    assert c.shown_signal == {"lines": ["l"], "values": [7]}
+    assert results.accept(MINING_SCAN, view, 1, 0, 2, 0.0, 0.0, quality="partial")
+    assert list(FeedbackContext.from_results(results).shown_scan) == [
+        "rock",
+        "mass",
+        "resistance",
+        "instability",
+        "cut",
+        "at",
+    ]

@@ -67,11 +67,11 @@ DI_HELP = "未检测到右上角位置信息：在游戏中按 ~ 打开控制台
 
 
 # ---------------------------------------------------------------- 依赖与辅助
-# 2026-10-30 重构阶段 2：悬浮窗从 app.hud_state 拿，引擎从 EngineManager 拿，原矿结果从 tasks.system 拿，
+# 2026-10-30 重构阶段 2：悬浮窗从 app.hud_state 拿，引擎和最近结果（ResultStore）从 EngineManager 拿，
 # 不再经 services 转发、出错也不再回头找 services 兜底。接口由 app/api/navigation.py 的 ROUTES 注册，不再用 api 装饰器。
 from ..app.hud_state import _hud, _note_hud, _off  # noqa: E402
 from ..app.engines.manager import EngineManager  # noqa: E402
-from .system import _ORE_LAST  # noqa: E402
+from ..runtime.results import MINING_SCAN  # noqa: E402
 
 _M = EngineManager.get_instance()
 _pos = _M.pos
@@ -815,7 +815,8 @@ def ore_record(here=False):
     """记下最近这块矿。here=True（游戏里按热键）：等玩家自己输 /showlocation，把坐标一起记下；窗口里点的不记坐标"""
     from ..mining import ore_log
 
-    view = _ORE_LAST.get("view")
+    entry = _M.results.get(MINING_SCAN)
+    view = entry.value if entry else None
     if not view:
         _note_hud("原矿", "暂无扫描结果，先扫描矿石", 5)
         return {"error": "暂无扫描结果，先在游戏中扫描矿石"}

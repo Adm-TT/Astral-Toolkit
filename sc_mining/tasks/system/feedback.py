@@ -7,10 +7,43 @@ import tempfile
 import threading
 import time
 import zipfile
+from dataclasses import dataclass
 from pathlib import Path
 
 from ...app import bus
-from .common import WIN, _FB_LAST, _engines, _hud, _note_hud
+from ...runtime.results import MINING_SCAN, MINING_SIGNALS
+from .common import WIN, _engines, _hud, _note_hud
+
+
+@dataclass(frozen=True)
+class FeedbackContext:
+    """反馈要对照的「当时显示的结果」：只装反馈要的字段"""
+
+    shown_signal: dict | None
+    shown_scan: dict | None
+
+    @classmethod
+    def from_results(cls, results):
+        sig, scan = results.get(MINING_SIGNALS), results.get(MINING_SCAN)
+        shown_scan = None
+        if scan:
+            v = scan.value
+            shown_scan = {
+                "rock": v.get("rock"),
+                "mass": v.get("mass"),
+                "resistance": v.get("resistance"),
+                "instability": v.get("instability"),
+                **(
+                    {"cut": True}
+                    if scan.quality == "partial"
+                    else {"minerals": v.get("minerals")}
+                ),
+                "at": v.get("at"),
+            }
+        return cls(
+            {**sig.value["view"], "values": sig.value["values"]} if sig else None,
+            shown_scan,
+        )
 
 
 def _fb_dir():
@@ -101,8 +134,7 @@ def feedback_report(kind="auto", note="", img=None):
     nav_label = m.nav.target_label()
     nav_space = m.nav.space_mode
 
-    fb_sig = _FB_LAST["sig"]
-    fb_scan = _FB_LAST["scan"]
+    shown = FeedbackContext.from_results(m.results)
 
     info = {
         "time": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -115,8 +147,8 @@ def feedback_report(kind="auto", note="", img=None):
         "ocr_age_s": round(time.time() - screen.LAST_RAW.get("t", 0))
         if screen.LAST_RAW.get("t")
         else None,
-        "shown_signal": fb_sig,
-        "shown_scan": fb_scan,
+        "shown_signal": shown.shown_signal,
+        "shown_scan": shown.shown_scan,
         "hover": {k: v for k, v in last_hover.items() if k != "img"},
         "hud": dict(getattr(_hud(), "sections", {}) or {}),
         "live": live_running,
