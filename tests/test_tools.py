@@ -997,7 +997,7 @@ def test_first_run_agreement(monkeypatch, tmp_path):
 
 def test_live_scan_updates_when_read_gets_more_complete(monkeypatch, tmp_path):
     """画面不动时：第一次读到的成分不全，后面读全了也要更新（不能停在不完整的结果上）"""
-    import threading, time as _t  # noqa: E401
+    import time as _t  # noqa: E401
     from PIL import Image
     from astral_toolkit.mining import screen, signals
     from astral_toolkit.core import paths
@@ -1062,12 +1062,15 @@ def test_live_scan_updates_when_read_gets_more_complete(monkeypatch, tmp_path):
     q = bus.subscribe()
     live = live_mod._Live()
     try:
-        live.stop_ev = threading.Event()
-        th = threading.Thread(target=live._run, daemon=True)
-        th.start()
-        _t.sleep(1.0)
+        sid = live.start()
+        assert sid is not None
+        deadline = _t.monotonic() + 5
+        while (
+            len(calls) < 8 and _t.monotonic() < deadline
+        ):  # 等这几帧都认过，不固定睡眠
+            _t.sleep(0.005)
         live.stop_ev.set()
-        th.join(2)
+        live.loop.join(session_id=sid, timeout=2)
         scans = []
         while not q.empty():
             m = q.get_nowait()
@@ -1079,6 +1082,7 @@ def test_live_scan_updates_when_read_gets_more_complete(monkeypatch, tmp_path):
         ]  # 最后显示的是读全的（钨 + 兰石）
         assert len(calls) < 40  # 画面不动、结果已完整：不再一直识别
     finally:
+        live.stop()
         bus.unsubscribe(q)
 
 
@@ -1985,13 +1989,14 @@ def test_live_scan_resumes_after_restart(monkeypatch, tmp_path):
     from astral_toolkit.core import settings
     from astral_toolkit.tasks import mining as t_mining, system as t_sys
     from astral_toolkit.app.engines.manager import EngineManager
+    from astral_toolkit.runtime.session import StopAttempt
 
     em = EngineManager.get_instance()
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
     settings.update(agreed=True)
     started = []
     monkeypatch.setattr(em.live, "start", lambda: started.append(1))
-    monkeypatch.setattr(em.live, "stop", lambda: None)
+    monkeypatch.setattr(em.live, "stop", lambda: StopAttempt(None, False, False))
     for name in ("hover", "pos", "logwatch"):
         monkeypatch.setattr(getattr(em, name), "start", lambda: None)
     monkeypatch.setattr(t_sys, "_online_loop", lambda: None)  # 测试里不联网检查更新
@@ -2007,11 +2012,13 @@ def test_live_scan_resumes_after_restart(monkeypatch, tmp_path):
     monkeypatch.setattr(
         t_sys, "_online", {"info": None, "told": "", "fb_retry": True}
     )  # 新的一份：不永久置 loop；不补发真实反馈
-    t_mining.live_start()
-    assert settings.load()["live_on"]
+    # live_on 只由会话循环写（RT-B4 起命令层不再写）：这里直接摆开关，测 start_background 的门控
+    settings.update(live_on=True)
+    t_mining.live_start()  # 命令层只负责开会话（这里被换成记录调用）
     started.clear()
     t_sys.start_background()  # 模拟重启
     assert started == [1]
+    settings.update(live_on=False)
     t_mining.live_stop()
     started.clear()
     t_sys.start_background()
@@ -2147,6 +2154,7 @@ def _live_run(
     sig=None,
     front=None,
     grabs=None,
+    until=None,
 ):
     """跑一小段实时读屏：frames = 每次 analyse 依次返回的 Scan（None = 画面里没有面板），返回推送的消息和悬浮窗操作。
     front：游戏在不在最前面（默认判断不了 = 照常认，不看真电脑的前台窗口）；grabs：记下每次截图的时间"""
@@ -2197,22 +2205,37 @@ def _live_run(
     monkeypatch.setattr(t_mining, "_game_front", front or (lambda: None))
     live = live_mod._Live()
     if stale is not None:
-        monkeypatch.setattr(live, "STALE_SECONDS", stale)
+        monkeypatch.setattr(live, "stale_after", {"panel": stale, "signals": stale})
     q = bus.subscribe()
     while not q.empty():  # 总线会补发之前保存的最后一条结果：先丢掉，只看这次跑出来的
         q.get_nowait()
-    ev = ev or threading.Event()
+    if ev is not None:
+        # 外部开关接上这个会话的停止开关：模拟「算到一半用户点了停止」
+        def bridge():
+            ev.wait()
+            live.stop_ev.set()
+
+        threading.Thread(target=bridge, daemon=True, name="test-live-stop").start()
     try:
-        th = threading.Thread(target=live._run, args=(ev,), daemon=True)
-        th.start()
-        _t.sleep(seconds)
-        ev.set()
-        th.join(2)
+        sid = live.start()
+        assert sid is not None
+        if until is not None:  # 等条件到了就停，不靠固定秒数
+            deadline = _t.monotonic() + 5
+            while not until() and _t.monotonic() < deadline:
+                _t.sleep(0.005)
+        else:
+            _t.sleep(seconds)
+        live.stop_ev.set()
+        live.loop.join(session_id=sid, timeout=2)
         msgs = []
         while not q.empty():
             msgs.append(q.get_nowait())
         return msgs, hud
     finally:
+        from astral_toolkit.runtime.session import RunState
+
+        if live.loop.state().state not in (RunState.STOPPED, RunState.FAILED):
+            live.stop()  # 还有活会话才补收尾，别给已经停掉的会话再来一次确认
         bus.unsubscribe(q)
 
 
@@ -2290,27 +2313,59 @@ def test_live_republishes_corrected_total_scu(monkeypatch, tmp_path):
 
 
 def test_live_session_isolation(monkeypatch, tmp_path):
-    """快速停了又开：旧会话的停止开关已经按下，就算线程还没退出也不会再干活（日志写到临时目录）"""
+    """快速停了又开（旧线程还卡在识别里、join 已超时）：新会话是全新的；旧会话的结果写不进来"""
     import threading
+
     from astral_toolkit.core import paths
+    from astral_toolkit.mining import screen
+    from astral_toolkit.tasks import mining as t_mining
     import astral_toolkit.app.engines.live as live_mod
 
     monkeypatch.setattr(paths, "log", lambda name: tmp_path / name)
     monkeypatch.setattr(paths, "shots", lambda name: tmp_path)
+    frame = __import__("PIL.Image", fromlist=["Image"]).new(
+        "RGB", (320, 180), (30, 20, 20)
+    )
+    monkeypatch.setattr(screen, "grab", lambda: frame)
+    from astral_toolkit.mining.parse import Scan
+
+    monkeypatch.setattr(screen, "analyse", lambda img: (Scan(), ({}, None, None)))
+    real = screen.analyse
+    gate = threading.Event()
+    entered = threading.Event()
+    calls = {"n": 0}
+
+    def analyse(img):
+        calls["n"] += 1
+        entered.set()
+        if calls["n"] == 1:
+            gate.wait(30)  # A 卡在识别里
+        return real(img)
+
+    monkeypatch.setattr(screen, "analyse", analyse)
+    monkeypatch.setattr(screen, "INTERVAL", 0.01)
+    monkeypatch.setattr(screen, "LAST_RAW", {})
+    monkeypatch.setattr(screen, "LAST_PANEL", {})
+    monkeypatch.setattr(t_mining, "_game_front", lambda: None)
     live = live_mod._Live()
-    old = threading.Event()
-    old.set()
-    live.stop_ev = threading.Event()  # 新会话的开关（没按下）
-    errors = []
-    t = threading.Thread(target=live._run, args=(old,), daemon=True)
-    hook = threading.excepthook
-    threading.excepthook = lambda a: errors.append(a.exc_value)
+    live.loop._join_timeout = 0.05
     try:
-        t.start()
-        t.join(2)
+        assert live.start() is not None
+        first = live.session_id
+        old = live.loop._current.session  # type: ignore[union-attr]
+        assert entered.wait(30)
+        attempt = live.stop()
+        assert attempt.timed_out and not old.alive(), "旧会话的开关已经按下、线程还卡着"
+        assert live.start() is not None and live.session_id > first
+        new = live.loop._current.session  # type: ignore[union-attr]
+        assert new is not old and new.alive() and live.running()
+        gate.set()  # 放行旧线程
+        assert live.loop.join(session_id=first, timeout=30)
+        assert live.running() and live.session_id > first, "旧会话退出不影响新会话"
+        assert live.loop.stamp(old, 1.0) is None  # 旧会话再来取表被拒
     finally:
-        threading.excepthook = hook
-    assert not t.is_alive() and not errors  # 旧会话看自己的开关，立刻正常退出
+        gate.set()
+        live.stop()
 
 
 def test_live_stop_during_compute_publishes_nothing(monkeypatch, tmp_path):
@@ -2409,7 +2464,8 @@ def test_live_pauses_when_game_not_in_front(monkeypatch, tmp_path):
     ]  # 暂停时一张都不截、不认
     assert [g for g in grabs if g - t0 > 1.45]  # 回到游戏接着认
     live = [m["data"] for m in msgs if m["kind"] == "live"]
-    assert {"running": True, "paused": True} in live and live[-1] == {
+    assert {"running": True, "paused": True} in live
+    assert [e for e in live if "paused" in e][-1] == {
         "running": True,
         "paused": False,
     }, live
@@ -2417,8 +2473,8 @@ def test_live_pauses_when_game_not_in_front(monkeypatch, tmp_path):
     assert (
         scans
         and not any(x.get("stale") for x in scans)
-        and ("clear", "扫描") not in hud
-    )
+        and hud.count(("clear", "扫描")) <= 1
+    )  # 暂停那段没让结果过期 / 没多清悬浮窗（1 次是收尾那次）
     log = (tmp_path / "live_log.txt").read_text(encoding="utf-8")
     assert "PAUSE 游戏不在最前面" in log and "RESUME 回到游戏" in log
 
@@ -4100,11 +4156,11 @@ def test_gear_change_marks_live_for_recalc(monkeypatch, tmp_path):
 
     em = EngineManager.get_instance()
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
-    before = em.live.gear_rev
+    before = em.live.loop.config_rev
     t_mining.set_mining_gear(
         ship="mole", loadout={"heads": [["helix_ii", []]] * 3, "crew": 2}
     )
-    assert em.live.gear_rev == before + 1
+    assert em.live.loop.config_rev == before + 1
 
 
 def test_item_names_and_categories_unified():
@@ -5117,3 +5173,31 @@ def test_rotation_phase_calibration(tmp_path, monkeypatch):
         math.dist(n.to_local(b, g2, when), p) < 0.01
     )  # 校准后推算的位置和游戏给的一致
     n._calib.update(stamp=None, data={}, pending={})
+
+
+def test_live_key_hint_says_stopping_when_refused(monkeypatch):
+    """3-2：F5 被拒（正在停止）时悬浮窗说「正在停止，请稍候」，不说「已开启」"""
+    from types import SimpleNamespace
+
+    from astral_toolkit.app.engines import hover as hover_mod
+
+    notes = []
+    hud = SimpleNamespace(_note_hud=lambda section, text: notes.append(text))
+    tasks = SimpleNamespace(
+        settings_key=lambda *a: "F5",
+        live_start=lambda: {"running": False, "error": "正在停止，请稍候"},
+        live_stop=lambda: {"running": False},
+    )
+    monkeypatch.setattr(hover_mod, "_H", lambda: hud)
+    monkeypatch.setattr(hover_mod, "_T", lambda name: tasks)
+    monkeypatch.setattr(
+        hover_mod,
+        "_E",
+        lambda: SimpleNamespace(live=SimpleNamespace(running=lambda: False)),
+    )
+    h = object.__new__(hover_mod._Hover)
+    h._toggle_live()
+    assert notes == ["正在停止，请稍候"], "被拒时不能说「已开启」"
+    tasks.live_start = lambda: {"running": True}  # 允许开的时候照旧
+    h._toggle_live()
+    assert notes[-1] == "采矿助手已开启｜按 F5 关闭"

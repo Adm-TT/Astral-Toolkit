@@ -1,6 +1,7 @@
 """采矿助手的提交边界（架构稿 §7.5、§11.2）：停止、重开、改配装时，迟到的结果不能发布、不能进 ResultStore
 
-用线程开关卡准时机，不靠 sleep；画面是假的，不读屏。
+RT-B4：线程 / 停止 / 提交边界在 SessionLoop 里。这里全部走真实路径（`live.start / stop / loop.request_stop`），
+要卡在「算完、提交之前」就卡在 `scan_view` 的栅栏上；不手改循环的内部状态，不靠 sleep。
 """
 
 import threading
@@ -15,10 +16,11 @@ from astral_toolkit.core import paths
 from astral_toolkit.mining import screen, signals
 from astral_toolkit.mining.parse import Scan
 from astral_toolkit.runtime.results import MINING_SCAN, MINING_SIGNALS
+from astral_toolkit.runtime.session import StopInfo
 from astral_toolkit.tasks import mining as t_mining
 from astral_toolkit.tasks import navigation as t_nav
 
-WAIT = 30  # 等线程的上限：正常都是瞬间到，超时就是测试失败
+WAIT = 30
 
 
 def _rock(mass=10000.0):
@@ -35,6 +37,7 @@ def _rock(mass=10000.0):
 class _Hud:
     def __init__(self):
         self.calls = []
+        self.notes = []
 
     def set(self, section, text, rich=None):
         self.calls.append(("set", section, text))
@@ -43,7 +46,7 @@ class _Hud:
         self.calls.append(("clear", section))
 
     def note(self, text, secs=6):
-        pass
+        self.notes.append(text)
 
 
 def _fake_view(rock="铜"):
@@ -104,29 +107,6 @@ class _Gate:
         return False
 
 
-def _track(live):
-    """记下这个 live 起过的所有工作线程"""
-    started = []
-    start = live.start
-
-    def tracked():
-        start()
-        started.append(live.thread)
-
-    live.start = tracked
-    return started
-
-
-def _finish(live, started, q, gate=None):
-    """断言失败也要收掉工作线程：补丁还原后它会去读真屏幕"""
-    if gate:
-        gate.release.set()
-    live.stop_ev.set()
-    for th in started:
-        th.join(WAIT)
-    bus.unsubscribe(q)
-
-
 def _subscribe():
     q = bus.subscribe()
     while not q.empty():  # 总线补发的旧消息不算
@@ -156,33 +136,42 @@ def _wait_kind(q, kind):
     raise AssertionError(f"等不到 {kind}")
 
 
-def _stop_with_worker_stuck(live) -> Any:
-    """工作线程还卡着时停止，且 stop 不等它（等于 join 超时）：之后旧线程才迟到"""
-    worker, live.thread = live.thread, None
-    live.stop()
-    return worker
+def _finish(live, q, gate=None):
+    """断言失败也要收掉工作线程：补丁还原后它会去读真屏幕"""
+    if gate:
+        gate.release.set()
+    live.stop_ev.set()
+    sid = live.loop.state().session_id
+    if sid:
+        live.loop.join(session_id=sid, timeout=5)
+    bus.unsubscribe(q)
 
 
-def _start_stuck(monkeypatch, tmp_path):
+def _start_stuck(monkeypatch, tmp_path, join_timeout=0.02):
+    """开一个会话，工作线程卡在 scan_view 里（会话是 RUNNING，但还没提交）"""
     hud, _ = _world(monkeypatch, tmp_path)
     gate = _Gate()
     monkeypatch.setattr(t_mining, "scan_view", gate.view)
     live = live_mod._Live()
-    started = _track(live)
+    live.loop._join_timeout = join_timeout
     q = _subscribe()
-    live.start()
+    assert live.start() is not None
     assert gate.entered.wait(WAIT)
-    return live, gate, q, hud, started
+    return live, gate, q, hud
+
+
+def _session(live):
+    return live.loop._current.session  # type: ignore[union-attr]
 
 
 def test_stop_between_analyze_and_commit_publishes_nothing(monkeypatch, tmp_path):
     """① 停止恰好落在算完和提交之间：什么都不发布，ResultStore 不变"""
-    live, gate, q, hud, started = _start_stuck(monkeypatch, tmp_path)
+    live, gate, q, hud = _start_stuck(monkeypatch, tmp_path)
     try:
-        worker = _stop_with_worker_stuck(live)
+        attempt = live.stop()
+        assert attempt.session_id is not None and not live.loop.running()
         gate.release.set()
-        worker.join(WAIT)
-        assert not worker.is_alive()
+        assert live.loop.join(session_id=attempt.session_id, timeout=WAIT)
         msgs = _drain(q)
         assert not [m for m in msgs if m["kind"] == "scan"]
         assert not [c for c in hud.calls if c[0] == "set"]
@@ -191,16 +180,17 @@ def test_stop_between_analyze_and_commit_publishes_nothing(monkeypatch, tmp_path
         monkeypatch.setattr(t_nav, "_note_hud", lambda *a, **k: None)
         assert "暂无扫描结果" in t_nav.ore_record()["error"]
     finally:
-        _finish(live, started, q, gate)
+        _finish(live, q, gate)
 
 
 def test_restart_rejects_late_result_of_old_session(monkeypatch, tmp_path):
     """② 停了马上重开：旧线程迟到的结果不能盖新会话，也不能重新点亮悬浮窗"""
-    live, gate, q, hud, started = _start_stuck(monkeypatch, tmp_path)
-    first = live.session_id
+    live, gate, q, hud = _start_stuck(monkeypatch, tmp_path)
     try:
-        old = _stop_with_worker_stuck(live)
-        live.start()
+        first = live.session_id
+        attempt = live.stop()
+        assert attempt.session_id == first
+        assert live.start() is not None
         assert live.session_id > first
         _wait_kind(q, "scan")
         e = live.results.get(MINING_SCAN)
@@ -208,8 +198,7 @@ def test_restart_rejects_late_result_of_old_session(monkeypatch, tmp_path):
         before = (e.session_id, e.sequence)
         hud_before = len(hud.calls)
         gate.release.set()
-        old.join(WAIT)
-        assert not old.is_alive()
+        assert live.loop.join(session_id=first, timeout=WAIT)
         e = live.results.get(MINING_SCAN)
         assert e is not None and e.value["rock"] == "新"
         assert (e.session_id, e.sequence) >= before
@@ -219,34 +208,37 @@ def test_restart_rejects_late_result_of_old_session(monkeypatch, tmp_path):
             m for m in _drain(q) if m["kind"] == "scan" and m["data"]["rock"] == "旧"
         ]
     finally:
-        _finish(live, started, q, gate)
-
-
-def _manual_run(live, monkeypatch, tmp_path):
-    _world(monkeypatch, tmp_path)
-    live.session_id = 1
-    return live_mod._Run(threading.Event(), 1)
+        _finish(live, q, gate)
 
 
 def test_older_frame_arriving_late_is_rejected(monkeypatch, tmp_path):
-    """③ 同一会话里旧帧晚到"""
-    live = live_mod._Live()
-    run = _manual_run(live, monkeypatch, tmp_path)
-    older, newer = live._stamp(run, 1.0), live._stamp(run, 2.0)
-    q = _subscribe()
+    """③ 同一会话里旧帧晚到（工作线程卡在 scan_view，测试自己取表、提交）"""
+    live, gate, q, _ = _start_stuck(monkeypatch, tmp_path)
     try:
+        session = _session(live)
+        older = live.loop.stamp(session, 1.0)
+        newer = live.loop.stamp(session, 2.0)
+        assert older is not None and newer is not None
         kw = {"slot": MINING_SCAN, "quality": "complete"}
-        assert live._commit(
-            run, live_mod._pub("scan", {"rock": "新"}), value="新", stamp=newer, **kw
+        assert live.loop.commit(
+            session,
+            live_mod._pub("scan", {"rock": "新"}),
+            value="新",
+            stamp=newer,
+            **kw,
         )
-        assert not live._commit(
-            run, live_mod._pub("scan", {"rock": "旧"}), value="旧", stamp=older, **kw
+        assert not live.loop.commit(
+            session,
+            live_mod._pub("scan", {"rock": "旧"}),
+            value="旧",
+            stamp=older,
+            **kw,
         )
         assert [m["data"]["rock"] for m in _drain(q) if m["kind"] == "scan"] == ["新"]
         e = live.results.get(MINING_SCAN)
         assert e is not None and e.value == "新" and e.sequence == newer.seq
     finally:
-        bus.unsubscribe(q)
+        _finish(live, q, gate)
 
 
 def test_old_epoch_rejected_after_config_change(monkeypatch, tmp_path):
@@ -256,17 +248,16 @@ def test_old_epoch_rejected_after_config_change(monkeypatch, tmp_path):
     calls = []
 
     def view(*a, **k):
-        calls.append(live.epoch)
+        calls.append(live.loop.config_rev)
         if len(calls) == 1:
             live.config_changed()  # 算到一半改了配装
             return _fake_view("旧配装")
         return _fake_view("新配装")
 
     monkeypatch.setattr(t_mining, "scan_view", view)
-    started = _track(live)
     q = _subscribe()
     try:
-        live.start()
+        assert live.start() is not None
         _wait_kind(q, "scan")
         live.stop()
         scans = [m for m in _drain(q) if m["kind"] == "scan"]
@@ -275,18 +266,18 @@ def test_old_epoch_rejected_after_config_change(monkeypatch, tmp_path):
         assert ("set", "扫描", "HUD 旧配装") not in hud.calls
         assert ("set", "扫描", "HUD 新配装") in hud.calls
     finally:
-        _finish(live, started, q)
+        _finish(live, q)
 
 
 def test_old_epoch_commit_changes_nothing(monkeypatch, tmp_path):
-    live = live_mod._Live()
-    run = _manual_run(live, monkeypatch, tmp_path)
-    old = live._stamp(run, 1.0)
-    live.config_changed()
-    q = _subscribe()
+    live, gate, q, _ = _start_stuck(monkeypatch, tmp_path)
     try:
-        assert not live._commit(
-            run,
+        session = _session(live)
+        old = live.loop.stamp(session, 1.0)
+        assert old is not None
+        live.config_changed()
+        assert not live.loop.commit(
+            session,
             live_mod._pub("scan", {"rock": "旧"}),
             slot=MINING_SCAN,
             value="旧",
@@ -295,7 +286,7 @@ def test_old_epoch_commit_changes_nothing(monkeypatch, tmp_path):
         assert not [m for m in _drain(q) if m["kind"] == "scan"]
         assert live.results.get(MINING_SCAN) is None
     finally:
-        bus.unsubscribe(q)
+        _finish(live, q, gate)
 
 
 def test_stale_republish_does_not_touch_store(monkeypatch, tmp_path):
@@ -309,19 +300,19 @@ def test_stale_republish_does_not_touch_store(monkeypatch, tmp_path):
 
     _world(monkeypatch, tmp_path, analyse)
     real_grab = screen.grab
+    seen = {}
+    done = threading.Event()
 
     def grab():
         clock["t"] += 5.0
         if frames["n"] > 100:
-            ev.set()  # 兜底：等不到过期也别卡住
+            done.set()  # 兜底：等不到过期也别卡住
         return real_grab()
 
     monkeypatch.setattr(screen, "grab", grab)
     monkeypatch.setattr(time, "time", lambda: clock["t"])
     monkeypatch.setattr(t_mining, "scan_view", lambda *a, **k: _fake_view())
-    live = live_mod._Live()
-    ev = live.stop_ev
-    seen = {}
+    live = live_mod._Live(clock=lambda: clock["t"])
     real_publish = bus.publish
 
     def publish(kind, data):
@@ -329,43 +320,51 @@ def test_stale_republish_does_not_touch_store(monkeypatch, tmp_path):
             if data.get("stale"):
                 seen["stale"] = data
                 seen["after"] = live.results.get(MINING_SCAN)
-                ev.set()
+                done.set()
             else:
                 seen["fresh"] = data
                 seen["before"] = live.results.get(MINING_SCAN)
         real_publish(kind, data)
 
     monkeypatch.setattr(bus, "publish", publish)
-    live._run(ev)
-    assert seen.get("stale"), "没有过期重发"
-    assert seen["stale"] == {**seen["fresh"], "stale": seen["stale"]["stale"]}
-    assert seen["before"] == seen["after"]
-    assert "stale" not in seen["after"].value
+    q = _subscribe()
+    try:
+        assert live.start() is not None
+        assert done.wait(WAIT), "没有过期重发"
+        live.stop()
+        assert seen.get("stale"), "没有过期重发"
+        assert seen["stale"] == {**seen["fresh"], "stale": seen["stale"]["stale"]}
+        assert seen["before"] == seen["after"]
+        assert "stale" not in seen["after"].value
+    finally:
+        _finish(live, q)
 
 
 def test_live_false_comes_after_last_scan(monkeypatch, tmp_path):
     """⑥ running=False 排在最后一条 scan 之后，旧线程迟到也不例外"""
-    live, gate, q, _, started = _start_stuck(monkeypatch, tmp_path)
+    live, gate, q, _ = _start_stuck(monkeypatch, tmp_path)
     try:
-        worker = _stop_with_worker_stuck(live)
+        sid = live.stop().session_id
         gate.release.set()
-        worker.join(WAIT)
+        assert live.loop.join(session_id=sid, timeout=WAIT)
         msgs = _drain(q)
         kinds = [m["kind"] for m in msgs if m["kind"] in ("scan", "live")]
-        assert kinds[-1] == "live" and msgs[-1]["data"] == {"running": False}
+        assert kinds[-1] == "live"
+        assert [m["data"] for m in msgs if m["kind"] == "live"][-1] == {
+            "running": False
+        }
         assert "scan" not in kinds
     finally:
-        _finish(live, started, q, gate)
+        _finish(live, q, gate)
 
 
 def test_live_false_after_published_scan(monkeypatch, tmp_path):
     _world(monkeypatch, tmp_path)
     monkeypatch.setattr(t_mining, "scan_view", lambda *a, **k: _fake_view())
     live = live_mod._Live()
-    started = _track(live)
     q = _subscribe()
     try:
-        live.start()
+        assert live.start() is not None
         got = _wait_kind(q, "scan")
         live.stop()
         msgs = got + _drain(q)
@@ -376,17 +375,12 @@ def test_live_false_after_published_scan(monkeypatch, tmp_path):
         assert live_msgs[0] == {"running": True}
         assert live_msgs[-1] == {"running": False}
     finally:
-        _finish(live, started, q)
+        _finish(live, q)
 
 
-def _with_results(live, monkeypatch, tmp_path):
-    run = _manual_run(live, monkeypatch, tmp_path)
-    for slot, value in (
-        (MINING_SCAN, {"rock": "铜"}),
-        (MINING_SIGNALS, {"view": {"lines": []}, "values": [7]}),
-    ):
-        assert live._commit(run, slot=slot, value=value, stamp=live._stamp(run, 1.0))
-    return run
+def _wait_scan(live, q):
+    _wait_kind(q, "scan")
+    return live.loop._current.session  # type: ignore[union-attr]
 
 
 def test_every_way_of_stopping_keeps_results_and_rejects_late(monkeypatch, tmp_path):
@@ -396,156 +390,148 @@ def test_every_way_of_stopping_keeps_results_and_rejects_late(monkeypatch, tmp_p
 
     monkeypatch.setattr(settings, "update", lambda **kw: None)
     monkeypatch.setattr(hud_state, "_note_hud", lambda *a, **k: None)
-    log = open(tmp_path / "x.log", "w", encoding="utf-8")
+    monkeypatch.setattr(t_mining, "scan_view", lambda *a, **k: _fake_view())
 
-    stops = {
-        "stop": lambda live, run: live.stop(),
-        "auto_off": lambda live, run: live._auto_off(run, log),
-        "fail_off": lambda live, run: live._fail_off(run, "坏了"),
-        "退出": lambda live, run: live.stop_ev.set(),  # EngineManager.stop_all 只按开关
-    }
-    try:
-        for name, stop in stops.items():
-            live = live_mod._Live()
-            run = _with_results(live, monkeypatch, tmp_path)
-            live.stop_ev = run.ev
-            stop(live, run)
+    def _stops(live, session):
+        return {
+            "stop": lambda: live.loop.request_stop(session, StopInfo("user")),
+            "auto_off": lambda: live.loop.request_stop(session, StopInfo("idle")),
+            "fail_off": lambda: live.loop.request_stop(
+                session, StopInfo("error", "坏了")
+            ),
+            "退出": lambda: live.stop_ev.set(),  # manager.stop_all
+        }
+
+    for name in ("stop", "auto_off", "fail_off", "退出"):
+        _world(monkeypatch, tmp_path)
+        live = live_mod._Live()
+        q = _subscribe()
+        try:
+            assert live.start() is not None
+            session = _wait_scan(live, q)
+            _stops(live, session)[name]()
+            assert live.loop.join(session_id=session.id)
             e = live.results.get(MINING_SCAN)
-            assert e is not None and e.value == {"rock": "铜"}, name
+            assert e is not None and e.value["rock"] == "铜", name
             shown = FeedbackContext.from_results(live.results)
             assert shown.shown_scan and shown.shown_scan["rock"] == "铜", name
-            assert shown.shown_signal and shown.shown_signal["values"] == [7], name
-            assert not live._commit(
-                run,
+            assert not live.loop.commit(
+                session,
                 slot=MINING_SCAN,
                 value={"rock": "迟到"},
-                stamp=live._stamp(run, 2.0),
+                stamp=live.loop.stamp(session, 2.0),
             ), name
             e = live.results.get(MINING_SCAN)
-            assert e is not None and e.value == {"rock": "铜"}, name
-    finally:
-        log.close()
+            assert e is not None and e.value["rock"] == "铜", name
+        finally:
+            _finish(live, q)
 
 
 def test_new_session_first_result_replaces_last_one(monkeypatch, tmp_path):
+    _world(monkeypatch, tmp_path)
+    monkeypatch.setattr(t_mining, "scan_view", lambda *a, **k: _fake_view("一"))
     live = live_mod._Live()
-    run = _with_results(live, monkeypatch, tmp_path)
-    live.stop_ev = run.ev
-    live.stop()
-    new = live_mod._Run(threading.Event(), 2)
-    live.session_id = 2
-    assert live._commit(
-        new, slot=MINING_SCAN, value={"rock": "新"}, stamp=live._stamp(new, 3.0)
-    )
-    e = live.results.get(MINING_SCAN)
-    assert e is not None and e.value == {"rock": "新"} and e.session_id == 2
+    q = _subscribe()
+    try:
+        assert live.start() is not None
+        first = _wait_scan(live, q)
+        live.stop()
+        assert live.loop.join(session_id=first.id)
+        assert live.start() is not None
+        _wait_scan(live, q)
+        e = live.results.get(MINING_SCAN)
+        assert e is not None and e.session_id > first.id
+        late = live.loop.stamp(first, 3.0)
+        assert late is None, "旧线程停完才来取 stamp 要被拒"
+    finally:
+        _finish(live, q)
 
 
 def test_start_presses_old_switch(monkeypatch, tmp_path):
     _world(monkeypatch, tmp_path)
     live = live_mod._Live()
-    monkeypatch.setattr(live, "_run", lambda ev, session: None, raising=False)
-    started = _track(live)
-    old = live.stop_ev
-    live.start()
-    started[0].join(WAIT)
-    assert old.is_set() and not live.stop_ev.is_set()
+    try:
+        assert live.start() is not None
+        old = live.stop_ev
+        live.stop()
+        assert old.is_set()
+        assert live.start() is not None
+        assert not live.stop_ev.is_set()
+    finally:
+        _finish(live, _subscribe())
 
 
 def test_zombie_worker_cannot_end_new_session(monkeypatch, tmp_path):
-    """旧线程到点自动关闭 / 连着出错：结束不了后来开的会话"""
-    from astral_toolkit.core import settings
-
-    saved = []
-    monkeypatch.setattr(settings, "update", lambda **kw: saved.append(kw))
-    log = open(tmp_path / "x.log", "w", encoding="utf-8")
-    try:
-        for off in (
-            lambda x, r: x._auto_off(r, log),
-            lambda x, r: x._fail_off(r, "坏"),
-        ):
-            live = live_mod._Live()
-            hud, _ = _world(monkeypatch, tmp_path)
-            zombie = live_mod._Run(threading.Event(), 1)
-            live.session_id = 2
-            new = live_mod._Run(live.stop_ev, 2)
-            epoch = live.epoch
-            q = _subscribe()
-            try:
-                off(live, zombie)
-                assert not [m for m in _drain(q) if m["kind"] == "live"]
-            finally:
-                bus.unsubscribe(q)
-            assert not zombie.ev.is_set() and not new.ev.is_set()
-            assert live.epoch == epoch and not saved and not hud.calls
-            assert live._commit(
-                new, slot=MINING_SCAN, value="新", stamp=live._stamp(new, 1.0)
-            )
-    finally:
-        log.close()
-
-
-def test_end_session_ends_the_named_session(monkeypatch, tmp_path):
+    """旧会话的停止命令迟到：结束不了后来开的会话"""
+    _world(monkeypatch, tmp_path)
+    monkeypatch.setattr(t_mining, "scan_view", lambda *a, **k: _fake_view())
     live = live_mod._Live()
-    live.session_id = 2
-    live._end_session(1)
-    assert live.results.accept(MINING_SCAN, "新", 2, live.epoch, 1, 0.0, 0.0)
-    assert not live.results.accept(MINING_SIGNALS, "旧", 1, live.epoch, 1, 0.0, 0.0)
+    q = _subscribe()
+    try:
+        assert live.start() is not None
+        old = _wait_scan(live, q)
+        live.stop()
+        assert live.loop.join(session_id=old.id)
+        assert live.start() is not None
+        _wait_scan(live, q)
+        new_id = live.session_id
+        q2 = _subscribe()
+        try:
+            assert live.loop.request_stop(old, StopInfo("idle")) is False
+            assert live.loop.request_stop(old, StopInfo("error", "坏")) is False
+            assert not [m for m in _drain(q2) if m["kind"] == "live"]
+        finally:
+            bus.unsubscribe(q2)
+        assert live.session_id == new_id and live.running()
+        assert live.loop.stamp(old, 1.0) is None
+    finally:
+        _finish(live, q)
 
 
 def test_stop_leaves_session_started_during_join_alone(monkeypatch, tmp_path):
-    hud, _ = _world(monkeypatch, tmp_path)
-    live: Any = live_mod._Live()
-    current = object()
-
-    class Old:
-        def join(self, timeout=None):  # join 的时候新会话开了
-            live.session_id += 1
-            live.thread = current
-
-    live.thread = Old()
-    q = _subscribe()
+    """等线程的时候新会话开了：旧会话的收尾不碰它的悬浮窗、也不说「已停止」"""
+    live, gate, q, hud = _start_stuck(monkeypatch, tmp_path)
     try:
-        live.stop()
-        assert not [m for m in _drain(q) if m["kind"] == "live"]
+        old = _session(live)
+        old_sid = live.stop().session_id
+        assert old_sid is not None and not live.loop.running()
+        hud_before = len(hud.calls)
+        assert live.start() is not None
+        new_sid = live.session_id
+        _wait_scan(live, q)
+        gate.release.set()
+        assert live.loop.join(session_id=old_sid, timeout=WAIT)
+        assert not [c for c in hud.calls[hud_before:] if c[0] == "clear"]
+        assert live.session_id == new_sid and live.running()
+        assert live.loop.request_stop(old, StopInfo("user")) is False
     finally:
-        bus.unsubscribe(q)
-    assert live.thread is current and not hud.calls
-
-
-def test_retry_does_not_clear_new_sessions_hud(monkeypatch, tmp_path):
-    hud, _ = _world(monkeypatch, tmp_path)
-    live = live_mod._Live()
-    live.session_id = 1
-    ev = threading.Event()
-    monkeypatch.setattr(ev, "wait", lambda t=None: True, raising=False)
-
-    def boom(ev, session):
-        live.session_id = 2
-        raise RuntimeError("坏了")
-
-    monkeypatch.setattr(live, "_run", boom, raising=False)
-    live._run_gpu(ev, 1)
-    assert not hud.calls and not ev.is_set()
+        _finish(live, q, gate)
 
 
 def test_commit_without_hud_is_fine(monkeypatch, tmp_path):
-    live = live_mod._Live()
-    run = _manual_run(live, monkeypatch, tmp_path)
-    monkeypatch.setattr(hud_state, "_hud", lambda: None)
-    assert live._commit(run, live_mod._set("扫描", "x"), live_mod._del("矿袋"))
+    live, gate, q, _ = _start_stuck(monkeypatch, tmp_path)
+    try:
+        monkeypatch.setattr(hud_state, "_hud", lambda: None)
+        session = _session(live)
+        assert live.loop.commit(
+            session, live_mod._set("扫描", "x"), live_mod._del("矿袋")
+        )
+    finally:
+        _finish(live, q, gate)
 
 
 def test_output_only_commit_needs_live_session(monkeypatch, tmp_path):
     """只有输出的提交（提示、过期重发）也查会话"""
-    live = live_mod._Live()
-    run = _manual_run(live, monkeypatch, tmp_path)
-    assert live._commit(run)
-    live.session_id = 2
-    assert not live._commit(run)
-    live.session_id = 1
-    run.ev.set()
-    assert not live._commit(run)
+    live, gate, q, _ = _start_stuck(monkeypatch, tmp_path)
+    try:
+        session = _session(live)
+        assert live.loop.commit(session, live_mod._pub("log", {"task": "live"}))
+        assert live.loop.request_stop(session, StopInfo("user"))
+        gate.release.set()
+        assert live.loop.join(session_id=session.id)
+        assert not live.loop.commit(session, live_mod._pub("log", {"task": "live"}))
+    finally:
+        _finish(live, q, gate)
 
 
 def test_feedback_context_reads_store():
@@ -592,47 +578,54 @@ def test_feedback_context_reads_store():
 
 def test_stop_waits_for_commit_in_progress(monkeypatch, tmp_path):
     """提交和停止同一把锁：发布到一半时 stop 进不来，发布完才封会话，running=False 排在后面"""
-    live = live_mod._Live()
-    run = _manual_run(live, monkeypatch, tmp_path)
-    live.stop_ev = run.ev
-    inside, leave = threading.Event(), threading.Event()
-    seq = []
-    real = bus.publish
-
-    def publish(kind, data):
-        if threading.current_thread() in (committer, stopper):  # 别的线程发的不算
-            seq.append(kind)
-            if kind == "scan":
-                inside.set()
-                assert leave.wait(WAIT)
-        real(kind, data)
-
-    monkeypatch.setattr(bus, "publish", publish)
-    stamp = live._stamp(run, 1.0)
-    committer = threading.Thread(
-        target=live._commit,
-        args=(run, live_mod._pub("scan", {"rock": "铜"})),
-        kwargs={"slot": MINING_SCAN, "value": "铜", "stamp": stamp},
-        daemon=True,
-    )
-    stopper = threading.Thread(target=live.stop, daemon=True)
+    live, gate, q, _ = _start_stuck(monkeypatch, tmp_path)
     try:
-        committer.start()
-        assert inside.wait(WAIT)
-        stopper.start()
-        stopper.join(0.2)  # 只用来等「进不来」：实现对的话这里一定超时，不会偶发失败
-        assert stopper.is_alive()
-        assert not run.ev.is_set()
-        assert live.results.get(MINING_SCAN) is not None
+        session = _session(live)
+        inside, leave = threading.Event(), threading.Event()
+        seq = []
+        real = bus.publish
+        committer: dict[str, Any] = {"thread": None}
+        stopper: dict[str, Any] = {"thread": None}
+
+        def publish(kind, data):
+            if threading.current_thread() in (
+                committer["thread"],
+                stopper["thread"],
+            ):  # 别的线程发的不算
+                seq.append(kind)
+                if kind == "scan":
+                    inside.set()
+                    assert leave.wait(WAIT)
+            real(kind, data)
+
+        monkeypatch.setattr(bus, "publish", publish)
+        stamp = live.loop.stamp(session, 1.0)
+        assert stamp is not None
+        committer["thread"] = threading.Thread(
+            target=live.loop.commit,
+            args=(session, live_mod._pub("scan", {"rock": "铜"})),
+            kwargs={"slot": MINING_SCAN, "value": "铜", "stamp": stamp},
+            daemon=True,
+        )
+        stopper["thread"] = threading.Thread(target=live.stop, daemon=True)
+        try:
+            committer["thread"].start()
+            assert inside.wait(WAIT)
+            stopper["thread"].start()
+            stopper["thread"].join(0.2)  # 进不来：实现对的话这里一定超时
+            assert stopper["thread"].is_alive()
+            assert session.alive()
+            assert live.results.get(MINING_SCAN) is not None
+        finally:
+            leave.set()
+        committer["thread"].join(WAIT)
+        stopper["thread"].join(WAIT)
+        assert not committer["thread"].is_alive()
+        assert not stopper["thread"].is_alive()
+        assert not session.alive()
+        assert seq.index("live") > seq.index("scan")
     finally:
-        leave.set()
-    committer.join(WAIT)
-    stopper.join(WAIT)
-    assert not committer.is_alive()
-    assert not stopper.is_alive()
-    assert run.ev.is_set()
-    assert not live.results.accept(MINING_SCAN, "迟到", 1, live.epoch, 99, 0.0, 0.0)
-    assert seq.index("live") > seq.index("scan")
+        _finish(live, q, gate)
 
 
 def _cut_rock():
@@ -662,10 +655,9 @@ def test_cut_result_is_partial_and_old_epoch_rejected(monkeypatch, tmp_path):
         return _fake_view("新配装")
 
     monkeypatch.setattr(t_mining, "scan_view", view)
-    started = _track(live)
     q = _subscribe()
     try:
-        live.start()
+        assert live.start() is not None
         got = _wait_kind(q, "scan")
         e = live.results.get(MINING_SCAN)
         assert e is not None and e.quality == "partial"
@@ -673,7 +665,7 @@ def test_cut_result_is_partial_and_old_epoch_rejected(monkeypatch, tmp_path):
         assert [m["data"]["rock"] for m in got if m["kind"] == "scan"] == ["新配装"]
         assert ("set", "扫描", "HUD 旧配装") not in hud.calls
     finally:
-        _finish(live, started, q)
+        _finish(live, q)
 
 
 def _signal_world(monkeypatch, tmp_path, lines):
@@ -693,10 +685,9 @@ def test_signal_result_goes_to_store(monkeypatch, tmp_path):
     """信号走真循环：窗口消息里没有 values，store 里有；日志排在悬浮窗之后"""
     hud = _signal_world(monkeypatch, tmp_path, lambda *a: ["信号 4,285 → 铝"])
     live = live_mod._Live()
-    started = _track(live)
     q = _subscribe()
     try:
-        live.start()
+        assert live.start() is not None
         msg = _wait_kind(q, "signals")[-1]["data"]
         assert "values" not in msg and msg["lines"] == ["信号 4,285 → 铝"]
         e = live.results.get(MINING_SIGNALS)
@@ -704,7 +695,7 @@ def test_signal_result_goes_to_store(monkeypatch, tmp_path):
         assert e.value["view"]["lines"] == msg["lines"]
         assert ("set", "信号", "4,285 → 铝") in hud.calls
     finally:
-        _finish(live, started, q)
+        _finish(live, q)
 
 
 def test_signal_old_epoch_rejected(monkeypatch, tmp_path):
@@ -719,34 +710,32 @@ def test_signal_old_epoch_rejected(monkeypatch, tmp_path):
         return ["新配装"]
 
     hud = _signal_world(monkeypatch, tmp_path, lines)
-    started = _track(live)
     q = _subscribe()
     try:
-        live.start()
+        assert live.start() is not None
         got = _wait_kind(q, "signals")
         assert [m["data"]["lines"] for m in got if m["kind"] == "signals"] == [
             ["新配装"]
         ]
         assert ("set", "信号", "旧配装") not in hud.calls
     finally:
-        _finish(live, started, q)
+        _finish(live, q)
 
 
 def test_signal_of_old_session_rejected_after_restart(monkeypatch, tmp_path):
     gate = _Gate()
     hud = _signal_world(monkeypatch, tmp_path, gate.lines)
     live = live_mod._Live()
-    started = _track(live)
+    live.loop._join_timeout = 0.02
     q = _subscribe()
     try:
-        live.start()
+        assert live.start() is not None
         assert gate.entered.wait(WAIT)
-        old = _stop_with_worker_stuck(live)
-        live.start()
+        old_sid = live.stop().session_id
+        assert live.start() is not None
         _wait_kind(q, "signals")
         gate.release.set()
-        old.join(WAIT)
-        assert not old.is_alive()
+        assert live.loop.join(session_id=old_sid, timeout=WAIT)
         e = live.results.get(MINING_SIGNALS)
         assert e is not None and e.value["view"]["lines"] == ["新"]
         assert ("set", "信号", "旧") not in hud.calls
@@ -756,19 +745,177 @@ def test_signal_of_old_session_rejected_after_restart(monkeypatch, tmp_path):
             if m["kind"] == "signals" and m["data"]["lines"] == ["旧"]
         ]
     finally:
-        _finish(live, started, q, gate)
+        _finish(live, q, gate)
 
 
 def test_worker_keeps_the_session_it_was_started_with(monkeypatch, tmp_path):
-    """会话号在 start 的锁里取好传给线程：线程起来得晚，也不会读成后来的新会话"""
+    """会话号和 payload 在 start 的锁里取好交给线程：线程起来得晚，也不会读成后来的新会话"""
     _world(monkeypatch, tmp_path)
     live = live_mod._Live()
     seen = []
+    done = threading.Event()
+
+    def setup(session):
+        seen.append((session.id, session.payload))
+
+    def tick(session, ctx, now):
+        seen.append((session.id, session.payload))
+        done.set()
+        from astral_toolkit.runtime.session import Tick
+
+        return Tick(0.02, {})
+
+    monkeypatch.setattr(live, "setup", setup)
+    monkeypatch.setattr(live, "tick", tick)
+    try:
+        assert live.start() is not None
+        assert done.wait(WAIT)
+        assert seen and all(sid == 1 for sid, _ in seen)
+        assert all(
+            payload is None for _, payload in seen
+        )  # 采矿没有 payload（热键在 StopInfo 里）
+    finally:
+        live.stop()
+
+
+def _wait_note(hud, word, timeout=5):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if any(word in note for note in hud.notes):
+            return True
+        time.sleep(0.001)
+    return False
+
+
+def test_stop_note_uses_the_hotkey_from_stop_time(monkeypatch, tmp_path):
+    """运行中改热键：自动关闭 / 出错用尽的提示里是新键（收尾那刻现读，不是开启时的快照）"""
+    clock = {"t": 1000.0}
+    hud, _ = _world(monkeypatch, tmp_path, lambda img: (Scan(), ({}, None, None)))
+    monkeypatch.setattr(time, "time", lambda: clock["t"])
+    live = live_mod._Live(clock=lambda: clock["t"])
+    keys = {"v": "F5"}
+    monkeypatch.setattr(live, "hotkey", lambda: keys["v"])
+    q = _subscribe()
+    try:
+        assert live.start() is not None
+        keys["v"] = "F9"  # 运行中改了热键
+        clock["t"] += 1000.0  # 超过 idle_close → 自动关闭
+        assert _wait_note(hud, "F9"), hud.notes
+        assert not any("F5" in note for note in hud.notes)
+    finally:
+        _finish(live, q)
+
+
+def test_error_note_uses_the_hotkey_from_stop_time(monkeypatch, tmp_path):
+    clock = {"t": 1000.0}
+    hud, _ = _world(monkeypatch, tmp_path, lambda img: (Scan(), ({}, None, None)))
+    monkeypatch.setattr(time, "time", lambda: clock["t"])
+    live = live_mod._Live(clock=lambda: clock["t"])
+    live.retries = 1
+    keys = {"v": "F5"}
+    ticks = {"n": 0}
+
+    def boom(session, ctx, now):
+        from astral_toolkit.runtime.session import Tick
+
+        ticks["n"] += 1
+        if ticks["n"] >= 5:  # 先跑几轮，让测试有机会改热键
+            raise RuntimeError("坏了")
+        return Tick(0.01, {})
+
+    monkeypatch.setattr(live, "tick", boom)
+    monkeypatch.setattr(live, "hotkey", lambda: keys["v"])
+    q = _subscribe()
+    try:
+        assert live.start() is not None
+        assert _wait_until(lambda: ticks["n"] >= 2, 5)
+        keys["v"] = "F7"  # 运行中改热键
+        clock["t"] += 1.0
+        assert _wait_note(hud, "F7"), hud.notes
+        assert not any("F5" in note for note in hud.notes)
+    finally:
+        _finish(live, q)
+
+
+def test_scan_off_flag_is_per_session(monkeypatch, tmp_path):
+    """scan_off 标记在 Ctx 里：A 卡在识别里被停（join 超时），B 开了以后照常清一次扫描区；
+    A 迟到的 tick 改不到 B 的标记"""
+    hud, _ = _world(monkeypatch, tmp_path, lambda img: (_rock(), ({}, None, None)))
+    off = {"scan": True}
     monkeypatch.setattr(
-        live, "_run", lambda ev, session=None: seen.append(session), raising=False
+        hud_state,
+        "_off",
+        lambda feature: "远程关了" if feature == "scan" and off["scan"] else None,
     )
-    started = _track(live)
-    live.start()
-    live.session_id += 5  # 线程读到的如果是这个就错了
-    started[0].join(WAIT)
-    assert seen == [1]
+    gate = threading.Event()
+    entered = threading.Event()
+    real = screen.analyse
+    calls = {"n": 0}
+
+    def analyse(img):
+        calls["n"] += 1
+        entered.set()
+        if calls["n"] == 1:
+            gate.wait(WAIT)  # A 卡在识别里
+        return real(img)
+
+    monkeypatch.setattr(screen, "analyse", analyse)
+    live = live_mod._Live()
+    live.loop._join_timeout = 0.05
+    q = _subscribe()
+    try:
+        assert live.start() is not None
+        assert entered.wait(WAIT)
+        first_attempt = live.stop()
+        assert first_attempt.timed_out, "A 卡在识别里，join 应该超时"
+        after_stop = hud.calls.count(("clear", "扫描"))  # 停止自己的 clear 也算进来
+        assert live.start() is not None  # join 已超时：可以开 B
+        gate.set()  # 放行 A
+        assert _wait_until(
+            lambda: hud.calls.count(("clear", "扫描")) > after_stop, 5
+        ), "B 会话应该重新清一次扫描区（标记按会话，A 的迟到 tick 改不到它）"
+        assert live.running()
+    finally:
+        off["scan"] = False
+        gate.set()
+        _finish(live, q)
+
+
+def test_sessions_do_not_share_vote_queue_or_log(monkeypatch, tmp_path):
+    """两个会话不共享投票队列和日志句柄：A 停了以后它的 ctx 关日志，B 的是新对象"""
+    _world(monkeypatch, tmp_path)
+    monkeypatch.setattr(t_mining, "scan_view", lambda *a, **k: _fake_view())
+    live = live_mod._Live()
+    contexts = {}
+    real_setup = live.setup
+
+    def setup(session):
+        ctx = real_setup(session)
+        contexts[session.id] = ctx
+        return ctx
+
+    monkeypatch.setattr(live, "setup", setup)
+    q = _subscribe()
+    try:
+        assert live.start() is not None
+        _wait_kind(q, "scan")
+        live.stop()
+        assert live.start() is not None
+        _wait_kind(q, "scan")
+        a, b = contexts[1], contexts[2]
+        assert a is not b
+        assert a.recent is not b.recent
+        assert a.log is not b.log
+        assert a.log.closed, "A 的日志句柄应该已经关了"
+        assert not b.log.closed
+    finally:
+        _finish(live, q)
+
+
+def _wait_until(predicate, timeout=5):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.001)
+    return False

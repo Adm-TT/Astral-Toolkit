@@ -279,3 +279,37 @@ def test_old_result_globals_are_gone():
     for f in _ROOT.rglob("*.py"):
         text = f.read_text(encoding="utf-8")
         assert "_FB_LAST" not in text and "_ORE_LAST" not in text, f.name
+
+
+def _thread_starts_in_source(source):
+    """模块里 threading.Thread(...) 的调用，落在哪个函数里（顶层返回 "<模块>"）"""
+    tree = ast.parse(source)
+    owner = {}
+    for fn in ast.walk(tree):
+        if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for node in ast.walk(fn):
+                owner[id(node)] = fn.name
+    out = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            f = node.func
+            if (
+                isinstance(f, ast.Attribute)
+                and f.attr == "Thread"
+                and isinstance(f.value, ast.Name)
+                and f.value.id == "threading"
+            ):
+                out.append(owner.get(id(node), "<模块>"))
+    return out
+
+
+def test_live_engine_does_not_start_its_own_scan_loop():
+    """RT-B4：采矿助手的工作线程由会话循环起（runtime/session.py），live.py 里只剩存截图的小线程"""
+    source = (_ROOT / "app" / "engines" / "live.py").read_text(encoding="utf-8")
+    assert _thread_starts_in_source(source) == ["_save_miss"]
+    for bad in (
+        "threading.Thread(target=self._run)",
+        "def f():\n    threading.Thread(target=g)",
+    ):
+        assert _thread_starts_in_source(bad), bad
+    assert "SessionLoop(" in source, "采矿助手要接会话循环"

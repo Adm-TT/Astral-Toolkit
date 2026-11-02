@@ -381,19 +381,21 @@ def scan_view(scan, bag, cut=False):
 
 
 def live_start():
-    from ..core import settings
-
-    _engines().live.start()
-    settings.update(live_on=True)  # 记住：重启、升级后自动接着扫
-    return {"running": True}
+    live = _engines().live
+    if live.start() is None:
+        view = live.loop.state()
+        if view.prev_stop_pending:  # 停止还没收尾：如实回「正在停止」
+            return {"running": live.running(), "error": "正在停止，请稍候"}
+        return {"running": live.running(), "error": "正在结束 / 正在退出，稍后再开"}
+    return {"running": live.running()}
 
 
 def live_stop():
-    from ..core import settings
-
-    _engines().live.stop()
-    settings.update(live_on=False)
-    return {"running": False}
+    live = _engines().live
+    attempt = live.stop()
+    if attempt.timed_out:
+        return {"running": live.running(), "error": "正在停止，旧线程还没退出"}
+    return {"running": live.running()}
 
 
 # ---------------------------------------------------------------- 采矿装备与自造配置
