@@ -18,7 +18,7 @@ import threading
 from contextlib import contextmanager
 from typing import Iterator
 
-from . import _build, _db, items, names, prices, shops
+from . import _build, _db, items, loot, mining, names, places, prices, shops, starmap
 from ._db import current_version as version, snapshot
 from ._lock import write_lock
 from ._manifest import Manifest
@@ -51,12 +51,16 @@ __all__ = [
     "ensure_ready",
     "items",
     "last_error",
+    "loot",
+    "mining",
     "names",
+    "places",
     "prices",
     "rebuild",
     "refresh",
     "shops",
     "snapshot",
+    "starmap",
     "updating",
     "version",
     "warm_up",

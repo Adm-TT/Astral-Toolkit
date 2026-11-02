@@ -8,16 +8,17 @@
 方位：0°=北（OM-1 方向），90°=东，应该和游戏头盔指南针一致（待游戏内确认）。
 """
 
-import json
 import math
 import re
 import sys
 import threading
 import time
+from contextlib import ExitStack
 from datetime import datetime, timezone
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+from .. import gamedata  # noqa: E402
 from ..core.paths import DATA, USER, write_json  # noqa: E402
 from .names import (
     BODY_ZH,
@@ -34,7 +35,6 @@ from .names import (
     _SHIP_ZH,
     _WRECK,
     _norm,
-    _places_zh,
     body_label,
     label,
     poi_zh,
@@ -56,11 +56,7 @@ from .starmap import (
     API,
     CACHE,
     UA,
-    _apply_fixes,
-    _data,
-    _data_stamp,
     _fetch,
-    _files_stamp,
     compact,
     load,
     update,
@@ -156,11 +152,9 @@ from .transit import (
     SITE_KINDS,
     SITE_NEAR_M,
     ZONE_MARGIN,
-    _amen,
     _bi,
     _car_changed,
     _car_no,
-    _city,
     _city_rows,
     _hangar_lift,
     _hangar_size,
@@ -196,39 +190,35 @@ _spots = {}
 
 def mining_spots(data=None):
     """导航里的「挖矿点」（太空目标，b = "@星系"，坐标千米）：
-    - data/mining_spots.json（数据构建脚本从游戏数据生成）：派罗 15 个小行星群、86 个远矿站，冰川环带中转点、QV 碎岩站
+    - mining_spots.json（数据构建脚本从游戏数据生成，从游戏数据层读）：派罗 15 个小行星群、86 个远矿站，冰川环带中转点、QV 碎岩站
     - 星图里有刷矿表的拉格朗日点（斯坦顿 20 个、派罗 25 个，data/mining_rocks.json 里有表的才算）
     每个点带 rocks：这里刷哪几种石头（搜「贝沙电气石」能搜到会刷它的点）"""
     from ..mining.mining_area import rocks_stamp, area_for_spot
-    from ..core import paths as _paths  # 调用时现取 paths.DATA（测试会换掉它）
 
-    p = _paths.DATA / "mining_spots.json"
     data = data or load()
-    try:
-        mt = p.stat().st_mtime_ns
-    except OSError:
-        mt = None
     stamp = (
-        mt,
+        gamedata.version(),
         rocks_stamp(),
         id(data),
-        _data_stamp,
-    )  # 挖矿点文件、石头表、星图任何一个换了都重算（审查 2026-10-27）
+    )  # 游戏数据（挖矿点、星图）、石头表、传进来的星图任何一个换了都重算（审查 2026-10-27）
     if _spots.get("stamp") == stamp and "list" in _spots:
         return _spots["list"]
     out = []
     try:
-        raw = json.loads(p.read_text(encoding="utf-8")) if mt is not None else []
-    except Exception:
-        raw = []
+        raw = gamedata.mining.spots()
+    except gamedata.GamedataError:
+        raw = ()  # 库不可用：和以前没有文件一样，只剩拉格朗日点
     for r in raw:
+        n = r.get("en") or r.get("id")
+        if not n:  # 没名字的一条跳过（以前 r["id"] 抛 KeyError 被吞，也是丢这一条）
+            continue
         x, y, z = r["x"] / 1000, r["y"] / 1000, r["z"] / 1000
         out.append(
             dict(
                 b="@" + r["sys"],
                 sys=r["sys"],
                 space=True,
-                n=r.get("en") or r["id"],
+                n=n,
                 zh=r.get("zh") or "",
                 t="Mining Spot",
                 x=round(x, 3),
@@ -299,6 +289,15 @@ def space_points(data=None):
 def search(query, data=None, limit=15):
     """按中文名/英文名/星球名/类型搜地点；多个词都要命中。没信标的排前面"""
     data = data or load()
+    with ExitStack() as stack:
+        try:  # 一次搜索钉在一个版本上：几千次地名查询复用这个快照，不每次读清单
+            stack.enter_context(gamedata.snapshot())
+        except gamedata.GamedataError:
+            pass  # 库不可用（调用方自己传了星图）：不钉快照照常搜，地名退化成空
+        return _search(query, data, limit)
+
+
+def _search(query, data, limit):
     words = [w for w in re.split(r"[\s,，]+", query.strip().lower()) if w]
     rows = []
     try:

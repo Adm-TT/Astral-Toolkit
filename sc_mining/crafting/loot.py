@@ -86,20 +86,20 @@ def load_index(auto=True):
     return _index
 
 
+# 无人读取：只给 update/data_pack.clear_caches 写（它还在 `loot._folded.update(...)`）。
+# 删除条件：整合清理时随 clear_caches 里那两行一起删（控制台，批 6 合并后；掉落查询已改走游戏数据库，批 4）
 _folded = {"of": None, "rows": []}
 
 
-def _folded_rows(idx):
-    """索引里每个物品的名字先折叠好存着（以前每查一次要折叠 2 万多次）"""
-    if _folded["of"] is not idx:
-        _folded.update(
-            of=idx,
-            rows=[
-                (u, en, zh, rar, _fold(en), _fold(zh), (cls or "").lower(), n or 0)
-                for u, en, cls, rar, n, zh in idx["rows"]
-            ],
-        )
-    return _folded["rows"]
+def _index_meta():
+    """游戏数据库里掉落索引的版本信息 {"version": …}；没有掉落索引、或库不可用返回 None"""
+    from .. import gamedata
+    from ..gamedata import loot as gd_loot
+
+    try:
+        return gd_loot.index_meta()
+    except gamedata.GamedataError:
+        return None
 
 
 # 同名的「变体」：NPC 专用、不显示的、测试 / 枪械游戏模式、低模、模板……玩家拿不到，掉落不算它的（2026-10-24 全量核对：
@@ -111,52 +111,60 @@ _VARIANT = re.compile(
 
 
 def _wiki_classes(name_en):
-    """物品查询（wiki）里这个英文名对应的全部游戏类名；没有返回空集"""
+    """物品查询（wiki）里这个英文名对应的全部游戏类名（含 alt）；没有返回空集。在 find 里调时用 find 钉住的快照"""
     try:
-        from .itemsearch import wiki_items
+        from ..gamedata import loot as gd_loot
 
-        k = _fold(name_en)
-        out = set()
-        for w in wiki_items():
-            if _fold(w.get("n")) == k:
-                out.add((w.get("cls") or "").lower())
-                out.update(c.lower() for c in w.get("alt") or [])
-        return out - {""}
+        return set(gd_loot.wiki_classes(_fold(name_en)))
     except Exception:
         return set()
+
+
+def _partial(ke, kz, r):
+    """名字只是开头像 / 包含：英文 ≥6 前缀、≥5 子串，中文 ≥3 子串"""
+    return (
+        (ke and len(ke) >= 6 and r.norm_en.startswith(ke))
+        or (ke and len(ke) >= 5 and ke in r.norm_en)
+        or (kz and len(kz) >= 3 and kz in r.norm_zh)
+    )
 
 
 def find(name_en="", name_zh=""):
     """按名字找物品：[(uuid, 英文名, 中文名, 稀有度)]，完全同名的排前面。
     同名的有好几个实体时，先要物品查询（wiki）里这个名字的类名，再去掉 NPC 专用、测试这些变体，有掉落的在前。
-    名字只是开头像 / 包含的（Zeus 探索头盔 → Zeus 探索头盔 Echo）：物品查询里本来就有这个物品时不算"""
-    idx = load_index(False)  # 索引缺了也不在 F8 / 物品页里联网下（更新数据会下）
-    if not idx:
-        return []
+    名字只是开头像 / 包含的（Zeus 探索头盔 → Zeus 探索头盔 Echo）：物品查询里本来就有这个物品时不算。
+    数据来自游戏数据库（掉落索引缺了也不在 F8 / 物品页里联网下，更新数据会下）；库不可用时返回空"""
+    from .. import gamedata
+    from ..gamedata import loot as gd_loot
+
     ke, kz = _fold(name_en), _fold(name_zh)
-    exact, part = [], []
-    for u, en, zh, rar, fe, fz, cls, n in _folded_rows(idx):
-        if (ke and fe == ke) or (kz and fz == kz):
-            exact.append((u, en, zh, rar, cls, n))
-        elif (
-            (ke and len(ke) >= 6 and fe.startswith(ke))
-            or (ke and len(ke) >= 5 and ke in fe)
-            or (kz and len(kz) >= 3 and kz in fz)
-        ):
-            part.append((u, en, zh, rar, cls, n))
-    if exact:
-        good = _wiki_classes(name_en or (exact[0][1] if not name_en else ""))
-        pick = (
-            [h for h in exact if h[4] in good]
-            or [h for h in exact if not _VARIANT.search(h[4])]
-            or exact
-        )
-        pick.sort(key=lambda h: -h[5])
-        return [h[:4] for h in pick]
-    if name_en and _wiki_classes(name_en):
+    try:
+        gamedata.ensure()
+        with gamedata.snapshot() as s:  # 精确、wiki 类名、部分匹配钉在同一个版本上
+            exact = [
+                (r.uuid, r.en, r.zh, r.rarity, r.cls_lower, r.n)
+                for r in gd_loot.exact(ke, kz, s)
+            ]
+            if exact:
+                good = _wiki_classes(name_en or exact[0][1])  # 源顺序第一个，排序前取
+                pick = (
+                    [h for h in exact if h[4] in good]
+                    or [h for h in exact if not _VARIANT.search(h[4])]
+                    or exact
+                )
+                pick.sort(key=lambda h: -h[5])
+                return [h[:4] for h in pick]
+            if name_en and _wiki_classes(name_en):
+                return []
+            part = []
+            for r in gd_loot.rows(s):
+                if _partial(ke, kz, r) and not _VARIANT.search(r.cls_lower):
+                    part.append((r.uuid, r.en, r.zh, r.rarity))
+                    if len(part) == 5:
+                        break
+            return part
+    except gamedata.GamedataError:
         return []
-    part = [h for h in part if not _VARIANT.search(h[4])]
-    return [h[:4] for h in part[:5]]
 
 
 _failed = {}  # 下载失败的物品 → 时间：10 分钟内不再重试（断网时每次都要等超时）
@@ -287,8 +295,7 @@ _VER_RE = re.compile(r"\w[\w.\-]{0,63}")
 
 
 def detail(uuid, online=True):
-    idx = load_index(False) or {}
-    version = idx.get("version", "4.10.2LIVE")
+    version = (_index_meta() or {}).get("version", "4.10.2LIVE")
     # 要拼进缓存路径和网址：只认字母数字、点、横线，别让 ..\ 之类跑到缓存目录外面
     if not isinstance(uuid, str) or not _UUID_RE.fullmatch(uuid):
         raise ValueError("物品编号格式不对")
@@ -393,19 +400,28 @@ def instance_ore(name_en="", name_zh=""):
 
 def mine_info(key, top=5, online=True):
     """副本专属矿的开采点：{name, mine: True, note, groups: [{p, box, regions}], more}"""
-    idx = load_index(online)
-    if not idx:
-        return None
+    from .. import gamedata
+    from ..gamedata import loot as gd_loot
+
+    if _index_meta() is None:  # 没有掉落索引（有索引、只是没有行不算）
+        if not online:
+            return None
+        load_index(True)  # 联网下一份：update() 在更新边界里，写完重建库
+        if _index_meta() is None:
+            return None
     want, skip = INSTANCE_ORES[key]
-    rocks = [
-        r
-        for r in _folded_rows(idx)
-        if r[6].startswith(want) and not (skip and r[6].startswith(skip))
-    ]
+    try:
+        rocks = [
+            r
+            for r in gd_loot.by_cls_prefix(want)
+            if not (skip and r.cls_lower.startswith(skip))
+        ]
+    except gamedata.GamedataError:
+        return None
     best = {}  # 地区 → (概率, 位置说明)
     for r in rocks:
         try:
-            d = detail(r[0], online)
+            d = detail(r.uuid, online)
         except Pending:
             return {"pending": True}
         except Exception as e:

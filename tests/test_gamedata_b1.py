@@ -111,6 +111,25 @@ def test_ensure_backs_off_after_failure(monkeypatch, tmp_path):
     assert calls == [1, 1]
 
 
+def test_ensure_wraps_non_gamedata_errors(monkeypatch, tmp_path):
+    """写锁 mkdir / open 这类 OSError 也包成 GamedataError：功能模块只接这一种（GD-B6 审查第 2 条）"""
+    import sc_mining.gamedata as G
+    from sc_mining.gamedata import _build
+    from tests.minipytest import raises
+
+    _setup(monkeypatch, tmp_path)
+
+    def boom():
+        raise PermissionError("数据目录只读")
+
+    monkeypatch.setattr(_build, "rebuild_if_needed", boom)
+    with raises(G.GamedataError) as got:
+        G.ensure()
+    assert got.value is not None and isinstance(got.value.__cause__, PermissionError)
+    with raises(G.GamedataError):
+        G.ensure()  # 退避期内再来：还是 GamedataError
+
+
 def test_ensure_fast_path_after_first_success(monkeypatch, tmp_path):
     import sc_mining.gamedata as G
     from sc_mining.gamedata import _build

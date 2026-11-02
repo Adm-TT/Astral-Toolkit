@@ -141,7 +141,9 @@ def test_blueprints_rows_keys_and_norms(monkeypatch, tmp_path):
         0,
         1,
     )
-    assert rows[2][1] == "" and rows[2][12] == "medpen"  # u 空照存；Medpen 在 items 里
+    assert (
+        rows[2][1] == "" and rows[2][12] == "medpen"
+    )  # u 是空串就存空串（源里就是 ""）；Medpen 在 items 里
     assert rows[0][12] is None  # Main Powerplant 不在 items 里
     assert rows[0][8] == _fold_name("Main Powerplant") == "mainpowerplant"
     assert (
@@ -228,6 +230,9 @@ def test_wikelo_tables(monkeypatch, tmp_path):
         _fold("激光"),
     )
     assert rq[0][6] == "iawsonminingiaser" and rq[1][2:6] == ("Tin", "", 1.5, "")
+    assert (
+        type(rq[0][4]) is int and type(rq[1][4]) is float
+    )  # q 不声明类型：源里 int 就是 int、float 就是 float（goals 乘数量要原样）
     assert sy == [("C1", 0, "Stanton"), ("C1", 1, "Pyro")]
 
 
@@ -244,7 +249,7 @@ def test_item_stats_scalars_and_stats_json(monkeypatch, tmp_path):
         "ADP Core",
         1,
         "A",
-        "",
+        None,  # 源里 cls: null → NULL，不是 ''（itemstats.item 还原 dict 要逐字一致）
         "Char_Armor_Torso",
         "Heavy",
         7.0,
@@ -577,22 +582,24 @@ def test_schema4_scalar_type_mismatch_does_not_break_build(monkeypatch, tmp_path
     with snapshot() as s:
         assert s.execute("select count(*) from items")[0][0] > 0
         assert s.execute("select z, g, sec, nsrc, norm_z from blueprints") == [
-            ("", "", None, 2, "")
-        ]
+            (None, None, None, 2, "")
+        ]  # 类型不对的文本列存 NULL；折叠键照旧是空串
         assert s.execute("select qty, min_q from blueprint_materials") == [
             (2.0, 1)
         ]  # 1.9 不是整数：跳过
-        assert s.execute("select type, t from wikelo_contracts") == [("", "")]
+        assert s.execute("select type, t from wikelo_contracts") == [(None, None)]
         assert (
             s.execute("select count(*) from wikelo_rewards")[0][0] == 0
         )  # 字符串不是列表
-        assert s.execute("select n, q from wikelo_requirements") == [("", None)]
+        assert s.execute("select n, q, norm_n from wikelo_requirements") == [
+            (None, None, "")
+        ]
         assert s.execute("select system from wikelo_contract_systems") == [("Pyro",)]
         assert s.execute("select n, size, mass, stats_json from item_stats") == [
-            ("", None, None, "{}")
+            (None, None, None, "{}")
         ]
         assert (
-            s.execute("select zh, cls from print_spots") == [("", "")]
+            s.execute("select zh, cls from print_spots") == [(None, None)]
             and s.execute("select count(*) from print_spot_places")[0][0] == 0
         )
         assert s.execute("select ship from ship_stock_items") == [("Ship",)]
@@ -645,3 +652,48 @@ def test_zh_name_pairs_src_zh_only_when_zh_names_value_was_junk(monkeypatch, tmp
         assert s.execute("select en, src from zh_name_pairs where zh = '某某某'") == [
             ("Lawson Mining Laser", "zh_only")
         ]
+
+
+def test_null_and_empty_string_are_distinct(monkeypatch, tmp_path):
+    """源里 null 存 NULL、"" 存 ""：批 3 还原 dict 时分得开（GD-B3 请求 2026-11-02）"""
+    bps = [
+        {**_BP, "n": "NullT", "t": None, "s": None, "u": None},
+        {**_BP, "n": "EmptyT", "t": "", "s": "", "u": ""},
+    ]
+    stats = {
+        "items": {
+            "a": {"n": "A", "cls": None, "mfr": ""},
+            "b": {"n": "B", "cls": "C", "mfr": None},
+        }
+    }
+    wk = {
+        "contracts": [
+            {
+                "id": "X",
+                "type": None,
+                "rz": "",
+                "req": [{"n": "T", "q": 3}, {"n": "U", "q": 24.0}, {"n": "V"}],
+            }
+        ]
+    }
+    snapshot = _built(
+        monkeypatch,
+        tmp_path,
+        **{
+            "crafting.json": {"blueprints": bps},
+            "item_stats.json": stats,
+            "wikelo.json": wk,
+        },
+    )
+    with snapshot() as s:
+        assert s.execute("select n, t, s, u from blueprints order by source_order") == [
+            ("NullT", None, None, None),
+            ("EmptyT", "", "", ""),
+        ]
+        assert s.execute("select uuid, cls, mfr from item_stats order by uuid") == [
+            ("a", None, ""),
+            ("b", "C", None),
+        ]
+        assert s.execute("select type, rz from wikelo_contracts") == [(None, "")]
+        q = [r[0] for r in s.execute("select q from wikelo_requirements order by idx")]
+        assert q == [3, 24.0, None] and type(q[0]) is int and type(q[1]) is float

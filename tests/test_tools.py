@@ -16,7 +16,7 @@ import time
 from sc_mining.crafting import shops, wikelo
 import json, time  # noqa: E401, F401, F811
 from sc_mining.crafting import shops, loot, acquire  # noqa: F811
-from sc_mining.navigation import position, navigate
+from sc_mining.navigation import position
 from sc_mining.gamedata._cache import VersionCache as _VC
 
 
@@ -249,9 +249,10 @@ def test_unrelated_search_results_dropped(tmp_path):
 # ======================================================================
 
 
-def _shops_db(monkeypatch, tmp_path, data):
+def _shops_db(monkeypatch, tmp_path, data, starmap=None, copy=()):
     """商店查询走游戏数据层（批 1）：把假商店表写成 shops.json、在临时目录建库，只把库目录指过去；
-    paths.DATA 不动（别的数据照旧读真实 data/）。shops._data 也照旧换掉，给还在用 load() 的地方"""
+    paths.DATA 不动（别的数据照旧读真实 data/）。shops._data 也照旧换掉，给还在用 load() 的地方。
+    starmap：假星图（批 2 起 find_point 走库），给了就一起写成 starmap.json 建进库；copy：再拷进去一起建库的源文件"""
     from sc_mining import gamedata
     from sc_mining.core import paths
     from sc_mining.gamedata import _build, _paths, _ready
@@ -261,6 +262,12 @@ def _shops_db(monkeypatch, tmp_path, data):
     (src / "shops.json").write_text(
         json.dumps(data, ensure_ascii=False), encoding="utf-8"
     )
+    if starmap is not None:
+        (src / "starmap.json").write_text(
+            json.dumps(starmap, ensure_ascii=False), encoding="utf-8"
+        )
+    for f in copy:
+        (src / f.name).write_bytes(f.read_bytes())
     monkeypatch.setattr(_paths, "gamedata_dir", lambda: src / "gamedata")
     monkeypatch.setattr(
         _build, "gamedata_dir", lambda: src / "gamedata"
@@ -274,6 +281,24 @@ def _shops_db(monkeypatch, tmp_path, data):
         paths.DATA = real
     # 记成已核对：查询时 ensure() 会按 paths.DATA（真实 data/）的源核对，别拿真实源把临时库重建掉
     monkeypatch.setattr(_ready, "_state", {"done": str(src / "gamedata")})
+
+
+def _nav_db(monkeypatch, tmp_path):
+    """城里导航的用例（批 2 起城市地点 / 城外设施 / 空间站电梯走游戏数据层）：tmp_path 里写好的这几份源，
+    加上真实星图（有就带上，以前这些用例也读真实星图），建成临时库；改了源再调一次就重建"""
+    from sc_mining.core import paths
+
+    real = [paths.DATA / f for f in ("starmap.json", "starmap_fixes.json")]
+    mine = [
+        tmp_path / f
+        for f in ("city_places.json", "place_amenities.json", "station_lifts.json")
+    ]
+    _shops_db(
+        monkeypatch,
+        tmp_path,
+        {"fmt": shops.FMT, "fetched": 0, "items": {}, "rows": []},
+        copy=[p for p in real + mine if p.exists()],
+    )
 
 
 def fake_shops(monkeypatch, tmp_path):
@@ -411,7 +436,6 @@ POINTS = [
 
 
 def setup(monkeypatch, tmp_path):
-    monkeypatch.setattr(navigate, "_data", {"bodies": {}, "pois": [], "points": POINTS})
     data = {
         "fmt": shops.FMT,
         "fetched": time.time(),
@@ -466,7 +490,12 @@ def setup(monkeypatch, tmp_path):
             ],
         ],
     }
-    _shops_db(monkeypatch, tmp_path, data)
+    _shops_db(
+        monkeypatch,
+        tmp_path,
+        data,
+        starmap={"bodies": {}, "pois": [], "points": POINTS},
+    )
 
 
 def test_shop_point_and_nearest(monkeypatch, tmp_path):
@@ -806,24 +835,28 @@ def test_log_place_is_specific(monkeypatch):
     """顶部「位置」要显示具体地点（新巴贝奇），不是星球（微科星）"""
     from sc_mining.navigation import position
 
-    monkeypatch.setattr(
-        position,
-        "_places_zh",
-        lambda: {
-            "newbabbage": "新巴贝奇",
-            "arcl1wideforeststation": "弧 L1 广袤森林站",
-            "checkmate": "死局空间站",
-        },
-    )
+    zh = {
+        "newbabbage": "新巴贝奇",
+        "arcl1wideforeststation": "弧 L1 广袤森林站",
+        "checkmate": "死局空间站",
+    }
+
+    def place_zh(key="", prefix=None):  # 代替查库的 places_zh（批 2 起走游戏数据层）
+        if prefix is not None:
+            keys = sorted((k for k in zh if k.startswith(prefix)), key=len)
+            return zh[keys[0]] if keys else None
+        return zh.get(key)
+
+    monkeypatch.setattr(position, "_place_zh", place_zh)
     monkeypatch.setattr(
         position, "_station_at", lambda i: "Checkmate Station" if i == "P2_L4" else ""
     )
-    position.place_name.cache_clear()
+    position._place_name.cache_clear()
     assert position.place_name("Stanton4_NewBabbage") == "新巴贝奇"
     assert position.place_name("RR_ARC_L1") == "弧 L1 广袤森林站"
     assert position.place_name("RR_P2_L4") == "死局空间站"
     assert position.place_name("Stanton1_SomeNewPlace") == "Some New Place"
-    position.place_name.cache_clear()
+    position._place_name.cache_clear()
 
 
 def test_displayinfo_real_ocr_lines():
@@ -4274,7 +4307,6 @@ def test_game_events_from_log(tmp_path):
 def test_city_nav(monkeypatch, tmp_path):
     """城内导航：读 city_places.json（坏行跳过、改了文件重读），按米显示、8 米内到达、上下楼层提示"""
     import json  # noqa: F811
-    import os
     from sc_mining.navigation import navigate as n
     from sc_mining.tasks import mining as t_mining
 
@@ -4302,8 +4334,7 @@ def test_city_nav(monkeypatch, tmp_path):
     ]
     f = tmp_path / "city_places.json"
     f.write_text(json.dumps(rows, ensure_ascii=False), encoding="utf-8")
-    monkeypatch.setattr(n, "DATA", tmp_path)
-    n._city.clear()
+    _nav_db(monkeypatch, tmp_path)
     ps = n.city_places()
     assert (
         len(ps) == 1
@@ -4314,8 +4345,7 @@ def test_city_nav(monkeypatch, tmp_path):
     assert not n.is_city({"t": "Outpost"}) and not n.is_city(None)
     rows[0]["zh"] = "改过"
     f.write_text(json.dumps(rows[:1], ensure_ascii=False), encoding="utf-8")
-    st = f.stat()
-    os.utime(f, ns=(st.st_atime_ns, st.st_mtime_ns + 10_000_000))
+    _nav_db(monkeypatch, tmp_path)  # 数据更新时会重建库
     assert n.city_places()[0]["zh"] == "改过"
 
     t = ps[0]
@@ -4351,7 +4381,6 @@ def test_city_nav(monkeypatch, tmp_path):
         v["city"] and not v["arrived"] and 45 < v["direct_m"] < 60 and v["updown"] > 10
     )
     assert t_mining._nav_view(near, t, {})["arrived"]
-    n._city.clear()
 
 
 def test_city_nav_review(monkeypatch, tmp_path):
@@ -4381,8 +4410,7 @@ def test_city_nav_review(monkeypatch, tmp_path):
     (tmp_path / "city_places.json").write_text(
         json.dumps(rows, ensure_ascii=False), encoding="utf-8"
     )
-    monkeypatch.setattr(n, "DATA", tmp_path)
-    n._city.clear()
+    _nav_db(monkeypatch, tmp_path)
     ps = n.city_places()
     assert [p["id"] for p in ps] == ["a", "b", "d"] and ps[2]["cat"] == ""
     assert ps[0]["zh"] == "ASOP 终端" and ps[1]["zh"] == "ASOP 终端 2"
@@ -4423,7 +4451,6 @@ def test_city_nav_review(monkeypatch, tmp_path):
     monkeypatch.setattr(n, "latlon", lambda p: (0.0, 0.0, 1000.0))
     plan = t_nav.nav_plan(k1)
     assert plan["city"] and plan["routes"] == [] and plan["area"] == "空港"
-    n._city.clear()
 
 
 def test_city_arrive_hysteresis_and_near():
@@ -4653,9 +4680,7 @@ def test_nav_nearest(monkeypatch, tmp_path):
     (tmp_path / "place_amenities.json").write_text(
         json.dumps(amen, ensure_ascii=False), encoding="utf-8"
     )
-    monkeypatch.setattr(n, "DATA", tmp_path)
-    n._city.clear()
-    n._amen.clear()
+    _nav_db(monkeypatch, tmp_path)
     now = time.time()
     arc = next(p for p in data["points"] if p["n"] == "ARC L1")
     g = (arc["x"] + 5000, arc["y"], arc["z"])
@@ -4689,8 +4714,6 @@ def test_nav_nearest(monkeypatch, tmp_path):
         == "死局空间站（Checkmate）"
     )
     assert "error" in t_nav.nav_near("加油")
-    n._city.clear()
-    n._amen.clear()
 
 
 def test_city_route(monkeypatch, tmp_path):
@@ -4780,8 +4803,7 @@ def test_city_route(monkeypatch, tmp_path):
     (tmp_path / "city_places.json").write_text(
         json.dumps(city, ensure_ascii=False), encoding="utf-8"
     )
-    monkeypatch.setattr(n, "DATA", tmp_path)
-    n._city.clear()
+    _nav_db(monkeypatch, tmp_path)
     ps = {q["n"]: q for q in n.city_places()}
     assert set(n._metro_lines("Lorville")) == {
         "perim_line_a",
@@ -4847,7 +4869,6 @@ def test_city_route(monkeypatch, tmp_path):
         n.city_route(here_at(ps["SP sp"]), ps["New Deal"]) is None
     )  # 就在旁边：直接走
     assert n.city_leg(here_at(ps["SP sp"]), ps["New Deal"]) == (ps["New Deal"], [])
-    n._city.clear()
 
 
 def test_site_menu(monkeypatch, tmp_path):
@@ -4916,8 +4937,7 @@ def test_site_menu(monkeypatch, tmp_path):
     (tmp_path / "city_places.json").write_text(
         json.dumps(rows, ensure_ascii=False), encoding="utf-8"
     )
-    monkeypatch.setattr(n, "DATA", tmp_path)
-    n._city.clear()
+    _nav_db(monkeypatch, tmp_path)
     data = {"bodies": {}, "pois": [], "points": []}
     ps = n.city_places()
     assert [q["zh"] for q in ps] == [
@@ -4939,7 +4959,6 @@ def test_site_menu(monkeypatch, tmp_path):
     assert [q["id"] for _, q in near] == ["b", "c"] and round(near[0][0]) == 54
     assert "上方 20 米" in n.station_text(g, near[0][1], data)
     assert n.station_text(g, ps[0], data).startswith("✅ 到了")
-    n._city.clear()
 
 
 def test_train_data(monkeypatch, tmp_path):

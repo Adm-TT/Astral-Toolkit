@@ -94,7 +94,7 @@
 
 导航源全部可选：JSON 坏了当作“在但读不出”（哈希照算，表为空），单条坏行跳过，不拖垮物品 / 商店表。
 
-新表：`bodies`、`pois`、`points`、`city_places`、`city_place_kinds`、`amenities`、`amenity_kinds`、`station_lifts`、`place_names`、`place_codes`、`mining_spots`。`SOURCES` 加 9 个可选源。`_import` 新增 `import_starmap / import_city_places / import_amenities / import_station_lifts / import_place_names / import_mining_spots`，变换逻辑**直接 import 复用** `transit._city_rows`、`transit._lift_rows`、`starmap._apply_fixes`（不抄）。`SCHEMA_VERSION = 2`、`IMPORTER_VERSION = 2`。
+新表：`bodies`、`pois`、`points`、`city_places`、`city_place_kinds`、`amenities`、`amenity_kinds`、`station_lifts`、`place_names`、`place_codes`、`mining_spots`。`SOURCES` 加 9 个可选源。`_import` 新增 `import_starmap / import_city_places / import_amenities / import_station_lifts / import_place_names / import_mining_spots`，变换逻辑**直接 import 复用** `transit._city_rows`、`transit._lift_rows`、`starmap.fix_points`（不抄；批 2 删了 `_apply_fixes`，建库时用 `fix_points` 套改正表）。`SCHEMA_VERSION = 2`、`IMPORTER_VERSION = 2`。
 
 ## 9. 批 2 开工前必须补的核对
 
