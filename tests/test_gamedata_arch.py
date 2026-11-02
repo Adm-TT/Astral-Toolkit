@@ -119,7 +119,8 @@ def test_sync_ensure_failure_visible_in_last_error(monkeypatch, tmp_path):
     assert G.last_error() is None
     with raises(G.GamedataError):
         G.ensure()
-    assert G.last_error() and "就绪失败" in G.last_error()
+    err = G.last_error()
+    assert err is not None and "就绪失败" in err
     monkeypatch.setattr(
         paths, "DATA", tmp_path
     )  # 换回有源的目录（另一个库目录，退避按目录记）
