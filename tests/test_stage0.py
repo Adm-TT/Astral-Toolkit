@@ -192,13 +192,18 @@ def test_start_all_needs_agreed(monkeypatch):
 
 def test_stop_all_sets_events(monkeypatch):
     from astral_toolkit.app.engines.manager import EngineManager
+    from astral_toolkit.runtime.session import StopInfo
 
     m = EngineManager.get_instance()
-    # live 的 stop_ev 现在转发到会话循环（RT-B4），是只读属性：按类换成新开关；nav 还是实例属性
-    monkeypatch.setattr(type(m.live), "stop_ev", threading.Event())
+    calls = []
+    monkeypatch.setattr(
+        m.live.loop, "request_stop_current", lambda info=None: calls.append(info)
+    )
     monkeypatch.setattr(m.nav, "stop_ev", threading.Event())
     m.stop_all()
-    assert m.live.stop_ev.is_set() and m.nav.stop_ev.is_set()
+    assert [info.reason for info in calls] == ["shutdown"]
+    assert all(isinstance(info, StopInfo) for info in calls)
+    assert m.nav.stop_ev.is_set()
 
 
 def _run_main(monkeypatch, tmp_path, shell):
@@ -397,27 +402,39 @@ def test_startup_drops_stale_helper_files():
     assert "restart_request" in names
 
 
-def test_live_fail_off_without_hud(monkeypatch):
+def test_live_fail_off_without_hud(monkeypatch, tmp_path):
     """悬浮窗没建起来时采矿助手出错：照样关掉、存 live_on=False、告诉窗口（以前收尾时擦悬浮窗抛错，线程死掉，界面一直显示在运行）"""
-    import threading
+    import time
+
     from astral_toolkit.app import bus, hud_state
     from astral_toolkit.app.engines import live as live_mod
-    from astral_toolkit.core import settings
-    from astral_toolkit.runtime.session import RunState, Session
+    from astral_toolkit.core import paths, settings
+    from astral_toolkit.runtime.session import RunState
+    from astral_toolkit.tasks import mining as t_mining
 
     saved, pub = [], []
     monkeypatch.setattr(hud_state, "_hud", lambda: None)
     monkeypatch.setattr(hud_state, "_note_hud", lambda *a, **k: None)
     monkeypatch.setattr(settings, "update", lambda **kw: saved.append(kw))
     monkeypatch.setattr(bus, "publish", lambda kind, data: pub.append((kind, data)))
+    monkeypatch.setattr(paths, "log", lambda name: tmp_path / name)
+    monkeypatch.setattr(paths, "shots", lambda name: tmp_path)
+    monkeypatch.setattr(t_mining, "_game_front", lambda: None)
     live = live_mod._Live()
-    session = Session(1, threading.Event())
-    live.loop._session = session
-    live.loop._session_id = 1
-    live.loop._state = RunState.RUNNING
-    live._error = "坏了"
-    assert live.loop._stop_session(session, "error", error="坏了")
-    assert session.cancel.is_set() and {"live_on": False} in saved
+    live.retries = 1  # 一次就收尾
+
+    def boom(session, ctx, now):
+        raise RuntimeError("坏了")
+
+    monkeypatch.setattr(live, "tick", boom)
+    assert live.start() is not None
+    deadline = time.monotonic() + 10
+    while (
+        live.loop.state().state is not RunState.FAILED and time.monotonic() < deadline
+    ):
+        time.sleep(0.001)
+    assert live.loop.state().state is RunState.FAILED
+    assert {"live_on": False} in saved
     assert ("live", {"running": False, "error": "坏了"}) in pub
     live.stop()  # 停止收尾也不抛错
 

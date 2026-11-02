@@ -1,26 +1,14 @@
-"""会话循环的计时和出错处理（设计稿 §2.3、§7.4）：暂停冻结、活动时钟、自动关闭、过期、重试、看门狗
+"""会话循环的计时和出错处理（设计稿 v3 §2.2、§2.3）：暂停冻结、活动时钟、自动关闭、过期、重试、看门狗
 
 假 Worker + 假时钟 + 「每轮放行的闸」卡时机，不靠 sleep 凑时间、不起真读屏。
 """
 
 import time
 
-from tests.runtime_fakes import FakeClock, FakeWorker, TickGate, make_loop
-from astral_toolkit.runtime.results import MINING_SCAN
-from astral_toolkit.runtime.session import Freshness, RunState
+from tests.runtime_fakes import FakeClock, FakeWorker, Gate, TickGate, make_loop
+from astral_toolkit.runtime.session import Freshness, RunState, StopInfo
 
 WAIT = 10
-
-
-def _wrap_finish(worker, ops):
-    """换成自定义收尾输出，但仍记一笔 finished（判断是哪一种收尾）"""
-    original = worker.finish_ops
-
-    def finish(session, reason):
-        original(session, reason)
-        return ops
-
-    worker.finish_ops = finish  # type: ignore[method-assign]
 
 
 def _wait_until(predicate, timeout=WAIT):
@@ -56,6 +44,15 @@ def _step_or_finish(worker, gate, clock, seconds=1.0):
     raise AssertionError("既没结束也没到下一轮")
 
 
+def _start(loop, worker):
+    sid = loop.start()
+    assert sid is not None and worker.started.wait(WAIT)
+    assert _wait_until(
+        lambda: loop.state().state in (RunState.RUNNING, RunState.PAUSED)
+    ), "工作线程没起来"
+    return sid
+
+
 def test_pause_freezes_idle_and_stale_timers():
     """切出游戏那段既不算过期也不算自动关闭；回来后按扣掉暂停的时间接着算"""
     clock = FakeClock()
@@ -63,16 +60,15 @@ def test_pause_freezes_idle_and_stale_timers():
     worker = FakeWorker(
         needs_foreground=True,
         idle_close=10.0,
-        stale_after=5.0,
-        seen=frozenset({MINING_SCAN}),
+        stale_after={"panel": 5.0},
+        observed={"panel": 0.0},
         wait=0.01,
     )
     gate = TickGate()
     worker.gate = gate
     loop, _, _ = make_loop(worker, clock=clock, foreground=lambda: front["on"])
     try:
-        loop.start()
-        assert worker.started.wait(WAIT)
+        sid = _start(loop, worker)
         gate.wait()
         _step(gate, clock, 1.0)
         _step(gate, clock, 1.0)
@@ -84,229 +80,262 @@ def test_pause_freezes_idle_and_stale_timers():
         gate.wait()  # 回到游戏，下一轮 tick 到闸
         assert loop.state().state is RunState.RUNNING
         gaps = [c[2] for c in worker.calls if c[0] == "on_resume"]
-        assert ("on_pause", 1) in worker.calls and len(gaps) == 1
+        assert ("on_pause", sid) in worker.calls and len(gaps) == 1
         assert 999 < gaps[0] < 1001, gaps
         assert not [c for c in worker.calls if c[0] == "on_stale"], "暂停那段不算过期"
         assert worker.finished == [], "暂停那段也不算自动关闭"
-        assert loop.freshness(MINING_SCAN) is Freshness.FRESH
+        assert loop.freshness("panel") is Freshness.FRESH
     finally:
-        loop.request_stop("user")
+        loop.request_stop_current(StopInfo("user"))
         gate.step()
-        loop.join()
+        loop.join(session_id=sid)
 
 
-def test_idle_close_ends_the_session_and_turns_the_flag_off(monkeypatch):
-    """太久没看到面板 / 信号：自己关掉，事件在锁内发，live_on 置 False，收尾提示最后一条"""
-    from astral_toolkit.core import settings
-
-    saved = []
-    monkeypatch.setattr(settings, "update", lambda **kw: saved.append(kw))
+def test_idle_close_uses_the_latest_of_all_channels(monkeypatch):
+    """只有雷达信号、没有扫描面板时，120 秒也不该自动关闭（dev 是 max(面板, 信号)）"""
     clock = FakeClock()
-    worker = FakeWorker(idle_close=10.0, active=False, wait=0.01)
+    worker = FakeWorker(idle_close=10.0, wait=0.01)
     gate = TickGate()
     worker.gate = gate
-    _wrap_finish(
+    saved = []
+    from astral_toolkit.runtime.session import RunFlag
+
+    loop, _, out = make_loop(
         worker,
-        [
-            ("bus", "live", {"running": False, "auto_off": True}),
-            ("note", "采矿助手", "采矿助手已关闭"),
-        ],
+        clock=clock,
+        run_flag=RunFlag("live_on", lambda k, v: saved.append((k, v))),
     )
-    loop, _, out = make_loop(worker, clock=clock, settings_flag="live_on")
     try:
-        loop.start()
-        assert worker.started.wait(WAIT)
+        sid = _start(loop, worker)
         gate.wait()
+        worker.observed = {"signals": 0.0}
+        for _ in range(20):  # 20 秒只有信号
+            assert not _step_or_finish(worker, gate, clock, 1.0)
+        assert worker.finished == [], "只有信号不应该自动关闭"
+        worker.observed = {}
+        finished = False
         for _ in range(20):
             if _step_or_finish(worker, gate, clock, 1.0):
+                finished = True
                 break
-        assert worker.finished == ["idle"]
+        assert finished and worker.finished == ["idle"]
         assert _wait_state(loop, RunState.STOPPED)
-        assert ("on_stop", 1, "idle") in worker.calls
-        assert saved == [{"live_on": False}]
-        assert out.published("live")[-1] == (
-            "live",
-            {"running": False, "auto_off": True},
-        )
-        assert out.calls[-1].op == "note_hud"
-        assert all(
-            c.locked for c in out.calls if c.op in ("publish", "hud_clear", "note_hud")
-        ), "收尾事件和提示都在锁里发"
+        assert saved == [("live_on", True), ("live_on", False)]
+        assert out.live_events()[-1] == {"running": False}
+        assert worker.last_stop_info.reason == "idle"
     finally:
-        loop.request_stop("user")
+        loop.request_stop_current(StopInfo("user"))
         gate.step()
-        loop.join()
+        loop.join(session_id=sid)
 
 
-def test_stale_marks_the_slot_and_calls_the_worker():
+def test_stale_fires_once_per_channel():
     clock = FakeClock()
-    worker = FakeWorker(stale_after=5.0, seen=frozenset({MINING_SCAN}), wait=0.01)
+    worker = FakeWorker(stale_after={"panel": 5.0}, observed={"panel": 0.0}, wait=0.01)
+    gate = TickGate()
+    worker.gate = gate
+    loop, _, out = make_loop(worker, clock=clock)
+    try:
+        sid = _start(loop, worker)
+        gate.wait()
+        _step(gate, clock, 1.0)
+        assert loop.freshness("panel") is Freshness.FRESH
+        worker.observed = {}  # 面板没了
+        _step(gate, clock, 6.0)
+        assert ("on_stale", sid, "panel") in worker.calls
+        assert loop.freshness("panel") is Freshness.STALE
+        _step(gate, clock, 1.0)  # 还是没看到：不再触发
+        assert len([c for c in worker.calls if c[0] == "on_stale"]) == 1
+        worker.observed = {"panel": 0.0}  # 又看到了
+        _step(gate, clock, 0.1)
+        assert loop.freshness("panel") is Freshness.FRESH
+    finally:
+        loop.request_stop_current(StopInfo("user"))
+        gate.step()
+        loop.join(session_id=sid)
+        assert out is not None
+
+
+def test_retry_restarts_the_idle_timer():
+    """重试不重置空闲计时的话：空闲 110 秒 → 抛错 → 重试后 1 秒就被关（v1 的 bug）"""
+    clock = FakeClock()
+    worker = FakeWorker(idle_close=10.0, fail_at=6, wait=0.01)
     gate = TickGate()
     worker.gate = gate
     loop, _, _ = make_loop(worker, clock=clock)
     try:
-        loop.start()
-        assert worker.started.wait(WAIT)
+        sid = _start(loop, worker)
         gate.wait()
-        _step(gate, clock, 1.0)
-        assert loop.freshness(MINING_SCAN) is Freshness.FRESH
-        worker.seen = frozenset()  # 面板没了
-        _step(gate, clock, 6.0)
-        assert ("on_stale", 1, MINING_SCAN) in worker.calls
-        assert loop.freshness(MINING_SCAN) is Freshness.STALE
-        worker.seen = frozenset({MINING_SCAN})  # 又看到了
-        _step(gate, clock, 1.0)
-        assert loop.freshness(MINING_SCAN) is Freshness.FRESH
-        assert len([c for c in worker.calls if c[0] == "on_stale"]) == 1
-    finally:
-        loop.request_stop("user")
-        gate.step()
-        loop.join()
-
-
-def test_errors_clear_the_hud_in_lock_and_retry():
-    """前两次出错：锁内清 HUD、重新 setup 再跑；第 3 次正常就不算失败"""
-    worker = FakeWorker(fail_times=2, wait=0.01)
-    loop, _, out = make_loop(worker)
-    try:
-        loop.start()
-        assert worker.ticked.wait(WAIT), "重试以后没跑起来"
-        assert loop.state().state is RunState.RUNNING
-        assert worker.calls.count(("setup", 1)) == 3
-        assert [c[1] for c in worker.calls if c[0] == "on_error"] == [0, 1]
-        clears = [c for c in out.calls if c.op == "hud_clear"]
-        assert len(clears) == 2 and all(c.locked for c in clears)
+        for _ in range(5):  # 空闲 5 秒
+            assert not _step_or_finish(worker, gate, clock, 1.0)
+        # 第 6 秒抛错 → 重试（等 1 秒真实时间），空闲计时重新起算
+        assert not _step_or_finish(worker, gate, clock, 1.0)
+        assert _wait_until(
+            lambda: sum(1 for c in worker.calls if c[0] == "setup") >= 2, 5
+        )
+        assert _wait_until(
+            lambda: any(c[0] == "tick" and c[1] == sid for c in worker.calls), 5
+        )
+        # 重试后重新起算：再过 9 秒（总共 15 秒 > 10）也不该关；不重置的话第 11 秒就关了
+        for _ in range(9):
+            assert not _step_or_finish(worker, gate, clock, 1.0), worker.finished
         assert worker.finished == []
     finally:
-        loop.request_stop("user")
-        loop.join()
+        loop.request_stop_current(StopInfo("user"))
+        gate.step()
+        loop.join(session_id=sid)
 
 
-def test_last_error_finishes_the_session_and_turns_the_flag_off(monkeypatch):
-    from astral_toolkit.core import settings
+def test_errors_clear_hud_in_lock_and_retry_then_finish(monkeypatch):
+    """前两次重试套 before_retry（锁内），第 3 次走 error 收尾、live_on 置 False"""
+    from astral_toolkit.runtime.session import RunFlag
 
     saved = []
-    monkeypatch.setattr(settings, "update", lambda **kw: saved.append(kw))
     worker = FakeWorker(fail_times=3, retries=3, wait=0.01)
-    _wrap_finish(worker, [("bus", "live", {"running": False, "error": "坏了"})])
-    loop, _, out = make_loop(worker, settings_flag="live_on")
+    worker.retry_ops_list = [("hud.clear", "信号")]
+    loop, _, out = make_loop(
+        worker, run_flag=RunFlag("live_on", lambda k, v: saved.append((k, v)))
+    )
     try:
-        loop.start()
-        assert _wait_state(loop, RunState.FAILED)
+        sid = loop.start()
+        assert sid is not None and _wait_state(loop, RunState.FAILED)
+        assert [c[1] for c in worker.calls if c[0] == "on_error"] == [sid, sid, sid]
+        clears = [r for r in out.ops if r.op[0] == "hud.clear"]
+        assert len(clears) == 2 and all(r.locked for r in clears)
+        assert worker.finished == ["error"]
+        assert saved == [("live_on", True), ("live_on", False)]
         view = loop.state()
         assert view.last_error == "坏了" and view.stop_reason == "error"
-        assert worker.finished == ["error"]
-        assert saved == [{"live_on": False}]
-        assert out.published("live")[-1] == (
-            "live",
-            {"running": False, "error": "坏了"},
-        )
-        assert ("teardown", 1) in worker.calls
-        assert not loop.running()
+        assert ("finish", sid, "error") in worker.calls
     finally:
-        loop.join()
+        loop.request_stop_current(StopInfo("user"))
+
+
+def test_setup_failure_counts_as_a_failed_attempt():
+    worker = FakeWorker(setup_fail_times=1, retries=2, wait=0.01)
+    loop, _, _ = make_loop(worker)
+    try:
+        sid = loop.start()
+        assert sid is not None
+        assert _wait_until(
+            lambda: any(c[0] == "tick" and c[1] == sid for c in worker.calls), 5
+        ), worker.calls
+        assert [c for c in worker.calls if c[0] == "on_error"]
+        # 失败的那次没有 ctx：teardown 也必须能收
+        assert loop.state().state is RunState.RUNNING
+    finally:
+        loop.request_stop_current(StopInfo("user"))
+        loop.join(session_id=sid)
+
+
+def test_finish_runs_before_teardown_and_writes_after_stop():
+    gate = Gate()
+    worker = FakeWorker()
+    worker.finish_gate = gate
+    loop, _, _ = make_loop(worker)
+    try:
+        sid = _start(loop, worker)
+        loop.request_stop_current(StopInfo("user"))
+        assert gate.entered.wait(WAIT)  # finish 卡住了
+        assert worker.calls[-1][0] == "finish"
+        assert ("teardown", sid) not in worker.calls
+        gate.release.set()
+        assert loop.join(session_id=sid)
+        calls = [c[0] for c in worker.calls]
+        assert calls.index("finish") < calls.index("teardown")
+    finally:
+        gate.release.set()
+        loop.request_stop_current(StopInfo("user"))
 
 
 def test_join_timeout_leaves_stopping_then_worker_exit_marks_stopped():
-    worker = FakeWorker(wait=0.01)
-    gate = TickGate()
+    gate = Gate()
+    worker = FakeWorker()
     worker.gate = gate
-    loop, _, _ = make_loop(worker, join_timeout=0.02)
+    loop, _, out = make_loop(worker, join_timeout=0.02)
     try:
-        loop.start()
-        assert worker.started.wait(WAIT)
-        gate.wait()
-        loop.request_stop("user")
-        assert not loop.join(), "线程卡在 tick 里，join 应该超时"
+        sid = _start(loop, worker)
+        assert gate.entered.wait(WAIT)
+        out.clear()
+        loop.request_stop_current(StopInfo("user"))
+        assert not loop.join(session_id=sid), "线程卡在 tick 里，join 应该超时"
         view = loop.state()
         assert view.state is RunState.STOPPING and view.worker_alive
-        gate.step()  # 旧线程这时才退出
+        assert view.prev_stop_pending
+        assert out.live_events() == [{"running": False}], "join 超时这条路径要发确认"
+        gate.release.set()  # 旧线程这时才退出
         assert _wait_state(loop, RunState.STOPPED)
-        assert loop.join()
-        assert not loop.state().worker_alive
+        assert out.live_events() == [{"running": False}], "退出时不再发第二次"
+        assert loop.join(session_id=sid)
     finally:
-        gate.step()
-        loop.join(1)
+        gate.release.set()
+        loop.join(session_id=sid)
 
 
-def test_worker_that_never_exits_becomes_failed_after_three_timeouts(monkeypatch):
-    from astral_toolkit.core import run_records
-
-    records = []
-    monkeypatch.setattr(run_records, "record", lambda *a, **k: records.append((a, k)))
-    worker = FakeWorker(wait=0.01)
-    gate = TickGate()
+def test_worker_that_never_exits_is_marked_failed_by_its_own_watchdog():
+    gate = Gate()
+    worker = FakeWorker()
     worker.gate = gate
-    loop, _, _ = make_loop(worker, join_timeout=0.02)
+    loop, _, out = make_loop(worker, join_timeout=0.02)
     try:
-        loop.start()
-        assert worker.started.wait(WAIT)
-        gate.wait()
-        loop.request_stop("user")
-        assert not loop.join()
+        sid = _start(loop, worker)
+        assert gate.entered.wait(WAIT)
+        loop.request_stop_current(StopInfo("user"))
+        assert not loop.join(session_id=sid)
         assert _wait_state(loop, RunState.FAILED)
         view = loop.state()
-        assert view.last_error == "stop_timeout" and view.stop_reason == "stop_timeout"
-        assert view.worker_alive, "旧线程还在跑：状态要能显示仍有待结束工作"
-        assert records and "停止超时" in records[0][0][1]
+        assert view.last_error == "stop_timeout" and view.worker_alive
+        assert _wait_until(lambda: out.records(), 5)
+        assert any("停止超时" in op[2] for op in out.records())
     finally:
-        gate.step()
-        loop.join(1)
+        gate.release.set()
+        loop.join(session_id=sid)
 
 
-def test_old_worker_cannot_end_the_new_session(monkeypatch):
+def test_old_worker_cannot_end_the_new_session():
     """停止超时中再开：新会话正常跑，旧线程出来后既不清新会话的计时也不结束它"""
-    from astral_toolkit.core import settings
-
-    saved = []
-    monkeypatch.setattr(settings, "update", lambda **kw: saved.append(kw))
     clock = FakeClock()
     worker = FakeWorker(idle_close=10.0, wait=0.01, restart_while_stopping=True)
     gate = TickGate()
     worker.gate = gate
-    loop, _, out = make_loop(
-        worker, clock=clock, settings_flag="live_on", join_timeout=0.02
-    )
+    loop, _, out = make_loop(worker, clock=clock, join_timeout=0.02)
     try:
-        loop.start()
-        assert worker.started.wait(WAIT)
+        first = _start(loop, worker)
         gate.wait()
         clock.advance(11.0)  # 旧会话已经到该自动关闭的时候
-        old = worker.session
-        old_thread = loop._thread
-        late = loop.stamp(old, 1.0)  # 旧线程手里还攥着一张表
+        old_session = worker.session
+        old_thread = loop._current.thread  # type: ignore[union-attr]
         worker.gate = None  # 新会话不受闸影响
-        loop.request_stop("user")
-        assert not loop.join(), "旧线程还卡着，join 应该超时"
-        loop.start()
-        assert _wait_state(loop, RunState.RUNNING)
-        view = loop.state()
-        assert view.prev_stop_pending
-        assert (
-            len(
-                [
-                    c
-                    for c in out.calls
-                    if c.op == "log" and "上次停止还没结束" in c.args[0]
-                ]
-            )
-            == 1
-        ), "「上次停止还没结束」只记一次"
+        loop.request_stop_current(StopInfo("user"))
+        assert not loop.join(session_id=first), "旧线程还卡着，join 应该超时"
+        second = loop.start()
+        assert second is not None and _wait_state(loop, RunState.RUNNING)
+        assert loop.state().prev_stop_pending
+        assert any("上次停止还没结束" in op[1] for op in out.logs())
         gate.step()  # 旧线程这才从 tick 里出来
-        assert old_thread is not None and old_thread.join(WAIT) is None
-        assert not old_thread.is_alive()
-        assert loop._stop_session(old, "idle") is False
-        assert not loop.commit(
-            old,
-            ("bus", "scan", {"rock": "旧"}),
-            slot=MINING_SCAN,
-            value="旧",
-            stamp=late,
-        ), "旧线程迟到的结果不能提交"
+        assert old_thread.join(WAIT) is None and not old_thread.is_alive()
+        assert loop.request_stop(old_session, StopInfo("idle")) is False
         assert loop.state().state is RunState.RUNNING
-        assert saved == []
         assert not [c for c in worker.calls if c[0] == "on_stale"]
     finally:
-        loop.request_stop("user")
+        loop.request_stop_current(StopInfo("user"))
         gate.step()
-        loop.join()
+        loop.join(session_id=loop.state().session_id)
+
+
+def test_shutdown_keeps_the_run_flag_and_confirms_once():
+    saved = []
+    from astral_toolkit.runtime.session import RunFlag
+
+    loop, worker, out = make_loop(
+        run_flag=RunFlag("live_on", lambda k, v: saved.append((k, v)))
+    )
+    try:
+        sid = _start(loop, worker)
+        out.clear()
+        loop.request_stop_current(StopInfo("shutdown"))
+        assert loop.join(session_id=sid)
+        assert saved == [("live_on", True)], "退出不改 live_on"
+        assert out.live_events() == [{"running": False}]
+    finally:
+        loop.request_stop_current(StopInfo("user"))

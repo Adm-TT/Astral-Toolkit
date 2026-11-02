@@ -1,9 +1,8 @@
-"""会话输出端口（设计稿 §2.1）：生产实现包总线 + 悬浮窗，测试用记录器
+"""会话输出端口（设计稿 v3 §2.1）：生产实现把 op 分发到总线 / 悬浮窗 / 运行日志 / 运行记录
 
-证明的是「悬浮窗没建起来时什么都不做」和「四种输出各自到对的地方」，不碰真悬浮窗、不连总线订阅。
+证明的是「锁内类只入队」「悬浮窗没建起来时什么都不做」「记录器按 order 记锁状态」，
+不碰真悬浮窗、不连总线订阅。
 """
-
-import threading
 
 from tests.runtime_fakes import RecordingOutput
 
@@ -19,34 +18,13 @@ class _Hud:
         self.calls.append(("clear", section))
 
 
-def _patch_bus(monkeypatch, pub, logs):
-    from astral_toolkit.app import bus
+def test_bus_output_dispatches_lock_in_ops(monkeypatch):
+    from astral_toolkit.app import bus, hud_state
+    from astral_toolkit.app.output import BusOutput
 
+    pub, notes = [], []
+    hud = _Hud()
     monkeypatch.setattr(bus, "publish", lambda kind, data: pub.append((kind, data)))
-    monkeypatch.setattr(
-        bus,
-        "runtime_log",
-        lambda line, tag="SYS", level="INFO": logs.append((line, tag, level)),
-    )
-
-
-def test_bus_output_publishes_and_logs_to_bus(monkeypatch):
-    from astral_toolkit.app.output import BusOutput
-
-    pub, logs = [], []
-    _patch_bus(monkeypatch, pub, logs)
-    out = BusOutput()
-    out.publish("live", {"running": True})
-    out.log("采矿助手已暂停", "LIVE", "WARN")
-    assert pub == [("live", {"running": True})]
-    assert logs == [("采矿助手已暂停", "LIVE", "WARN")]
-
-
-def test_bus_output_writes_hud_sections_and_notes(monkeypatch):
-    from astral_toolkit.app import hud_state
-    from astral_toolkit.app.output import BusOutput
-
-    hud, notes = _Hud(), []
     monkeypatch.setattr(hud_state, "_hud", lambda: hud)
     monkeypatch.setattr(
         hud_state,
@@ -54,20 +32,46 @@ def test_bus_output_writes_hud_sections_and_notes(monkeypatch):
         lambda section, text, secs=6: notes.append((section, text, secs)),
     )
     out = BusOutput()
-    out.hud_set("扫描", "读数")
-    out.hud_set("信号", "4,285", {"title": "x"})
-    out.hud_clear("信号", "扫描")
-    out.note_hud("采矿助手", "已关闭")
-    out.note_hud("采矿助手", "已关闭", 3)
+    out.apply(("bus", "live", {"running": True}))
+    out.apply(("hud.set", "扫描", "读数"))
+    out.apply(("hud.set", "信号", "4,285", {"title": "x"}))
+    out.apply(("hud.clear", "信号", "扫描"))
+    out.apply(("note", "采矿助手", "已关闭"))
+    assert pub == [("live", {"running": True})]
     assert hud.calls == [
         ("set", "扫描", "读数", None),
         ("set", "信号", "4,285", {"title": "x"}),
         ("clear", "信号"),
         ("clear", "扫描"),
     ]
-    assert notes == [
-        ("采矿助手", "已关闭", 6),
-        ("采矿助手", "已关闭", 3),
+    assert notes == [("采矿助手", "已关闭", 6)]
+
+
+def test_bus_output_dispatches_post_lock_ops(monkeypatch):
+    from astral_toolkit.app import bus
+    from astral_toolkit.app.output import BusOutput
+
+    logs, records = [], []
+    monkeypatch.setattr(
+        bus,
+        "runtime_log",
+        lambda line, tag="SYS", level="INFO": logs.append((line, tag, level)),
+    )
+    from astral_toolkit.core import run_records
+
+    monkeypatch.setattr(
+        run_records,
+        "record",
+        lambda cat, text, details=None, **kw: records.append((cat, text, details, kw)),
+    )
+    out = BusOutput()
+    out.apply(("log", "一行日志", "LIVE", "WARN"))
+    out.apply(("record", "MINING", "采矿助手已暂停", "LIVE", "游戏不在最前面", "WARN"))
+    out.apply(("record", "MINING", "采矿助手引擎已停止", "LIVE"))
+    assert logs == [("一行日志", "LIVE", "WARN")]
+    assert records == [
+        ("MINING", "采矿助手已暂停", "游戏不在最前面", {"level": "WARN", "ui_tag": "LIVE"}),
+        ("MINING", "采矿助手引擎已停止", "", {"level": "INFO", "ui_tag": "LIVE"}),
     ]
 
 
@@ -78,18 +82,47 @@ def test_bus_output_is_silent_without_hud(monkeypatch):
 
     monkeypatch.setattr(hud_state, "_hud", lambda: None)
     out = BusOutput()
-    out.hud_set("扫描", "读数")
-    out.hud_clear("信号", "扫描", "矿袋")
-    out.note_hud("采矿助手", "已关闭")
+    out.apply(("hud.set", "扫描", "读数"))
+    out.apply(("hud.clear", "信号", "扫描", "矿袋"))
+    out.apply(("note", "采矿助手", "已关闭"))
+
+
+def test_bus_output_rejects_unknown_op():
+    from astral_toolkit.app.output import BusOutput
+
+    out = BusOutput()
+    try:
+        out.apply(("什么", 1))
+    except ValueError as e:
+        assert "未知输出类型" in str(e)
+    else:
+        raise AssertionError("未知 op 应该被拒绝")
+
+
+def test_setting_run_flag_writes_settings(monkeypatch):
+    from astral_toolkit.app.output import setting_run_flag
+    from astral_toolkit.core import settings
+
+    saved = []
+    monkeypatch.setattr(settings, "update", lambda **kw: saved.append(kw))
+    flag = setting_run_flag("live_on")
+    flag.write(flag.key, True)
+    flag.write(flag.key, False)
+    assert saved == [{"live_on": True}, {"live_on": False}]
 
 
 def test_recording_output_marks_whether_loop_lock_is_held():
-    out = RecordingOutput()
-    lock = threading.Lock()
-    out.bind(lock)
-    out.publish("live", {"running": True})
-    with lock:
-        out.hud_set("扫描", "x")
-    assert [c.op for c in out.calls] == ["publish", "hud_set"]
-    assert [c.locked for c in out.calls] == [False, True]
-    assert out.live_events() == [{"running": True}]
+    """记录器用 loop.lock_held_by_me() 记锁状态，不用 Lock.locked()"""
+    from tests.runtime_fakes import make_loop
+
+    class _Out(RecordingOutput):
+        pass
+
+    out = _Out()
+    loop, _, _ = make_loop(output=out)
+    out.apply(("bus", "x", {}))
+    with loop._lock:
+        out.apply(("hud.clear", "信号"))
+    assert [r.op[0] for r in out.ops] == ["bus", "hud.clear"]
+    assert [r.locked for r in out.ops] == [False, True]
+    assert out.published("x") == [("x", {})]

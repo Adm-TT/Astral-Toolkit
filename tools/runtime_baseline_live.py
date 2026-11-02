@@ -82,6 +82,16 @@ def _patch(rec, tmp):
     paths.shots = lambda name: tmp
 
 
+def _new_live(clock):
+    """建采矿引擎：RT-B4 起循环时钟可以注入假时钟；dev 上的 _Live 没有这个参数（用补丁过的 time.time）"""
+    from astral_toolkit.app.engines import live as live_mod
+
+    try:
+        return live_mod._Live(clock=clock)
+    except TypeError:
+        return live_mod._Live()
+
+
 def _settle(rec):
     """等后台线程把收尾事件发完：录制序列连续几次长度不变就算稳定"""
     last, same = -1, 0
@@ -95,12 +105,11 @@ def _settle(rec):
 def _drive(rec, frames, clock, front=None):
     """跑完一轮：frames 用完后喂空白帧，等它自己过期、自动关闭；到上限还没停就按开关"""
     from PIL import Image
-    from astral_toolkit.app.engines import live as live_mod
     from astral_toolkit.mining import screen
     from astral_toolkit.tasks import mining
 
     blank = Image.new("RGB", (1920, 1080))
-    live = live_mod._Live()
+    live = _new_live(clock)  # 循环计时也用假时钟
     i = {"n": 0}
 
     def grab():
@@ -129,7 +138,100 @@ def _drive(rec, frames, clock, front=None):
     while live.running():
         time.sleep(0.001)
     _settle(rec)
+    # 跑完再按一次停止（dev 上这一步也会清 HUD、发 running=False、记「已停止」）
+    live.stop()
+    _settle(rec)
     return i["n"]
+
+
+def _signals_only(rec, clock):
+    """只有雷达信号、没有扫描面板：持续 130 秒（不该自动关闭），再消失 25 秒（该标过期）"""
+    import astral_toolkit.mining.signals as sig_mod
+    from PIL import Image, ImageDraw
+
+    from astral_toolkit.mining import screen
+    from astral_toolkit.mining.parse import Scan
+
+    seen = Image.new("RGB", (1920, 1080), (18, 18, 24))
+    ImageDraw.Draw(seen).rectangle((700, 300, 900, 360), fill=(120, 120, 130))
+    blank = Image.new("RGB", (1920, 1080), (0, 0, 0))
+    sig_mod.find_signatures = lambda img: [(4285, "铝")] if img is seen else []
+    sig_mod.describe_all = lambda found, where=None, area=None: ["信号 4,285 → 铝"]
+    sig_mod.match_signature = lambda v: True
+    sig_mod.guesses = lambda *a: [("铝", True)]
+    screen.analyse = lambda img: (Scan(), base.NO_BAG)
+    screen.miss_reason = lambda img: ""
+    screen.LAST_PANEL = {}
+    screen.LAST_RAW = {}
+    # 118 帧 × 1.1 秒 ≈ 130 秒只有信号；再 23 帧 ≈ 25 秒信号消失，然后空白到自动关闭
+    frames = [seen] * 118 + [blank] * 23
+    rec.seq.clear()
+    n = _drive(rec, frames, clock)
+    return {"帧数": n, "序列": list(rec.seq)}
+
+
+def _restart(rec, clock):
+    """开 → 扫 → 停 → 立刻开 → 再停：停止的收尾不能动后来开的会话"""
+    import threading
+
+    from PIL import Image
+
+    from astral_toolkit.mining import screen
+    from astral_toolkit.mining.parse import Scan
+    from astral_toolkit.tasks import mining
+
+    scan = Scan(
+        rock="Gold",
+        mass=9000,
+        resistance=35,
+        instability=6,
+        total_scu=10.0,
+        composition=[("Gold", 60.0, 500), ("Inert Materials", 40.0, None)],
+    )
+    frames = [
+        Image.new("RGB", (1920, 1080), (10 + 15 * (k % 12), 20, 20)) for k in range(40)
+    ]
+    i = {"n": 0}
+    stop_at = {"n": 6}
+    reached = threading.Event()
+    release = threading.Event()
+
+    def grab():
+        n = i["n"]
+        i["n"] += 1
+        clock.t += FRAME_SECONDS
+        if n == stop_at["n"]:
+            reached.set()
+            release.wait(30)  # 卡在截图里，等主线程把停止按下再放行
+        return frames[n % len(frames)]
+
+    screen.grab = grab
+    screen.INTERVAL = 0
+    screen.analyse = lambda img: (scan, base.NO_BAG)
+    screen.LAST_PANEL = {}
+    screen.LAST_RAW = {}
+    screen.miss_reason = lambda img: ""
+    mining._game_front = lambda: None
+    live = _new_live(clock)  # 循环计时也用假时钟
+    rec.seq.clear()
+
+    def run_once():
+        reached.clear()
+        release.clear()
+        live.start()
+        assert reached.wait(10)
+        stopper = threading.Thread(target=live.stop, daemon=True)
+        stopper.start()
+        release.set()
+        stopper.join(10)
+        while live.running():
+            time.sleep(0.001)
+
+    run_once()
+    stop_at["n"] = i["n"] + 6
+    run_once()
+    _settle(rec)
+    return {"帧数": i["n"], "序列": list(rec.seq)}
 
 
 def _samples(rec, clock):
@@ -177,7 +279,9 @@ def _scripted(rec, clock):
     frames, scans = [], {}
     for k, s in enumerate(plan):
         if s == "gear":
-            frames.append(lambda live: setattr(live, "gear_rev", live.gear_rev + 1))
+            frames.append(
+                lambda live: live.config_changed()
+            )  # 经 config_changed 改配装
             continue
         img = Image.new("RGB", (1920, 1080), (10 + 15 * (k % 12), 20, 20))
         scans[id(img)] = s
@@ -203,7 +307,12 @@ def collect():
     _patch(rec, tmp)
     clock = Clock()
     time.time = clock
-    results = {"样本": _samples(rec, clock), "写死": _scripted(rec, clock)}
+    results = {
+        "样本": _samples(rec, clock),
+        "写死": _scripted(rec, clock),
+        "只有信号": _signals_only(rec, clock),
+        "开停开": _restart(rec, clock),
+    }
     return {"git": base._git_head(), "results": results}
 
 

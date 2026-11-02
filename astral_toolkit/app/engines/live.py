@@ -1,24 +1,25 @@
-"""采矿助手主循环：扫描面板识别、雷达信号、破碎方案、袋子（_Live）
+"""采矿助手：扫描面板识别、雷达信号、破碎方案、袋子（_Live）
 
 2026-10-28 从 app/services.py 原样剪出来（逻辑没改）。2026-10-30 重构阶段 4 删了 services.py，
 用到的函数 / 变量直接到它们所在的模块取，运行时才取，避免互相 import：
 _T("mining").xxx = tasks/mining.py，_H().xxx = app/hud_state.py，_E().live / .nav / .pos / .cam_filter = 引擎实例。
 用到：_area_now, _game_front, _hud, _mark_goal_lines, _note_hud, _off, _where_now, scan_view, settings_key
 
-RT-B4：线程、停止、提交边界、暂停 / 过期 / 自动关闭 / 重试都搬进 runtime/session.py 的 SessionLoop，
-这里只剩「一轮识别」这一层：setup / tick / on_pause / on_resume / on_stale / finish_ops / teardown。
-一个会话的识别状态放在 _Ctx 里（按会话号分开）：停止超时后旧线程还卡在识别里时，不会写坏新会话的投票队列。
+RT-B4：线程 / 停止 / 提交边界 / 暂停 / 过期 / 自动关闭 / 重试都在 runtime/session.py 的 SessionLoop；
+这里只写一轮识别（Worker）。一个会话的每次尝试的状态放在 _Ctx 里（按会话分开：停止超时后旧线程
+还卡在识别里时，不会写坏新会话的投票队列）。热键名整个会话不变，放 Session.payload（LivePayload）。
 """
 
 import collections
 import importlib
 import threading
 import time
+from dataclasses import dataclass
 from typing import Any
 
 from ...runtime.results import MINING_SCAN, MINING_SIGNALS, ResultStore
-from ...runtime.session import RunState, SessionLoop, Tick
-from ..output import BusOutput
+from ...runtime.session import RunState, SessionLoop, StopInfo, Tick
+from ..output import BusOutput, setting_run_flag
 
 
 def _T(name):
@@ -44,21 +45,38 @@ def _set(*args):
     return ("hud.set", *args)
 
 
-def _del(section):
-    return ("hud.clear", section)
+def _del(*sections):
+    return ("hud.clear", *sections)
 
 
 def _note(section, text, secs=None):
     return ("note", section, text, secs)
 
 
+def _record(cat, text, ui_tag="", details="", level="INFO"):
+    return ("record", cat, text, ui_tag, details, level)
+
+
 def _foreground():
-    """游戏在不在最前面：True / False；判断不了返回 None（照常识别）"""
+    """游戏在不在最前面：True / False；判断不了（不是 Windows、读不到前台窗口）返回 None——照常识别。
+    切到聊天、浏览器、AT 窗口时别的窗口里的字会被当成扫描面板 / 雷达信号（2026-10-23 用户同意暂停）"""
     return _T("mining")._game_front()
 
 
+def _hotkey_now():
+    """采矿助手开关的热键名（提示文案里用）；只在锁外调用"""
+    return _T("navigation").settings_key("live_key", "F5")
+
+
+@dataclass(frozen=True)
+class LivePayload:
+    """一次采矿会话开始时定下来、整个会话不变的东西"""
+
+    hotkey: str
+
+
 class _Ctx:
-    """一个会话自己的识别状态：旧线程停在识别里时，新会话的投票队列不被它清掉 / 混进来"""
+    """一个会话的一次尝试的全部可变状态：旧线程停在自己的 Ctx 里，碰不到新会话"""
 
     def __init__(self, log, shots, now):
         from ...mining import screen
@@ -81,35 +99,63 @@ class _Ctx:
         self.miss_n = 0
         self.unstable_n = 0
         self.miss_t = 0.0
+        # 显示用的墙钟时间戳（「已过期」里的从几点起、暂停补偿）
         self.last_panel_t = now
         self.last_sig_t = now
         self.scan_live = False
         self.sig_live = False
         self.missing = 0
         self.scan_off_cleared = False
+        self._closed = False
+
+    def close(self):
+        """幂等：finish 关过以后再 teardown 不再关"""
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            self.log.close()
+        except (OSError, ValueError):
+            pass
+
+
+class _StopProxy:
+    """`stop_ev` 代理（RT-B7 删）：set() = 按当前会话停止；is_set() = 当前会话已取消或没有会话"""
+
+    def __init__(self, loop):
+        self._loop = loop
+
+    def set(self):
+        self._loop.request_stop_current(StopInfo("shutdown"))
+
+    def is_set(self):
+        return not self._loop.running()
+
+    def wait(self, timeout=None):
+        deadline = None if timeout is None else time.monotonic() + timeout
+        while not self.is_set():
+            if deadline is not None and time.monotonic() >= deadline:
+                return False
+            time.sleep(0.01)
+        return True
+
+    def clear(self):
+        pass
 
 
 class _Live:
     """实时读屏：和命令行版同样的投票逻辑，结果推给窗口和悬浮窗"""
 
-    # ---- 会话循环要的类属性（设计稿 §2.2）
+    # ---- 会话循环要的类属性（设计稿 v3 §2.2）
     name = "live"
     retries = 3
-    idle_close: float | None = (
-        120.0  # 这么多秒没看到扫描面板、也没认到信号：自动关掉采矿助手（切出游戏那段不算）
-    )
-    stale_after: float | None = (
-        20.0  # 扫描面板 / 信号消失这么久：算目标丢失，悬浮窗清掉，窗口里标「已过期」
-    )
+    idle_close: float | None = 120.0  # 所有通道最近一次「看到」都超过这么久：自动关闭
+    stale_after: dict[str, float] = {"panel": 20.0, "signals": 20.0}
     needs_foreground = True
     restart_while_stopping = True
 
-    RECHECK_SECONDS = (
-        5  # 画面静止省电时，也每隔这么久复核一次（防止面板里的数变了但整屏几乎没变）
-    )
-    MISS_FRAMES = (
-        4  # 看得到扫描面板、却连续这么多帧读不全 / 读不稳：自动留一张图（排查用）
-    )
+    RECHECK_SECONDS = 5  # 画面静止省电时，也每隔这么久复核一次（防止面板里的数变了但整屏几乎没变）
+    MISS_FRAMES = 4  # 看得到扫描面板、却连续这么多帧读不全 / 读不稳：自动留一张图（排查用）
     MISS_GAP = 30  # 两次留图至少隔这么多秒
     MISS_KEEP = 10  # 最多留这么多张（userdata\shots\miss，每张 5MB 左右）
 
@@ -126,34 +172,39 @@ class _Live:
 
     def __init__(self, results=None, output=None, clock=None):
         self.results = results if results is not None else ResultStore()
-        self.gear_rev = (
-            0  # 配置改了几次：变了就把正在显示的石头按新配置重算一遍（2026-10-26）
-        )
-        self._ctx: dict[int, _Ctx] = {}
-        self._error = ""
-        self._hotkey: str | None = None
-        self._empty_ev = threading.Event()
         self.loop: Any = SessionLoop(
             self,
             results=self.results,
             output=output if output is not None else BusOutput(),
             foreground=_foreground,
             clock=clock,
-            settings_flag="live_on",
+            run_flag=setting_run_flag("live_on"),
         )
 
-    # ---------------------------------------------------------------- 兼容转发（RT-B7 删）
+    @property
+    def pause_wait(self):
+        from ...mining import screen
+
+        return min(screen.INTERVAL, 0.25)
+
+    # ---------------------------------------------------------------- 兼容外壳（RT-B7 删）
+    def start(self):  # RT-B7 删
+        """锁外读热键（每次开都重读）→ 开会话；返回会话号，被拒返回 None"""
+        return self.loop.start(LivePayload(_hotkey_now()))
+
+    def stop(self):  # RT-B7 删
+        """按当前会话停止；返回停掉的会话号（本来就没在跑 → None）"""
+        sid = self.loop.request_stop_current(StopInfo("user"))
+        if sid is not None:
+            self.loop.join(session_id=sid)
+        return sid
+
     def running(self):  # RT-B7 删
         return self.loop.running()
 
     @property
     def paused(self):  # RT-B7 删
         return self.loop.state().state is RunState.PAUSED
-
-    @property
-    def stop_ev(self):  # RT-B7 删
-        session = self.loop._session
-        return session.cancel if session is not None else self._empty_ev
 
     @property
     def session_id(self):  # RT-B7 删
@@ -164,144 +215,150 @@ class _Live:
         return self.loop.state().epoch
 
     @property
-    def lock(self):  # RT-B7 删
-        return self.loop._lock
-
-    def start(self):  # RT-B7 删
-        if self.loop.running():
-            return
-        from ...core import run_records
-
-        run_records.record("MINING", "采矿助手引擎已启动", ui_tag="LIVE")
-        self.loop.start()
-
-    def stop(self):  # RT-B7 删
-        from ...core import run_records
-
-        run_records.record("MINING", "采矿助手引擎已停止", ui_tag="LIVE")
-        self.loop.request_stop("user")
-        self.loop.join()
+    def stop_ev(self):  # RT-B7 删
+        return _StopProxy(self.loop)
 
     def config_changed(self):  # RT-B7 删
         """配装变了：正在算的结果作废，正在显示的石头按新配装重算（采矿助手最多 5 秒后重新发布）"""
-        self.gear_rev += 1
         self.loop.config_changed()
 
-    # ---------------------------------------------------------------- Worker：会话循环调这些
+    # ---------------------------------------------------------------- Worker
+    def start_ops(self, session):
+        return [
+            _record("MINING", "采矿助手引擎已启动", "LIVE"),
+            _pub("live", {"running": True}),
+        ]
+
+    def stop_ops(self, session, info):
+        """会话结束时要发的东西（循环在锁内按序套用；record 是锁后类）"""
+        ops = [
+            _del("信号", "扫描", "矿袋"),
+            _pub("scan_hint", {"why": "", "text": ""}),
+        ]
+        if session is None:
+            hotkey = _hotkey_now()  # 没有会话时按停止：锁外现读一次（v3 §2.2）
+        else:
+            hotkey = getattr(session.payload, "hotkey", None) or "F5"
+        if info.reason == "error":
+            ops.append(_pub("live", {"running": False, "error": info.error}))
+            ops.append(
+                _note(
+                    "采矿助手",
+                    f"采矿助手出错已关闭｜按 {hotkey} 重开（详情见日志）",
+                )
+            )
+        elif info.reason == "idle":
+            ops.append(_pub("live", {"running": False, "auto_off": True}))
+            ops.append(_note("采矿助手", f"采矿助手已关闭｜按 {hotkey} 开启"))
+        else:
+            ops.append(_pub("live", {"running": False}))
+        if info.reason in ("user", "shutdown", "replaced"):
+            # dev 上只有 stop() 记这一条（自动关闭 / 出错不记）
+            ops.append(_record("MINING", "采矿助手引擎已停止", "LIVE"))
+        return ops
+
     def setup(self, session):
         from ...core import paths
 
-        if self._hotkey is None:
-            # 收尾提示要按热键名，提前取好：finish_ops 在锁里跑，不能再读设置文件
-            self._hotkey = _T("navigation").settings_key("live_key", "F5")
         log = open(paths.log("live_log.txt"), "a", encoding="utf-8")
-        self._ctx[session.id] = _Ctx(log, paths.shots("live"), time.time())
+        return _Ctx(log, paths.shots("live"), time.time())
 
-    def teardown(self, session):
-        ctx = self._ctx.pop(session.id, None)
+    def teardown(self, session, ctx):
         if ctx is not None:
-            ctx.log.close()
+            ctx.close()
 
-    def start_ops(self, session):
-        return [_pub("live", {"running": True})]
+    def finish(self, session, ctx, info):
+        """工作线程退出循环后（锁外）：自动关闭写 AUTO_OFF 日志，关本 Ctx 的日志"""
+        if ctx is not None:
+            if info.reason == "idle":
+                try:
+                    ctx.log.write(
+                        f"{time.strftime('%F %T')} AUTO_OFF {int(self.idle_close or 0)} 秒没看到扫描面板和信号，采矿助手自动关闭\n"
+                    )
+                    ctx.log.flush()
+                except (OSError, ValueError):
+                    pass
+            ctx.close()
+        return []
 
-    def retry_ops(self, session):
-        """重来前把上一轮的旧结果清掉（新一轮的过期清理不认旧的）"""
-        return [_del("信号"), _del("扫描"), _del("矿袋")]
-
-    def on_error(self, attempt, exc):
+    def on_error(self, session, ctx, exc):
+        """把 traceback 写进本 Ctx 的日志（错误文本由循环记进本会话的待停记录）"""
         import traceback
 
-        from ...core import paths
-
-        self._error = str(exc)
-        msg = f"采矿助手出错（第 {attempt + 1} 次）：{exc!r}"
-        try:
-            with open(paths.log("live_log.txt"), "a", encoding="utf-8") as f:
-                f.write(
-                    f"{time.strftime('%F %T')} ERROR {msg}\n{traceback.format_exc()}"
-                )
-        except OSError:
-            pass
+        msg = f"采矿助手出错：{exc!r}"
         print(msg)
-
-    def on_stop(self, session, reason):
-        if reason != "idle":
-            return
-        ctx = self._ctx.get(session.id)
         if ctx is None:
             return
         try:
-            ctx.log.write(
-                f"{time.strftime('%F %T')} AUTO_OFF {self.idle_close or 0:.0f} 秒没看到扫描面板和信号，采矿助手自动关闭\n"
-            )
+            ctx.log.write(f"{time.strftime('%F %T')} ERROR {msg}\n{traceback.format_exc()}")
             ctx.log.flush()
         except (OSError, ValueError):
             pass
 
-    def finish_ops(self, session, reason):
-        """会话结束时要发的东西（循环在锁内按序套用）：清三块悬浮窗 + 窗口状态 + 一句提示"""
-        ops = [
-            _del("信号"),
-            _del("扫描"),
-            _del("矿袋"),
-            _pub("scan_hint", {"why": "", "text": ""}),
-        ]
-        key = self._hotkey or "F5"
-        if reason == "error":
-            ops.append(_pub("live", {"running": False, "error": self._error}))
-            ops.append(
-                _note("采矿助手", f"采矿助手出错已关闭｜按 {key} 重开（详情见日志）")
-            )
-        elif reason == "idle":
-            ops.append(_pub("live", {"running": False, "auto_off": True}))
-            ops.append(_note("采矿助手", f"采矿助手已关闭｜按 {key} 开启"))
-        else:
-            ops.append(_pub("live", {"running": False}))
-        return ops
+    def before_retry(self, session, ctx, error):
+        """重来前把上一轮的旧结果清掉（新一轮的过期清理不认旧的）"""
+        return [_del("信号", "扫描", "矿袋")]
 
-    def on_pause(self, session):
-        ctx = self._ctx.get(session.id)
+    def on_pause(self, session, ctx):
         if ctx is None:
-            return
+            return []
         ctx.miss_n = ctx.unstable_n = 0
-        self._set_paused(session, ctx, True)
+        try:
+            ctx.log.write(f"{time.strftime('%F %T')} PAUSE 游戏不在最前面，暂停识别\n")
+            ctx.log.flush()
+        except (OSError, ValueError):
+            pass
+        return [
+            _pub("live", {"running": True, "paused": True}),
+            _record("MINING", "采矿助手已暂停", "LIVE", "游戏不在最前面", "WARN"),
+        ]
 
-    def on_resume(self, session, gap):
-        ctx = self._ctx.get(session.id)
+    def on_resume(self, session, ctx, gap):
         if ctx is None:
-            return
-        ctx.prev_small = ctx.prev_panel = (
-            None  # 回来的第一帧一定重新认，不按「画面没变」跳过
-        )
-        self._set_paused(session, ctx, False, gap)
+            return []
+        # 暂停的这段不算「面板 / 信号消失了」：显示用的时间戳跟着推
+        ctx.last_panel_t += gap
+        ctx.last_sig_t += gap
+        ctx.prev_small = ctx.prev_panel = None  # 回来的第一帧一定重新认，不按「画面没变」跳过
+        try:
+            ctx.log.write(
+                f"{time.strftime('%F %T')} RESUME 回到游戏，继续识别（暂停了 {gap:.0f} 秒）\n"
+            )
+            ctx.log.flush()
+        except (OSError, ValueError):
+            pass
+        return [
+            _pub("live", {"running": True, "paused": False}),
+            _record("MINING", "采矿助手已继续", "LIVE", f"暂停了 {gap:.0f} 秒", "INFO"),
+        ]
 
-    def on_stale(self, session, slot):
-        ctx = self._ctx.get(session.id)
+    def on_stale(self, session, ctx, channel):
+        """某个通道超过 stale_after 没看到：面板 / 信号标过期（每次「看到→没看到」只来一次）"""
         if ctx is None:
-            return
-        if slot == MINING_SIGNALS and ctx.sig_live:
-            ctx.sig_live, ctx.sig_shown = (
-                False,
-                None,
-            )  # 信号没了：悬浮窗清掉，窗口里标过期
+            return []
+        ops = []
+        if channel == "signals" and ctx.sig_live:
+            ctx.sig_live, ctx.sig_shown = False, None  # 信号没了：悬浮窗清掉，窗口里标过期
             since = time.strftime("%H:%M:%S", time.localtime(ctx.last_sig_t))
             shown_sig = self.results.get(MINING_SIGNALS)
-            self.loop.commit(
-                session,
-                _del("信号"),
+            ops.append(_del("信号"))
+            ops.append(
                 _pub(
                     "signals",
                     {
-                        **(shown_sig.value["view"] if shown_sig else {"lines": []}),
+                        **(
+                            shown_sig.value["view"]
+                            if shown_sig
+                            else {"lines": []}
+                        ),
                         "stale": since,
                     },
-                ),
+                )
             )
-        elif slot == MINING_SCAN:
+        elif channel == "panel":
             if ctx.hint["why"]:
-                self._hint(
-                    session, ctx, None, clear_hud=True
+                ops.extend(
+                    self._hint_ops(ctx, None, clear_hud=True)
                 )  # 面板不在了：读不全提示也收起
             if ctx.scan_live:
                 ctx.scan_live, ctx.last_shown, ctx.last_key = False, None, None
@@ -309,25 +366,24 @@ class _Live:
                 ctx.part.clear()
                 since = time.strftime("%H:%M:%S", time.localtime(ctx.last_panel_t))
                 shown_scan = self.results.get(MINING_SCAN)
-                self.loop.commit(
-                    session,
-                    _del("扫描"),
-                    _del("矿袋"),
+                ops.append(_del("扫描", "矿袋"))
+                ops.append(
                     _pub(
                         "scan",
                         {**(shown_scan.value if shown_scan else {}), "stale": since},
-                    ),
+                    )
                 )
+        return ops
 
     # ---------------------------------------------------------------- 一轮识别
-    def tick(self, session, now):
+    def tick(self, session, ctx, now):
         import numpy as np
 
         from ...mining import screen
         from ...mining.signals import describe_all, find_signatures, match_signature
 
-        ctx = self._ctx[session.id]
         log = ctx.log
+        wall = time.time()
         img = screen.grab()
         l, t, r, b = screen.SEARCH  # noqa: E741
         W, H = img.size
@@ -355,15 +411,18 @@ class _Live:
             ctx.same, ctx.settled, ctx.done_here = 0, False, 0
         ctx.prev_small, ctx.prev_panel = small, panel
         if ctx.same >= 2 and ctx.settled and now - ctx.last_full < self.RECHECK_SECONDS:
-            return Tick(screen.INTERVAL, False, frozenset())
+            return Tick(screen.INTERVAL, {})
         ctx.last_full = now
-        stamp = self.loop.stamp(session, now)
+        stamp = self.loop.stamp(session, wall)
         if stamp is None:
-            return Tick(screen.INTERVAL, False, frozenset())
+            return Tick(screen.INTERVAL, {})
+        observed: dict[str, float] = {}
         # ---- 扫描面板（先看有没有面板：有面板时屏幕上的质量等数字会被当成信号，信号识别就暂停）
         scan, bag = screen.analyse(img)
         raw = (
-            screen.LAST_RAW.get("scan") if screen.LAST_RAW.get("t", 0) >= now else None
+            screen.LAST_RAW.get("scan")
+            if screen.LAST_RAW.get("t", 0) >= wall
+            else None
         )
         # 真有面板才算（读全了，或认出面板上的字 / 带矿名的成分）。只读到几个零散数字不算：勘探者驾驶舱右边的
         # 高度表、气压会被拼成「质量 0.7、抗性 76」，以前因此一直当面板开着，信号识别整段暂停（2026-10-23 Calliope）
@@ -373,9 +432,7 @@ class _Live:
 
             yield_ocr()
         scan_off = bool(_H()._off("scan"))
-        if (
-            scan_off
-        ):  # 远程关了：面板在不在照样判断（雷达靠它避开面板上的数字），结果不用；
+        if scan_off:  # 远程关了：面板在不在照样判断（雷达靠它避开面板上的数字），结果不用；
             from ...mining.parse import parse_bag, parse_scan
 
             scan, bag = parse_scan([]), parse_bag([])
@@ -383,7 +440,7 @@ class _Live:
             ctx.part.clear()
             if not ctx.scan_off_cleared:
                 ctx.scan_off_cleared = True
-                self.loop.commit(session, _del("扫描"), _del("矿袋"))
+                self.loop.commit(session, _del("扫描", "矿袋"))
         else:
             ctx.scan_off_cleared = False
         # 面板顶着屏幕右边、被挡住一截（16:10 屏幕上鼹鼠炮塔的面板，2026-10-23 用户反馈）：品质和总 SCU 在屏幕外面，
@@ -403,35 +460,31 @@ class _Live:
             ctx.part.clear()
         # 面板在却读不全：连续几帧这样就留一张图，并告诉玩家可能的原因（被屏幕挡住 / 字有色差重影）
         ctx.miss_n = (
-            0
-            if (scan_off or scan.valid or not panel_now or part_ok)
-            else ctx.miss_n + 1
+            0 if (scan_off or scan.valid or not panel_now or part_ok) else ctx.miss_n + 1
         )
         if ctx.miss_n >= self.MISS_FRAMES and now - ctx.miss_t > self.MISS_GAP:
             ctx.miss_t, ctx.miss_n = now, 0
             self._save_miss(ctx, img, "读不全", raw)
             why = screen.miss_reason(img)
             if why and why != ctx.hint["why"]:
-                self._hint(session, ctx, why)
+                self.loop.commit(session, *self._hint_ops(ctx, why))
         if panel_now and ctx.sig_live:
-            ctx.sig_live, ctx.sig_shown, ctx.sig_prev = (
-                False,
-                None,
-                None,
-            )  # 对着石头看面板：悬浮窗收起信号
+            ctx.sig_live, ctx.sig_shown, ctx.sig_prev = False, None, None  # 对着石头看面板：悬浮窗收起信号
             self.loop.commit(session, _del("信号"))
         # ---- 雷达信号（扫描面板开着时不认，2026-10-23 用户反馈把石头质量 13,586 当成了信号）
-        seen: set[str] = set()
         try:
             found = [] if panel_now or _H()._off("radar") else find_signatures(img)
             sigs = frozenset(v for v, *_ in found)
             if sigs:
-                ctx.last_sig_t = now
+                ctx.last_sig_t = wall
+                observed["signals"] = now
                 from ...navigation.displayinfo import yield_ocr
 
                 yield_ocr()
             area = (
-                _T("navigation")._area_now() if sigs and sigs == ctx.sig_prev else None
+                _T("navigation")._area_now()
+                if sigs and sigs == ctx.sig_prev
+                else None
             )
             # 产矿区变了（飞进矿带、跳跃）也要重新发：以前只看信号数值，同样的 7,200 会一直停在旧地点的说法
             from ...core.paths import file_stamp
@@ -477,8 +530,7 @@ class _Live:
                     _set(
                         "信号",
                         "\n".join(
-                            x.split("｜精炼后")[0].replace("信号 ", "")
-                            for x in lines[:4]
+                            x.split("｜精炼后")[0].replace("信号 ", "") for x in lines[:4]
                         ),
                     ),
                     _say(
@@ -501,8 +553,8 @@ class _Live:
             )
         ctx.done_here += 1
         if panel_now and not scan_off:
-            ctx.last_panel_t, ctx.missing = now, 0
-            seen.add(MINING_SCAN)
+            ctx.last_panel_t, ctx.missing = wall, 0
+            observed["panel"] = now
         else:
             ctx.missing += 1
             if ctx.missing >= 3:
@@ -510,12 +562,12 @@ class _Live:
             if not scan.valid:
                 ctx.settled = ctx.same >= 2  # 画面里没有扫描面板，静止时不用一直认
         if scan.valid:
-            self._tick_scan(session, ctx, scan, bag, img, now, stamp, seen)
+            self._tick_scan(session, ctx, scan, bag, img, now, stamp)
         elif part_ok and len(ctx.part) >= 2:
-            self._tick_part(session, ctx, bag, now, stamp, seen)
-        return Tick(screen.INTERVAL, bool(seen), frozenset(seen))
+            self._tick_part(session, ctx, bag, now, stamp)
+        return Tick(screen.INTERVAL, observed)
 
-    def _tick_scan(self, session, ctx, scan, bag, img, now, stamp, seen):
+    def _tick_scan(self, session, ctx, scan, bag, img, now, stamp):
         from ...mining import screen
 
         log = ctx.log
@@ -534,9 +586,7 @@ class _Live:
                 and now - ctx.miss_t > self.MISS_GAP
             ):
                 ctx.miss_t, ctx.unstable_n = now, 0
-                self._save_miss(
-                    ctx, img, "读不稳", [str(x[0]) for x in list(ctx.recent)[-3:]]
-                )
+                self._save_miss(ctx, img, "读不稳", [str(x[0]) for x in list(ctx.recent)[-3:]])
             key = (round(best.mass or 0), best.resistance, best.instability)
             # 任何影响计算的字段变了（总 SCU、成分、评级、矿袋）都重新发布，修正后的数也要推出去
             shown = (
@@ -546,7 +596,7 @@ class _Live:
                 best.difficulty,
                 tuple(best.composition),
                 ctx.recent[-1][1][1],
-                self.gear_rev,
+                self.loop.config_rev,
             )
             if stable and best.valid and shown != ctx.last_shown and session.alive():
                 view = _T("mining").scan_view(
@@ -569,7 +619,7 @@ class _Live:
                     ctx.settled = False
                     return
                 if ctx.hint["why"]:
-                    self._hint(session, ctx, None)
+                    self.loop.commit(session, *self._hint_ops(ctx, None))
                 ctx.last_key, ctx.last_shown, ctx.scan_live = key, shown, True
                 log.write(f"{time.strftime('%F %T')} {best} {ctx.recent[-1][1]}\n")
                 log.flush()
@@ -582,7 +632,7 @@ class _Live:
         # 同一个画面认够一轮投票（5 帧）、结果也出了，就不再重复认（每 RECHECK_SECONDS 秒仍复核一次）
         ctx.settled = ctx.last_shown is not None and ctx.done_here >= screen.VOTE_FRAMES
 
-    def _tick_part(self, session, ctx, bag, now, stamp, seen):
+    def _tick_part(self, session, ctx, bag, now, stamp):
         from ...mining import screen
 
         best, stable = screen.vote_partial([x[0] for x in ctx.part])
@@ -606,7 +656,7 @@ class _Live:
             best.rock,
             best.difficulty,
             tuple(best.composition),
-            self.gear_rev,
+            self.loop.config_rev,
         )
         if stable and shown != ctx.last_shown and session.alive():
             view = _T("mining").scan_view(best, bag, cut=True)
@@ -622,7 +672,7 @@ class _Live:
                 ctx.settled = False
                 return
             if ctx.hint["why"]:
-                self._hint(session, ctx, None)
+                self.loop.commit(session, *self._hint_ops(ctx, None))
             ctx.last_key, ctx.last_shown, ctx.scan_live = None, shown, True
             ctx.log.write(
                 f"{time.strftime('%F %T')} PART 面板被屏幕挡住，只算破碎 {best}\n"
@@ -653,11 +703,10 @@ class _Live:
             except OSError:
                 pass
 
-        threading.Thread(target=save, daemon=True).start()  # L183 存截图的小线程，保留
+        threading.Thread(target=save, daemon=True).start()  # 存截图的小线程，保留
 
-    def _hint(self, session, ctx, why, clear_hud=False):
-        """采矿助手读不全时告诉玩家原因（采矿助手页 + 悬浮窗）；why=None 收起（clear_hud：悬浮窗上的提示也擦掉；
-        刚发了新结果时不擦，悬浮窗上已经是新结果了）"""
+    def _hint_ops(self, ctx, why, clear_hud=False):
+        """读不全的提示 ops；why=None 收起（clear_hud：悬浮窗上的提示也擦掉）"""
         ctx.hint["why"] = why
         text, short = self.HINTS.get(why, ("", ""))
         if why:
@@ -666,8 +715,7 @@ class _Live:
                 ctx.log.flush()
             except (OSError, ValueError):
                 pass
-
-        ops: list[tuple] = [
+        ops = [
             _pub(
                 "scan_hint",
                 {"why": why or "", "text": text, "at": time.strftime("%H:%M:%S")},
@@ -677,30 +725,4 @@ class _Live:
             ops.append(_set("扫描", short))
         elif clear_hud:
             ops.append(_del("扫描"))
-        self.loop.commit(session, *ops)
-
-    def _set_paused(self, session, ctx, on, gap=0.0):
-        """暂停 / 继续：记一行日志，告诉窗口（采矿助手页和左边的小灯）"""
-        from ...core import run_records
-
-        run_records.record(
-            "MINING",
-            "采矿助手已暂停" if on else "采矿助手已继续",
-            "游戏不在最前面" if on else f"暂停了 {gap:.0f} 秒",
-            level="WARN" if on else "INFO",
-            ui_tag="LIVE",
-        )
-        try:
-            ctx.log.write(
-                f"{time.strftime('%F %T')} "
-                + (
-                    "PAUSE 游戏不在最前面，暂停识别"
-                    if on
-                    else f"RESUME 回到游戏，继续识别（暂停了 {gap:.0f} 秒）"
-                )
-                + "\n"
-            )
-            ctx.log.flush()
-        except (OSError, ValueError):
-            pass
-        self.loop.commit(session, _pub("live", {"running": True, "paused": on}))
+        return ops

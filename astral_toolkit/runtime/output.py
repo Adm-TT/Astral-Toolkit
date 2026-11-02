@@ -1,28 +1,27 @@
-"""会话输出端口（设计稿 §2.1、§4.4）：会话循环只认这个接口，不 import 界面层（架构稿 §4.3）
+"""会话输出端口（设计稿 v3 §2.1）：op 的种类，以及哪些能在锁里套用
 
-把 live.py 原来 `_apply` 的四种输出收成五个方法：总线、悬浮窗分区、悬浮窗短提示、运行日志。
-锁内调用，实现里只做入队 / 写状态，不做文件、网络、截图（同 RT-B3 的锁内规矩）。
-生产实现是 `astral_toolkit/app/output.py` 的 `BusOutput`（runtime/ 不许 import app/）；
-测试用记录器在 `tests/runtime_fakes.py`。
+- **锁内类**（只入队 / 写内存）：`bus / hud.set / hud.clear / note`
+- **锁后类**（写盘）：`log / record`——锁释放后按序执行，且只在锁内检查通过时执行
+
+`Output.apply(op)` 是唯一出口；循环在拿到 op 列表时（锁外）先 `validate_ops`，
+未知种类在那里就拒绝，不会到锁里才抛。
 """
 
-from typing import Any, Protocol
+from typing import Any, Iterable, Protocol
+
+LOCK_IN_KINDS = frozenset({"bus", "hud.set", "hud.clear", "note"})
+POST_LOCK_KINDS = frozenset({"log", "record"})
+OP_KINDS = LOCK_IN_KINDS | POST_LOCK_KINDS
+
+
+def validate_ops(ops: Iterable[Any]) -> None:
+    """锁外调用：op 种类不认识就立刻拒绝"""
+    for op in ops:
+        if not isinstance(op, tuple) or not op or op[0] not in OP_KINDS:
+            raise ValueError(f"未知输出类型：{op!r}")
 
 
 class Output(Protocol):
-    """一次会话能看到的全部对外输出"""
+    """一次会话能看到的全部对外输出。锁内类只入队 / 写状态，锁后类才写盘"""
 
-    def publish(self, kind: str, data: Any) -> None:
-        """发一条总线消息（SSE 事件名和 payload 一字不改）"""
-
-    def hud_set(self, section: str, text: str, rich: Any = None) -> None:
-        """写悬浮窗一个分区；rich 是采矿助手那种有层次的内容"""
-
-    def hud_clear(self, *sections: str) -> None:
-        """擦掉悬浮窗的几块；悬浮窗没建起来就什么都不做"""
-
-    def note_hud(self, section: str, text: str, secs: float | None = None) -> None:
-        """悬浮窗上一条短提示（secs 秒后自己收起，不给就用默认）"""
-
-    def log(self, line: str, tag: str, level: str = "INFO") -> None:
-        """运行日志（窗口日志面板）"""
+    def apply(self, op: tuple) -> None: ...
