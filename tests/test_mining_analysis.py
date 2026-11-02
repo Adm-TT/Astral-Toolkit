@@ -29,17 +29,21 @@ def _inputs(**over):
         method_zh=lambda m: f"方式{m}",
         station_zh=lambda s: f"站{s}",
         gadget_label=lambda g: f"工具{g}",
-        best_price=lambda m: (100, "城") if m != "Copper" else (0, None),
-        station_bonus=lambda s: {},
-        refined_plan=lambda bag: [("M", "S", 1234.0, 2.5, 10.0, 1.0)],
-        refined_scu=lambda bag, station, method=None: {
+        goal_text=lambda g, q, mine=(): f"缺 {g['en']} {len(mine)} 份",
+        prices={"Gold": (100, "城"), "Tungsten": (100, "城")},
+        refineries={"S": ("星系", {})},
+        loadout=None,
+        refined_plan=lambda bag, prices=None, refineries=None: [
+            ("M", "S", 1234.0, 2.5, 10.0, 1.0)
+        ],
+        refined_scu=lambda bag, station, method=None, refineries=None: {
             k: v * 0.5 for k, v in bag.items()
         },
-        recommend=lambda mass, res, ins: [_plan()],
-        quality_hints=lambda comp: ["提示"],
-        mat_summary=lambda m, q=None: {"count": 1, "ok": q},
-        goal_for=lambda *names: None,
-        goal_text=lambda g, q, mine=(): f"缺 {g['en']} {len(mine)} 份",
+        recommend=lambda mass, res, ins, loadout=None: [_plan()],
+        craft_hints=("提示",),
+        craft_mats=(),
+        goal_targets=(),
+        goals_complete=True,
     )
     kw.update(over)
     return MiningInputs(**kw)
@@ -76,9 +80,9 @@ def test_lots_rank_tier_and_refined():
 
 def test_station_bonus_texts():
     minerals = {"Gold": 1.0, "Tungsten": 1.0}
-    same = _inputs(station_bonus=lambda s: {"Gold": 3, "Tungsten": 3})
+    same = _inputs(refineries={"S": ("星系", {"Gold": 3, "Tungsten": 3})})
     assert station_bonus("S", minerals, same) == "+3%"
-    diff = _inputs(station_bonus=lambda s: {"Gold": 3, "Tungsten": -2})
+    diff = _inputs(refineries={"S": ("星系", {"Gold": 3, "Tungsten": -2})})
     assert station_bonus("S", minerals, diff) == "金 +3%、钨 -2%"
     assert station_bonus("S", minerals, _inputs()) == ""
 
@@ -97,7 +101,7 @@ def test_analyze_numbers_and_bag():
     def boom(*a, **k):
         raise AssertionError("没有矿不该查")
 
-    empty = _inputs(refined_plan=boom, quality_hints=boom)
+    empty = _inputs(refined_plan=boom)
     only_inert = _scan(composition=[("Inert Materials", 100.0, None)])
     r = analyze(only_inert, ({}, None, None), empty)
     assert not r.refine and not r.craft and r.bag is None

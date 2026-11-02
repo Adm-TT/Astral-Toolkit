@@ -1,8 +1,7 @@
-"""采矿结果计算（运行结构 RT-B1，架构稿 §10.2 第 1 步）：一块石头的读数 + 输入 → 不可变结果。
+"""采矿结果计算（运行结构 RT-B1 / RT-B2，架构稿 §10.2 第 1、2 步）：一块石头的读数 + 输入 → 不可变结果。
 
-只做计算：本模块不 import 线程 / 时钟 / 文件 / 设置 / 数据库 / UI。要查的东西都从 MiningInputs 进（由 tasks/mining.py 装配），
-其中的函数调用时仍会读设置和全局表（recommend → settings、refined_plan / best_price → 全局表），RT-B2 换成值。
-排版在 app/presenters/mining.py。"""
+只做计算：本模块不 import 线程 / 时钟 / 文件 / 设置 / 数据库 / UI，也不 import 读全局表的 laser / data / refinery。
+外部事实由 tasks/mining.py 在一轮开始时取好，作为值从 MiningInputs 进来。排版在 app/presenters/mining.py。"""
 
 from collections import defaultdict
 from collections.abc import Callable, Mapping
@@ -17,25 +16,32 @@ INERT = "Inert Materials"
 
 @dataclass(frozen=True)
 class MiningInputs:
-    """scan_view 一次计算读到的全部外部东西。查询用函数传：出错的时机和范围要和拆分前逐字一致（制造提示、目标
-    出错只影响它们自己）；换成注入的数据快照是 RT-B2 的事"""
+    """一轮计算用到的全部外部东西，开始计算前取好。三类：
+
+    值：取输入那一刻的快照，之后全局表、设置、目标变了也不影响这一轮。
+    纯函数（mineral_zh / method_zh / station_zh / gadget_label / goal_text）：同输入同输出，不读设置、用户文件、数据库、
+      可变全局。翻译函数第一次调用时读程序自带的只读对照表 sc_glossary.json（lru_cache，运行期不变）。
+    算法（refined_plan / refined_scu / recommend）：analyze 调用时显式传 prices / refineries / loadout，
+      之后只再读 data.py 的常量表（精炼方式、矿头、模组、工具）。"""
 
     at: str  # 显示用的时间
     mineral_zh: Callable[[str], str]
     method_zh: Callable[[str], str]
     station_zh: Callable[[str], str]
     gadget_label: Callable[[str], str]
-    best_price: Callable[[str], tuple]  # 矿 → (最高收购价, 城市)
-    station_bonus: Callable[[str], Mapping]  # 精炼站 → {矿: 加成 %}
-    refined_plan: Callable[[dict], list]
-    refined_scu: Callable[..., dict]
-    recommend: Callable[
-        [Any, Any, Any], list
-    ]  # (质量, 抗性, 不稳定性) → 按配装排好的方案
-    quality_hints: Callable[[list], Any]
-    mat_summary: Callable[..., dict]
-    goal_for: Callable[..., Any]
     goal_text: Callable[..., str]
+    prices: Mapping  # 矿 → (最高收购价, 城市)；没有的矿算不收
+    refineries: Mapping  # 精炼站 → (星系, {矿: 加成 %})
+    loadout: Any  # 配装事实（laser.LoadoutFacts），原样传给 recommend
+    refined_plan: Callable[..., list]
+    refined_scu: Callable[..., dict]
+    recommend: Callable[..., list]  # (质量, 抗性, 不稳定性, loadout=) → 排好的方案
+    craft_hints: tuple  # 这块石头的制造提示
+    craft_mats: tuple  # ((矿, 蓝图统计), …)，只有蓝图用得到的矿
+    goal_targets: tuple  # ((矿, 目标缺口), …)，只有目标还缺的矿
+    goals_complete: (
+        bool  # 目标查询没有中途出错（出错时 goal_targets 只有前几条，悬浮窗不写目标行）
+    )
 
 
 @dataclass(frozen=True)
@@ -94,12 +100,31 @@ class MiningResult:
     bag: BagFacts | None
 
 
+def minerals_of(scan):
+    """这块石头里算钱的矿：{矿: SCU}。没有总 SCU 时为空"""
+    return {k: v for k, v in scan.minerals_scu().items() if k not in (INERT, "?")}
+
+
+def best_quality(composition):
+    """每种矿的最高品质：{矿: 品质}，品质都没认出来时为 None"""
+    best = {}
+    for nm, pct, qq in composition:
+        if nm and nm not in (INERT, "?"):
+            best[nm] = (
+                max(best.get(nm) or 0, qq or 0) if qq is not None else best.get(nm)
+            )
+    return best
+
+
+def _price(mineral, inputs: MiningInputs):
+    return inputs.prices.get(mineral, (0, None))
+
+
 def station_bonus(station, minerals, inputs: MiningInputs):
     """精炼站对这块石头里的矿的加成：只有一种值钱的矿写「+3%」，几种不一样就写「铁 +3%、金 -2%」，都是 0 返回空"""
-    bonus = inputs.station_bonus(station)
-    best_price = inputs.best_price
-    worth = sorted(minerals, key=lambda m: -(minerals[m] * (best_price(m)[0] or 0)))
-    worth = [m for m in worth if (best_price(m)[0] or 0) > 0] or worth
+    bonus = inputs.refineries.get(station, ("", {}))[1]
+    worth = sorted(minerals, key=lambda m: -(minerals[m] * (_price(m, inputs)[0] or 0)))
+    worth = [m for m in worth if (_price(m, inputs)[0] or 0) > 0] or worth
     vals = {m: bonus.get(m, 0) for m in worth}
     if not any(vals.values()):
         return ""
@@ -153,7 +178,9 @@ def lots(scan, plan, inputs: MiningInputs):
             )
         v = None
         if not inert and plan and scu is not None and n:
-            v = inputs.refined_scu({n: scu}, plan[1], plan[0]).get(n, 0.0)
+            v = inputs.refined_scu(
+                {n: scu}, plan[1], plan[0], refineries=inputs.refineries
+            ).get(n, 0.0)
             row["refined"] = round(v, 6)
         rows.append(MappingProxyType(row))
         amounts.append(v)
@@ -161,48 +188,39 @@ def lots(scan, plan, inputs: MiningInputs):
 
 
 def _craft_and_goals(scan, lot_rows, inputs: MiningInputs):
-    """制造提示和目标缺口：(提示, 可制造矿, 目标, 悬浮窗目标行)。查询中途出错就停在那里，已算出的留着"""
-    craft, mats, goals, lines = (), [], [], ()
+    """可制造矿和目标缺口：(可制造矿, 目标, 悬浮窗目标行)。目标没查全或写文字出错就停在那里，已算出的留着"""
     mineral_zh = inputs.mineral_zh
+    best = best_quality(scan.composition)
+    mats = tuple(
+        {"en": nm, "zh": mineral_zh(nm), "q": best[nm], **summary}
+        for nm, summary in inputs.craft_mats
+    )
+    goals, lines = [], ()
     try:
-        craft = tuple(inputs.quality_hints(scan.composition))
-        best = {}
-        for nm, pct, qq in scan.composition:
-            if nm and nm not in (INERT, "?"):
-                best[nm] = (
-                    max(best.get(nm) or 0, qq or 0) if qq is not None else best.get(nm)
-                )
-        mats = [
-            {"en": nm, "zh": mineral_zh(nm), "q": qq, **inputs.mat_summary(nm, qq)}
-            for nm, qq in best.items()
-            if inputs.mat_summary(nm)["count"]
-        ]
-        for nm, qq in best.items():  # 目标还缺这种矿（有品质门槛的按每一份判断）
-            g = inputs.goal_for(nm, mineral_zh(nm))
-            if g:
-                mine = [r for r in lot_rows if r["en"] == nm]
-                ok = (
-                    any((r["q"] or 0) >= g["minq"] for r in mine)
-                    if g["minq"] > 1
-                    else True
-                )
-                goals.append(
-                    {
-                        "en": nm,
-                        "zh": g["zh"] or mineral_zh(nm),
-                        "short": g["short"],
-                        "unit": g["unit"],
-                        "minq": g["minq"],
-                        "q": qq,
-                        "ok": ok,
-                        "goals": g["goals"],
-                        "text": inputs.goal_text(g, qq, mine),
-                    }
-                )
-        lines = tuple(x["text"] for x in goals[:2])
+        for nm, g in inputs.goal_targets:  # 有品质门槛的按每一份判断
+            qq = best[nm]
+            mine = [r for r in lot_rows if r["en"] == nm]
+            ok = (
+                any((r["q"] or 0) >= g["minq"] for r in mine) if g["minq"] > 1 else True
+            )
+            goals.append(
+                {
+                    "en": nm,
+                    "zh": g["zh"] or mineral_zh(nm),
+                    "short": g["short"],
+                    "unit": g["unit"],
+                    "minq": g["minq"],
+                    "q": qq,
+                    "ok": ok,
+                    "goals": g["goals"],
+                    "text": inputs.goal_text(g, qq, mine),
+                }
+            )
+        if inputs.goals_complete:
+            lines = tuple(x["text"] for x in goals[:2])
     except Exception:
         pass
-    return craft, tuple(mats), tuple(goals), lines
+    return mats, tuple(goals), lines
 
 
 def _plan_facts(p, inputs: MiningInputs):
@@ -222,14 +240,18 @@ def analyze(scan, bag, inputs: MiningInputs, cut=False) -> MiningResult:
     """一块石头的计算结果。cut=True：面板被屏幕右边挡住，品质和总 SCU 读不到，只有破碎方案和成分占比"""
     mineral_zh = inputs.mineral_zh
     rock = mineral_zh(scan.main_mineral) if scan.main_mineral else "?"
-    minerals = {k: v for k, v in scan.minerals_scu().items() if k not in (INERT, "?")}
+    minerals = minerals_of(scan)
     refine, sell, first = [], (), None
     if minerals:
         for i, (method, station, value, rscu, fee, hours) in enumerate(
-            inputs.refined_plan(minerals)
+            inputs.refined_plan(
+                minerals, prices=inputs.prices, refineries=inputs.refineries
+            )
         ):
             bonus = station_bonus(station, minerals, inputs)
-            per = inputs.refined_scu(minerals, station, method)
+            per = inputs.refined_scu(
+                minerals, station, method, refineries=inputs.refineries
+            )
             refine.append(
                 RefineOption(
                     method_zh=inputs.method_zh(method),
@@ -244,12 +266,15 @@ def analyze(scan, bag, inputs: MiningInputs, cut=False) -> MiningResult:
             )
             if i == 0:
                 first = (method, station)
-        sell = tuple((mineral_zh(k), inputs.best_price(k)[1]) for k in minerals)
+        sell = tuple((mineral_zh(k), _price(k, inputs)[1]) for k in minerals)
     lot_rows, lot_refined = lots(scan, first, inputs)
     craft, mats, goals, goal_lines = (), (), (), ()
     if minerals:
-        craft, mats, goals, goal_lines = _craft_and_goals(scan, lot_rows, inputs)
-    plans = inputs.recommend(scan.mass, scan.resistance, scan.instability)
+        craft = inputs.craft_hints
+        mats, goals, goal_lines = _craft_and_goals(scan, lot_rows, inputs)
+    plans = inputs.recommend(
+        scan.mass, scan.resistance, scan.instability, loadout=inputs.loadout
+    )
     contents, used, cap = bag
     bag_facts = None
     if used is not None:
