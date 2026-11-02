@@ -345,10 +345,30 @@ def ship_loadout(ship=None):
     return ship, clean_loadout(ship, saved)
 
 
-def loadout():
-    _, lo = ship_loadout()
+def _setups(lo):
     craft = lo.get("craft") or [None] * len(lo["heads"])
     return [HeadSetup(k, mods, craft[i]) for i, (k, mods) in enumerate(lo["heads"])]
+
+
+def loadout():
+    _, lo = ship_loadout()
+    return _setups(lo)
+
+
+@dataclass(frozen=True)
+class LoadoutFacts:
+    """算破碎方案要的全部配装事实，一次取好：矿头、同时操作几个、破碎模型"""
+
+    setups: tuple
+    crew: int
+    model: str
+    k: float
+
+
+def loadout_facts():
+    _, lo = ship_loadout()
+    model, k = active_model()
+    return LoadoutFacts(tuple(_setups(lo)), lo["crew"], model, k)
 
 
 def max_active_heads():
@@ -400,12 +420,13 @@ def _rank(p: Plan):
     )
 
 
-def recommend(mass, resistance_pct, instability, top=3):
-    setups = loadout()
-    model, k = active_model()
+def recommend(mass, resistance_pct, instability, top=3, loadout=None):
+    """loadout：一份 LoadoutFacts，给了就不读设置；None 读当前配装"""
+    facts = loadout_facts() if loadout is None else loadout
+    model, k = facts.model, facts.k
     plans = []
-    for n in range(1, max_active_heads() + 1):
-        for combo in combinations(setups, n):
+    for n in range(1, facts.crew + 1):
+        for combo in combinations(facts.setups, n):
             for gadget in [None, *GADGETS]:
                 plans.append(
                     evaluate(
