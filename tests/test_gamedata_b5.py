@@ -136,3 +136,316 @@ def test_mining_topic_uses_outer_snapshot(monkeypatch, tmp_path):
         assert "N" not in G.prices.refinery_yields()
     assert G.mining.rocks() == {"areas": {"N": {}}}
     assert list(G.prices.refinery_yields()) == ["N"]
+
+
+# ---------------------------------------------------------------- Task 2：mining_area
+
+DEEP = "Deep Space Asteroids"
+_AREA_ROCKS = {
+    "tiers": {"common": {"p_cluster": 100.0, "sizes": [[0.5, 6, 6]]}},
+    "ores": {"Iron": {"sig": 4285, "tier": "common"}},
+    "areas": {
+        DEEP: {"Iron": 50.0, "Gold": 2},
+        "PYR1-L1": {"Iron": 1.5},
+        "Keeger Belt": {"Bexalite": 18.0},
+        "Empty Area": {},
+    },
+    "contains": {"Iron": ["Iron", "Quartz"]},
+}
+_AREA_SPOTS = [
+    {
+        "id": "c1",
+        "sys": "Pyro",
+        "zh": "小行星群",
+        "en": "C1",
+        "kind": "cluster",
+        "area": DEEP,
+        "x": 1e10,
+        "y": 0.0,
+        "z": 0.0,
+    },
+    {
+        "id": "m1",
+        "sys": "Pyro",
+        "zh": "远矿站",
+        "en": "M1",
+        "kind": "mining_base",
+        "area": "PYR1-L1",
+        "x": 2e10,
+        "y": 0.0,
+        "z": 0.0,
+    },
+    {
+        "id": "m2",
+        "sys": "Pyro",
+        "zh": "和 m1 重合",
+        "en": "M2",
+        "kind": "mining_base",
+        "area": DEEP,
+        "x": 2e10,
+        "y": 0.0,
+        "z": 0.0,
+    },
+    {
+        "id": "empty",
+        "sys": "Pyro",
+        "zh": "没有地点名",
+        "en": "E",
+        "kind": "mining_base",
+        "area": "",
+        "x": 3e10,
+        "y": 0.0,
+        "z": 0.0,
+    },
+    {
+        "id": "nyx",
+        "sys": "Nyx",
+        "zh": "别的星系",
+        "en": "N",
+        "kind": "mining_base",
+        "area": DEEP,
+        "x": 4e10,
+        "y": 0.0,
+        "z": 0.0,
+    },
+    {
+        "sys": "Pyro",
+        "zh": "无 id、缺表",
+        "en": "X",
+        "kind": "mining_base",
+        "area": "No Table",
+        "x": 5e10,
+        "y": 0.0,
+        "z": 0.0,
+    },
+]
+
+
+def _body(sys_, x):
+    return {"sys": sys_, "x": x, "y": 0.0, "z": 0.0, "r": 1e6, "om": 1e6, "grid": 2e6}
+
+
+_AREA_STAR = {
+    "fetched": "2026-11-02",
+    "bodies": {"Yela": _body("Stanton", 1e11), "Terminus": _body("Pyro", 6e10)},
+    "pois": [],
+    "points": [
+        {
+            "n": "P1 L1",
+            "i": "P1_L1",
+            "sys": "Pyro",
+            "t": "Lagrange Point",
+            "x": 7e10,
+            "y": 0.0,
+            "z": 0.0,
+        },
+        {
+            "n": "Belt",
+            "i": "belt",
+            "sys": "Pyro",
+            "t": "AsteroidBelt",
+            "x": 8e10,
+            "y": 0.0,
+            "z": 0.0,
+        },
+        {
+            "n": "ARC L1",
+            "i": "ARC_L1",
+            "sys": "Stanton",
+            "t": "Lagrange Point",
+            "x": 9e10,
+            "y": 0.0,
+            "z": 0.0,
+        },
+    ],
+}
+
+
+def _area_setup(monkeypatch, tmp_path, **override):
+    """最小库 + 采矿源；星图的 CACHE 指到 tmp（否则没有真实 data/ 的机器上 load() 会去下载）"""
+    from sc_mining.navigation import starmap
+
+    _setup(
+        monkeypatch,
+        tmp_path,
+        **{
+            "mining_rocks.json": _AREA_ROCKS,
+            "mining_spots.json": _AREA_SPOTS,
+            "starmap.json": _AREA_STAR,
+            **override,
+        },
+    )
+    monkeypatch.setattr(starmap, "CACHE", tmp_path / "starmap.json")
+    return tmp_path
+
+
+def _legacy_rocks_table(data_dir):
+    """迁移前的读法（只在测试里存在）"""
+    try:
+        t = json.loads((data_dir / "mining_rocks.json").read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return t if isinstance(t, dict) else {}
+
+
+def _legacy_spots_raw(data_dir):
+    try:
+        return json.loads((data_dir / "mining_spots.json").read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+
+_AREA_INPUTS = [
+    ((1e10, 0.0, 0.0), "Pyro", None, None, "", ""),
+    ((1e10 + 4.9e7, 0.0, 0.0), "Pyro", None, None, "", ""),
+    ((1e10 + 5.1e7, 0.0, 0.0), "Pyro", None, None, "", ""),
+    ((2e10, 0.0, 0.0), "Pyro", None, None, "", ""),
+    ((2e10 + 1.9e7, 0.0, 0.0), "Pyro", None, None, "", ""),
+    ((2e10 + 2.1e7, 0.0, 0.0), "Pyro", None, None, "", ""),
+    ((3e10, 0.0, 0.0), "Pyro", None, None, "", ""),
+    ((4e10, 0.0, 0.0), "Pyro", None, None, "", ""),
+    ((5e10, 0.0, 0.0), "Pyro", None, None, "", ""),
+    ((6e10 + 1e9, 0.0, 0.0), "Pyro", None, None, "", ""),
+    ((7e10 + 1e6, 0.0, 0.0), "Pyro", None, None, "", ""),
+    ((8e10 + 1e6, 0.0, 0.0), "Pyro", None, None, "", ""),
+    ((1e12, 0.0, 0.0), "Pyro", None, None, "", ""),
+    (None, "Pyro", None, None, "", ""),
+    ((1.0, 2.0, 3.0), "Pyro", None, None, "Akiro", ""),
+    ((1.0, 2.0, 3.0), "Pyro", None, None, "AsteroidCluster_Pyro_1", ""),
+    ((1.0, 2.0, 3.0), "Pyro", "Fairo", True, "", ""),
+    ((1.0, 2.0, 3.0), "Nyx", None, None, "Keeger", ""),
+    ((48.0e9, 0.0, 0.0), "Nyx", None, None, "", ""),
+    ((30e9, 0.0, 0.0), "Nyx", None, None, "", ""),
+    ((1e11 + 6e8, 0.0, 0.0), "Stanton", None, None, "", ""),
+    ((9e10 + 1e6, 0.0, 0.0), "Stanton", None, None, "", ""),
+    ((1e13, 1e13, 0.0), "Stanton", None, None, "", ""),
+    ((1.0, 2.0, 3.0), "Stanton", "Hurston", True, "", ""),
+]
+
+
+def test_area_equals_legacy_on_sample(monkeypatch, tmp_path):
+    from sc_mining.mining import mining_area as M
+
+    _area_setup(monkeypatch, tmp_path)
+    new = [M.area(*a) for a in _AREA_INPUTS]
+    assert any(r and r.get("rocks") for r in new)
+    monkeypatch.setattr(M, "rocks_table", lambda: _legacy_rocks_table(tmp_path))
+    monkeypatch.setattr(M, "_spots_raw", lambda: _legacy_spots_raw(tmp_path))
+    assert new == [M.area(*a) for a in _AREA_INPUTS]
+
+
+def _forbid_json_reads(monkeypatch, *names):
+    """读到这几个文件就炸（证明查询路径不再读 JSON）"""
+    import pathlib
+
+    real = pathlib.Path.read_text
+
+    def guard(self, *a, **k):
+        assert self.name not in names, f"不该读 {self.name}"
+        return real(self, *a, **k)
+
+    monkeypatch.setattr(pathlib.Path, "read_text", guard)
+
+
+def test_area_reads_no_json_and_pins_one_snapshot(monkeypatch, tmp_path):
+    import sc_mining.gamedata as G
+    from sc_mining.core import paths
+    from sc_mining.gamedata import _db
+    from sc_mining.mining import mining_area as M
+    from tests.minipytest import raises
+
+    _area_setup(monkeypatch, tmp_path)
+    G.ensure()
+    _forbid_json_reads(monkeypatch, "mining_spots.json", "mining_rocks.json")
+    real_cached = paths.cached_json
+
+    def cached(p, *a, **k):
+        assert p.name != "mining_rocks.json"
+        return real_cached(p, *a, **k)
+
+    monkeypatch.setattr(paths, "cached_json", cached)
+    # 只有最外层 snapshot() 进入时读清单：读清单次数 = 开了几个最外层快照
+    calls = []
+    real_read = _db.read_manifest
+
+    def counted():
+        calls.append(1)
+        return real_read()
+
+    monkeypatch.setattr(_db, "read_manifest", counted)
+    assert M.area((1e12, 0.0, 0.0), "Pyro")["zh"] == M.NO_ORE  # 走完派罗整个分支
+    assert len(calls) == 1
+    monkeypatch.setattr(_db, "read_manifest", real_read)
+
+    # 函数体里的异常照常往外抛（钉快照那层不吞）
+    def boom(g):
+        raise RuntimeError("函数体的错")
+
+    real_spot = M._pyro_spot
+    monkeypatch.setattr(M, "_pyro_spot", boom)
+    with raises(RuntimeError):
+        M.area((1e12, 0.0, 0.0), "Pyro")
+    monkeypatch.setattr(M, "_pyro_spot", real_spot)
+
+    # 进不了快照：不抛，当作没有数据
+    def no_snap():
+        raise G.GamedataUnavailable("库坏了")
+
+    monkeypatch.setattr(G, "snapshot", no_snap)
+    monkeypatch.setattr(_db, "snapshot", no_snap)
+    assert M.area((1e12, 0.0, 0.0), "Pyro") is None
+    assert M.area((1e13, 1e13, 0.0), "Stanton") is None
+
+
+def test_pyro_spot_raw_meters_same_system_only(monkeypatch, tmp_path):
+    from sc_mining.mining import mining_area as M
+
+    _area_setup(monkeypatch, tmp_path)
+    assert M.area((2e10 + 19_999_000, 0.0, 0.0), "Pyro")["name"] == "PYR1-L1"  # 2 万 km
+    assert M.area((2e10 + 20_001_000, 0.0, 0.0), "Pyro")["zh"] == M.NO_ORE
+    assert M.area((1e10 + 49_999_000, 0.0, 0.0), "Pyro")["name"] == DEEP  # 星团 5 万 km
+    assert M.area((1e10 + 50_001_000, 0.0, 0.0), "Pyro")["zh"] == M.NO_ORE
+    assert M.area((4e10, 0.0, 0.0), "Pyro")["zh"] == M.NO_ORE  # sys=Nyx 的重合点不算
+    assert M.area((2e10, 0.0, 0.0), "Pyro")["name"] == "PYR1-L1"  # 都中取源顺序第一个
+    assert M.area((3e10, 0.0, 0.0), "Pyro")["zh"] == M.NO_ORE  # 没有地点名的点不算
+    assert M.area((5e10, 0.0, 0.0), "Pyro") is None  # 在点上但缺表：不能说不刷
+    assert M.area((1e7, 0.0, 0.0), "Pyro")["zh"] == M.NO_ORE  # 按千米传对不上：单位没变
+
+
+def test_rocks_refresh_after_rebuild_and_stamp_follows_version(monkeypatch, tmp_path):
+    import sc_mining.gamedata as G
+    from sc_mining.mining import mining_area as M
+
+    _area_setup(monkeypatch, tmp_path)
+    assert "New" not in M.rocks_table()["areas"]
+    before = M.rocks_stamp()
+    assert before == G.version() and before is not None
+    with G.updating():
+        _write(tmp_path, "mining_rocks.json", {"areas": {"New": {"Iron": 1}}})
+    assert M.rocks_table()["areas"] == {"New": {"Iron": 1}}  # 不调 clear_caches 也换了
+    assert M.rocks_stamp() == G.version() != before
+
+
+def test_mining_area_empty_when_db_unavailable(monkeypatch, tmp_path):
+    from sc_mining.core import paths
+    from sc_mining.mining import mining_area as M
+
+    _area_setup(monkeypatch, tmp_path)
+    monkeypatch.setattr(paths, "DATA", tmp_path / "empty")  # 没有 shops.json：建不出库
+    assert M.rocks_table() == {} and M._spots_raw() == ()
+    assert M.rocks_stamp() is None
+    assert (
+        M.area((2e10, 0.0, 0.0), "Pyro") is None
+    )  # 没数据：不知道星团在哪，不说「不刷」
+    assert M.area((1e13, 1e13, 0.0), "Stanton") is None  # 斯坦顿分支也不抛
+    assert M.area((48.0e9, 0.0, 0.0), "Nyx")["name"] == "Keeger Belt"  # 内置表不受影响
+    assert "rocks" not in M.area((48.0e9, 0.0, 0.0), "Nyx")
+
+
+def test_area_for_spot_returns_empty_dict_not_none(monkeypatch, tmp_path):
+    from sc_mining.mining import mining_area as M
+
+    _area_setup(monkeypatch, tmp_path)
+    assert M.area_for_spot({"area": "Empty Area"}, None) == {}
+    assert M.area_for_spot({"area": "Nope"}, None) is None
+    assert M.area_for_spot({"lagrange": "P1_L1"}, None) == {"Iron": 1.5}
