@@ -22,8 +22,10 @@ from ..app.presenters import mining as _present
 from ..mining import analysis as _analysis
 from . import goals as _t_goals
 
-_pos = EngineManager.get_instance().pos
-_live = EngineManager.get_instance().live
+
+def _engines():
+    """后台引擎用时才取：导入本模块不创建引擎（架构稿 §4.3 规则 8）"""
+    return EngineManager.get_instance()
 
 
 def settings_key(k, default=None):
@@ -77,7 +79,7 @@ def _marker_tick(target, data, state, shown, ref=None):
     from ..navigation import navigate as n
     from ..system.showloc import game_foreground
 
-    t, g, info = _pos.current
+    t, g, info = _engines().pos.current
     h = state.get("here")
     cam = (info or {}).get("camdir")
     try:
@@ -92,7 +94,7 @@ def _marker_tick(target, data, state, shown, ref=None):
         and not h.get("arrived")
         and not h.get("far")
         and fg
-        and not _live.running()
+        and not _engines().live.running()
         and _marker_on()
         and not _off("nav_marker")
     )
@@ -284,10 +286,6 @@ def _game_front():
     return showloc.game_front()
 
 
-# RT-B1 过渡，RT-B2 删：scan_view 拆开后留的同名转发（tests/test_tools.py 在用）
-scu_text = _present.scu_text
-
-
 def _quality_hints(composition):
     from ..crafting.crafting import (
         quality_hints,
@@ -380,7 +378,7 @@ def scan_view(scan, bag, cut=False):
 def live_start():
     from ..core import settings
 
-    _live.start()
+    _engines().live.start()
     settings.update(live_on=True)  # 记住：重启、升级后自动接着扫
     return {"running": True}
 
@@ -388,7 +386,7 @@ def live_start():
 def live_stop():
     from ..core import settings
 
-    _live.stop()
+    _engines().live.stop()
     settings.update(live_on=False)
     return {"running": False}
 
@@ -580,7 +578,9 @@ def set_mining_gear(ship="mole", loadout=None, reset=False):
     elif loadout is not None:
         saved[ship] = clean_loadout(ship, loadout)
     settings.update(mining_ship=ship, mining_loadouts=saved)
-    _live.gear_rev += 1  # 正在显示的石头按新配置重算（采矿助手最多 5 秒后重新发布）
+    _engines().live.gear_rev += (
+        1  # 正在显示的石头按新配置重算（采矿助手最多 5 秒后重新发布）
+    )
     return _gear()
 
 
@@ -619,7 +619,6 @@ __all__ = [
     "_nav_view",
     # 读屏与扫描
     "_game_front",
-    "scu_text",
     "scan_view",
     "live_start",
     "live_stop",

@@ -3453,9 +3453,11 @@ def test_goal_shortage_marked_everywhere(monkeypatch):
         ("363", "49.41%", False),
     ]
     assert r["gain"][1][2] == "aUEC" and r["advice"]["heads"]
-    assert t_mining.scu_text(0.42) == "420,000 uSCU（0.420 SCU）" and t_mining.scu_text(
-        3.5
-    ).startswith("3.50 SCU（3,500,000 uSCU）")
+    from sc_mining.app.presenters.mining import scu_text
+
+    assert scu_text(0.42) == "420,000 uSCU（0.420 SCU）" and scu_text(3.5).startswith(
+        "3.50 SCU（3,500,000 uSCU）"
+    )
     assert "当前 650 未达标" in t_goals._goal_text(
         gold, 650
     ) and "当前 900 已达标" in t_goals._goal_text(gold, 900)
