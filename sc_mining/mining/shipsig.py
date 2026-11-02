@@ -1,6 +1,6 @@
 """扫描到的飞船信号（红外 IR / 电磁 EM / 截面 CS）→ 可能是哪几种船
 
-数据：data/ship_signatures.json，从 erkul.games（LIVE 4.10.2）整理：
+数据：游戏数据层（gamedata.mining.ship_signatures），从 erkul.games（LIVE 4.10.2）整理：
   cs      三个方向的截面（已乘装甲系数），从小到大。游戏里显示的截面随你看它的角度变化，
           正对船头时接近最小值，侧面/上方看时接近较大的值，所以只要落在「最小 ~ 最大」之间都算可能。
   em_max  默认配置下电源、冷却、护盾、量子引擎、雷达等全部开满时的电磁估算上限
@@ -8,20 +8,18 @@
 截面基本只看船体大小形状，最可靠；红外、电磁随开机状态/加速/开火变化很大，只用来排除「明显超出上限」的船。
 """
 
-import json
-from functools import lru_cache
-
-from ..core.paths import DATA
-
 TOL = 0.12  # 截面允许的误差（读数取整、装甲改装、角度不在三个主方向上）
 SLACK = 1.6  # 电磁/红外超过估算上限多少倍才算不可能（加速、开火时会冲高）
 
 
-@lru_cache(maxsize=1)
 def ships():
-    return json.loads((DATA / "ship_signatures.json").read_text(encoding="utf-8"))[
-        "ships"
-    ]
+    """全部船（按内容版本缓存，更新数据后自动换新的）；没有数据返回 []"""
+    from .. import gamedata
+
+    try:
+        return list(gamedata.mining.ship_signatures())
+    except gamedata.GamedataError:
+        return []
 
 
 def _cs_score(cs, axes):

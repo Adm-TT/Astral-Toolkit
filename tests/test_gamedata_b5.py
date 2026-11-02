@@ -449,3 +449,99 @@ def test_area_for_spot_returns_empty_dict_not_none(monkeypatch, tmp_path):
     assert M.area_for_spot({"area": "Empty Area"}, None) == {}
     assert M.area_for_spot({"area": "Nope"}, None) is None
     assert M.area_for_spot({"lagrange": "P1_L1"}, None) == {"Iron": 1.5}
+
+
+# ---------------------------------------------------------------- Task 3：shipsig
+
+
+def _legacy_ships(data_dir):
+    """迁移前的读法（只在测试里存在；match / describe 没改，换掉 ships 就是旧行为）"""
+    return json.loads((data_dir / "ship_signatures.json").read_text(encoding="utf-8"))[
+        "ships"
+    ]
+
+
+_MATCH_SHIPS = {
+    "note": "n",
+    "ships": [
+        {"id": "b", "name": "Beta", "cs": [1000, 2000, 3000], "em_max": 100, "ir_max": 0},
+        {"id": "a", "name": "Alpha", "cs": [1000, 2000, 3000], "em_max": 0, "ir_max": 50},
+        {"id": "a2", "name": "Alpha", "cs": [1000, 2000, 3000], "em_max": 0, "ir_max": 0, "zh": "阿尔法二"},
+        {"id": "f", "name": "Float", "cs": [1000.0, 2000.5, 3000.25], "em_max": 0, "ir_max": 0, "role": "x"},
+        {"id": "s", "name": "Same", "cs": [1000.0, 2000.0, 3000.0], "em_max": 0, "ir_max": 0},
+        {"id": "d", "name": "Far", "cs": [9000, 9500, 9900], "em_max": 10, "ir_max": 10, "zh": "远"},
+    ],
+}  # fmt: skip
+_MATCH_INPUTS = [
+    (1000, None, None, 6),
+    (2000, None, None, 6),
+    (3000, None, None, 6),
+    (880, None, None, 6),
+    (3360, None, None, 6),
+    (879, None, None, 6),
+    (3361, None, None, 6),
+    (1000, 160, None, 6),
+    (1000, 161, None, 6),
+    (1000, None, 80, 6),
+    (1000, None, 81, 6),
+    (2000.5, 5000, 5000, 6),
+    (9500, 16, 16, 6),
+    (9500, 17, 17, 6),
+    (0, None, None, 6),
+    (1000, None, None, 1),
+    (5000, None, None, 6),
+]
+
+
+def test_ship_match_equals_legacy_on_sample(monkeypatch, tmp_path):
+    from sc_mining.mining import shipsig
+
+    _setup(monkeypatch, tmp_path, **{"ship_signatures.json": _MATCH_SHIPS})
+    new_m = [shipsig.match(c, e, i, n) for c, e, i, n in _MATCH_INPUTS]
+    new_d = [shipsig.describe(c, e, i) for c, e, i, _ in _MATCH_INPUTS if c]
+    assert new_m[0] and new_m[0][0]["variants"]  # 样例真的走到了变体合并
+    monkeypatch.setattr(shipsig, "ships", lambda: _legacy_ships(tmp_path))
+    assert new_m == [shipsig.match(c, e, i, n) for c, e, i, n in _MATCH_INPUTS]
+    assert new_d == [shipsig.describe(c, e, i) for c, e, i, _ in _MATCH_INPUTS if c]
+
+
+def test_ships_refresh_after_rebuild_without_clear_caches(monkeypatch, tmp_path):
+    import sc_mining.gamedata as G
+    from sc_mining.mining import shipsig
+
+    _setup(monkeypatch, tmp_path, **{"ship_signatures.json": _MATCH_SHIPS})
+    assert len(shipsig.ships()) == 6
+    with G.updating():
+        _write(tmp_path, "ship_signatures.json", {"ships": _MATCH_SHIPS["ships"][:1]})
+    assert [s["id"] for s in shipsig.ships()] == ["b"]
+
+
+def test_ships_empty_when_missing_or_db_unavailable(monkeypatch, tmp_path):
+    from sc_mining.core import paths
+    from sc_mining.mining import shipsig
+
+    _setup(monkeypatch, tmp_path)  # 没有 ship_signatures.json
+    assert shipsig.ships() == [] and shipsig.match(1000) == []
+    assert shipsig.describe(1000) == ["截面 1,000：没有对得上的船"]
+    monkeypatch.setattr(paths, "DATA", tmp_path / "empty")  # 建不出库
+    assert shipsig.ships() == []
+
+
+def test_ships_does_not_read_json(monkeypatch, tmp_path):
+    import sc_mining.gamedata as G
+    from sc_mining.mining import shipsig
+
+    _setup(monkeypatch, tmp_path, **{"ship_signatures.json": _MATCH_SHIPS})
+    G.ensure()
+    _forbid_json_reads(monkeypatch, "ship_signatures.json")
+    assert shipsig.match(1000)
+
+
+def test_clear_caches_still_safe_for_shipsig(monkeypatch, tmp_path):
+    from sc_mining.mining import shipsig
+    from sc_mining.update import data_pack, uex
+
+    _setup(monkeypatch, tmp_path, **{"ship_signatures.json": _MATCH_SHIPS})
+    monkeypatch.setattr(uex, "apply_live", lambda m: False)
+    data_pack.clear_caches()
+    assert shipsig.match(1000)
