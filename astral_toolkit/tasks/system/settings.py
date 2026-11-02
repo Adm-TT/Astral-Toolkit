@@ -149,7 +149,7 @@ def start_background():
 
 
 def show():
-    """又双击了一次 Dubhe.exe：后台开着的 AT 把窗口打开"""
+    """又双击了一次 AT（安装版 AT.exe、源码版 Dubhe.exe）：后台开着的 AT 把窗口打开"""
     from ...app.server import show_window
 
     show_window()
@@ -157,7 +157,7 @@ def show():
 
 
 def quit():
-    """又双击了一次 Dubhe.exe：旧的这个退出，让新的接手"""
+    """又双击了一次 AT（安装版 AT.exe、源码版 Dubhe.exe）：旧的这个退出，让新的接手"""
     from ...app.server import QUIT
 
     QUIT.set()

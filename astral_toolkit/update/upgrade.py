@@ -240,7 +240,7 @@ def apply(path, progress=print):
 
     top, v = check(path)
     progress(f"安装包没问题：AT {'.'.join(map(str, v))}（现在是 {VERSION}）")
-    work = Path(tempfile.mkdtemp(prefix="dubhe_install_"))
+    work = Path(tempfile.mkdtemp(prefix="at_install_"))
     try:
         src = work / Path(path).name
         shutil.copy2(path, src)

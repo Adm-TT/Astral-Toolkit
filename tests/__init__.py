@@ -4,7 +4,7 @@
 import os
 import tempfile
 
-os.environ["LOCALAPPDATA"] = tempfile.mkdtemp(prefix="dubhe_test_localappdata_")
+os.environ["LOCALAPPDATA"] = tempfile.mkdtemp(prefix="at_test_localappdata_")
 os.environ["AT_FEEDBACK_OFF"] = (
     "1"  # 测试一律不往服务器发反馈：以前只在 run_all 里设，单跑一个模块会漏（2026-11-01 收件箱出现过测试数据）
 )

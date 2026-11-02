@@ -338,7 +338,7 @@ def update(direct=False, web_ok=()):
         sources if direct else (("数据包", from_pack),)
     )
 
-    try:  # 在天枢窗口里点「更新」时：几个下载线程的输出都要进窗口的更新记录
+    try:  # 在 AT 窗口里点「更新」时：几个下载线程的输出都要进窗口的更新记录
         from .app import bus
 
         task = bus.current_task()
@@ -412,7 +412,7 @@ def menu(console=False, restart=False):
     from .system import showloc
     from .app.server import _single_instance, release_instance
 
-    # 只允许开一个天枢：已经开着就把它的窗口叫出来，这次直接退出（不再弹管理员确认框、不再重复挂热键）
+    # 只允许开一个 AT：已经开着就把它的窗口叫出来，这次直接退出（不再弹管理员确认框、不再重复挂热键）
     if not _single_instance(restart):
         return
     if showloc.WIN and not showloc.is_admin() and settings.load()["admin"] is not False:
@@ -420,7 +420,7 @@ def menu(console=False, restart=False):
         # 否则 Windows 不让读游戏里的按键。默认直接用管理员身份重开。
         print("正在用管理员身份重新打开助手（Windows 会弹确认框，点「是」）…")
         print("（不想这样的话：在窗口「设置与更新」里关掉「以管理员身份运行」）")
-        release_instance()  # 让管理员身份的新天枢拿到「只开一个」的锁
+        release_instance()  # 让管理员身份的新 AT 拿到「只开一个」的锁
         if showloc.relaunch_as_admin("menu"):
             settings.update(admin=True)
             return

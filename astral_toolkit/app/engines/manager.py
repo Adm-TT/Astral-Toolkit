@@ -41,7 +41,7 @@ class EngineManager:
         self.logwatch = _LogWatch()
 
     def start_all(self):
-        """打开天枢主窗口时启动后台服务：热键监听、定时查更新、搜索索引预热、未发送反馈补发、原矿扫描续跑
+        """打开 AT 主窗口时启动后台服务：热键监听、定时查更新、搜索索引预热、未发送反馈补发、原矿扫描续跑
         （原来的 services.start_background()，原样搬来）"""
         from ...core import settings
         from ...tasks import (

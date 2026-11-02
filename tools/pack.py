@@ -1,4 +1,4 @@
-# 打包「天枢」安装包 → dist\Dubhe_<版本>.zip（不含个人数据、Python 环境、测试、tools）。用法：.venv\Scripts\python.exe -X utf8 tools\pack.py
+# 打包 AT 压缩包版（2026-10-31 停发）→ dist\Dubhe_<版本>.zip（不含个人数据、Python 环境、测试、tools）。用法：.venv\Scripts\python.exe -X utf8 tools\pack.py
 import sys, io, traceback, contextlib, zipfile, time, os  # noqa: E401, F401
 from pathlib import Path
 

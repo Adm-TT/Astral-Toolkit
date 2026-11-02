@@ -118,7 +118,7 @@ def _find_window(title=TITLE):
 
 
 def brand_window(root, timeout=20.0):
-    """后台等天枢窗口出现，给它打上天枢的任务栏身份"""
+    """后台等 AT 窗口出现，给它打上 AT 的任务栏身份"""
     if sys.platform != "win32":
         return
 
@@ -158,7 +158,7 @@ def brand_window(root, timeout=20.0):
 
 
 def focus_window(title=TITLE):
-    """已经开着的天枢窗口：最小化了就还原，拉到最前面。找到返回 True"""
+    """已经开着的 AT 窗口：最小化了就还原，拉到最前面。找到返回 True"""
     if sys.platform != "win32":
         return False
     u32 = ctypes.windll.user32
@@ -248,7 +248,7 @@ def close_windows(pids, title=TITLE, exes=("msedge.exe", "chrome.exe", "atshell.
 
 
 def allow_focus():
-    """第二次双击的那个天枢调用：允许已经开着的天枢把窗口拉到最前面"""
+    """第二次双击的那个 AT 调用：允许已经开着的 AT 把窗口拉到最前面"""
     if sys.platform == "win32":
         try:
             ctypes.windll.user32.AllowSetForegroundWindow(-1)  # ASFW_ANY

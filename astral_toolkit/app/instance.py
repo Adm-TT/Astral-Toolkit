@@ -76,7 +76,7 @@ def _single_instance(restart=False):
         except Exception:
             pass
         try:
-            _call_old(url, "show")  # 已经开着的天枢把窗口打开
+            _call_old(url, "show")  # 已经开着的 AT 把窗口打开
             return False
         except Exception:
             time.sleep(3)  # 可能刚好也在启动：等它起来再叫一次
@@ -87,7 +87,7 @@ def _single_instance(restart=False):
                 )
                 return False
             except Exception:
-                pass  # 旧天枢卡住了：请它退出，重新开
+                pass  # 旧的 AT 卡住了：请它退出，重新开
     try:
         _call_old(url, "quit")
     except Exception:
