@@ -90,6 +90,7 @@ MODULES = [
     "tests.test_gamedata_mining",
     "tests.test_gamedata_arch",
     "tests.test_mining_analysis",
+    "tests.test_mining_presenter",
     "tests.test_gamedata_b4",
     "tests.test_gamedata_b6",
     "tests.test_gamedata_b5",
