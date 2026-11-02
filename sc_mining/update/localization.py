@@ -304,13 +304,6 @@ def _write_name_files(zh_names, places_zh, codes_zh):
         position.reset_names()
     except Exception:
         pass
-    try:
-        from ..trade import names
-
-        names.table.cache_clear()
-        names._index.cache_clear()
-    except Exception:
-        pass
 
 
 def _rebuild_crafting(src, progress):

@@ -13,7 +13,7 @@
 | `trade/names.table()` | 读 `zh_names.json` + `zh_only_names.json`，用 `_junk(en, _known_names())` 过滤，返回 `{中文: 英文}` dict（`lru_cache(maxsize=1)`） | 公共层把 `_import._names_table(sources)` 的结果**原样按顺序**存进新表 `zh_name_pairs`；`table()` 从 `gamedata.names.zh_pairs()` 组装同一个 dict，按库版本缓存；删掉 `_known_names()`（连带删掉对 `shops.load / loot.load_index` 的依赖） |
 | `trade/names._index()` | 在 `table()` 上建 `{_norm_zh(zh): (zh, en)}`、`{_fold_en(en): (zh, en)}` 两个 dict（`setdefault`，首个胜出） | 算法不动；缓存改成跟着 `table()` 那份对象走（`VersionCache(identity=True)`，同批 1 `stockplaces._index`） |
 | `to_english / canonical / zh_for / suggest` | 只消费 `table()` / `_index()` | 不改 |
-| `has_chinese / split_bilingual / _fold_en / _norm_zh / _junk / _CODE` | 纯函数，不读数据 | 不改；**`_junk / _norm_zh / _fold_en` 被 `gamedata/_import.py` import 复用，签名和规则不能动**（动了要升 `IMPORTER_VERSION`） |
+| `has_chinese / split_bilingual / _fold_en / _norm_zh / _junk / _CODE` | 纯函数，不读数据 | 不改；对照表的组装规则只在 `gamedata/_import._names_table` 一处，`trade/names` 不再有第二份；**`_junk / _norm_zh / _fold_en / _CODE` 被 `_import` 复用，改了要升 `_build.IMPORTER_VERSION`** |
 | `trade/gamekey._index / resolve` | `wiki_items()`（`cached_json`）+ 直接读 `loot_index.json`、`name_aliases.json` 建三个 dict | 公共层新表 `wiki_items` / `wiki_alt_classes` / `name_alias_pairs`（原样）+ 已有 `loot_rows`；`gamekey` 从 `gamedata.names` 取四份有序行，**在自己模块里**按原 `setdefault / 赋值` 语义建 dict，按库版本缓存 |
 | `core/i18n` | 只读包内随程序带的 `sc_glossary.json`（`GLOSSARY` 常量，三个 `lru_cache`） | **不迁、不改**（§4） |
 | `crafting/itemsearch.wiki_items()` | `cached_json(wiki_items.json)` | **本批不删**：`crafting/loot._wiki_classes`（批 4）和 `update/localization.wiki_class_names`（更新流程）还在用（§5） |
