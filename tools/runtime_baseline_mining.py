@@ -2,8 +2,9 @@
 
 用法（在项目根目录）：.venv\\Scripts\\python.exe -X utf8 tools\\runtime_baseline_mining.py --out <输出.json>
   输入：tests/samples 里能读出扫描面板的截图 + 几组写死的扫描 × cut 两种 × 目标清单（空 / 有一条）× 矿袋（有 / 没读到）。
-  全程断网、时间写死；配装和目标在进程内换掉（settings.load / goals.goal_short），不写 userdata。
-  JSON 不排序键：字段顺序变了也算差异。不合法的扫描只记异常类型（见 BAD_SCANS）。
+  全程断网、时间写死；配装和目标在进程内换掉（settings.load / goals.goal_short）。
+  在 worktree 里跑：主仓库目录跑时 settings.load 可能迁移写回开发目录的 userdata/settings.json，paths 导入时也会建 userdata 目录。
+  JSON 不排序键：字段顺序变了也算差异。不合法的扫描只记异常类型。旧 scan_view 只在基线提交上有：比对时把本工具拷过去出 before。
 """
 
 import argparse
@@ -59,6 +60,7 @@ def _git_head():
 
 def _freeze_world():
     """断网、时间写死、配装写死"""
+    from sc_mining import gamedata
     from sc_mining.core import net, settings
     from sc_mining.navigation import starmap
     from sc_mining.update import uex
@@ -69,6 +71,7 @@ def _freeze_world():
     uex._get = no_net
     net.read = no_net
     starmap.read = no_net
+    gamedata.ensure()  # 先建好库：建库文件名要用真实时间，写死后冷启动会建库失败
     time.strftime = lambda *a, **k: "12:00:00"
     real = settings.load
     settings.load = lambda: {
@@ -167,6 +170,74 @@ def _view(scan, bag, cut):
     return mining.scan_view(scan, bag, cut=cut)
 
 
+def _branch_cases(out, Scan, goals):
+    """真实数据走不到的分支：临时改精炼站表 / 方案 / 目标，跑完还原"""
+    from sc_mining.mining import data, laser
+
+    copper = Scan(
+        rock="Gold",
+        mass=9000,
+        resistance=35,
+        instability=6,
+        total_scu=10.0,
+        composition=[("Gold", 50.0, 500), ("Copper", 50.0, 500)],
+    )
+    no_goal = lambda force=False: {}  # noqa: E731
+    goals.goal_short = no_goal
+    saved = dict(data.REFINERIES)
+    try:
+        for k, (sys_, _) in saved.items():
+            data.REFINERIES[k] = (sys_, {})
+        out["分支:精炼站加成为空"] = _view(copper, BAG, False)
+        for k, (sys_, _) in saved.items():
+            data.REFINERIES[k] = (sys_, {"Copper": -100})
+        out["分支:某份精炼后为 0"] = _view(copper, BAG, False)
+    finally:
+        data.REFINERIES.update(saved)
+    out["分支:卖价无收购"] = _view(
+        Scan(
+            rock="NotAnOre",
+            mass=9000,
+            resistance=35,
+            instability=6,
+            total_scu=10.0,
+            composition=[("NotAnOre", 100.0, 500)],
+        ),
+        BAG,
+        False,
+    )
+    out["分支:高品质但总 SCU 读不到"] = _view(
+        Scan(
+            rock="Gold",
+            mass=9000,
+            resistance=35,
+            instability=6,
+            total_scu=None,
+            composition=[("Gold", 30.0, 800), ("Gold", 30.0, 600), ("Gold", 40.0, 300)],
+        ),
+        BAG,
+        True,
+    )
+    real = laser.recommend
+    laser.recommend = lambda *a, **k: []
+    try:
+        out["分支:没有方案"] = _view(copper, BAG, False)
+    finally:
+        laser.recommend = real
+    t = {
+        "en": "Gold",
+        "zh": "目标自带名",
+        "short": 1.5,
+        "unit": "",
+        "minq": 1,
+        "goals": ["某蓝图"],
+        "item": None,
+    }
+    goals.goal_short = lambda force=False: {goals._gkey("Gold"): t}
+    out["分支:目标 minq≤1 且自带中文名"] = _view(copper, BAG, False)
+    goals.goal_short = no_goal
+
+
 def collect():
     _freeze_world()
     from sc_mining.mining.parse import Scan
@@ -189,6 +260,8 @@ def collect():
     goals.goal_short = boom
     first = next(iter(_fixed_scans().values()))
     out["目标查询出错"] = _view(first, BAG, False)
+
+    _branch_cases(out, Scan, goals)
 
     # 不合法的扫描：只比异常类型（调用方都先判过 mass，这条路线上用户看不到异常文字）
     goals.goal_short = lambda force=False: {}
