@@ -1,10 +1,13 @@
-"""运行结构 RT-B3（结果状态）前后的发布序列基线：假画面驱动 _Live._run，录下总线和悬浮窗的完整序列，改完逐字比对
+"""运行结构 RT-B3 / RT-B4（结果状态、会话循环）前后的发布序列基线：假画面驱动采矿助手（只经 start / stop），
+录下总线和悬浮窗的完整序列，改完逐字比对
 
 用法（在 worktree 根目录）：.venv\\Scripts\\python.exe -X utf8 tools\\runtime_baseline_live.py --out <输出.json>
   不读屏：screen.grab 换成脚本里的图。两轮：
     样本：tests/samples 每张喂 6 帧（真 OCR），再切出游戏几帧，再空白帧到过期、到自动关闭。
     写死：screen.analyse 也换掉，走面板读全、读不全提示、换石头、配装变化、面板被挡、空白到过期、自动关闭。
   时钟写死：每帧前进固定秒数，文字时间写成 12:00:00。全程断网，设置、目标、远程开关换掉，日志和截图写临时目录。
+  驱动只用 start / stop（RT-B4 起线程由会话循环起，工具不再直接调 _Live._run）：自动关闭后线程自己退出，
+  这里等录制序列稳定（收尾事件发完）再收工。
   JSON 不排序键：字段顺序、发布顺序变了都算差异。证明的是正常路径；停止和迟到结果由 tests/test_live_commit.py 证明。
 """
 
@@ -79,8 +82,18 @@ def _patch(rec, tmp):
     paths.shots = lambda name: tmp
 
 
-def _drive(frames, clock, front=None):
-    """跑完一轮：frames 用完后喂空白帧，等它自己过期、自动关闭（_auto_off）；最后走一遍 stop"""
+def _settle(rec):
+    """等后台线程把收尾事件发完：录制序列连续几次长度不变就算稳定"""
+    last, same = -1, 0
+    while same < 3:
+        time.sleep(0.005)
+        n = len(rec.seq)
+        same = same + 1 if n == last else 0
+        last = n
+
+
+def _drive(rec, frames, clock, front=None):
+    """跑完一轮：frames 用完后喂空白帧，等它自己过期、自动关闭（_auto_off）；到上限还没停就按开关"""
     from PIL import Image
     from astral_toolkit.app.engines import live as live_mod
     from astral_toolkit.mining import screen
@@ -112,8 +125,10 @@ def _drive(frames, clock, front=None):
     screen.grab = grab
     screen.INTERVAL = 0
     mining._game_front = game_front
-    live._run(live.stop_ev)
-    live.stop()
+    live.start()
+    while live.running():
+        time.sleep(0.001)
+    _settle(rec)
     return i["n"]
 
 
@@ -134,7 +149,7 @@ def _samples(rec, clock):
             used.append(p.name)
     away_from = len(frames)
     rec.seq.clear()
-    n = _drive(frames, clock, front=lambda k: away_from <= k < away_from + 4)
+    n = _drive(rec, frames, clock, front=lambda k: away_from <= k < away_from + 4)
     return {"样本": used, "帧数": n, "序列": list(rec.seq)}
 
 
@@ -177,7 +192,7 @@ def _scripted(rec, clock):
     screen.analyse = analyse
     screen.miss_reason = lambda img: "cut"
     rec.seq.clear()
-    n = _drive(frames, clock)
+    n = _drive(rec, frames, clock)
     return {"帧数": n, "序列": list(rec.seq)}
 
 
@@ -216,3 +231,4 @@ def main(argv=None):
 
 if __name__ == "__main__":
     sys.exit(main())
+
