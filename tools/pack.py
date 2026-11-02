@@ -12,12 +12,12 @@ with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
             raise SystemExit(
                 "缺少 " + "、".join(lost) + "，不能打包（AGPL 要求随程序附上许可证）"
             )
-        from sc_mining.app.build_exe import build
+        from astral_toolkit.app.build_exe import build
 
         build()  # 用最新代码重新生成 Dubhe.exe
         dist = root / "dist"
         dist.mkdir(exist_ok=True)
-        from sc_mining.core.version import VERSION
+        from astral_toolkit.core.version import VERSION
 
         name = f"Dubhe_{VERSION}"
         zpath = dist / f"{name}.zip"
@@ -47,7 +47,7 @@ with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
             "LICENSE",
         ]
         skip_dirs = {"__pycache__"}
-        from sc_mining.core.paths import BUILD_DIR
+        from astral_toolkit.core.paths import BUILD_DIR
 
         # 以后 BUILD_DIR 改名时，旧目录名也要留在这个排除表里，否则游戏数据原文件会被打进安装包
         skip_data = {
@@ -68,7 +68,7 @@ with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
             readme = "\n".join(l for l in readme.splitlines() if "_claude_run" not in l)  # noqa: E741
             z.writestr(f"{name}/README.md", readme)
             n += 1  # noqa: E702
-            for base in ("sc_mining", "data"):
+            for base in ("astral_toolkit", "data"):
                 for dirpath, dirs, files in os.walk(root / base):
                     rel = Path(dirpath).relative_to(root)
                     dirs[:] = [
@@ -120,8 +120,8 @@ with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
             [
                 sys.executable,
                 "-c",
-                "import sc_mining.app.server, sc_mining.app.api.router, sc_mining.run; "
-                "from sc_mining.core import settings; print('agreed', settings.load()['agreed'])",
+                "import astral_toolkit.app.server, astral_toolkit.app.api.router, astral_toolkit.run; "
+                "from astral_toolkit.core import settings; print('agreed', settings.load()['agreed'])",
             ],
             cwd=app,
             capture_output=True,
@@ -137,7 +137,7 @@ with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
             "使用说明.txt",
             "第三方许可.txt",
             "LICENSE",
-            "sc_mining/app/web/index.html",
+            "astral_toolkit/app/web/index.html",
             "data/shops.json",
             "data/crafting.json",
             "data/ship_signatures.json",

@@ -46,7 +46,7 @@ def _git_head():
 
 def _new_babbage_point(data):
     """用商店数据里第一家新巴贝奇商店的位置当“我在这”，不依赖导航模块的常量"""
-    from sc_mining.crafting import shops
+    from astral_toolkit.crafting import shops
 
     for r in data["rows"]:
         if len(r) > 6 and r[6] and r[6][5] == "New Babbage":
@@ -55,9 +55,9 @@ def _new_babbage_point(data):
 
 
 def collect():
-    from sc_mining.core.paths import DATA, file_stamp
-    from sc_mining.crafting import itemsearch, loot, shops
-    from sc_mining.trade import gamekey, names
+    from astral_toolkit.core.paths import DATA, file_stamp
+    from astral_toolkit.crafting import itemsearch, loot, shops
+    from astral_toolkit.trade import gamekey, names
 
     out = {}
     for q in SEARCHES:

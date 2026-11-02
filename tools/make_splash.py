@@ -14,7 +14,7 @@ def main():
     im = Image.new("RGB", (W, H), NAVY)
     d = ImageDraw.Draw(im)
     icon = (
-        Image.open(ROOT / "sc_mining" / "app" / "web" / "icon.png")
+        Image.open(ROOT / "astral_toolkit" / "app" / "web" / "icon.png")
         .convert("RGBA")
         .resize((96, 96), Image.LANCZOS)
     )

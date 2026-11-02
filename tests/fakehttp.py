@@ -3,7 +3,7 @@
 import json as _json
 from types import SimpleNamespace
 from urllib.parse import urlparse
-from sc_mining.trade.providers.http import _Response
+from astral_toolkit.trade.providers.http import _Response
 
 
 def Response(status, json=None, headers=None, text=None):

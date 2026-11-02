@@ -15,8 +15,8 @@ def _loot_src(rows, **extra):
 
 
 def test_loot_rows_order_and_fold(monkeypatch, tmp_path):
-    from sc_mining.crafting.loot import _fold
-    from sc_mining.gamedata import loot as T
+    from astral_toolkit.crafting.loot import _fold
+    from astral_toolkit.gamedata import loot as T
 
     _setup(
         monkeypatch,
@@ -37,8 +37,8 @@ def test_loot_rows_order_and_fold(monkeypatch, tmp_path):
 
 
 def test_loot_rows_cached_per_version(monkeypatch, tmp_path):
-    import sc_mining.gamedata as G
-    from sc_mining.gamedata import loot as T
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.gamedata import loot as T
 
     _setup(monkeypatch, tmp_path)
     a = T.rows()
@@ -53,8 +53,8 @@ def test_loot_rows_cached_per_version(monkeypatch, tmp_path):
 
 
 def test_loot_exact_ignores_empty_keys(monkeypatch, tmp_path):
-    from sc_mining.crafting.loot import _fold
-    from sc_mining.gamedata import loot as T
+    from astral_toolkit.crafting.loot import _fold
+    from astral_toolkit.gamedata import loot as T
 
     _setup(
         monkeypatch,
@@ -74,7 +74,7 @@ def test_loot_exact_ignores_empty_keys(monkeypatch, tmp_path):
 
 
 def test_loot_by_cls_prefix_underscore_is_literal(monkeypatch, tmp_path):
-    from sc_mining.gamedata import loot as T
+    from astral_toolkit.gamedata import loot as T
 
     _setup(
         monkeypatch,
@@ -95,8 +95,8 @@ def test_loot_by_cls_prefix_underscore_is_literal(monkeypatch, tmp_path):
 
 
 def test_wiki_classes_includes_alt_and_drops_empty(monkeypatch, tmp_path):
-    from sc_mining.crafting.loot import _fold
-    from sc_mining.gamedata import loot as T
+    from astral_toolkit.crafting.loot import _fold
+    from astral_toolkit.gamedata import loot as T
 
     _setup(
         monkeypatch,
@@ -126,8 +126,8 @@ def test_wiki_classes_includes_alt_and_drops_empty(monkeypatch, tmp_path):
 
 
 def test_index_meta_three_states(monkeypatch, tmp_path):
-    import sc_mining.gamedata as G
-    from sc_mining.gamedata import loot as T
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.gamedata import loot as T
 
     _setup(monkeypatch, tmp_path)
     assert T.index_meta() == {"version": "4.10.2LIVE"}
@@ -140,9 +140,9 @@ def test_index_meta_three_states(monkeypatch, tmp_path):
 
 
 def test_loot_topic_uses_outer_snapshot(monkeypatch, tmp_path):
-    import sc_mining.gamedata as G
-    from sc_mining.crafting.loot import _fold
-    from sc_mining.gamedata import loot as T
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.crafting.loot import _fold
+    from astral_toolkit.gamedata import loot as T
 
     _setup(monkeypatch, tmp_path)
     G.ensure()
@@ -240,7 +240,7 @@ def _legacy_find(tmp_path, name_en="", name_zh=""):
     """迁移前 crafting/loot.py 的 find + _folded_rows + _wiki_classes（行号 L92-159），只在测试里存在：直接读最小源的 JSON"""
     import json
 
-    from sc_mining.crafting.loot import _VARIANT, _fold
+    from astral_toolkit.crafting.loot import _VARIANT, _fold
 
     f = tmp_path / "loot_index.json"
     idx = json.loads(f.read_text(encoding="utf-8")) if f.exists() else None
@@ -296,7 +296,7 @@ def _legacy_find(tmp_path, name_en="", name_zh=""):
 
 
 def test_find_equals_legacy_on_sample(monkeypatch, tmp_path):
-    from sc_mining.crafting import loot
+    from astral_toolkit.crafting import loot
 
     _find_setup(monkeypatch, tmp_path)
     nonempty = 0
@@ -310,7 +310,7 @@ def test_find_equals_legacy_on_sample(monkeypatch, tmp_path):
 def test_find_exact_prefers_wiki_class_then_non_variant_then_n_desc(
     monkeypatch, tmp_path
 ):
-    from sc_mining.crafting import loot
+    from astral_toolkit.crafting import loot
 
     _find_setup(monkeypatch, tmp_path)
     ids = lambda hits: [h[0] for h in hits]  # noqa: E731
@@ -327,8 +327,8 @@ def test_find_exact_prefers_wiki_class_then_non_variant_then_n_desc(
 
 
 def test_find_refreshes_after_rebuild_without_clear_caches(monkeypatch, tmp_path):
-    import sc_mining.gamedata as G
-    from sc_mining.crafting import loot
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.crafting import loot
 
     _find_setup(monkeypatch, tmp_path)
     assert loot.find("Brand New Thing") == []
@@ -343,9 +343,9 @@ def test_find_refreshes_after_rebuild_without_clear_caches(monkeypatch, tmp_path
 
 
 def test_find_empty_when_no_index_or_db_unavailable(monkeypatch, tmp_path):
-    import sc_mining.gamedata as G
-    from sc_mining.core import paths
-    from sc_mining.crafting import loot
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.core import paths
+    from astral_toolkit.crafting import loot
 
     _find_setup(monkeypatch, tmp_path)
     (tmp_path / "loot_index.json").unlink()
@@ -358,7 +358,7 @@ def test_find_empty_when_no_index_or_db_unavailable(monkeypatch, tmp_path):
 
 
 def test_find_does_not_read_json(monkeypatch, tmp_path):
-    from sc_mining.crafting import itemsearch, loot
+    from astral_toolkit.crafting import itemsearch, loot
 
     def boom(*a, **kw):
         raise AssertionError("查询路径不该再读 JSON")
@@ -377,8 +377,8 @@ def test_find_does_not_read_json(monkeypatch, tmp_path):
 
 
 def test_wiki_classes_swallows_db_errors(monkeypatch, tmp_path):
-    from sc_mining.core import paths
-    from sc_mining.crafting import loot
+    from astral_toolkit.core import paths
+    from astral_toolkit.crafting import loot
 
     _find_setup(monkeypatch, tmp_path)
     monkeypatch.setattr(paths, "DATA", tmp_path / "empty")
@@ -386,8 +386,8 @@ def test_wiki_classes_swallows_db_errors(monkeypatch, tmp_path):
 
 
 def test_clear_caches_still_safe(monkeypatch, tmp_path):
-    from sc_mining.crafting import loot
-    from sc_mining.update import data_pack, uex
+    from astral_toolkit.crafting import loot
+    from astral_toolkit.update import data_pack, uex
 
     _find_setup(monkeypatch, tmp_path)
     monkeypatch.setattr(
@@ -404,7 +404,7 @@ def test_clear_caches_still_safe(monkeypatch, tmp_path):
 
 def _detail_env(monkeypatch, tmp_path):
     """明细相关路径都换到 tmp_path；_from_zip / _get 换成记录器（不联网、不读真实整包）"""
-    from sc_mining.crafting import loot
+    from astral_toolkit.crafting import loot
 
     rec = {"zip": [], "get": []}
     monkeypatch.setattr(loot, "DETAILS", tmp_path / "loot_details.zip")
@@ -427,8 +427,8 @@ def _detail_env(monkeypatch, tmp_path):
 def test_detail_version_from_meta_matches_legacy(monkeypatch, tmp_path):
     import json
 
-    import sc_mining.gamedata as G
-    from sc_mining.crafting import loot
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.crafting import loot
     from tests.minipytest import raises
 
     _setup(monkeypatch, tmp_path)
@@ -466,7 +466,7 @@ def test_detail_version_from_meta_matches_legacy(monkeypatch, tmp_path):
 
 
 def test_detail_online_write_not_in_updating(monkeypatch, tmp_path):
-    from sc_mining.crafting import loot
+    from astral_toolkit.crafting import loot
     from tests.test_gamedata_b1 import _count_updating
 
     _setup(monkeypatch, tmp_path)
@@ -478,7 +478,7 @@ def test_detail_online_write_not_in_updating(monkeypatch, tmp_path):
 
 
 def test_detail_does_not_read_index_json(monkeypatch, tmp_path):
-    from sc_mining.crafting import loot
+    from astral_toolkit.crafting import loot
 
     def boom(*a, **kw):
         raise AssertionError("detail 不该再读 loot_index.json")
@@ -491,8 +491,8 @@ def test_detail_does_not_read_index_json(monkeypatch, tmp_path):
 
 
 def test_detail_default_version_when_db_unavailable(monkeypatch, tmp_path):
-    from sc_mining.core import paths
-    from sc_mining.crafting import loot
+    from astral_toolkit.core import paths
+    from astral_toolkit.crafting import loot
 
     _setup(monkeypatch, tmp_path)
     rec = _detail_env(monkeypatch, tmp_path)
@@ -526,7 +526,7 @@ _ROCKS = [
 
 
 def _fake_details(monkeypatch):
-    from sc_mining.crafting import loot
+    from astral_toolkit.crafting import loot
 
     seen = []
 
@@ -542,7 +542,7 @@ def _mine(key, online):
     """mine_info 的结果，断言不是 None（类型检查要知道下面能取下标）"""
     from typing import Any
 
-    from sc_mining.crafting import loot
+    from astral_toolkit.crafting import loot
 
     d = loot.mine_info(key, online=online)
     assert d is not None
@@ -570,8 +570,8 @@ def test_mine_info_cls_prefix_literal_and_skips_pure(monkeypatch, tmp_path):
 def test_mine_info_online_downloads_when_no_index(monkeypatch, tmp_path):
     import json
 
-    import sc_mining.gamedata as G
-    from sc_mining.crafting import loot
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.crafting import loot
 
     _setup(monkeypatch, tmp_path, **_loot_src(_ROCKS))
     (tmp_path / "loot_index.json").unlink()
@@ -597,8 +597,8 @@ def test_mine_info_online_downloads_when_no_index(monkeypatch, tmp_path):
 
 
 def test_mine_info_none_when_download_fails(monkeypatch, tmp_path):
-    import sc_mining.gamedata as G
-    from sc_mining.crafting import loot
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.crafting import loot
 
     _setup(monkeypatch, tmp_path)
     (tmp_path / "loot_index.json").unlink()
@@ -613,7 +613,7 @@ def test_mine_info_none_when_download_fails(monkeypatch, tmp_path):
 
 
 def test_mine_info_empty_rows_does_not_download(monkeypatch, tmp_path):
-    from sc_mining.crafting import loot
+    from astral_toolkit.crafting import loot
 
     _setup(monkeypatch, tmp_path, **_loot_src([]))
     _detail_env(monkeypatch, tmp_path)
@@ -624,8 +624,8 @@ def test_mine_info_empty_rows_does_not_download(monkeypatch, tmp_path):
 
 
 def test_mine_info_none_when_db_unavailable(monkeypatch, tmp_path):
-    from sc_mining.core import paths
-    from sc_mining.crafting import loot
+    from astral_toolkit.core import paths
+    from astral_toolkit.crafting import loot
 
     _setup(monkeypatch, tmp_path, **_loot_src(_ROCKS))
     _detail_env(monkeypatch, tmp_path)
@@ -703,7 +703,7 @@ _DETAILS = {
 def test_info_and_text_equal_legacy_on_sample(monkeypatch, tmp_path):
     import json
 
-    from sc_mining.crafting import loot
+    from astral_toolkit.crafting import loot
 
     _find_setup(monkeypatch, tmp_path)
     monkeypatch.setattr(
@@ -757,7 +757,7 @@ def test_info_and_text_equal_legacy_on_sample(monkeypatch, tmp_path):
 
 
 def test_loot_update_still_inside_updating(monkeypatch, tmp_path):
-    from sc_mining.crafting import loot
+    from astral_toolkit.crafting import loot
     from tests.test_gamedata_b1 import _count_updating
 
     _setup(monkeypatch, tmp_path)
@@ -778,7 +778,7 @@ def test_loot_update_still_inside_updating(monkeypatch, tmp_path):
 
 
 def test_load_index_still_available_for_batch6(monkeypatch, tmp_path):
-    from sc_mining.crafting import loot
+    from astral_toolkit.crafting import loot
 
     _setup(monkeypatch, tmp_path)
     monkeypatch.setattr(loot, "INDEX", tmp_path / "loot_index.json")

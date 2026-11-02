@@ -2,7 +2,7 @@
 
 import threading
 
-from sc_mining.runtime.results import MINING_SCAN, MINING_SIGNALS, ResultStore
+from astral_toolkit.runtime.results import MINING_SCAN, MINING_SIGNALS, ResultStore
 
 
 def _put(store, value, session=1, epoch=1, seq=1, slot=MINING_SCAN, **kw):

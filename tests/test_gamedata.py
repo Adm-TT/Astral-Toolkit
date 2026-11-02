@@ -1,13 +1,13 @@
-"""游戏数据层地基（sc_mining/gamedata）：路径、类型、写锁、清单、表结构、快照、建库、入口
+"""游戏数据层地基（astral_toolkit/gamedata）：路径、类型、写锁、清单、表结构、快照、建库、入口
 
 全部用 tmp_path 当 data/ 根（monkeypatch paths.DATA），不读真实 data/、不写 userdata/。"""
 
 import dataclasses
-from sc_mining.gamedata._cache import VersionCache as _VC
+from astral_toolkit.gamedata._cache import VersionCache as _VC
 
 
 def _data_root(monkeypatch, tmp_path):
-    from sc_mining.core import paths
+    from astral_toolkit.core import paths
 
     monkeypatch.setattr(paths, "DATA", tmp_path)
     return tmp_path
@@ -17,7 +17,7 @@ def _data_root(monkeypatch, tmp_path):
 
 
 def test_paths_follow_data_root(monkeypatch, tmp_path):
-    from sc_mining.gamedata import _paths
+    from astral_toolkit.gamedata import _paths
 
     _data_root(monkeypatch, tmp_path)
     assert _paths.gamedata_dir() == tmp_path / "gamedata"
@@ -28,7 +28,7 @@ def test_paths_follow_data_root(monkeypatch, tmp_path):
 
 
 def test_types_are_frozen():
-    from sc_mining.gamedata import ShopRow, Vec3
+    from astral_toolkit.gamedata import ShopRow, Vec3
     from tests.minipytest import raises
 
     v = Vec3(1.0, 2.0, 3.0)
@@ -38,7 +38,7 @@ def test_types_are_frozen():
 
 
 def test_exceptions_hierarchy():
-    from sc_mining.gamedata import BuildError, GamedataError, GamedataUnavailable
+    from astral_toolkit.gamedata import BuildError, GamedataError, GamedataUnavailable
 
     assert issubclass(GamedataUnavailable, GamedataError)
     assert issubclass(BuildError, GamedataError)
@@ -48,7 +48,7 @@ def test_exceptions_hierarchy():
 
 
 def test_write_lock_reentrant_in_process(monkeypatch, tmp_path):
-    from sc_mining.gamedata import _lock
+    from astral_toolkit.gamedata import _lock
 
     _data_root(monkeypatch, tmp_path)
     with _lock.write_lock():
@@ -62,15 +62,15 @@ def test_write_lock_blocks_other_process(monkeypatch, tmp_path):
     import sys
     import time
 
-    from sc_mining.gamedata import GamedataError, _lock
+    from astral_toolkit.gamedata import GamedataError, _lock
     from tests.minipytest import raises
 
     _data_root(monkeypatch, tmp_path)
     code = (
         "import sys, time; sys.path.insert(0, sys.argv[1]);"
-        "from sc_mining.core import paths; from pathlib import Path;"
+        "from astral_toolkit.core import paths; from pathlib import Path;"
         "paths.DATA = Path(sys.argv[2]);"
-        "from sc_mining.gamedata import _lock;"
+        "from astral_toolkit.gamedata import _lock;"
         "l = _lock.write_lock(); l.__enter__(); print('locked', flush=True); time.sleep(3)"
     )
     import os
@@ -95,7 +95,7 @@ def test_write_lock_blocks_other_process(monkeypatch, tmp_path):
 
 
 def test_manifest_roundtrip(monkeypatch, tmp_path):
-    from sc_mining.gamedata._manifest import Manifest, read_manifest, write_manifest
+    from astral_toolkit.gamedata._manifest import Manifest, read_manifest, write_manifest
 
     _data_root(monkeypatch, tmp_path)
     m = Manifest("g1", "v1", 1, "gamedata-g1.db")
@@ -104,16 +104,16 @@ def test_manifest_roundtrip(monkeypatch, tmp_path):
 
 
 def test_manifest_missing_is_none(monkeypatch, tmp_path):
-    from sc_mining.gamedata._manifest import read_manifest
+    from astral_toolkit.gamedata._manifest import read_manifest
 
     _data_root(monkeypatch, tmp_path)
     assert read_manifest() is None
 
 
 def test_manifest_corrupt_raises(monkeypatch, tmp_path):
-    from sc_mining.gamedata import GamedataUnavailable
-    from sc_mining.gamedata._manifest import read_manifest
-    from sc_mining.gamedata._paths import manifest_path
+    from astral_toolkit.gamedata import GamedataUnavailable
+    from astral_toolkit.gamedata._manifest import read_manifest
+    from astral_toolkit.gamedata._paths import manifest_path
     from tests.minipytest import raises
 
     _data_root(monkeypatch, tmp_path)
@@ -176,7 +176,7 @@ _TABLES = {
 def test_ddl_creates_all_tables(tmp_path):
     import sqlite3
 
-    from sc_mining.gamedata._schema import DDL, SCHEMA_VERSION
+    from astral_toolkit.gamedata._schema import DDL, SCHEMA_VERSION
 
     assert (
         SCHEMA_VERSION == 6
@@ -194,7 +194,7 @@ def test_ddl_creates_all_tables(tmp_path):
 def test_read_sources_hash_matches_bytes(tmp_path):
     import hashlib
 
-    from sc_mining.gamedata._sources import SOURCES, read_sources
+    from astral_toolkit.gamedata._sources import SOURCES, read_sources
 
     raw = b'{"items":{},"rows":[]}'
     (tmp_path / "shops.json").write_bytes(raw)
@@ -210,8 +210,8 @@ def test_read_sources_hash_matches_bytes(tmp_path):
 
 
 def test_read_sources_missing_required_raises(tmp_path):
-    from sc_mining.gamedata import BuildError
-    from sc_mining.gamedata._sources import read_sources
+    from astral_toolkit.gamedata import BuildError
+    from astral_toolkit.gamedata._sources import read_sources
     from tests.minipytest import raises
 
     with raises(BuildError):
@@ -219,8 +219,8 @@ def test_read_sources_missing_required_raises(tmp_path):
 
 
 def test_read_sources_bad_json_raises(tmp_path):
-    from sc_mining.gamedata import BuildError
-    from sc_mining.gamedata._sources import read_sources
+    from astral_toolkit.gamedata import BuildError
+    from astral_toolkit.gamedata._sources import read_sources
     from tests.minipytest import raises
 
     (tmp_path / "shops.json").write_text('{"items":', encoding="utf-8")
@@ -235,9 +235,9 @@ def _make_db(tmp_path, gen, data_version):
     """按 DDL 建一个空库、写 meta、写清单（不走建库流程，单测快照用）"""
     import sqlite3
 
-    from sc_mining.gamedata._manifest import Manifest, write_manifest
-    from sc_mining.gamedata._paths import db_path
-    from sc_mining.gamedata._schema import DDL, IMPORTER_VERSION, SCHEMA_VERSION
+    from astral_toolkit.gamedata._manifest import Manifest, write_manifest
+    from astral_toolkit.gamedata._paths import db_path
+    from astral_toolkit.gamedata._schema import DDL, IMPORTER_VERSION, SCHEMA_VERSION
 
     p = db_path(gen)
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -262,7 +262,7 @@ def _make_db(tmp_path, gen, data_version):
 
 
 def test_snapshot_reads_meta(monkeypatch, tmp_path):
-    from sc_mining.gamedata import snapshot
+    from astral_toolkit.gamedata import snapshot
 
     _data_root(monkeypatch, tmp_path)
     _make_db(tmp_path, "g1", "v1")
@@ -274,7 +274,7 @@ def test_snapshot_reads_meta(monkeypatch, tmp_path):
 
 
 def test_snapshot_nested_reuses_outer(monkeypatch, tmp_path):
-    from sc_mining.gamedata import snapshot
+    from astral_toolkit.gamedata import snapshot
 
     _data_root(monkeypatch, tmp_path)
     _make_db(tmp_path, "g1", "v1")
@@ -287,7 +287,7 @@ def test_snapshot_nested_reuses_outer(monkeypatch, tmp_path):
 
 
 def test_snapshot_no_manifest_raises(monkeypatch, tmp_path):
-    from sc_mining.gamedata import GamedataUnavailable, snapshot
+    from astral_toolkit.gamedata import GamedataUnavailable, snapshot
     from tests.minipytest import raises
 
     _data_root(monkeypatch, tmp_path)
@@ -297,8 +297,8 @@ def test_snapshot_no_manifest_raises(monkeypatch, tmp_path):
 
 
 def test_snapshot_missing_db_file_raises(monkeypatch, tmp_path):
-    from sc_mining.gamedata import GamedataUnavailable, snapshot
-    from sc_mining.gamedata._paths import db_path
+    from astral_toolkit.gamedata import GamedataUnavailable, snapshot
+    from astral_toolkit.gamedata._paths import db_path
     from tests.minipytest import raises
 
     _data_root(monkeypatch, tmp_path)
@@ -310,8 +310,8 @@ def test_snapshot_missing_db_file_raises(monkeypatch, tmp_path):
 
 
 def test_snapshot_generation_mismatch_raises(monkeypatch, tmp_path):
-    from sc_mining.gamedata import GamedataUnavailable, snapshot
-    from sc_mining.gamedata._manifest import Manifest, write_manifest
+    from astral_toolkit.gamedata import GamedataUnavailable, snapshot
+    from astral_toolkit.gamedata._manifest import Manifest, write_manifest
     from tests.minipytest import raises
 
     _data_root(monkeypatch, tmp_path)
@@ -325,7 +325,7 @@ def test_snapshot_generation_mismatch_raises(monkeypatch, tmp_path):
 
 
 def test_version_outside_snapshot_follows_manifest(monkeypatch, tmp_path):
-    from sc_mining.gamedata import version
+    from astral_toolkit.gamedata import version
 
     _data_root(monkeypatch, tmp_path)
     assert version() is None
@@ -336,7 +336,7 @@ def test_version_outside_snapshot_follows_manifest(monkeypatch, tmp_path):
 def test_snapshot_connection_is_readonly(monkeypatch, tmp_path):
     import sqlite3
 
-    from sc_mining.gamedata import GamedataUnavailable, snapshot
+    from astral_toolkit.gamedata import GamedataUnavailable, snapshot
     from tests.minipytest import raises
 
     _data_root(monkeypatch, tmp_path)
@@ -402,10 +402,10 @@ def _write_min_sources(tmp_path, **override):
 
 
 def test_build_publish_roundtrip(monkeypatch, tmp_path):
-    from sc_mining.gamedata import snapshot
-    from sc_mining.gamedata._build import rebuild_if_needed
-    from sc_mining.gamedata._manifest import read_manifest
-    from sc_mining.gamedata._paths import db_path, tmp_dir
+    from astral_toolkit.gamedata import snapshot
+    from astral_toolkit.gamedata._build import rebuild_if_needed
+    from astral_toolkit.gamedata._manifest import read_manifest
+    from astral_toolkit.gamedata._paths import db_path, tmp_dir
 
     _data_root(monkeypatch, tmp_path)
     _write_min_sources(tmp_path)
@@ -422,7 +422,7 @@ def test_build_publish_roundtrip(monkeypatch, tmp_path):
 
 
 def test_rebuild_skips_when_unchanged(monkeypatch, tmp_path):
-    from sc_mining.gamedata._build import rebuild_if_needed
+    from astral_toolkit.gamedata._build import rebuild_if_needed
 
     _data_root(monkeypatch, tmp_path)
     _write_min_sources(tmp_path)
@@ -430,7 +430,7 @@ def test_rebuild_skips_when_unchanged(monkeypatch, tmp_path):
 
 
 def test_rebuild_when_source_changes(monkeypatch, tmp_path):
-    from sc_mining.gamedata._build import rebuild_if_needed
+    from astral_toolkit.gamedata._build import rebuild_if_needed
 
     _data_root(monkeypatch, tmp_path)
     _write_min_sources(tmp_path)
@@ -444,7 +444,7 @@ def test_rebuild_when_source_changes(monkeypatch, tmp_path):
 
 
 def test_rebuild_force_makes_new_generation_same_version(monkeypatch, tmp_path):
-    from sc_mining.gamedata._build import rebuild_if_needed
+    from astral_toolkit.gamedata._build import rebuild_if_needed
 
     _data_root(monkeypatch, tmp_path)
     _write_min_sources(tmp_path)
@@ -455,10 +455,10 @@ def test_rebuild_force_makes_new_generation_same_version(monkeypatch, tmp_path):
 
 
 def test_build_bad_json_keeps_old_manifest(monkeypatch, tmp_path):
-    from sc_mining.gamedata import BuildError
-    from sc_mining.gamedata._build import rebuild_if_needed
-    from sc_mining.gamedata._manifest import read_manifest
-    from sc_mining.gamedata._paths import tmp_dir
+    from astral_toolkit.gamedata import BuildError
+    from astral_toolkit.gamedata._build import rebuild_if_needed
+    from astral_toolkit.gamedata._manifest import read_manifest
+    from astral_toolkit.gamedata._paths import tmp_dir
     from tests.minipytest import raises
 
     _data_root(monkeypatch, tmp_path)
@@ -472,8 +472,8 @@ def test_build_bad_json_keeps_old_manifest(monkeypatch, tmp_path):
 
 
 def test_import_items_follows_itemsearch_rules(monkeypatch, tmp_path):
-    from sc_mining.gamedata import snapshot
-    from sc_mining.gamedata._build import rebuild_if_needed
+    from astral_toolkit.gamedata import snapshot
+    from astral_toolkit.gamedata._build import rebuild_if_needed
 
     _data_root(monkeypatch, tmp_path)
     _write_min_sources(tmp_path)
@@ -528,8 +528,8 @@ def test_import_items_follows_itemsearch_rules(monkeypatch, tmp_path):
 
 
 def test_import_alias_does_not_override_existing_item(monkeypatch, tmp_path):
-    from sc_mining.gamedata import snapshot
-    from sc_mining.gamedata._build import rebuild_if_needed
+    from astral_toolkit.gamedata import snapshot
+    from astral_toolkit.gamedata._build import rebuild_if_needed
 
     _data_root(monkeypatch, tmp_path)
     _write_min_sources(tmp_path)
@@ -547,8 +547,8 @@ def test_import_alias_does_not_override_existing_item(monkeypatch, tmp_path):
 def test_data_version_depends_on_missing_flag(tmp_path):
     import json
 
-    from sc_mining.gamedata._build import data_version
-    from sc_mining.gamedata._sources import read_sources
+    from astral_toolkit.gamedata._build import data_version
+    from astral_toolkit.gamedata._sources import read_sources
 
     (tmp_path / "shops.json").write_text(
         json.dumps(_MIN_SOURCES["shops.json"]), encoding="utf-8"
@@ -565,8 +565,8 @@ def test_data_version_depends_on_missing_flag(tmp_path):
 def test_rebuild_concurrent_same_process(monkeypatch, tmp_path):
     import threading
 
-    import sc_mining.gamedata as G
-    from sc_mining.gamedata._paths import gamedata_dir
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.gamedata._paths import gamedata_dir
 
     _data_root(monkeypatch, tmp_path)
     _write_min_sources(tmp_path)
@@ -591,9 +591,9 @@ def test_rebuild_concurrent_same_process(monkeypatch, tmp_path):
 
 
 def test_updating_rebuilds_once_at_outermost(monkeypatch, tmp_path):
-    import sc_mining.gamedata as G
-    from sc_mining.gamedata import _build
-    from sc_mining.gamedata._manifest import Manifest
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.gamedata import _build
+    from astral_toolkit.gamedata._manifest import Manifest
 
     _data_root(monkeypatch, tmp_path)
     calls = []
@@ -609,8 +609,8 @@ def test_updating_rebuilds_once_at_outermost(monkeypatch, tmp_path):
 
 
 def test_updating_swallows_build_error_and_records_it(monkeypatch, tmp_path):
-    import sc_mining.gamedata as G
-    from sc_mining.gamedata import BuildError, _build
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.gamedata import BuildError, _build
 
     _data_root(monkeypatch, tmp_path)
 
@@ -624,8 +624,8 @@ def test_updating_swallows_build_error_and_records_it(monkeypatch, tmp_path):
 
 
 def test_updating_skips_rebuild_when_body_raises(monkeypatch, tmp_path):
-    import sc_mining.gamedata as G
-    from sc_mining.gamedata import _build
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.gamedata import _build
     from tests.minipytest import raises
 
     _data_root(monkeypatch, tmp_path)
@@ -640,8 +640,8 @@ def test_updating_skips_rebuild_when_body_raises(monkeypatch, tmp_path):
 
 
 def test_cleanup_skips_when_other_instance_running(monkeypatch, tmp_path):
-    from sc_mining.gamedata import _build, _lock
-    from sc_mining.gamedata._paths import gamedata_dir
+    from astral_toolkit.gamedata import _build, _lock
+    from astral_toolkit.gamedata._paths import gamedata_dir
 
     _data_root(monkeypatch, tmp_path)
     monkeypatch.setattr(_build, "other_instance_running", lambda: True)
@@ -658,8 +658,8 @@ def test_cleanup_keeps_current_and_one_previous(monkeypatch, tmp_path):
     import os
     import time
 
-    from sc_mining.gamedata import _build, _lock
-    from sc_mining.gamedata._paths import db_path, gamedata_dir
+    from astral_toolkit.gamedata import _build, _lock
+    from astral_toolkit.gamedata._paths import db_path, gamedata_dir
 
     _data_root(monkeypatch, tmp_path)
     monkeypatch.setattr(_lock, "other_instance_running", lambda: False)
@@ -677,8 +677,8 @@ def test_cleanup_keeps_current_and_one_previous(monkeypatch, tmp_path):
 
 
 def test_warm_up_swallows_errors(monkeypatch, tmp_path):
-    import sc_mining.gamedata as G
-    from sc_mining.gamedata._manifest import read_manifest
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.gamedata._manifest import read_manifest
 
     _data_root(monkeypatch, tmp_path)  # 没有 shops.json：建库必失败
     t = G.warm_up()
@@ -689,8 +689,8 @@ def test_warm_up_swallows_errors(monkeypatch, tmp_path):
 
 
 def test_refresh_closes_thread_connection(monkeypatch, tmp_path):
-    import sc_mining.gamedata as G
-    from sc_mining.gamedata import _db
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.gamedata import _db
 
     _data_root(monkeypatch, tmp_path)
     _make_db(tmp_path, "g1", "v1")
@@ -702,8 +702,8 @@ def test_refresh_closes_thread_connection(monkeypatch, tmp_path):
 
 
 def test_data_pack_clear_caches_calls_refresh(monkeypatch):
-    import sc_mining.gamedata as G
-    from sc_mining.update import data_pack
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.update import data_pack
 
     called = []
     monkeypatch.setattr(G, "refresh", lambda: called.append(1))
@@ -722,8 +722,8 @@ def test_cli_build_and_check(monkeypatch, tmp_path):
     import sys
     from pathlib import Path
 
-    from sc_mining.gamedata._manifest import read_manifest
-    from sc_mining.gamedata._paths import db_path
+    from astral_toolkit.gamedata._manifest import read_manifest
+    from astral_toolkit.gamedata._paths import db_path
 
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
     T = importlib.import_module("build_gamedata")
@@ -761,8 +761,8 @@ def test_cli_check_without_db_returns_2(monkeypatch, tmp_path):
 
 def test_updating_swallows_any_rebuild_exception(monkeypatch, tmp_path):
     """审查第 2 条：清单被占（PermissionError）或源结构不对（AttributeError）时，源已写好，不能让更新流程报失败"""
-    import sc_mining.gamedata as G
-    from sc_mining.gamedata import _build
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.gamedata import _build
 
     _data_root(monkeypatch, tmp_path)
 
@@ -777,8 +777,8 @@ def test_updating_swallows_any_rebuild_exception(monkeypatch, tmp_path):
 
 def test_build_wraps_unexpected_source_shape_in_build_error(monkeypatch, tmp_path):
     """审查第 2 条：shops.json 是合法 JSON 但结构不对 → BuildError，不是裸 AttributeError"""
-    from sc_mining.gamedata import BuildError
-    from sc_mining.gamedata._build import rebuild_if_needed
+    from astral_toolkit.gamedata import BuildError
+    from astral_toolkit.gamedata._build import rebuild_if_needed
     from tests.minipytest import raises
 
     _data_root(monkeypatch, tmp_path)
@@ -789,9 +789,9 @@ def test_build_wraps_unexpected_source_shape_in_build_error(monkeypatch, tmp_pat
 
 def test_rebuild_recovers_from_corrupt_manifest(monkeypatch, tmp_path):
     """审查第 3 条：清单坏了要能重建，不是永远报错"""
-    from sc_mining.gamedata._build import rebuild_if_needed
-    from sc_mining.gamedata._manifest import read_manifest
-    from sc_mining.gamedata._paths import manifest_path
+    from astral_toolkit.gamedata._build import rebuild_if_needed
+    from astral_toolkit.gamedata._manifest import read_manifest
+    from astral_toolkit.gamedata._paths import manifest_path
 
     _data_root(monkeypatch, tmp_path)
     _write_min_sources(tmp_path)
@@ -803,9 +803,9 @@ def test_rebuild_recovers_from_corrupt_manifest(monkeypatch, tmp_path):
 
 def test_ensure_ready_rebuilds_when_db_file_corrupt(monkeypatch, tmp_path):
     """审查第 4 条：库文件在但是坏的 → 启动要重建新一代，不能跳过"""
-    import sc_mining.gamedata as G
-    from sc_mining.gamedata._build import rebuild_if_needed
-    from sc_mining.gamedata._paths import db_path
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.gamedata._build import rebuild_if_needed
+    from astral_toolkit.gamedata._paths import db_path
 
     _data_root(monkeypatch, tmp_path)
     _write_min_sources(tmp_path)
@@ -819,9 +819,9 @@ def test_ensure_ready_rebuilds_when_db_file_corrupt(monkeypatch, tmp_path):
 
 def test_data_version_includes_app_version(monkeypatch, tmp_path):
     """审查第 5 条：导入规则是代码，升级应用后库要重建"""
-    from sc_mining.core import version as V
-    from sc_mining.gamedata._build import data_version
-    from sc_mining.gamedata._sources import read_sources
+    from astral_toolkit.core import version as V
+    from astral_toolkit.gamedata._build import data_version
+    from astral_toolkit.gamedata._sources import read_sources
 
     _write_min_sources(tmp_path)
     a = data_version(read_sources(tmp_path))
@@ -832,8 +832,8 @@ def test_data_version_includes_app_version(monkeypatch, tmp_path):
 
 def test_names_table_without_zh_names_is_empty(monkeypatch, tmp_path):
     """审查第 6 条：没有 zh_names.json 时 names.table() 返回空，不补 zh_only_names；导入要一致"""
-    from sc_mining.gamedata._import import _names_table
-    from sc_mining.gamedata._sources import read_sources
+    from astral_toolkit.gamedata._import import _names_table
+    from astral_toolkit.gamedata._sources import read_sources
 
     _write_min_sources(tmp_path)
     (tmp_path / "zh_names.json").unlink()
@@ -842,9 +842,9 @@ def test_names_table_without_zh_names_is_empty(monkeypatch, tmp_path):
 
 def test_import_matches_itemsearch_index_on_sample(monkeypatch, tmp_path):
     """审查第 8 条：在同一份小样本上，建库结果和 itemsearch._build_locked() 逐条一致"""
-    from sc_mining.crafting import itemsearch, loot, shops
-    from sc_mining.gamedata import snapshot
-    from sc_mining.gamedata._build import rebuild_if_needed
+    from astral_toolkit.crafting import itemsearch, loot, shops
+    from astral_toolkit.gamedata import snapshot
+    from astral_toolkit.gamedata._build import rebuild_if_needed
 
     _data_root(monkeypatch, tmp_path)
     _write_min_sources(tmp_path)
@@ -895,9 +895,9 @@ def test_import_matches_itemsearch_index_on_sample(monkeypatch, tmp_path):
 
 def test_shop_items_keep_every_uex_entry_verbatim(monkeypatch, tmp_path):
     """shops.json 的 items 原样一行一条：同一折叠名的两种写法（Synergy / Synergy+）都在，英文名不改、顺序照源"""
-    from sc_mining.gamedata import snapshot
-    from sc_mining.gamedata._build import rebuild_if_needed
-    from sc_mining.gamedata._schema import SCHEMA_VERSION
+    from astral_toolkit.gamedata import snapshot
+    from astral_toolkit.gamedata._build import rebuild_if_needed
+    from astral_toolkit.gamedata._schema import SCHEMA_VERSION
 
     assert SCHEMA_VERSION >= 3  # shop_items 从 3 起就有
     _data_root(monkeypatch, tmp_path)
@@ -932,8 +932,8 @@ def test_shop_items_keep_every_uex_entry_verbatim(monkeypatch, tmp_path):
 def test_read_manifest_retries_permission_error(monkeypatch, tmp_path):
     from pathlib import Path
 
-    from sc_mining.gamedata import _manifest
-    from sc_mining.gamedata._manifest import Manifest, read_manifest, write_manifest
+    from astral_toolkit.gamedata import _manifest
+    from astral_toolkit.gamedata._manifest import Manifest, read_manifest, write_manifest
 
     _data_root(monkeypatch, tmp_path)
     m = Manifest("g1", "v1", 1, "gamedata-g1.db")
@@ -956,8 +956,8 @@ def test_read_manifest_retries_permission_error(monkeypatch, tmp_path):
 def test_read_manifest_gives_up_after_retries(monkeypatch, tmp_path):
     from pathlib import Path
 
-    from sc_mining.gamedata import GamedataUnavailable, _manifest
-    from sc_mining.gamedata._manifest import Manifest, read_manifest, write_manifest
+    from astral_toolkit.gamedata import GamedataUnavailable, _manifest
+    from astral_toolkit.gamedata._manifest import Manifest, read_manifest, write_manifest
     from tests.minipytest import raises
 
     _data_root(monkeypatch, tmp_path)
@@ -976,9 +976,9 @@ def test_read_manifest_cached_until_file_changes(monkeypatch, tmp_path):
     """清单文件没变（mtime / 大小 / inode 一样）就不重读：导航每帧读清单好几次（收口 2）；换文件、就地改坏都能察觉"""
     from pathlib import Path
 
-    from sc_mining.gamedata import GamedataUnavailable
-    from sc_mining.gamedata._manifest import Manifest, read_manifest, write_manifest
-    from sc_mining.gamedata._paths import manifest_path
+    from astral_toolkit.gamedata import GamedataUnavailable
+    from astral_toolkit.gamedata._manifest import Manifest, read_manifest, write_manifest
+    from astral_toolkit.gamedata._paths import manifest_path
     from tests.minipytest import raises
 
     _data_root(monkeypatch, tmp_path)

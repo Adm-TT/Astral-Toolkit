@@ -1,7 +1,7 @@
 """发版前的接口巡检：把安装包解压到临时目录（全新的用户数据，不碰你自己的），启动天枢后台，
 按真实使用顺序把每一个接口都调一遍，检查有没有报错、返回的东西对不对、耗时多少。
 
-用法（在 sc_mining 文件夹里）：
+用法（在 astral_toolkit 文件夹里）：
   .venv\\Scripts\\python.exe -X utf8 tools\\release_check.py              巡检 dist 里最新的安装包
   .venv\\Scripts\\python.exe -X utf8 tools\\release_check.py 包.zip       巡检指定的安装包
   加 --update 会顺便测「更新数据」（要联网，两三分钟）
@@ -31,9 +31,9 @@ if not PY.exists():
 LAUNCH = r"""
 import sys, threading, subprocess
 from pathlib import Path
-from sc_mining.app import server, bus
+from astral_toolkit.app import server, bus
 desk = Path(sys.argv[1])
-import sc_mining.tasks.system as _ts
+import astral_toolkit.tasks.system as _ts
 _ts._desktop = lambda: desk                         # 导出日志放临时「桌面」，不碰真实桌面（导出在 tasks/system 里做）
 _popen = subprocess.Popen
 subprocess.Popen = lambda a, *k, **kw: None if a and str(a[0]).lower() == "explorer" else _popen(a, *k, **kw)

@@ -9,14 +9,14 @@ from typing import Any
 
 from PIL import Image
 
-from sc_mining.app import bus, hud_state
-from sc_mining.app.engines import live as live_mod
-from sc_mining.core import paths
-from sc_mining.mining import screen, signals
-from sc_mining.mining.parse import Scan
-from sc_mining.runtime.results import MINING_SCAN, MINING_SIGNALS
-from sc_mining.tasks import mining as t_mining
-from sc_mining.tasks import navigation as t_nav
+from astral_toolkit.app import bus, hud_state
+from astral_toolkit.app.engines import live as live_mod
+from astral_toolkit.core import paths
+from astral_toolkit.mining import screen, signals
+from astral_toolkit.mining.parse import Scan
+from astral_toolkit.runtime.results import MINING_SCAN, MINING_SIGNALS
+from astral_toolkit.tasks import mining as t_mining
+from astral_toolkit.tasks import navigation as t_nav
 
 WAIT = 30  # 等线程的上限：正常都是瞬间到，超时就是测试失败
 
@@ -391,8 +391,8 @@ def _with_results(live, monkeypatch, tmp_path):
 
 def test_every_way_of_stopping_keeps_results_and_rejects_late(monkeypatch, tmp_path):
     """停止只封会话：最后一份结果留着（记录、反馈照常读，和基线一样），迟到的写不进来"""
-    from sc_mining.core import settings
-    from sc_mining.tasks.system.feedback import FeedbackContext
+    from astral_toolkit.core import settings
+    from astral_toolkit.tasks.system.feedback import FeedbackContext
 
     monkeypatch.setattr(settings, "update", lambda **kw: None)
     monkeypatch.setattr(hud_state, "_note_hud", lambda *a, **k: None)
@@ -454,7 +454,7 @@ def test_start_presses_old_switch(monkeypatch, tmp_path):
 
 def test_zombie_worker_cannot_end_new_session(monkeypatch, tmp_path):
     """旧线程到点自动关闭 / 连着出错：结束不了后来开的会话"""
-    from sc_mining.core import settings
+    from astral_toolkit.core import settings
 
     saved = []
     monkeypatch.setattr(settings, "update", lambda **kw: saved.append(kw))
@@ -550,8 +550,8 @@ def test_output_only_commit_needs_live_session(monkeypatch, tmp_path):
 
 def test_feedback_context_reads_store():
     """反馈包里的字段和以前一样：读全的带成分，面板被挡的带 cut；信号带 values；发到窗口的消息里没有 values"""
-    from sc_mining.runtime.results import ResultStore
-    from sc_mining.tasks.system.feedback import FeedbackContext
+    from astral_toolkit.runtime.results import ResultStore
+    from astral_toolkit.tasks.system.feedback import FeedbackContext
 
     results = ResultStore()
     empty = FeedbackContext.from_results(results)
@@ -677,7 +677,7 @@ def test_cut_result_is_partial_and_old_epoch_rejected(monkeypatch, tmp_path):
 
 
 def _signal_world(monkeypatch, tmp_path, lines):
-    from sc_mining.tasks import goals as t_goals
+    from astral_toolkit.tasks import goals as t_goals
 
     hud, _ = _world(monkeypatch, tmp_path, lambda img: (Scan(), ({}, None, None)))
     monkeypatch.setattr(signals, "find_signatures", lambda img: [(4285, 1)])

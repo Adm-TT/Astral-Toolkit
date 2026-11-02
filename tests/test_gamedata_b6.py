@@ -99,7 +99,7 @@ def _read(data_dir, name):
 
 
 def test_zh_pairs_order_and_src(monkeypatch, tmp_path):
-    from sc_mining.gamedata import names as gn
+    from astral_toolkit.gamedata import names as gn
 
     _b6(monkeypatch, tmp_path)
     got = [(p.zh, p.en, p.src) for p in gn.zh_pairs()]
@@ -115,7 +115,7 @@ def test_zh_pairs_order_and_src(monkeypatch, tmp_path):
 
 
 def test_wiki_classes_keep_noise_raw_case_and_alt_order(monkeypatch, tmp_path):
-    from sc_mining.gamedata import names as gn
+    from astral_toolkit.gamedata import names as gn
 
     _b6(monkeypatch, tmp_path)
     got = [(w.n, w.cls, w.alt) for w in gn.wiki_classes()]
@@ -130,7 +130,7 @@ def test_wiki_classes_keep_noise_raw_case_and_alt_order(monkeypatch, tmp_path):
 
 
 def test_alias_pairs_unfiltered_in_source_order(monkeypatch, tmp_path):
-    from sc_mining.gamedata import names as gn
+    from astral_toolkit.gamedata import names as gn
 
     _b6(monkeypatch, tmp_path)
     assert gn.alias_pairs() == (
@@ -141,7 +141,7 @@ def test_alias_pairs_unfiltered_in_source_order(monkeypatch, tmp_path):
 
 
 def test_class_uuids_source_order(monkeypatch, tmp_path):
-    from sc_mining.gamedata import names as gn
+    from astral_toolkit.gamedata import names as gn
 
     _b6(monkeypatch, tmp_path)
     assert gn.class_uuids() == (
@@ -153,8 +153,8 @@ def test_class_uuids_source_order(monkeypatch, tmp_path):
 
 
 def test_names_topic_shares_outer_snapshot(monkeypatch, tmp_path):
-    import sc_mining.gamedata as G
-    from sc_mining.gamedata import names as gn
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.gamedata import names as gn
 
     _b6(monkeypatch, tmp_path)
     G.ensure()
@@ -174,8 +174,8 @@ def test_names_topic_shares_outer_snapshot(monkeypatch, tmp_path):
 
 
 def test_names_topic_cached_per_version(monkeypatch, tmp_path):
-    import sc_mining.gamedata as G
-    from sc_mining.gamedata import names as gn
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.gamedata import names as gn
 
     _b6(monkeypatch, tmp_path)
     a, w, al, u = gn.zh_pairs(), gn.wiki_classes(), gn.alias_pairs(), gn.class_uuids()
@@ -195,7 +195,7 @@ def test_names_topic_cached_per_version(monkeypatch, tmp_path):
 
 def _legacy_table(d):
     """迁移前 trade/names.table() + _known_names() 的函数体原样，只把读文件 / shops.load / loot.load_index 换成读 d 下的 JSON"""
-    from sc_mining.trade.names import _fold_en, _junk, _norm_zh
+    from astral_toolkit.trade.names import _fold_en, _junk, _norm_zh
 
     try:
         raw = _read(d, "zh_names.json")
@@ -227,7 +227,7 @@ def _legacy_table(d):
 
 def _legacy_index(t):
     """迁移前 trade/names._index() 的函数体原样（setdefault：首个胜出）"""
-    from sc_mining.trade.names import _fold_en, _norm_zh
+    from astral_toolkit.trade.names import _fold_en, _norm_zh
 
     zh_map, en_map = {}, {}
     for zh, en in t.items():
@@ -238,7 +238,7 @@ def _legacy_index(t):
 
 def _on_legacy(monkeypatch, d, fn):
     """把 table / _index 换成旧实现在 d 上的结果，再跑 fn()——比较“同样的派生函数”在新旧数据上的输出"""
-    from sc_mining.trade import names
+    from astral_toolkit.trade import names
 
     t = _legacy_table(d)
     idx = _legacy_index(t)
@@ -248,7 +248,7 @@ def _on_legacy(monkeypatch, d, fn):
 
 
 def test_table_equals_legacy_on_edge_sample(monkeypatch, tmp_path):
-    from sc_mining.trade import names
+    from astral_toolkit.trade import names
 
     _b6(monkeypatch, tmp_path)
     got = list(names.table().items())
@@ -264,7 +264,7 @@ def test_table_equals_legacy_on_edge_sample(monkeypatch, tmp_path):
 
 
 def test_table_empty_when_zh_names_missing_even_with_zh_only(monkeypatch, tmp_path):
-    from sc_mining.trade import names
+    from astral_toolkit.trade import names
 
     _b6(monkeypatch, tmp_path)
     (tmp_path / "zh_names.json").unlink()
@@ -272,7 +272,7 @@ def test_table_empty_when_zh_names_missing_even_with_zh_only(monkeypatch, tmp_pa
 
 
 def test_table_zh_only_broken_keeps_zh_names(monkeypatch, tmp_path):
-    from sc_mining.trade import names
+    from astral_toolkit.trade import names
 
     _b6(monkeypatch, tmp_path)
     (tmp_path / "zh_only_names.json").write_text("{坏了", encoding="utf-8")
@@ -282,21 +282,21 @@ def test_table_zh_only_broken_keeps_zh_names(monkeypatch, tmp_path):
 
 
 def test_table_drops_code_like_english(monkeypatch, tmp_path):
-    from sc_mining.trade import names
+    from astral_toolkit.trade import names
 
     _b6(monkeypatch, tmp_path)
     assert "视差步枪" not in names.table() and "制空" not in names.table()  # R3
 
 
 def test_table_keeps_short_name_known_in_shop(monkeypatch, tmp_path):
-    from sc_mining.trade import names
+    from astral_toolkit.trade import names
 
     _b6(monkeypatch, tmp_path)
     assert names.table()["锡"] == "Tin"  # R4
 
 
 def test_table_known_includes_raw_loot_en_quirk(monkeypatch, tmp_path):
-    from sc_mining.trade import names
+    from astral_toolkit.trade import names
 
     _b6(monkeypatch, tmp_path)
     assert names.table()["护甲"] == "护甲套"  # R5：掉落英文位是中文 → known 里有 ""
@@ -305,7 +305,7 @@ def test_table_known_includes_raw_loot_en_quirk(monkeypatch, tmp_path):
         tmp_path,
         **{**_B6_SOURCES, "loot_index.json": {"version": "x", "rows": rows}},
     )
-    import sc_mining.gamedata as G
+    import astral_toolkit.gamedata as G
 
     G.rebuild()
     assert "护甲" not in names.table()
@@ -313,7 +313,7 @@ def test_table_known_includes_raw_loot_en_quirk(monkeypatch, tmp_path):
 
 
 def test_table_zh_only_needs_three_chars(monkeypatch, tmp_path):
-    from sc_mining.trade import names
+    from astral_toolkit.trade import names
 
     _b6(monkeypatch, tmp_path)
     assert (
@@ -322,14 +322,14 @@ def test_table_zh_only_needs_three_chars(monkeypatch, tmp_path):
 
 
 def test_table_zh_names_wins_over_zh_only(monkeypatch, tmp_path):
-    from sc_mining.trade import names
+    from astral_toolkit.trade import names
 
     _b6(monkeypatch, tmp_path)
     assert names.table()["医疗笔"] == "Medpen"  # R7：zh_only 的 Medpen Other 不覆盖
 
 
 def test_to_english_returns_source_spelling_not_item_en(monkeypatch, tmp_path):
-    from sc_mining.trade import names
+    from astral_toolkit.trade import names
 
     _b6(monkeypatch, tmp_path)
     assert names.to_english("劳森") == [
@@ -340,7 +340,7 @@ def test_to_english_returns_source_spelling_not_item_en(monkeypatch, tmp_path):
 
 
 def test_to_english_exact_last_wins_index_first_wins(monkeypatch, tmp_path):
-    from sc_mining.trade import names
+    from astral_toolkit.trade import names
 
     _b6(monkeypatch, tmp_path)
     new = (names.to_english("医疗笔"), names.canonical("医疗笔", ""))
@@ -357,7 +357,7 @@ def test_to_english_exact_last_wins_index_first_wins(monkeypatch, tmp_path):
 
 
 def test_to_english_fuzzy_order_and_limit(monkeypatch, tmp_path):
-    from sc_mining.trade import names
+    from astral_toolkit.trade import names
 
     _b6(monkeypatch, tmp_path)
     qs = [
@@ -378,7 +378,7 @@ def test_to_english_fuzzy_order_and_limit(monkeypatch, tmp_path):
 
 
 def test_canonical_and_zh_for_unchanged(monkeypatch, tmp_path):
-    from sc_mining.trade import names
+    from astral_toolkit.trade import names
 
     _b6(monkeypatch, tmp_path)
     cs = [
@@ -405,7 +405,7 @@ def test_canonical_and_zh_for_unchanged(monkeypatch, tmp_path):
 
 
 def test_suggest_tie_order_follows_table(monkeypatch, tmp_path):
-    from sc_mining.trade import names
+    from astral_toolkit.trade import names
 
     _b6(monkeypatch, tmp_path)
     qs = ["医疗", "医疗笔", "med", "lawson", "荣誉"]
@@ -419,9 +419,9 @@ def test_suggest_tie_order_follows_table(monkeypatch, tmp_path):
 
 
 def test_table_refreshes_after_rebuild_without_cache_clear(monkeypatch, tmp_path):
-    import sc_mining.gamedata as G
-    from sc_mining.trade import names
-    from sc_mining.update import data_pack, uex
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.trade import names
+    from astral_toolkit.update import data_pack, uex
 
     _b6(monkeypatch, tmp_path)
     t1, i1 = names.table(), names._index()
@@ -445,8 +445,8 @@ def test_table_refreshes_after_rebuild_without_cache_clear(monkeypatch, tmp_path
 
 
 def test_names_empty_when_db_unavailable(monkeypatch, tmp_path):
-    from sc_mining.core import paths
-    from sc_mining.trade import names
+    from astral_toolkit.core import paths
+    from astral_toolkit.trade import names
 
     _b6(monkeypatch, tmp_path)
     monkeypatch.setattr(
@@ -461,9 +461,9 @@ def test_names_empty_when_db_unavailable(monkeypatch, tmp_path):
 
 
 def test_names_does_not_read_json_or_call_loaders(monkeypatch, tmp_path):
-    import sc_mining.gamedata as G
-    from sc_mining.crafting import loot, shops
-    from sc_mining.trade import names
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.crafting import loot, shops
+    from astral_toolkit.trade import names
 
     def boom(*a, **k):
         raise AssertionError("不该再读旧数据")
@@ -483,7 +483,7 @@ def test_names_does_not_read_json_or_call_loaders(monkeypatch, tmp_path):
 
 def _legacy_gamekey_index(d):
     """迁移前 trade/gamekey._index() 的函数体原样，wiki_items() 换成直接读 d/wiki_items.json"""
-    from sc_mining.trade.gamekey import _fold
+    from astral_toolkit.trade.gamekey import _fold
 
     rows = (_read(d, "wiki_items.json") or {}).get("items") or []
     by_name = {}
@@ -506,7 +506,7 @@ def _legacy_gamekey_index(d):
 
 def _legacy_resolve(idx, name_en):
     """迁移前 trade/gamekey.resolve() 的函数体原样"""
-    from sc_mining.trade.gamekey import _fold
+    from astral_toolkit.trade.gamekey import _fold
 
     k = _fold(name_en)
     if not k:
@@ -541,7 +541,7 @@ _GK_QUERIES = [
 
 
 def test_gamekey_resolve_equals_legacy_on_sample(monkeypatch, tmp_path):
-    from sc_mining.trade import gamekey
+    from astral_toolkit.trade import gamekey
 
     _b6(monkeypatch, tmp_path)
     idx = _legacy_gamekey_index(tmp_path)
@@ -558,7 +558,7 @@ def test_gamekey_resolve_equals_legacy_on_sample(monkeypatch, tmp_path):
 
 
 def test_gamekey_fold_does_not_merge_l_and_i(monkeypatch, tmp_path):
-    from sc_mining.trade import gamekey
+    from astral_toolkit.trade import gamekey
 
     _b6(monkeypatch, tmp_path)
     assert gamekey.resolve("Lawson Mining Laser") == ("laser_s0", "")  # G1：不做 l→i
@@ -566,7 +566,7 @@ def test_gamekey_fold_does_not_merge_l_and_i(monkeypatch, tmp_path):
 
 
 def test_gamekey_alias_last_wins_and_unfiltered(monkeypatch, tmp_path):
-    from sc_mining.trade import gamekey
+    from astral_toolkit.trade import gamekey
 
     _b6(monkeypatch, tmp_path)
     assert gamekey.resolve("Medi Pen") == ("laser_s0", "")  # G5：同折叠旧写法后写覆盖
@@ -577,7 +577,7 @@ def test_gamekey_alias_last_wins_and_unfiltered(monkeypatch, tmp_path):
 
 
 def test_gamekey_alt_class_fallback_in_order(monkeypatch, tmp_path):
-    from sc_mining.trade import gamekey
+    from astral_toolkit.trade import gamekey
 
     _b6(monkeypatch, tmp_path)
     # klein_s0 掉落里没有 → alt 按顺序：nope_x 没有、klein_s0_b（掉落里是大写）有 → u3，不看后面的 medpen_01（G8）
@@ -585,8 +585,8 @@ def test_gamekey_alt_class_fallback_in_order(monkeypatch, tmp_path):
 
 
 def test_gamekey_none_when_db_unavailable(monkeypatch, tmp_path):
-    from sc_mining.core import paths
-    from sc_mining.trade import gamekey
+    from astral_toolkit.core import paths
+    from astral_toolkit.trade import gamekey
 
     _b6(monkeypatch, tmp_path)
     monkeypatch.setattr(paths, "DATA", tmp_path / "empty")
@@ -596,8 +596,8 @@ def test_gamekey_none_when_db_unavailable(monkeypatch, tmp_path):
 
 
 def test_gamekey_refreshes_after_alias_change(monkeypatch, tmp_path):
-    import sc_mining.gamedata as G
-    from sc_mining.trade import gamekey
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.trade import gamekey
 
     _b6(monkeypatch, tmp_path)
     assert gamekey.resolve("Zed Pen") is None
@@ -613,14 +613,14 @@ def test_gamekey_refreshes_after_alias_change(monkeypatch, tmp_path):
 
 
 def _catalog(tmp_path):
-    from sc_mining.trade.catalog import Catalog
-    from sc_mining.trade.storage import Database
+    from astral_toolkit.trade.catalog import Catalog
+    from astral_toolkit.trade.storage import Database
 
     return Catalog(Database(tmp_path / "inv" / "trade.db"))
 
 
 def test_catalog_search_uses_to_english(monkeypatch, tmp_path):
-    from sc_mining.trade.models import Item
+    from astral_toolkit.trade.models import Item
 
     _b6(monkeypatch, tmp_path)
     cat = _catalog(tmp_path)
@@ -632,7 +632,7 @@ def test_catalog_search_uses_to_english(monkeypatch, tmp_path):
 
 
 def test_catalog_fill_keys_resolves(monkeypatch, tmp_path):
-    from sc_mining.trade.models import Item
+    from astral_toolkit.trade.models import Item
 
     _b6(monkeypatch, tmp_path)
     cat = _catalog(tmp_path)
@@ -650,9 +650,9 @@ def test_catalog_fill_keys_resolves(monkeypatch, tmp_path):
 
 
 def test_parser_and_market_service_import_ok(monkeypatch, tmp_path):
-    import sc_mining.trade.market_service  # noqa: F401
-    import sc_mining.trade.parser  # noqa: F401
-    from sc_mining.trade import names
+    import astral_toolkit.trade.market_service  # noqa: F401
+    import astral_toolkit.trade.parser  # noqa: F401
+    from astral_toolkit.trade import names
 
     _b6(monkeypatch, tmp_path)
     a = names.to_english("医疗")[:3]
@@ -666,7 +666,7 @@ def test_trade_names_module_has_no_toplevel_gamedata_import():
     import ast
     from pathlib import Path
 
-    root = Path(__file__).resolve().parent.parent / "sc_mining" / "trade"
+    root = Path(__file__).resolve().parent.parent / "astral_toolkit" / "trade"
     for name in ("names.py", "gamekey.py"):
         tree = ast.parse((root / name).read_text(encoding="utf-8"))
         for node in tree.body:
@@ -680,8 +680,8 @@ def test_trade_names_module_has_no_toplevel_gamedata_import():
 
 
 def test_tasks_trade_zh_of_refreshes_with_table(monkeypatch, tmp_path):
-    import sc_mining.gamedata as G
-    from sc_mining.tasks import trade as T
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.tasks import trade as T
 
     _b6(monkeypatch, tmp_path)
     assert T._zh_of("Medpen") == "医疗笔"

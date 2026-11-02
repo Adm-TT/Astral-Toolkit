@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from sc_mining.core.paths import SAMPLES
+from astral_toolkit.core.paths import SAMPLES
 
 ROWS_1440 = {
     7: "Zone: ObjectContainer-Ground_Lobby Pos: -4.61m 74.93m 11.71m",
@@ -37,7 +37,7 @@ def _sample(name):
 
 
 def _fresh(monkeypatch, tmp_path):
-    from sc_mining.navigation import gridtext as G
+    from astral_toolkit.navigation import gridtext as G
 
     monkeypatch.setattr(G, "GLYPH_DIR", tmp_path / "glyphs")  # 不碰用户自己的字模
     G._state.update(glyphs=None, h=None, tried_load=False, font_at=0.0)
@@ -149,7 +149,7 @@ def test_wrong_ocr_text_is_not_learned(monkeypatch, tmp_path):
 
 def test_displayinfo_fast_path_and_fallback(monkeypatch, tmp_path):
     """displayinfo.read：用字体画出字模后几毫秒认完（fast=True，坐标、地点都对）；字体不能用、又没学过时走识别引擎（fast=False）"""
-    from sc_mining.navigation import displayinfo as D
+    from astral_toolkit.navigation import displayinfo as D
 
     G = _fresh(monkeypatch, tmp_path)
     full = (
@@ -163,13 +163,13 @@ def test_displayinfo_fast_path_and_fallback(monkeypatch, tmp_path):
     D._layout.update(at=0.0, boxes=None)
     calls = []
     monkeypatch.setattr(
-        "sc_mining.ocr.recognize", lambda img, **k: calls.append("full") or []
+        "astral_toolkit.ocr.recognize", lambda img, **k: calls.append("full") or []
     )
     loc_text = "Current player location : Hospital Stanton4 NewBabbage (LZ : Stanton4 NewBabbage)"
     zone_text = "Zone: OOC_Stanton_4_Microtech Pos: 520.9152km 419.2893km 744.0843km"
     answers = iter([loc_text, zone_text])  # 先认地点那一行，再认区域名那一行
     monkeypatch.setattr(
-        "sc_mining.ocr.read_line",
+        "astral_toolkit.ocr.read_line",
         lambda img: calls.append("line") or (next(answers), 0.9),
     )
     D._loc.update(hash=None, text="", at=0.0, top=None)
@@ -197,7 +197,7 @@ def test_displayinfo_fast_path_and_fallback(monkeypatch, tmp_path):
         abs(a - b) < 1
         for a, b in zip(info["global"], (22462326.4853e3, 37186368.6338e3, 744.0843e3))
     )
-    from sc_mining.navigation import navigate as n
+    from astral_toolkit.navigation import navigate as n
 
     assert info["solar_id"] == "862949775749"
     if n.CACHE.exists() and n.load().get(
@@ -224,7 +224,7 @@ def test_displayinfo_fast_path_and_fallback(monkeypatch, tmp_path):
 def test_system_from_solar_id_and_zone(monkeypatch, tmp_path):
     """星系判断：地点里的星系名 > SolarSystem 编号（学过的）> 区域名对上的地点 > 最近的星球（只猜，不记）。
     尼克斯基格小行星带的坐标按「最近星球」会猜错，右上角线索能救回来；学到的编号存到临时目录"""
-    from sc_mining.navigation import navigate as n
+    from astral_toolkit.navigation import navigate as n
 
     if (
         not n.CACHE.exists()
@@ -262,11 +262,11 @@ def test_system_from_solar_id_and_zone(monkeypatch, tmp_path):
 
 
 def test_nyx_location_label():
-    from sc_mining.navigation import navigate as n
+    from astral_toolkit.navigation import navigate as n
 
     if not n.CACHE.exists():  # display_label 里会 load 星图：没有就跳过，不联网
         pytest.skip("没有星图数据")
-    from sc_mining.navigation.position import display_label as d
+    from astral_toolkit.navigation.position import display_label as d
 
     assert d("AsteroidCluster_MiningBase_Nyx_Keeger") == "采矿基地（基格小行星带）"
     assert d("Hospital Stanton4 NewBabbage (LZ : Stanton4 NewBabbage)") == "新巴贝奇"
@@ -310,7 +310,7 @@ LIVE_PYRO = {
 def test_live_frames_learn_in_pyro_read_in_new_babbage(monkeypatch, tmp_path):
     """2026-10-27 用户实测的三帧（2560×1440，游戏里）：派罗 5d 那帧学（识别引擎把 ARGO_MOLE 认成 ARG0_M0LE 也不能把字模带坏），
     跳到新巴贝奇医院后的两帧直接认：坐标一个数字都不能错，Pos、Root 不能认成 P0s、Ro0t（以前学多了会这样，又退回识别引擎）"""
-    from sc_mining.navigation.displayinfo import parse
+    from astral_toolkit.navigation.displayinfo import parse
 
     G = _fresh(monkeypatch, tmp_path)
     arr = _sample("displayinfo_live_pyro.png")
@@ -350,7 +350,7 @@ def test_bottom_row_cut_in_half_does_not_crash(monkeypatch, tmp_path):
 
 
 def test_fold_lookalikes():
-    from sc_mining.navigation.gridtext import fold
+    from astral_toolkit.navigation.gridtext import fold
 
     assert fold("00C_Stanton_4_M1crotech") == fold("OOC_Stanton_4_Microtech")
     assert fold("Pyro5d") == fold("pyrosd") and fold("ARG0") == "argo"
@@ -371,7 +371,7 @@ def test_font_glyphs_read_coordinates_without_learning(
 ):
     """2026-10-27：游戏调试字是 Vera Sans Mono（游戏引擎自带的 Engine\\Fonts\\VeraMono.ttf），AT 带开源同款 DejaVu Sans Mono。
     不学任何截图、不用识别引擎，自己试出字号画字模：两种分辨率、三张游戏实拍的坐标一个数字都不能错（含负号）"""
-    from sc_mining.navigation.displayinfo import parse
+    from astral_toolkit.navigation.displayinfo import parse
 
     G = _fresh(monkeypatch, tmp_path)
     arr = _sample(name)
@@ -393,7 +393,7 @@ def test_font_glyphs_read_coordinates_without_learning(
 
 def test_digit_context_keeps_6_and_minus():
     """数字段里只在数字、小数点里挑；段首像负号就是负号（游戏的负号和字体的不太一样）"""
-    from sc_mining.navigation.gridtext import _digit_context
+    from astral_toolkit.navigation.gridtext import _digit_context
 
     keys = list("0123456789.-Sm k")
     K = len(keys)
@@ -418,7 +418,7 @@ def test_digit_context_keeps_6_and_minus():
 
 
 def test_font_file_and_license_present():
-    from sc_mining.navigation.gridtext import FONT_FILE
+    from astral_toolkit.navigation.gridtext import FONT_FILE
 
     assert FONT_FILE.exists() and FONT_FILE.stat().st_size > 100_000
     lic = FONT_FILE.parent / "LICENSE-DejaVu.txt"
@@ -428,7 +428,7 @@ def test_font_file_and_license_present():
 def test_review_102_position_guards(monkeypatch, tmp_path):
     """2026-10-27 补审：①字模这条路两行坐标都要读出来且一致；②数字旁认不出的格子让坐标作废，不删成少一位；
     ③挑出来的数字也不像就写 ?；④字模失效（识别引擎读得出、字模读不出）连续 3 次就扔掉重画；⑤学字样本有上限"""
-    from sc_mining.navigation import displayinfo as D, gridtext as G
+    from astral_toolkit.navigation import displayinfo as D, gridtext as G
 
     sol = (
         "Zone: SolarSystem_862949775749 Pos: 22462326.4853km 37186368.6338km 744.0843km"
@@ -483,7 +483,7 @@ def test_review_102_position_guards(monkeypatch, tmp_path):
 def test_review_102_reader_poll_is_serialized(monkeypatch):
     """两个线程同时读位置：一次只读一个，旧帧不会盖掉新帧"""
     import threading
-    from sc_mining.navigation import displayinfo as D
+    from astral_toolkit.navigation import displayinfo as D
 
     calls = {"n": 0, "max": 0, "now": 0}
     lock = threading.Lock()
@@ -499,7 +499,7 @@ def test_review_102_reader_poll_is_serialized(monkeypatch):
             n = calls["n"]
         return {"global": (n * 1e7, 0, 0), "fast": True, "t": time.time()}
 
-    from sc_mining.system import showloc
+    from astral_toolkit.system import showloc
 
     monkeypatch.setattr(D, "read", fake_read)
     monkeypatch.setattr(showloc, "game_foreground", lambda: True)  # 测试时游戏不在前台
@@ -513,7 +513,7 @@ def test_review_102_reader_poll_is_serialized(monkeypatch):
 
 def test_lost_minus_sign_rejected(monkeypatch, tmp_path):
     """字模把负号当空格丢掉（1080p 实拍见过），两行一起丢时两行照样一致：Pos 后双空格接数字就作废这一帧（2026-10-30）"""
-    from sc_mining.navigation import displayinfo as D
+    from astral_toolkit.navigation import displayinfo as D
 
     sol = "Zone: SolarSystem_862685702877 Pos: -4634409.3882km -47775658.1227km -42.6401km"
     root = "Zone: Root Pos: -4634409.3882km -47775658.1227km -42.6401km"
@@ -557,7 +557,7 @@ def test_lost_minus_sign_rejected(monkeypatch, tmp_path):
 
 def test_dot_after_unit_may_be_lost_minus():
     """「km.21」可能是认丢的负号：两行都这样（或只有一行）就不采用；另一行干净、数值一致才采用（审查 2026-10-31）"""
-    from sc_mining.navigation.displayinfo import parse
+    from astral_toolkit.navigation.displayinfo import parse
 
     sys_dot = "Zone: SolarSystem 862685702877 Pos: 744.0843km 1000.5km.42.6401km"
     root_dot = "Zone: Root Pos: 744.0843km 1000.5km.42.6401km"
@@ -574,7 +574,7 @@ def test_dot_after_unit_may_be_lost_minus():
 
 def test_camdir_broken_row_rejected():
     """CamDir 那行残缺（认不出的格子、丢了负号、数多了少了）整行不要（审查 2026-10-31）"""
-    from sc_mining.navigation.displayinfo import parse, grid_text
+    from astral_toolkit.navigation.displayinfo import parse, grid_text
 
     assert parse(["CamDir: 52 27 -176 FOV: 64"])["camdir"] == (52, 27, -176)
     assert parse(["CamDir: 5# 27 -176 FOV: 64"])["camdir"] is None
@@ -600,7 +600,7 @@ def test_camdir_broken_row_rejected():
 
 def test_cam_filter_recovers_from_real_mirror_turn():
     """被拒的读数连着几帧都一样就收下，不会永久卡在旧值上（审查 2026-10-31）"""
-    from sc_mining.app.engines.nav import _CamFilter
+    from astral_toolkit.app.engines.nav import _CamFilter
 
     f = _CamFilter()
     assert f.check((30, 0, 90), fast=True) == (30, 0, 90)
@@ -619,7 +619,7 @@ def test_cam_filter_recovers_from_real_mirror_turn():
 
 def test_font_hires_cache_released_after_build():
     """画字模用的高清大图画完就放掉，不常驻内存（审查 2026-10-31）"""
-    from sc_mining.navigation import gridtext as G
+    from astral_toolkit.navigation import gridtext as G
 
     if not G.FONT_FILE.exists():
         pytest.skip("没有字体文件")

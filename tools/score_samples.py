@@ -70,7 +70,7 @@ UP = 0
 
 def one(path, ans):
     from PIL import Image
-    from sc_mining.mining import screen, signals
+    from astral_toolkit.mining import screen, signals
 
     img = Image.open(path).convert("RGB")
     if (

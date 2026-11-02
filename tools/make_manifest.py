@@ -18,14 +18,14 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from sc_mining.update import update_check  # noqa: E402
+from astral_toolkit.update import update_check  # noqa: E402
 
 
 def current_online():
     """AT 服务器、国内镜像上 (kill_rev, 版本) 最大的那份 latest.json；两处都读不到返回 None。
     只认这两处：Gitee / GitHub 的清单已不再更新，带它的旧 kill_rev / disabled 会盖掉服务器上新的远程关功能列表。
     两处都读到但 kill_rev 不一致（上次发布只传了一半）：停下，不猜用哪份"""
-    from sc_mining.update.upgrade import ver
+    from astral_toolkit.update.upgrade import ver
 
     own = {
         n
@@ -73,7 +73,7 @@ def main(argv):
         print(__doc__)
         return 1
     if not update_check.enabled():
-        print("❌ sc_mining/update/update_check.py 里的下载地址（OWN / COS）还没填")
+        print("❌ astral_toolkit/update/update_check.py 里的下载地址（OWN / COS）还没填")
         return 1
     rest, installer = list(argv), None
     if "--installer" in rest:

@@ -5,8 +5,8 @@ import sys
 import unittest
 from unittest.mock import patch, MagicMock
 
-from sc_mining.core import perf, settings
-from sc_mining.tasks.system import set_settings, status
+from astral_toolkit.core import perf, settings
+from astral_toolkit.tasks.system import set_settings, status
 
 
 class TestOcrDeviceSwitch(unittest.TestCase):
@@ -93,8 +93,8 @@ class TestOcrDeviceSwitch(unittest.TestCase):
 
     def test_cell_labels_tokens_reuse(self):
         from unittest.mock import MagicMock
-        from sc_mining.trade.inspector import cell_labels
-        from sc_mining.ocr import OcrToken
+        from astral_toolkit.trade.inspector import cell_labels
+        from astral_toolkit.ocr import OcrToken
 
         mock_img = MagicMock()
         mock_img.size = (1920, 1080)
@@ -110,13 +110,13 @@ class TestOcrDeviceSwitch(unittest.TestCase):
 
     def test_cell_labels_native_param(self):
         from unittest.mock import MagicMock, patch
-        from sc_mining.trade.inspector import cell_labels
+        from astral_toolkit.trade.inspector import cell_labels
 
         mock_img = MagicMock()
         mock_img.size = (1920, 1080)
         mock_img.crop.return_value = mock_img
 
-        with patch("sc_mining.ocr.recognize", return_value=[]) as mock_rec:
+        with patch("astral_toolkit.ocr.recognize", return_value=[]) as mock_rec:
             cell_labels(mock_img, (500, 500), tokens=None)
             self.assertTrue(mock_rec.called)
             # 确认调用了 native=True
@@ -274,13 +274,13 @@ def test_cpu_error_not_retried(monkeypatch):
 
 
 def test_switch_device_reaches_every_caller(monkeypatch):
-    """切显卡 / CPU 后，统一 OCR（sc_mining.ocr）、采矿读屏（screen._ocr / _recognize）用的都是新引擎：
+    """切显卡 / CPU 后，统一 OCR（astral_toolkit.ocr）、采矿读屏（screen._ocr / _recognize）用的都是新引擎：
     它们缓存的是同一个共享对象，切换只换里面的引擎"""
     import numpy as np
     from PIL import Image
-    from sc_mining import ocr as O
-    from sc_mining.ocr import engine as OE
-    from sc_mining.mining import screen as S
+    from astral_toolkit import ocr as O
+    from astral_toolkit.ocr import engine as OE
+    from astral_toolkit.mining import screen as S
 
     made = _fake_engines(monkeypatch)
     monkeypatch.setattr(OE, "_engine", None)

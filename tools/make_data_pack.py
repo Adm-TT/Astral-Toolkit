@@ -22,8 +22,8 @@ sys.path.insert(0, str(ROOT))
 
 
 def main(argv):
-    from sc_mining.update import data_pack
-    from sc_mining import run
+    from astral_toolkit.update import data_pack
+    from astral_toolkit import run
     import os
 
     src = os.environ.get("AT_SRC_DIR") or ""
@@ -33,7 +33,7 @@ def main(argv):
         and (Path(src) / "oc_x").exists()
         and (Path(tools) / "starmap_merge.py").exists()
     )
-    from sc_mining.core import paths
+    from astral_toolkit.core import paths
 
     try:
         game_star = paths.from_game(
@@ -54,7 +54,7 @@ def main(argv):
         r = run.update(
             direct=True,
             web_ok=(
-                ("sc_mining.navigation.navigate", "sc_mining.navigation.starmap")
+                ("astral_toolkit.navigation.navigate", "astral_toolkit.navigation.starmap")
                 if oc
                 else ()
             ),  # navigate.update 的 __module__ 实际是 starmap：两个名字都给（收口 1）
@@ -82,7 +82,7 @@ def main(argv):
                 "AT_SRC_DIR": src,
             },  # 合并这份仓库（不是别的签出）
         )
-    from sc_mining.crafting import loot
+    from astral_toolkit.crafting import loot
 
     idx = loot.load_index(False) or {}
     if (

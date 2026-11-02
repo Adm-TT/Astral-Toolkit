@@ -40,22 +40,22 @@ _SYSTEM_API = [
 
 def test_system_controller_routes():
     """系统的每个接口名都由 app/api/system.py 接，名单和 Controller 的 ROUTES 一个不多一个不少"""
-    from sc_mining.app.api import router, system as CY
+    from astral_toolkit.app.api import router, system as CY
 
     router.reset()
     r = router.routes()
     for name in _SYSTEM_API:
-        assert r[name].__module__ == "sc_mining.app.api.system", name
+        assert r[name].__module__ == "astral_toolkit.app.api.system", name
     assert sorted(CY.ROUTES) == sorted(_SYSTEM_API)
 
 
 def test_system_tasks_no_services():
     """tasks/system 不再反过来引用 app.services"""
-    pkg = ROOT / "sc_mining" / "tasks" / "system"
+    pkg = ROOT / "astral_toolkit" / "tasks" / "system"
     files = (
         list(pkg.glob("*.py"))
         if pkg.is_dir()
-        else [ROOT / "sc_mining" / "tasks" / "system.py"]
+        else [ROOT / "astral_toolkit" / "tasks" / "system.py"]
     )
     for p in files:
         text = p.read_text(encoding="utf-8")
@@ -65,8 +65,8 @@ def test_system_tasks_no_services():
 
 def test_system_router_roundtrip():
     """只读接口 about_info：走 router 和直接调 tasks 结果一样"""
-    from sc_mining.app.api import router
-    from sc_mining.tasks import system as TY
+    from astral_toolkit.app.api import router
+    from astral_toolkit.tasks import system as TY
 
     router.reset()
     got = router.call("about_info", {})
@@ -78,8 +78,8 @@ def test_system_router_roundtrip():
 
 def test_system_start_background_uses_engine_manager(monkeypatch):
     """tasks.system.start_background 交给 EngineManager.start_all（以前经 services 转一道）"""
-    from sc_mining.app.engines.manager import EngineManager
-    from sc_mining.tasks import system as TY
+    from astral_toolkit.app.engines.manager import EngineManager
+    from astral_toolkit.tasks import system as TY
 
     called = []
     monkeypatch.setattr(
@@ -205,7 +205,7 @@ _OLD_API_NAMES = [
 
 def test_all_api_names_routed():
     """原来 services 能调的接口，现在 router 里都有（每个都由 app/api/ 下某个 Controller 接）"""
-    from sc_mining.app.api import router
+    from astral_toolkit.app.api import router
 
     router.reset()
     r = router.routes()
@@ -215,23 +215,23 @@ def test_all_api_names_routed():
     missing = [n for n in _OLD_API_NAMES if n not in r]
     assert not missing, missing
     for n in _OLD_API_NAMES:
-        assert r[n].__module__.startswith("sc_mining.app.api."), (n, r[n].__module__)
+        assert r[n].__module__.startswith("astral_toolkit.app.api."), (n, r[n].__module__)
 
 
 def test_no_services_module():
-    """services.py 删了：import 不到；sc_mining/ 下没有代码再引用它"""
+    """services.py 删了：import 不到；astral_toolkit/ 下没有代码再引用它"""
     import importlib
     import sys
 
-    sys.modules.pop("sc_mining.app.services", None)
+    sys.modules.pop("astral_toolkit.app.services", None)
     try:
-        importlib.import_module("sc_mining.app.services")
+        importlib.import_module("astral_toolkit.app.services")
     except ImportError:
         pass
     else:
-        raise AssertionError("sc_mining.app.services 还能 import")
+        raise AssertionError("astral_toolkit.app.services 还能 import")
     bad = []
-    for f in sorted((ROOT / "sc_mining").rglob("*.py")):
+    for f in sorted((ROOT / "astral_toolkit").rglob("*.py")):
         text = f.read_text(encoding="utf-8")
         for s in ("app import services", "app.services"):
             if s in text:
@@ -242,8 +242,8 @@ def test_no_services_module():
 def test_feedback_scrub_personal_info(monkeypatch, tmp_path):
     """反馈包里的日志、情况.json：AT / 数据 / userdata 文件夹换成占位符，别的 C:\\Users\\<名字> 也抹掉，网址里的口令换掉
     （审查 2026-10-31：日志尾巴原样进反馈包、默认自动上传，会带出 Windows 用户名）"""
-    from sc_mining.core import paths
-    from sc_mining.tasks import system as t_sys
+    from astral_toolkit.core import paths
+    from astral_toolkit.tasks import system as t_sys
 
     root = tmp_path / "AT"
     monkeypatch.setattr(paths, "ROOT", root)
@@ -275,8 +275,8 @@ def test_feedback_scrub_personal_info(monkeypatch, tmp_path):
 def test_showloc_hotkey_and_new_here_do_not_double_save(monkeypatch):
     """合并后审查 2026-10-31：热键记路标已经在等 /showlocation 时，再点「用当前位置新建」不另起盯剪贴板（不然一次输入记成两个路标）；
     已经在等时不再挂「请输入」提示；拿到坐标后提示马上收起"""
-    from sc_mining.system import showloc
-    from sc_mining.tasks import navigation as nav
+    from astral_toolkit.system import showloc
+    from astral_toolkit.tasks import navigation as nav
 
     started, notes = [], []
     monkeypatch.setattr(nav, "_start_here_watch", lambda: started.append(1))

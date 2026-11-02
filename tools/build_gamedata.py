@@ -5,7 +5,7 @@
   --force   强制重建一代
   --check   只检查：清单、库文件、完整性、meta 对照；有问题退出码 2
   --data    临时指定 data/ 目录（开发用）
-只是命令行壳，建库逻辑全在 sc_mining/gamedata/_build.py，程序运行时也调同一份。"""
+只是命令行壳，建库逻辑全在 astral_toolkit/gamedata/_build.py，程序运行时也调同一份。"""
 
 import argparse
 import sqlite3
@@ -18,9 +18,9 @@ if str(ROOT) not in sys.path:
 
 
 def _check() -> int:
-    from sc_mining.gamedata import GamedataError
-    from sc_mining.gamedata._manifest import read_manifest
-    from sc_mining.gamedata._paths import db_path
+    from astral_toolkit.gamedata import GamedataError
+    from astral_toolkit.gamedata._manifest import read_manifest
+    from astral_toolkit.gamedata._paths import db_path
 
     try:
         m = read_manifest()
@@ -70,12 +70,12 @@ def main(argv=None) -> int:
     ap.add_argument("--data", help="临时指定 data/ 目录")
     a = ap.parse_args(argv)
     if a.data:
-        from sc_mining.core import paths
+        from astral_toolkit.core import paths
 
         paths.DATA = Path(a.data)
     if a.check:
         return _check()
-    from sc_mining.gamedata import GamedataError, rebuild
+    from astral_toolkit.gamedata import GamedataError, rebuild
 
     try:
         m = rebuild(force=a.force)

@@ -64,5 +64,5 @@ if not exist ".venv\Scripts\python.exe" (
   pause
   exit /b
 )
-".venv\Scripts\python.exe" -m sc_mining.run install
+".venv\Scripts\python.exe" -m astral_toolkit.run install
 pause

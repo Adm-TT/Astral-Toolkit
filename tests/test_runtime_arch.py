@@ -7,20 +7,20 @@ from pathlib import Path
 
 from tests.test_gamedata_arch import _imports_in, _imports_in_source
 
-_ROOT = Path(__file__).resolve().parent.parent / "sc_mining"
+_ROOT = Path(__file__).resolve().parent.parent / "astral_toolkit"
 
 # 领域计算不能碰的：上层、运行环境、数据和设置；laser / data / refinery 读全局表，要用经 MiningInputs 传
 _ANALYSIS_FORBIDDEN = (
-    "sc_mining.app",
-    "sc_mining.tasks",
-    "sc_mining.runtime",
-    "sc_mining.gamedata",
-    "sc_mining.crafting",
-    "sc_mining.core.settings",
-    "sc_mining.core.paths",
-    "sc_mining.mining.laser",
-    "sc_mining.mining.data",
-    "sc_mining.mining.refinery",
+    "astral_toolkit.app",
+    "astral_toolkit.tasks",
+    "astral_toolkit.runtime",
+    "astral_toolkit.gamedata",
+    "astral_toolkit.crafting",
+    "astral_toolkit.core.settings",
+    "astral_toolkit.core.paths",
+    "astral_toolkit.mining.laser",
+    "astral_toolkit.mining.data",
+    "astral_toolkit.mining.refinery",
     "threading",
     "time",
     "datetime",
@@ -35,8 +35,8 @@ _ANALYSIS_FORBIDDEN = (
     "sys",
 )
 _BARE_FORBIDDEN = (
-    "sc_mining",
-    "sc_mining.core",
+    "astral_toolkit",
+    "astral_toolkit.core",
 )  # 裸导入后走属性访问，等于绕开上面的清单
 _DYNAMIC_IMPORTS = ("__import__", "import_module", "open", "exec", "eval")
 
@@ -76,7 +76,7 @@ def _bound_modules(source, pkg):
 
 
 def _analysis_violations(source):
-    pkg = "sc_mining.mining"
+    pkg = "astral_toolkit.mining"
     mods = list(_imports_in_source(source, pkg))
     bare = [m for m in _bound_modules(source, pkg) if m in _BARE_FORBIDDEN]
     return _forbidden(mods, _ANALYSIS_FORBIDDEN) + bare + _dynamic_imports(source)
@@ -114,20 +114,20 @@ def test_analysis_check_catches_known_gaps():
         "import sqlite3",
         "import os",
         "import os.path",
-        "from sc_mining import gamedata",
+        "from astral_toolkit import gamedata",
         "from .. import runtime",
         "def f():\n    import time",
-        "import importlib\nimportlib.import_module('sc_mining.mining.laser')",
+        "import importlib\nimportlib.import_module('astral_toolkit.mining.laser')",
         "from importlib import import_module\nimport_module('x')",
-        "__import__('sc_mining.mining.data')",
+        "__import__('astral_toolkit.mining.data')",
         "import pathlib",
         "import json",
         "from .. import core",
-        "import sc_mining",
+        "import astral_toolkit",
         "open('x')",
         "exec('import os')",
         "import sys",
-        "import sys\nsys.modules['sc_mining.mining.data']",
+        "import sys\nsys.modules['astral_toolkit.mining.data']",
         "f = __import__",
     ):
         assert _analysis_violations(src), src
@@ -149,13 +149,13 @@ def test_presenter_imports():
     bad = _forbidden(
         _imports_in(path),
         (
-            "sc_mining.gamedata",
-            "sc_mining.mining.laser",
-            "sc_mining.mining.data",
-            "sc_mining.mining.refinery",
-            "sc_mining.crafting",
-            "sc_mining.tasks",
-            "sc_mining.core.settings",
+            "astral_toolkit.gamedata",
+            "astral_toolkit.mining.laser",
+            "astral_toolkit.mining.data",
+            "astral_toolkit.mining.refinery",
+            "astral_toolkit.crafting",
+            "astral_toolkit.tasks",
+            "astral_toolkit.core.settings",
         ),
     )
     assert bad == [] and _dynamic_imports(path.read_text(encoding="utf-8")) == [], bad
@@ -176,10 +176,10 @@ def _run(code):
 def test_analysis_import_is_clean_transitively():
     """新进程只导入 analysis：不能间接带进数据层、设置、读全局表的模块、任务实现，也不能启动线程"""
     code = (
-        "import sys, threading, sc_mining.mining.analysis;"
-        "print([m for m in sys.modules if m.startswith(('sc_mining.gamedata',"
-        "'sc_mining.core.settings','sc_mining.core.paths','sc_mining.tasks','sc_mining.app',"
-        "'sc_mining.runtime','sc_mining.mining.laser','sc_mining.mining.data','sc_mining.mining.refinery',"
+        "import sys, threading, astral_toolkit.mining.analysis;"
+        "print([m for m in sys.modules if m.startswith(('astral_toolkit.gamedata',"
+        "'astral_toolkit.core.settings','astral_toolkit.core.paths','astral_toolkit.tasks','astral_toolkit.app',"
+        "'astral_toolkit.runtime','astral_toolkit.mining.laser','astral_toolkit.mining.data','astral_toolkit.mining.refinery',"
         "'sqlite3'))], threading.active_count())"
     )
     assert _run(code) == "[] 1"
@@ -187,16 +187,16 @@ def test_analysis_import_is_clean_transitively():
 
 def test_tasks_mining_import_creates_no_engine():
     """导入 tasks.mining 本身不创建引擎。tasks/__init__.py 还会连带导入 count、navigation（它们导入时还在取引擎，
-    已写进 RT-B2 PR「需要别人改」），这里换掉包入口只测这个模块；那两处改完后去掉假包，直接 import sc_mining.tasks.mining"""
+    已写进 RT-B2 PR「需要别人改」），这里换掉包入口只测这个模块；那两处改完后去掉假包，直接 import astral_toolkit.tasks.mining"""
     code = (
-        "import sys, types, pathlib, sc_mining;"
-        "pkg = types.ModuleType('sc_mining.tasks');"
-        "pkg.__path__ = [str(pathlib.Path(sc_mining.__file__).parent / 'tasks')];"
-        "sys.modules['sc_mining.tasks'] = pkg;"
-        "import sc_mining.tasks.mining;"
-        "from sc_mining.app.engines.manager import EngineManager;"
-        "print(EngineManager._instance is None, 'sc_mining.tasks.count' in sys.modules,"
-        " 'sc_mining.tasks.navigation' in sys.modules)"
+        "import sys, types, pathlib, astral_toolkit;"
+        "pkg = types.ModuleType('astral_toolkit.tasks');"
+        "pkg.__path__ = [str(pathlib.Path(astral_toolkit.__file__).parent / 'tasks')];"
+        "sys.modules['astral_toolkit.tasks'] = pkg;"
+        "import astral_toolkit.tasks.mining;"
+        "from astral_toolkit.app.engines.manager import EngineManager;"
+        "print(EngineManager._instance is None, 'astral_toolkit.tasks.count' in sys.modules,"
+        " 'astral_toolkit.tasks.navigation' in sys.modules)"
     )
     assert _run(code) == "True False False"
 
@@ -213,10 +213,10 @@ def test_tasks_mining_gets_engine_only_inside_functions():
     assert _toplevel_engine_calls("def f():\n    return _engines().pos") == []
 
 
-_RUNTIME_FORBIDDEN = ("sc_mining.app", "sc_mining.tasks", "sc_mining.gamedata")
+_RUNTIME_FORBIDDEN = ("astral_toolkit.app", "astral_toolkit.tasks", "astral_toolkit.gamedata")
 
 
-def _runtime_violations(source, pkg="sc_mining.runtime"):
+def _runtime_violations(source, pkg="astral_toolkit.runtime"):
     mods = list(_imports_in_source(source, pkg))
     dynamic = [d for d in _dynamic_imports(source) if d != "open"]
     return _forbidden(mods, _RUNTIME_FORBIDDEN) + dynamic
@@ -230,9 +230,9 @@ def test_runtime_layer_stays_below_app():
         assert _runtime_violations(f.read_text(encoding="utf-8")) == [], f.name
     for bad in (
         "from ..app import bus",
-        "from sc_mining.tasks import mining",
+        "from astral_toolkit.tasks import mining",
         "from ..gamedata import snapshot",
-        "import importlib\nimportlib.import_module('sc_mining.app')",
+        "import importlib\nimportlib.import_module('astral_toolkit.app')",
     ):
         assert _runtime_violations(bad), bad
 

@@ -44,8 +44,8 @@ def _git_head():
 def collect():
     from collections import Counter
 
-    from sc_mining.core.paths import DATA, file_stamp
-    from sc_mining.crafting import acquire, crafting, goals, itemstats, wikelo
+    from astral_toolkit.core.paths import DATA, file_stamp
+    from astral_toolkit.crafting import acquire, crafting, goals, itemstats, wikelo
 
     out = {}
     bps = crafting.blueprints()

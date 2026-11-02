@@ -14,23 +14,23 @@ VISION = ("hover_trigger", "count_toggle", "count_state", "count_apply", "count_
 
 
 def test_mining_vision_controller_routes():
-    from sc_mining.app.api import router
-    from sc_mining.app.api import mining, vision
+    from astral_toolkit.app.api import router
+    from astral_toolkit.app.api import mining, vision
 
     router.reset()
     r = router.routes()
     for name in MINING:
-        assert r[name].__module__ == "sc_mining.app.api.mining", name
+        assert r[name].__module__ == "astral_toolkit.app.api.mining", name
         assert r[name] is mining.ROUTES[name]
     for name in VISION:
-        assert r[name].__module__ == "sc_mining.app.api.vision", name
+        assert r[name].__module__ == "astral_toolkit.app.api.vision", name
         assert r[name] is vision.ROUTES[name]
     assert set(mining.ROUTES) == set(MINING)  # 一个不多一个不少
     assert set(vision.ROUTES) == set(VISION)
 
 
 def test_mining_vision_tasks_no_services():
-    root = Path(__file__).resolve().parent.parent / "sc_mining" / "tasks"
+    root = Path(__file__).resolve().parent.parent / "astral_toolkit" / "tasks"
     for f in ("mining.py", "hover.py", "count.py"):
         text = (root / f).read_text(encoding="utf-8")
         for bad in ("app import services", "_services()", "@api"):
@@ -39,8 +39,8 @@ def test_mining_vision_tasks_no_services():
 
 def test_mining_vision_router_roundtrip():
     import json
-    from sc_mining.app.api import router
-    from sc_mining.tasks import mining as M
+    from astral_toolkit.app.api import router
+    from astral_toolkit.tasks import mining as M
 
     b = router.call("mining_gear")
     direct = json.loads(json.dumps(M.mining_gear(), ensure_ascii=False, default=str))

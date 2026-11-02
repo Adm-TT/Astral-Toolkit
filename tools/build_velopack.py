@@ -38,7 +38,7 @@ TITLE = "AT 星际公民助手"
 def version():
     return re.search(
         r'VERSION = "([^"]+)"',
-        (ROOT / "sc_mining" / "core" / "version.py").read_text(encoding="utf-8"),
+        (ROOT / "astral_toolkit" / "core" / "version.py").read_text(encoding="utf-8"),
     ).group(1)
 
 
@@ -85,7 +85,7 @@ def pack(v, notes):
         "--packAuthors",
         "Adm_TT",
         "--icon",
-        str(ROOT / "sc_mining" / "app" / "icon.ico"),
+        str(ROOT / "astral_toolkit" / "app" / "icon.ico"),
         "--outputDir",
         str(REL),
         "--channel",

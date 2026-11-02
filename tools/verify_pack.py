@@ -9,8 +9,8 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from sc_mining.update import data_pack as P, update_check as U  # noqa: E402
-from sc_mining.crafting import loot  # noqa: E402
+from astral_toolkit.update import data_pack as P, update_check as U  # noqa: E402
+from astral_toolkit.crafting import loot  # noqa: E402
 
 
 def rounds():

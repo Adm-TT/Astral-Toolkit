@@ -66,8 +66,8 @@ DETAILS = 20
 
 
 def _offline():
-    from sc_mining.core import net
-    from sc_mining.crafting import loot
+    from astral_toolkit.core import net
+    from astral_toolkit.crafting import loot
 
     def no_net(*a, **kw):
         raise OSError("基线：断网")
@@ -86,8 +86,8 @@ def _safe(fn, *a, **kw):
 def collect():
     import zipfile
 
-    from sc_mining.core.paths import DATA, file_stamp
-    from sc_mining.crafting import loot
+    from astral_toolkit.core.paths import DATA, file_stamp
+    from astral_toolkit.crafting import loot
 
     _offline()
     out = {}
@@ -125,7 +125,7 @@ def collect():
         "details_version": loot.details_version(),
     }
     try:
-        from sc_mining import gamedata
+        from astral_toolkit import gamedata
 
         topic = getattr(gamedata, "loot", None)
         if topic is not None:

@@ -1,4 +1,4 @@
-"""独立 OCR 模块 (sc_mining.ocr) 单元测试与兼容性回归"""
+"""独立 OCR 模块 (astral_toolkit.ocr) 单元测试与兼容性回归"""
 
 import unittest
 from unittest.mock import MagicMock, patch
@@ -8,14 +8,14 @@ from PIL import Image
 
 class TestOcrModule(unittest.TestCase):
     def test_imports_and_exports(self):
-        from sc_mining.ocr import (
+        from astral_toolkit.ocr import (
             OcrToken,
             recognize,
             read_line,
             raw_detector,
             raw_recognizer,
         )
-        from sc_mining.ocr.models import OcrToken as DirectOcrToken
+        from astral_toolkit.ocr.models import OcrToken as DirectOcrToken
 
         # 验证新模块导出
         self.assertIs(OcrToken, DirectOcrToken)
@@ -28,10 +28,10 @@ class TestOcrModule(unittest.TestCase):
         import importlib
 
         with self.assertRaises((ModuleNotFoundError, ImportError)):
-            importlib.import_module("sc_mining.trade.ocr")
+            importlib.import_module("astral_toolkit.trade.ocr")
 
     def test_ocr_token_properties(self):
-        from sc_mining.ocr import OcrToken
+        from astral_toolkit.ocr import OcrToken
 
         tok = OcrToken("测试文本", 98.5, (10, 20, 100, 30))
         self.assertEqual(tok.text, "测试文本")
@@ -43,7 +43,7 @@ class TestOcrModule(unittest.TestCase):
             tok.text = "新文本"  # type: ignore
 
     def test_recognize_with_mock_engine(self):
-        from sc_mining.ocr import recognize, OcrToken
+        from astral_toolkit.ocr import recognize, OcrToken
 
         mock_eng = MagicMock()
         mock_eng.kind = "rapidocr_onnxruntime"
@@ -53,7 +53,7 @@ class TestOcrModule(unittest.TestCase):
             0.01,
         )
 
-        with patch("sc_mining.ocr.engine._get_engine", return_value=mock_eng):
+        with patch("astral_toolkit.ocr.engine._get_engine", return_value=mock_eng):
             img = Image.new("RGB", (200, 100), color=(0, 0, 0))
             tokens = recognize(img, offset=(5, 5), native=True)
 
@@ -64,13 +64,13 @@ class TestOcrModule(unittest.TestCase):
             self.assertEqual(tokens[0].box, (15, 25, 100, 30))
 
     def test_read_line_with_pil_and_numpy(self):
-        from sc_mining.ocr import read_line
+        from astral_toolkit.ocr import read_line
 
         mock_eng = MagicMock()
         mock_eng.kind = "rapidocr_onnxruntime"
         mock_eng.return_value = ([("4,280", 0.98)], 0.005)
 
-        with patch("sc_mining.ocr.engine._get_engine", return_value=mock_eng):
+        with patch("astral_toolkit.ocr.engine._get_engine", return_value=mock_eng):
             # 1. 传入 PIL Image
             img = Image.new("RGB", (80, 24), color=(255, 255, 255))
             txt, conf = read_line(img)
@@ -84,7 +84,7 @@ class TestOcrModule(unittest.TestCase):
             self.assertEqual(conf2, 0.98)
 
     def test_raw_detector_and_recognizer(self):
-        from sc_mining.ocr import raw_detector, raw_recognizer
+        from astral_toolkit.ocr import raw_detector, raw_recognizer
 
         mock_eng = MagicMock()
         mock_eng.kind = "rapidocr_onnxruntime"
@@ -96,7 +96,7 @@ class TestOcrModule(unittest.TestCase):
 
         mock_eng.side_effect = _side_effect
 
-        with patch("sc_mining.ocr.engine._get_engine", return_value=mock_eng):
+        with patch("astral_toolkit.ocr.engine._get_engine", return_value=mock_eng):
             det = raw_detector()
             self.assertTrue(callable(det))
             arr = np.zeros((50, 50, 3), dtype=np.uint8)

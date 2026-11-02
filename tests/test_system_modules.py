@@ -2,8 +2,8 @@
 
 import sys
 
-from sc_mining.tasks import system as t_sys
-from sc_mining.tasks.system import (
+from astral_toolkit.tasks import system as t_sys
+from astral_toolkit.tasks.system import (
     about as m_about,
     common as m_common,
     feedback as m_feedback,
@@ -23,7 +23,7 @@ def test_submodules_exist():
     assert hasattr(m_feedback, "feedback_report")
 
     # status 模块与门面 status 函数兼容性验证
-    status_mod = sys.modules.get("sc_mining.tasks.system.status")
+    status_mod = sys.modules.get("astral_toolkit.tasks.system.status")
     assert status_mod is not None
     assert hasattr(status_mod, "status")
     assert callable(t_sys.status)
@@ -59,7 +59,7 @@ def test_dynamic_setattr_sync_to_submodules():
         t_sys._scrub = old_scrub
 
     # 3. 测试同步到 status._gridtext_status
-    status_mod = sys.modules.get("sc_mining.tasks.system.status")
+    status_mod = sys.modules.get("astral_toolkit.tasks.system.status")
     old_gt = status_mod._gridtext_status
     try:
 

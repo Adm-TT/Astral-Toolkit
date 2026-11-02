@@ -7,11 +7,11 @@ AT 的源代码按 GNU Affero 通用公共许可证第 3 版（AGPL-3.0，见 LI
   AT、Astral Toolkit、天枢、Dubhe、阿塔
 
 图片文件：
-  sc_mining/app/icon.ico
-  sc_mining/app/web/icon.png
-  sc_mining/app/web/icon.svg
-  sc_mining/app/web/at-mark-dark.svg
-  sc_mining/app/web/at-mark-light.svg
+  astral_toolkit/app/icon.ico
+  astral_toolkit/app/web/icon.png
+  astral_toolkit/app/web/icon.svg
+  astral_toolkit/app/web/at-mark-dark.svg
+  astral_toolkit/app/web/at-mark-light.svg
   tools/shell/ATShell/icon.ico
   tools/shell/ATShell/icon.png
   tools/velopack_splash.png

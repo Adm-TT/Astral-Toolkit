@@ -2,8 +2,8 @@
 
 import json
 
-from sc_mining.app.presenters import mining as P
-from sc_mining.mining.analysis import analyze, freeze, lots
+from astral_toolkit.app.presenters import mining as P
+from astral_toolkit.mining.analysis import analyze, freeze, lots
 from tests.test_mining_analysis import _inputs, _plan, _scan
 
 

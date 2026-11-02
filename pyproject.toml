@@ -17,8 +17,8 @@ select = ["E4", "E7", "E9", "F"]
 
 [tool.ruff.lint.per-file-ignores]
 # 门面模块（2026-11-01 PR #6 拆模块后保留的旧入口）：import 进来就是为了让 navigate.X / tasks.system.X 的老写法继续可用
-"sc_mining/navigation/navigate.py" = ["F401", "E402"]
-"sc_mining/tasks/system/__init__.py" = ["F401"]
+"astral_toolkit/navigation/navigate.py" = ["F401", "E402"]
+"astral_toolkit/tasks/system/__init__.py" = ["F401"]
 
 [tool.basedpyright]
 pythonVersion = "3.12"
@@ -26,7 +26,7 @@ typeCheckingMode = "standard"
 # 主仓库根目录下的 .venv；在 worktree 里跑时用 --pythonpath 指过去
 venvPath = "."
 venv = ".venv"
-include = ["sc_mining", "tests", "tools"]
+include = ["astral_toolkit", "tests", "tools"]
 exclude = [
     "**/__pycache__",
     ".venv",

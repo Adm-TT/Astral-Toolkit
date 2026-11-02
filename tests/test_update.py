@@ -15,7 +15,7 @@ class _Resp(io.BytesIO):
 
 
 def _setup(monkeypatch, tmp_path, pages):
-    from sc_mining.update import update_check as C
+    from astral_toolkit.update import update_check as C
 
     monkeypatch.setattr(C, "GITEE", "at/at")
     monkeypatch.setattr(C, "GITHUB", "at/at")
@@ -90,7 +90,7 @@ def test_offline_returns_none(monkeypatch, tmp_path):
 
 
 def test_parse_rejects_bad_manifest():
-    from sc_mining.update import update_check as C
+    from astral_toolkit.update import update_check as C
 
     good = {
         "version": "1.7.1",
@@ -133,7 +133,7 @@ def test_download_checks_sha_and_uses_mirror(monkeypatch, tmp_path):
 
 
 def test_disabled_without_repo(monkeypatch):
-    from sc_mining.update import update_check as C
+    from astral_toolkit.update import update_check as C
 
     monkeypatch.setattr(C, "GITEE", "")
     monkeypatch.setattr(C, "GITHUB", "")
@@ -144,7 +144,7 @@ def test_disabled_without_repo(monkeypatch):
 
 def test_installer_entry_only_for_standalone(tmp_path):
     """1.7.0 起 latest.json 多一项 installer：Python 版照旧用 Dubhe_*.zip，独立安装版只认 AT_Setup_*.exe"""
-    from sc_mining.update import update_check as C
+    from astral_toolkit.update import update_check as C
 
     m = {
         "version": "1.7.1",
@@ -294,8 +294,8 @@ def _old_install(d, version="1.6.72", settings=None, waypoints=None):
 
 def test_legacy_find_and_import(monkeypatch, tmp_path):
     """1.0.1：安装版找旧版天枢、导入设置和路标（免责声明那项不带过来、AT 原来的文件先备份）"""
-    from sc_mining.update import legacy
-    from sc_mining.core import paths
+    from astral_toolkit.update import legacy
+    from astral_toolkit.core import paths
 
     me = tmp_path / "AT"
     (me / "userdata").mkdir(parents=True)
@@ -343,8 +343,8 @@ def test_legacy_find_and_import(monkeypatch, tmp_path):
 
 
 def test_legacy_skips_self(monkeypatch, tmp_path):
-    from sc_mining.update import legacy
-    from sc_mining.core import paths
+    from astral_toolkit.update import legacy
+    from astral_toolkit.core import paths
 
     me = _old_install(tmp_path / "Documents" / "sc_mining")
     monkeypatch.setattr(paths, "ROOT", me)
@@ -354,7 +354,7 @@ def test_legacy_skips_self(monkeypatch, tmp_path):
 def test_killswitch(monkeypatch, tmp_path):
     """远程关功能（2026-10-27，借鉴 EDMC）：latest.json 的 disabled 按版本范围关掉指定功能；写错的不关；存到本地离线也照样关"""
     import json
-    from sc_mining.update import update_check as U, upgrade
+    from astral_toolkit.update import update_check as U, upgrade
 
     monkeypatch.setattr(U, "KILL_FILE", tmp_path / "killswitch.json")
     monkeypatch.setattr(U, "_kill", {"list": None, "at": 0.0})
@@ -439,7 +439,7 @@ def test_own_server_stale_does_not_hide_newer(monkeypatch, tmp_path):
 
 def test_beta_sees_same_number_live(monkeypatch, tmp_path):
     """本机是 beta（1.1.2-beta.1）时，同号的 live（1.1.2）也提示更新；live 装的不提示同号（2026-10-30）"""
-    from sc_mining.update import upgrade
+    from astral_toolkit.update import upgrade
 
     z = _pkg(tmp_path / "Dubhe_9.0.0.zip", "9.0.0", {})
     C, calls = _setup(
@@ -460,8 +460,8 @@ def test_beta_sees_same_number_live(monkeypatch, tmp_path):
 
 def test_data_pack_takes_newest_source(monkeypatch, tmp_path):
     import io
-    from sc_mining.update import data_pack as P
-    from sc_mining.update import update_check as U
+    from astral_toolkit.update import data_pack as P
+    from astral_toolkit.update import update_check as U
 
     base = {
         "file": "AT_data_2026.10.27-0100.zip",
@@ -544,7 +544,7 @@ def test_vpk_falls_back_to_cos(monkeypatch):
     """Velopack：香港连不上（出错 / 超时）就用国内镜像查版本、下载（2026-10-29）；用假的 velopack，不联网"""
     import sys
     import types
-    from sc_mining.update import vpk, upgrade
+    from astral_toolkit.update import vpk, upgrade
 
     calls = []
 
@@ -616,8 +616,8 @@ def test_vpk_falls_back_to_cos(monkeypatch):
 
 def test_vpk_check_fail_not_up_to_date(monkeypatch):
     """Velopack 版：香港和国内镜像都连不上时「检查更新」不说「已是最新」；latest.json 有新版本就提示手动下载（审查 2026-10-29）"""
-    from sc_mining.update import vpk
-    from sc_mining.tasks import system as t_sys
+    from astral_toolkit.update import vpk
+    from astral_toolkit.tasks import system as t_sys
 
     def boom(rollback=False):
         raise RuntimeError("AT 服务器和国内镜像都无法连接：timed out")
@@ -692,7 +692,7 @@ def test_import_inno_userdata(monkeypatch, tmp_path):
     """Velopack 版第一次启动：老 Inno 版的设置和记录搬过来（窗口缓存、窗口地址、锁不搬；新位置更新的文件不盖）；搬完写标记，不再搬"""
     import os
     import time
-    from sc_mining.core import paths
+    from astral_toolkit.core import paths
 
     old, new = tmp_path / "Programs" / "AT" / "userdata", tmp_path / "AT_userdata"
     (old / "logs").mkdir(parents=True)
@@ -728,7 +728,7 @@ def test_import_inno_userdata(monkeypatch, tmp_path):
 
 def test_vkey_beta_older_than_live():
     """版本比较按 semver：x.y.z-beta.N 比同号 x.y.z 旧；beta.2 比 beta.1 新，beta.10 比 beta.9 新（审查 2026-10-31）"""
-    from sc_mining.update.upgrade import vkey
+    from astral_toolkit.update.upgrade import vkey
 
     assert vkey("1.1.2-beta.1") < vkey("1.1.2")
     assert vkey("1.1.2-beta.1") < vkey("1.1.2-beta.2") < vkey("1.1.2-beta.10")
@@ -773,8 +773,8 @@ def test_vpk_beta_gets_same_number_live(monkeypatch):
     """Velopack 版装着 1.1.2-beta.1：服务器上的 1.1.2 正式版能升级、界面也提示；同号 beta 不算新；
     装着 1.1.2 时上一个版本 1.1.2-beta.3 能回滚（审查 2026-10-31：以前比版本丢掉 beta 后缀，测试玩家收不到同号正式版）"""
     import sys
-    from sc_mining.update import upgrade, vpk
-    from sc_mining.tasks import system as t_sys
+    from astral_toolkit.update import upgrade, vpk
+    from astral_toolkit.tasks import system as t_sys
 
     versions = {"win": "1.1.2", "beta": None, "prev": None}
     monkeypatch.setattr(vpk, "FEEDS", [("https://example.invalid/velopack", "测试源")])
@@ -826,9 +826,9 @@ def test_killswitch_refreshes_when_update_check_off(monkeypatch):
     """玩家关了「启动时检查更新」：不提示新版本，但远程关功能清单照常每小时查一次
     （整改第 2 批选 A，2026-10-31：远程关是游戏更新后防止给出错误识别结果的兜底）"""
     import time as _t
-    from sc_mining.core import settings
-    from sc_mining.tasks import system as t_sys
-    from sc_mining.update import update_check as U
+    from astral_toolkit.core import settings
+    from astral_toolkit.tasks import system as t_sys
+    from astral_toolkit.update import update_check as U
 
     calls = []
 
@@ -856,9 +856,9 @@ def test_killswitch_refreshes_when_update_check_off(monkeypatch):
 
 def test_game_source_marker(monkeypatch, tmp_path):
     """数据文件的 source 标记：由游戏数据构建的（新写法、兼容旧数据包的旧写法）更新时不让网站版盖掉；网站来的照常更新"""
-    from sc_mining import run
-    from sc_mining.core import paths
-    from sc_mining.crafting import build_crafting
+    from astral_toolkit import run
+    from astral_toolkit.core import paths
+    from astral_toolkit.crafting import build_crafting
 
     monkeypatch.setattr(paths, "DATA", tmp_path)
     monkeypatch.setattr(build_crafting, "source_rows", lambda: None)
@@ -877,8 +877,8 @@ def test_game_source_marker(monkeypatch, tmp_path):
 
 def test_build_input_rows(monkeypatch, tmp_path):
     """本机构建输入目录里同版本的蓝图 + 任务文件成对才算；不成对、没有目录都返回 None"""
-    from sc_mining.core import paths
-    from sc_mining.crafting import build_crafting
+    from astral_toolkit.core import paths
+    from astral_toolkit.crafting import build_crafting
 
     monkeypatch.setattr(paths, "DATA", tmp_path)
     assert build_crafting.source_rows() is None
@@ -899,9 +899,9 @@ def test_make_data_pack_keeps_game_starmap(monkeypatch, tmp_path):
     import subprocess
     from pathlib import Path
 
-    from sc_mining import run
-    from sc_mining.core import paths
-    from sc_mining.update import data_pack
+    from astral_toolkit import run
+    from astral_toolkit.core import paths
+    from astral_toolkit.update import data_pack
     from tests.minipytest import raises
 
     M = runpy.run_path(

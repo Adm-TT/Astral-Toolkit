@@ -1,6 +1,6 @@
 {
     "files": {
-        "./sc_mining/app/engines/count.py": [
+        "./astral_toolkit/app/engines/count.py": [
             {
                 "code": "reportOptionalMemberAccess",
                 "range": {
@@ -18,7 +18,7 @@
                 }
             }
         ],
-        "./sc_mining/app/engines/live.py": [
+        "./astral_toolkit/app/engines/live.py": [
             {
                 "code": "reportOperatorIssue",
                 "range": {
@@ -60,7 +60,7 @@
                 }
             }
         ],
-        "./sc_mining/app/engines/nav.py": [
+        "./astral_toolkit/app/engines/nav.py": [
             {
                 "code": "reportOptionalMemberAccess",
                 "range": {
@@ -182,7 +182,7 @@
                 }
             }
         ],
-        "./sc_mining/app/engines/pos.py": [
+        "./astral_toolkit/app/engines/pos.py": [
             {
                 "code": "reportArgumentType",
                 "range": {
@@ -208,7 +208,7 @@
                 }
             }
         ],
-        "./sc_mining/app/http_server.py": [
+        "./astral_toolkit/app/http_server.py": [
             {
                 "code": "reportIncompatibleMethodOverride",
                 "range": {
@@ -218,7 +218,7 @@
                 }
             }
         ],
-        "./sc_mining/app/hud_state.py": [
+        "./astral_toolkit/app/hud_state.py": [
             {
                 "code": "reportOptionalMemberAccess",
                 "range": {
@@ -228,7 +228,7 @@
                 }
             }
         ],
-        "./sc_mining/app/instance.py": [
+        "./astral_toolkit/app/instance.py": [
             {
                 "code": "reportFunctionMemberAccess",
                 "range": {
@@ -278,7 +278,7 @@
                 }
             }
         ],
-        "./sc_mining/core/paths.py": [
+        "./astral_toolkit/core/paths.py": [
             {
                 "code": "reportInvalidStringEscapeSequence",
                 "range": {
@@ -288,7 +288,7 @@
                 }
             }
         ],
-        "./sc_mining/core/perf.py": [
+        "./astral_toolkit/core/perf.py": [
             {
                 "code": "reportAttributeAccessIssue",
                 "range": {
@@ -306,7 +306,7 @@
                 }
             }
         ],
-        "./sc_mining/crafting/acquire.py": [
+        "./astral_toolkit/crafting/acquire.py": [
             {
                 "code": "reportOperatorIssue",
                 "range": {
@@ -332,7 +332,7 @@
                 }
             }
         ],
-        "./sc_mining/crafting/crafting.py": [
+        "./astral_toolkit/crafting/crafting.py": [
             {
                 "code": "reportCallIssue",
                 "range": {
@@ -366,7 +366,7 @@
                 }
             }
         ],
-        "./sc_mining/crafting/goals.py": [
+        "./astral_toolkit/crafting/goals.py": [
             {
                 "code": "reportGeneralTypeIssues",
                 "range": {
@@ -384,7 +384,7 @@
                 }
             }
         ],
-        "./sc_mining/crafting/itemsearch.py": [
+        "./astral_toolkit/crafting/itemsearch.py": [
             {
                 "code": "reportOptionalIterable",
                 "range": {
@@ -394,7 +394,7 @@
                 }
             }
         ],
-        "./sc_mining/crafting/itemstats.py": [
+        "./astral_toolkit/crafting/itemstats.py": [
             {
                 "code": "reportCallIssue",
                 "range": {
@@ -412,7 +412,7 @@
                 }
             }
         ],
-        "./sc_mining/crafting/loot.py": [
+        "./astral_toolkit/crafting/loot.py": [
             {
                 "code": "reportArgumentType",
                 "range": {
@@ -502,7 +502,7 @@
                 }
             }
         ],
-        "./sc_mining/crafting/stockplaces.py": [
+        "./astral_toolkit/crafting/stockplaces.py": [
             {
                 "code": "reportCallIssue",
                 "range": {
@@ -528,7 +528,7 @@
                 }
             }
         ],
-        "./sc_mining/crafting/wikelo.py": [
+        "./astral_toolkit/crafting/wikelo.py": [
             {
                 "code": "reportOptionalSubscript",
                 "range": {
@@ -538,7 +538,7 @@
                 }
             }
         ],
-        "./sc_mining/demo.py": [
+        "./astral_toolkit/demo.py": [
             {
                 "code": "reportArgumentType",
                 "range": {
@@ -548,7 +548,7 @@
                 }
             }
         ],
-        "./sc_mining/mining/data.py": [
+        "./astral_toolkit/mining/data.py": [
             {
                 "code": "reportCallIssue",
                 "range": {
@@ -566,7 +566,7 @@
                 }
             }
         ],
-        "./sc_mining/mining/laser.py": [
+        "./astral_toolkit/mining/laser.py": [
             {
                 "code": "reportAttributeAccessIssue",
                 "range": {
@@ -656,7 +656,7 @@
                 }
             }
         ],
-        "./sc_mining/mining/locations.py": [
+        "./astral_toolkit/mining/locations.py": [
             {
                 "code": "reportReturnType",
                 "range": {
@@ -666,7 +666,7 @@
                 }
             }
         ],
-        "./sc_mining/mining/mining_area.py": [
+        "./astral_toolkit/mining/mining_area.py": [
             {
                 "code": "reportOptionalMemberAccess",
                 "range": {
@@ -676,7 +676,7 @@
                 }
             }
         ],
-        "./sc_mining/mining/parse.py": [
+        "./astral_toolkit/mining/parse.py": [
             {
                 "code": "reportOptionalOperand",
                 "range": {
@@ -750,7 +750,7 @@
                 }
             }
         ],
-        "./sc_mining/mining/screen.py": [
+        "./astral_toolkit/mining/screen.py": [
             {
                 "code": "reportAttributeAccessIssue",
                 "range": {
@@ -1000,7 +1000,7 @@
                 }
             }
         ],
-        "./sc_mining/mining/signals.py": [
+        "./astral_toolkit/mining/signals.py": [
             {
                 "code": "reportAttributeAccessIssue",
                 "range": {
@@ -1034,7 +1034,7 @@
                 }
             }
         ],
-        "./sc_mining/navigation/celestial.py": [
+        "./astral_toolkit/navigation/celestial.py": [
             {
                 "code": "reportReturnType",
                 "range": {
@@ -1044,7 +1044,7 @@
                 }
             }
         ],
-        "./sc_mining/navigation/displayinfo.py": [
+        "./astral_toolkit/navigation/displayinfo.py": [
             {
                 "code": "reportOptionalMemberAccess",
                 "range": {
@@ -1182,7 +1182,7 @@
                 }
             }
         ],
-        "./sc_mining/navigation/gridtext.py": [
+        "./astral_toolkit/navigation/gridtext.py": [
             {
                 "code": "reportPossiblyUnboundVariable",
                 "range": {
@@ -1360,7 +1360,7 @@
                 }
             }
         ],
-        "./sc_mining/navigation/navigate.py": [
+        "./astral_toolkit/navigation/navigate.py": [
             {
                 "code": "reportOptionalMemberAccess",
                 "range": {
@@ -1394,7 +1394,7 @@
                 }
             }
         ],
-        "./sc_mining/navigation/transit.py": [
+        "./astral_toolkit/navigation/transit.py": [
             {
                 "code": "reportArgumentType",
                 "range": {
@@ -1636,7 +1636,7 @@
                 }
             }
         ],
-        "./sc_mining/run.py": [
+        "./astral_toolkit/run.py": [
             {
                 "code": "reportArgumentType",
                 "range": {
@@ -1662,7 +1662,7 @@
                 }
             }
         ],
-        "./sc_mining/selftest.py": [
+        "./astral_toolkit/selftest.py": [
             {
                 "code": "reportPossiblyUnboundVariable",
                 "range": {
@@ -1704,7 +1704,7 @@
                 }
             }
         ],
-        "./sc_mining/system/showloc.py": [
+        "./astral_toolkit/system/showloc.py": [
             {
                 "code": "reportPossiblyUnboundVariable",
                 "range": {
@@ -1834,7 +1834,7 @@
                 }
             }
         ],
-        "./sc_mining/tasks/mining.py": [
+        "./astral_toolkit/tasks/mining.py": [
             {
                 "code": "reportOptionalMemberAccess",
                 "range": {
@@ -1956,7 +1956,7 @@
                 }
             }
         ],
-        "./sc_mining/tasks/navigation.py": [
+        "./astral_toolkit/tasks/navigation.py": [
             {
                 "code": "reportArgumentType",
                 "range": {
@@ -2086,7 +2086,7 @@
                 }
             }
         ],
-        "./sc_mining/tasks/system/common.py": [
+        "./astral_toolkit/tasks/system/common.py": [
             {
                 "code": "reportOptionalMemberAccess",
                 "range": {
@@ -2096,7 +2096,7 @@
                 }
             }
         ],
-        "./sc_mining/tasks/system/legacy.py": [
+        "./astral_toolkit/tasks/system/legacy.py": [
             {
                 "code": "reportArgumentType",
                 "range": {
@@ -2114,7 +2114,7 @@
                 }
             }
         ],
-        "./sc_mining/tasks/system/status.py": [
+        "./astral_toolkit/tasks/system/status.py": [
             {
                 "code": "reportOperatorIssue",
                 "range": {
@@ -2132,7 +2132,7 @@
                 }
             }
         ],
-        "./sc_mining/tasks/system/upgrade.py": [
+        "./astral_toolkit/tasks/system/upgrade.py": [
             {
                 "code": "reportOptionalSubscript",
                 "range": {
@@ -2150,7 +2150,7 @@
                 }
             }
         ],
-        "./sc_mining/trade/console.py": [
+        "./astral_toolkit/trade/console.py": [
             {
                 "code": "reportIndexIssue",
                 "range": {
@@ -2232,7 +2232,7 @@
                 }
             }
         ],
-        "./sc_mining/trade/decimal_math.py": [
+        "./astral_toolkit/trade/decimal_math.py": [
             {
                 "code": "reportOperatorIssue",
                 "range": {
@@ -2242,7 +2242,7 @@
                 }
             }
         ],
-        "./sc_mining/trade/inspector.py": [
+        "./astral_toolkit/trade/inspector.py": [
             {
                 "code": "reportArgumentType",
                 "range": {
@@ -2252,7 +2252,7 @@
                 }
             }
         ],
-        "./sc_mining/trade/pricing.py": [
+        "./astral_toolkit/trade/pricing.py": [
             {
                 "code": "reportArgumentType",
                 "range": {
@@ -2262,7 +2262,7 @@
                 }
             }
         ],
-        "./sc_mining/trade/providers/scm.py": [
+        "./astral_toolkit/trade/providers/scm.py": [
             {
                 "code": "reportArgumentType",
                 "range": {
@@ -2272,7 +2272,7 @@
                 }
             }
         ],
-        "./sc_mining/update/data_pack.py": [
+        "./astral_toolkit/update/data_pack.py": [
             {
                 "code": "reportOptionalMemberAccess",
                 "range": {
@@ -2282,7 +2282,7 @@
                 }
             }
         ],
-        "./sc_mining/update/localization.py": [
+        "./astral_toolkit/update/localization.py": [
             {
                 "code": "reportGeneralTypeIssues",
                 "range": {
@@ -2308,7 +2308,7 @@
                 }
             }
         ],
-        "./sc_mining/update/update_check.py": [
+        "./astral_toolkit/update/update_check.py": [
             {
                 "code": "reportPossiblyUnboundVariable",
                 "range": {
@@ -2318,7 +2318,7 @@
                 }
             }
         ],
-        "./sc_mining/update/upgrade.py": [
+        "./astral_toolkit/update/upgrade.py": [
             {
                 "code": "reportOptionalMemberAccess",
                 "range": {
@@ -2328,7 +2328,7 @@
                 }
             }
         ],
-        "./sc_mining/update/vpk.py": [
+        "./astral_toolkit/update/vpk.py": [
             {
                 "code": "reportArgumentType",
                 "range": {

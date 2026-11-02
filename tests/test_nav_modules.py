@@ -1,7 +1,7 @@
 """测试 navigation 拆分出的 names.py、waypoints.py、starmap.py、celestial.py 与 transit.py 子模块"""
 
 import math
-from sc_mining.navigation import names, waypoints, starmap, celestial, transit, navigate
+from astral_toolkit.navigation import names, waypoints, starmap, celestial, transit, navigate
 
 
 def test_names_mappings():

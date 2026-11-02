@@ -11,9 +11,9 @@ from tests.test_gamedata_craft import _BP, _CRAFT_SOURCES
 
 def _setup(monkeypatch, tmp_path, **override):
     """tmp_path 当 data/ 根、写最小源 + 制造源；就绪标记、后台线程记录换成新的（每个测试一个新库目录）"""
-    import sc_mining.gamedata as G
-    from sc_mining.core import paths
-    from sc_mining.gamedata import _ready
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.core import paths
+    from astral_toolkit.gamedata import _ready
 
     tmp_path.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(paths, "DATA", tmp_path)
@@ -28,7 +28,7 @@ def _setup(monkeypatch, tmp_path, **override):
 
 def _rewrite(tmp_path, name, obj):
     """换一个源文件并重建（模拟更新数据）"""
-    from sc_mining.gamedata._build import rebuild_if_needed
+    from astral_toolkit.gamedata._build import rebuild_if_needed
 
     (tmp_path / name).write_text(json.dumps(obj, ensure_ascii=False), encoding="utf-8")
     rebuild_if_needed()
@@ -39,7 +39,7 @@ def _rewrite(tmp_path, name, obj):
 
 def test_blueprints_dict_shape_equals_json(monkeypatch, tmp_path):
     """还原出的蓝图 dict 与源逐字相等（含重名两份、u 空、无槽）"""
-    from sc_mining.crafting import crafting
+    from astral_toolkit.crafting import crafting
 
     _setup(monkeypatch, tmp_path)
     src = _CRAFT_SOURCES["crafting.json"]["blueprints"]
@@ -50,7 +50,7 @@ def test_blueprints_dict_shape_equals_json(monkeypatch, tmp_path):
 
 def test_blueprints_same_objects_within_version(monkeypatch, tmp_path):
     """同一版本内两次取到的是同一批对象（bp_key 靠 id(bp)）；换了版本就是新对象、新内容"""
-    from sc_mining.crafting import crafting
+    from astral_toolkit.crafting import crafting
 
     _setup(monkeypatch, tmp_path)
     a, b = crafting.blueprints(), crafting.blueprints()
@@ -66,7 +66,7 @@ def test_blueprints_same_objects_within_version(monkeypatch, tmp_path):
 
 def test_blueprints_kept_when_other_source_changes(monkeypatch, tmp_path):
     """别的源文件更新（这里换 wikelo.json）换了库版本，蓝图还是同一批对象：长期拿着旧对象的地方编号照样对"""
-    from sc_mining.crafting import crafting, wikelo
+    from astral_toolkit.crafting import crafting, wikelo
 
     _setup(monkeypatch, tmp_path)
     a = crafting.blueprints()
@@ -82,7 +82,7 @@ def test_catalog_built_once_when_threads_race(monkeypatch, tmp_path):
     import threading
     import time
 
-    from sc_mining.gamedata import crafting as gc
+    from astral_toolkit.gamedata import crafting as gc
 
     _setup(monkeypatch, tmp_path)
     gc.catalog()  # 先把库建好
@@ -112,7 +112,7 @@ def test_catalog_built_once_when_threads_race(monkeypatch, tmp_path):
 
 def test_blueprint_dicts_are_plain_mutable_like_json(monkeypatch, tmp_path):
     """slots / 选项 / 改装 / src 是 list 不是 tuple，d 是 bool，和 json.loads 出来的一样"""
-    from sc_mining.crafting import crafting
+    from astral_toolkit.crafting import crafting
 
     _setup(monkeypatch, tmp_path)
     bp = crafting.blueprints()[0]
@@ -125,7 +125,7 @@ def test_blueprint_dicts_are_plain_mutable_like_json(monkeypatch, tmp_path):
 
 def test_keys_rule_unchanged(monkeypatch, tmp_path):
     """编号：名字唯一 → 名字；重名 → 名字#序号；旧编号（只有名字）取第一份；variant_note 照旧"""
-    from sc_mining.crafting import crafting
+    from astral_toolkit.crafting import crafting
 
     _setup(monkeypatch, tmp_path)
     bps = crafting.blueprints()
@@ -145,8 +145,8 @@ def test_keys_rule_unchanged(monkeypatch, tmp_path):
 
 def test_bp_key_hot_path_opens_no_snapshot(monkeypatch, tmp_path):
     """bp_key / variant_note 对已缓存那份里的对象直接查，不开快照（一页要调上百次）；不在里面的才去取当前版本"""
-    from sc_mining.crafting import crafting
-    from sc_mining.gamedata import _db
+    from astral_toolkit.crafting import crafting
+    from astral_toolkit.gamedata import _db
 
     _setup(monkeypatch, tmp_path)
     bps = crafting.blueprints()
@@ -169,8 +169,8 @@ def test_bp_key_hot_path_opens_no_snapshot(monkeypatch, tmp_path):
 
 def test_data_empty_when_no_blueprints(monkeypatch, tmp_path):
     """库里没有蓝图 / 库不可用：{"blueprints": []}，同一个原因只记一次警告"""
-    import sc_mining.gamedata as G
-    from sc_mining.crafting import crafting
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.crafting import crafting
 
     _setup(monkeypatch, tmp_path, **{"crafting.json": {"version": "x"}})
     assert crafting.data() == {"blueprints": []} and crafting.blueprints() == []
@@ -276,7 +276,7 @@ def _pos(bps, got):
 
 
 def test_for_item_fold_rule(monkeypatch, tmp_path):
-    from sc_mining.crafting import crafting
+    from astral_toolkit.crafting import crafting
 
     src = _rich(monkeypatch, tmp_path)
     bps = crafting.blueprints()
@@ -303,7 +303,7 @@ def test_for_item_fold_rule(monkeypatch, tmp_path):
 
 
 def test_search_exact_before_partial_sorted(monkeypatch, tmp_path):
-    from sc_mining.crafting import crafting
+    from astral_toolkit.crafting import crafting
 
     src = _rich(monkeypatch, tmp_path)
     bps = crafting.blueprints()
@@ -329,7 +329,7 @@ def test_search_exact_before_partial_sorted(monkeypatch, tmp_path):
 
 
 def test_by_key_legacy_name_only(monkeypatch, tmp_path):
-    from sc_mining.crafting import crafting
+    from astral_toolkit.crafting import crafting
 
     _rich(monkeypatch, tmp_path)
     bps = crafting.blueprints()
@@ -339,7 +339,7 @@ def test_by_key_legacy_name_only(monkeypatch, tmp_path):
 
 
 def test_mat_summary_gates_are_ints(monkeypatch, tmp_path):
-    from sc_mining.crafting import crafting
+    from astral_toolkit.crafting import crafting
 
     _rich(monkeypatch, tmp_path)
     m = crafting.mat_summary("Tin", 700)
@@ -356,7 +356,7 @@ def test_mat_summary_gates_are_ints(monkeypatch, tmp_path):
 
 
 def test_uses_matches_legacy_on_sample(monkeypatch, tmp_path):
-    from sc_mining.crafting import crafting
+    from astral_toolkit.crafting import crafting
 
     src = _rich(monkeypatch, tmp_path)
     bps = crafting.blueprints()
@@ -377,8 +377,8 @@ def test_uses_matches_legacy_on_sample(monkeypatch, tmp_path):
 
 def test_queries_empty_when_db_unavailable(monkeypatch, tmp_path):
     """库不可用：for_item → None，search / uses → []，mat_summary 计 0（照批 1 shops 的做法，不往外抛）"""
-    import sc_mining.gamedata as G
-    from sc_mining.crafting import crafting
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.crafting import crafting
 
     _setup(monkeypatch, tmp_path)
 
@@ -446,7 +446,7 @@ def _wk(monkeypatch, tmp_path):
 
 def _legacy_wk_uses(cs, name_en="", name_zh=""):
     """迁移前的 wikelo.uses（照抄，比对用；_fold / _same 用模块里的，没改）"""
-    from sc_mining.crafting.wikelo import _fold, _same
+    from astral_toolkit.crafting.wikelo import _fold, _same
 
     hits = []
     for c in cs:
@@ -467,7 +467,7 @@ def _legacy_wk_uses(cs, name_en="", name_zh=""):
 
 def test_wikelo_load_shape(monkeypatch, tmp_path):
     """load() 与源同形（按源顺序，req 的 z 去掉末尾反斜杠），同一版本内是同一个列表"""
-    from sc_mining.crafting import wikelo
+    from astral_toolkit.crafting import wikelo
 
     src = _wk(monkeypatch, tmp_path)
     got = wikelo.load()
@@ -482,7 +482,7 @@ def test_wikelo_load_shape(monkeypatch, tmp_path):
 
 def test_wikelo_uses_prefix_rule_preserved(monkeypatch, tmp_path):
     """先按折叠名相等找；一条都没有才放宽成包含（≥4 个字符），和旧实现逐条一致"""
-    from sc_mining.crafting import wikelo
+    from astral_toolkit.crafting import wikelo
 
     src = _wk(monkeypatch, tmp_path)
     cases = [
@@ -508,7 +508,7 @@ def test_wikelo_uses_prefix_rule_preserved(monkeypatch, tmp_path):
 
 
 def test_wikelo_search(monkeypatch, tmp_path):
-    from sc_mining.crafting import wikelo
+    from astral_toolkit.crafting import wikelo
 
     _wk(monkeypatch, tmp_path)
     assert wikelo.search("") is wikelo.load()
@@ -520,7 +520,7 @@ def test_wikelo_search(monkeypatch, tmp_path):
 
 def test_print_spots(monkeypatch, tmp_path):
     """按名字找打印地点：不分大小写、去首尾空格；没有 → []"""
-    from sc_mining.crafting import wikelo
+    from astral_toolkit.crafting import wikelo
 
     _setup(monkeypatch, tmp_path)
     assert wikelo.print_spots("Comp-Board") == ["死局空间站", "另一处"]
@@ -530,8 +530,8 @@ def test_print_spots(monkeypatch, tmp_path):
 
 
 def test_wikelo_empty_when_db_unavailable(monkeypatch, tmp_path):
-    import sc_mining.gamedata as G
-    from sc_mining.crafting import wikelo
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.crafting import wikelo
 
     _wk(monkeypatch, tmp_path)
 
@@ -592,7 +592,7 @@ _STATS = {
 
 def test_itemstats_item_shapes(monkeypatch, tmp_path):
     """item(uuid) 与源同形（s 里 {min,max} / 数值 / 嵌套都原样）；base_value / tags 照旧"""
-    from sc_mining.crafting import itemstats
+    from astral_toolkit.crafting import itemstats
 
     _setup(monkeypatch, tmp_path, **{"item_stats.json": copy.deepcopy(_STATS)})
     a = itemstats.item("uuid-a")
@@ -615,7 +615,7 @@ def test_itemstats_item_shapes(monkeypatch, tmp_path):
 
 
 def test_itemstats_none_for_unknown(monkeypatch, tmp_path):
-    from sc_mining.crafting import itemstats
+    from astral_toolkit.crafting import itemstats
 
     src = copy.deepcopy(_STATS)
     src["items"][
@@ -628,8 +628,8 @@ def test_itemstats_none_for_unknown(monkeypatch, tmp_path):
 
 
 def test_itemstats_version(monkeypatch, tmp_path):
-    import sc_mining.gamedata as G
-    from sc_mining.crafting import itemstats
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.crafting import itemstats
 
     _setup(monkeypatch, tmp_path, **{"item_stats.json": copy.deepcopy(_STATS)})
     assert itemstats.version() == "s2"
@@ -646,8 +646,8 @@ def test_itemstats_version(monkeypatch, tmp_path):
 
 def test_ships_with(monkeypatch, tmp_path):
     """部件名折叠（小写、只留字母数字）后对上；返回新列表；没有 → []"""
-    import sc_mining.gamedata as G
-    from sc_mining.crafting import acquire
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.crafting import acquire
 
     _setup(monkeypatch, tmp_path)
     want = ["剜度 死镰", "埃斯佩里亚 刀锋"]
@@ -670,8 +670,8 @@ def test_ships_with(monkeypatch, tmp_path):
 
 def _spy_updating(monkeypatch, log):
     """包一层 gamedata.updating：记下每次进入时本线程是不是已经拿着 BUILD_LOCK（拿着就是锁顺序反了）"""
-    import sc_mining.gamedata as G
-    from sc_mining.crafting.build_crafting import BUILD_LOCK
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.crafting.build_crafting import BUILD_LOCK
 
     real = G.updating
 
@@ -687,7 +687,7 @@ def _spy_updating(monkeypatch, log):
 
 
 def _count_rebuilds(monkeypatch):
-    from sc_mining.gamedata import _build
+    from astral_toolkit.gamedata import _build
 
     n = [0]
     real = _build.rebuild_if_needed
@@ -702,7 +702,7 @@ def _count_rebuilds(monkeypatch):
 
 def test_build_crafting_runs_inside_updating(monkeypatch, tmp_path):
     """写 crafting.json 在 updating 里（BUILD_LOCK 在内），出口重建库：新蓝图马上查得到"""
-    from sc_mining.crafting import build_crafting, crafting
+    from astral_toolkit.crafting import build_crafting, crafting
 
     _setup(monkeypatch, tmp_path)
     assert crafting.by_key("Medpen") is not None
@@ -719,7 +719,7 @@ def test_build_crafting_runs_inside_updating(monkeypatch, tmp_path):
 
 
 def test_wikelo_build_runs_inside_updating(monkeypatch, tmp_path):
-    from sc_mining.crafting import wikelo
+    from astral_toolkit.crafting import wikelo
 
     _setup(monkeypatch, tmp_path)
     log = []
@@ -731,9 +731,9 @@ def test_wikelo_build_runs_inside_updating(monkeypatch, tmp_path):
 
 def test_update_rebuilds_once_and_checks_outside_write_lock(monkeypatch, tmp_path):
     """update()：比版本 / 下载不拿写锁也不拿 BUILD_LOCK（收口 2）；两份文件重建套一层 updating，库只重建一次"""
-    import sc_mining.gamedata as G
-    from sc_mining.crafting import build_crafting, crafting, wikelo
-    from sc_mining.gamedata import _lock
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.crafting import build_crafting, crafting, wikelo
+    from astral_toolkit.gamedata import _lock
 
     _setup(monkeypatch, tmp_path)
     crafting.blueprints()  # 先建好库
@@ -784,7 +784,7 @@ def test_update_rebuilds_once_and_checks_outside_write_lock(monkeypatch, tmp_pat
 
 def test_rebuild_still_rebuilds_db_when_wikelo_fails(monkeypatch, tmp_path):
     """维科洛那份写失败：crafting.json 已经换了，库照样重建一次（新蓝图查得到），错再往外抛、不打印完成提示"""
-    from sc_mining.crafting import build_crafting, crafting, wikelo
+    from astral_toolkit.crafting import build_crafting, crafting, wikelo
 
     _setup(monkeypatch, tmp_path)
     crafting.blueprints()
@@ -815,7 +815,7 @@ def test_rebuild_still_rebuilds_db_when_wikelo_fails(monkeypatch, tmp_path):
 
 def test_null_fields_and_int_qty_round_trip(monkeypatch, tmp_path):
     """源里的 null 还原出来还是 None（不是 ''），维科洛数量 int 还是 int；材料没有中文名 → z 是 ''（同原 load()）"""
-    from sc_mining.crafting import crafting, wikelo
+    from astral_toolkit.crafting import crafting, wikelo
 
     bp = copy.deepcopy(_CRAFT_SOURCES["crafting.json"])
     bp["blueprints"][2]["t"] = None

@@ -10,8 +10,8 @@ from pathlib import Path
 
 from tests.test_gamedata_b1 import _setup
 
-_ROOT = Path(__file__).resolve().parent.parent / "sc_mining"
-_FORBIDDEN = ("sc_mining.tasks", "sc_mining.app")
+_ROOT = Path(__file__).resolve().parent.parent / "astral_toolkit"
+_FORBIDDEN = ("astral_toolkit.tasks", "astral_toolkit.app")
 
 
 def _imports_in(path: Path):
@@ -58,8 +58,8 @@ def test_gamedata_topics_do_not_import_tasks_or_app():
 
 def test_reused_rules_are_pure(monkeypatch):
     """导入器复用的规则在查询 / 建库入口全部「调用即报错」时照常算：规则不查库、不建库、不开快照"""
-    import sc_mining.gamedata as G
-    from sc_mining.gamedata import _build, _db, _ready
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.gamedata import _build, _db, _ready
 
     def boom(*a, **k):
         raise AssertionError("纯规则不该触发查询 / 建库")
@@ -73,14 +73,14 @@ def test_reused_rules_are_pure(monkeypatch):
         for n in names:
             monkeypatch.setattr(mod, n, boom)
 
-    from sc_mining.crafting.crafting import _fold_name, _search_norm, assign_keys
-    from sc_mining.crafting.itemsearch import en_key, zh_key
-    from sc_mining.crafting.loot import _fold as loot_fold
-    from sc_mining.crafting.wikelo import _fold as wikelo_fold
-    from sc_mining.navigation.names import _norm
-    from sc_mining.navigation.starmap import fix_points
-    from sc_mining.navigation.transit import _city_rows
-    from sc_mining.trade.names import _fold_en, _junk, _norm_zh
+    from astral_toolkit.crafting.crafting import _fold_name, _search_norm, assign_keys
+    from astral_toolkit.crafting.itemsearch import en_key, zh_key
+    from astral_toolkit.crafting.loot import _fold as loot_fold
+    from astral_toolkit.crafting.wikelo import _fold as wikelo_fold
+    from astral_toolkit.navigation.names import _norm
+    from astral_toolkit.navigation.starmap import fix_points
+    from astral_toolkit.navigation.transit import _city_rows
+    from astral_toolkit.trade.names import _fold_en, _junk, _norm_zh
 
     bps = [{"n": "X"}, {"n": "X"}, {"n": "Y"}]
     keys, index, total = assign_keys(bps)
@@ -113,8 +113,8 @@ def test_reused_rules_are_pure(monkeypatch):
 
 def test_sync_ensure_failure_visible_in_last_error(monkeypatch, tmp_path):
     """同步 ensure() 建库失败：公开 last_error() 能查到；之后成功就绪会清掉（架构稿 v1.1 §13.2）"""
-    import sc_mining.gamedata as G
-    from sc_mining.core import paths
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.core import paths
     from tests.minipytest import raises
 
     _setup(monkeypatch, tmp_path)

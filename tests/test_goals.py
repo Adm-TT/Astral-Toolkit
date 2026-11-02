@@ -1,7 +1,7 @@
 """目标：库存联动维科洛兑换 / 制造，算还差多少"""
 
-from sc_mining.trade.console import Trade
-from sc_mining.trade.models import Item, StockKey, StockLine
+from astral_toolkit.trade.console import Trade
+from astral_toolkit.trade.models import Item, StockKey, StockLine
 
 
 def _trade(tmp_path, stock):
@@ -24,7 +24,7 @@ def _trade(tmp_path, stock):
 
 
 def _setup(monkeypatch, tmp_path):
-    from sc_mining.crafting import goals
+    from astral_toolkit.crafting import goals
 
     monkeypatch.setattr(goals, "FILE", tmp_path / "goals.json")
     return goals
@@ -166,8 +166,8 @@ def test_add_stock_from_goal_page(monkeypatch, tmp_path):
 
 def test_goal_quality_effect_and_stock_quality(monkeypatch, tmp_path):
     """目标：带入分到的库存平均品质，算成品属性；库存页手动入库、改品质（能撤销）"""
-    from sc_mining.crafting import crafting as CR
-    from sc_mining.tasks import (
+    from astral_toolkit.crafting import crafting as CR
+    from astral_toolkit.tasks import (
         count as t_count,
         goals as t_goals,
         hover as t_hover,
@@ -234,7 +234,7 @@ def test_goal_quality_effect_and_stock_quality(monkeypatch, tmp_path):
 
 def test_tooltip_quality():
     from types import SimpleNamespace as N
-    from sc_mining.trade.inspector import tooltip_quality
+    from astral_toolkit.trade.inspector import tooltip_quality
 
     tk = lambda s, y=0: N(text=s, box=(0, y, 10, y + 5))  # noqa: E731
     assert tooltip_quality([tk("钛"), tk("品质：650", 10)]) == 650
@@ -251,7 +251,7 @@ def test_tooltip_quality():
 def test_units_uscu_and_migration(monkeypatch, tmp_path):
     """入库单位 个 / SCU / uSCU：SCU 和 uSCU 都按 uSCU 存（0.495 SCU 不再被存成 0.50，2026-10-23 用户）；
     以前按 0.01 SCU 记的旧库存换算成 uSCU，历史记录一起换算，撤销照常"""
-    from sc_mining.tasks import (
+    from astral_toolkit.tasks import (
         count as t_count,
         goals as t_goals,
         hover as t_hover,
@@ -303,14 +303,14 @@ def test_units_uscu_and_migration(monkeypatch, tmp_path):
 
 def test_stock_suggest_and_named_add(monkeypatch, tmp_path):
     """手动入库联想：打几个字就出矿物和物品（带单位）；点选后按选中的入库"""
-    from sc_mining.tasks import (
+    from astral_toolkit.tasks import (
         count as t_count,
         goals as t_goals,
         hover as t_hover,
         stock as t_stock,
         trade as t_trade,
     )
-    from sc_mining.trade import names
+    from astral_toolkit.trade import names
 
     _setup(monkeypatch, tmp_path)
     t = Trade(tmp_path / "db", providers=[])
@@ -365,7 +365,7 @@ def test_stock_suggest_and_named_add(monkeypatch, tmp_path):
 def test_stock_places_list_and_match():
     """库存地点列表（1.6.39）：游戏里能存东西的地方，中文名和「星系 / 星球 / 站点」路径；以前手打的位置能对上的自动认"""
     import pytest
-    from sc_mining.crafting import stockplaces as SP
+    from astral_toolkit.crafting import stockplaces as SP
 
     ps = SP.places()
     labels = [p["label"] for p in ps]
@@ -402,21 +402,21 @@ def test_stock_places_list_and_match():
 def test_stock_out_set_move_and_places(monkeypatch, tmp_path):
     """库存 1.6.39：地点从列表选（New Babbage → 新巴贝奇）、出库 / 改数量 / 移库 / 改品质都单独记一笔带备注、能撤销；
     以前手打的位置：能对上的启动时自动归位（先备份），对不上的放「未归类」，可以整组归到某个地点或留成自己的地点"""
-    from sc_mining.tasks import (
+    from astral_toolkit.tasks import (
         count as t_count,
         goals as t_goals,
         hover as t_hover,
         stock as t_stock,
         trade as t_trade,
     )
-    from sc_mining.trade.storage import EXPECTED_SCHEMA
+    from astral_toolkit.trade.storage import EXPECTED_SCHEMA
 
     _setup(monkeypatch, tmp_path)
     t = Trade(tmp_path / "db", providers=[])
     _v = lambda: t  # noqa: E731
     for _m in (t_count, t_goals, t_hover, t_stock, t_trade):
         monkeypatch.setattr(_m, "trade", _v)
-    monkeypatch.setattr("sc_mining.crafting.stockplaces.current_place", lambda: None)
+    monkeypatch.setattr("astral_toolkit.crafting.stockplaces.current_place", lambda: None)
     # 以前手打的位置（直接写进库存，不经过地点列表）
     t.catalog.upsert([Item("ber", "Beryl"), Item("crp", "CryoPod")])
     old = [
@@ -629,7 +629,7 @@ def test_stock_undo_blocked_by_later_ops_and_op_id(tmp_path):
 
 def test_stock_page_uses_place_picker():
     """库存页、物品页、目标页入库都从地点列表选（不再手打「放在哪」）；库存页有出库 / 改数量 / 移库 / 改品质"""
-    from sc_mining.core import paths
+    from astral_toolkit.core import paths
 
     js = (paths.CODE / "app" / "web" / "app.js").read_text(encoding="utf-8")
     assert 'id="s-loc"' not in js and "gf-loc" not in js and 'id="sa-loc"' not in js
@@ -647,7 +647,7 @@ def test_stock_page_uses_place_picker():
 
 def test_stock_bins_reserve_ledger_and_values(monkeypatch, tmp_path):
     """库存 1.6.40：仓位（建 / 默认 / 改名 / 删除，东西跟着走）、「不给目标用」、目标占用、仓储流水筛选分页、估值"""
-    from sc_mining.tasks import (
+    from astral_toolkit.tasks import (
         count as t_count,
         goals as t_goals,
         hover as t_hover,
@@ -660,7 +660,7 @@ def test_stock_bins_reserve_ledger_and_values(monkeypatch, tmp_path):
     _v = lambda: t  # noqa: E731
     for _m in (t_count, t_goals, t_hover, t_stock, t_trade):
         monkeypatch.setattr(_m, "trade", _v)
-    monkeypatch.setattr("sc_mining.crafting.stockplaces.current_place", lambda: None)
+    monkeypatch.setattr("astral_toolkit.crafting.stockplaces.current_place", lambda: None)
     add = lambda **k: t_stock.stock_add_named(  # noqa: E731
         **{
             "name": "钛",
@@ -707,7 +707,7 @@ def test_stock_bins_reserve_ledger_and_values(monkeypatch, tmp_path):
         next(
             b
             for b in __import__(
-                "sc_mining.crafting.crafting", fromlist=["x"]
+                "astral_toolkit.crafting.crafting", fromlist=["x"]
             ).blueprints()
             if any(n == "Titanium" for _s, opts, _m in b["slots"] for _k, n, *_ in opts)
         )["n"],
@@ -800,14 +800,14 @@ def test_stock_bins_reserve_ledger_and_values(monkeypatch, tmp_path):
 def test_goal_finish_deducts_stock(monkeypatch, tmp_path):
     """目标「做完了」：从库存扣掉做一次用掉的材料（一笔出库，原因「用于制造」，能撤销），次数 -1，最后一次做完删掉目标；
     材料不够不让扣；标了「不给目标用」的不拿"""
-    from sc_mining.tasks import (
+    from astral_toolkit.tasks import (
         count as t_count,
         goals as t_goals,
         hover as t_hover,
         stock as t_stock,
         trade as t_trade,
     )
-    from sc_mining.crafting import crafting as CR
+    from astral_toolkit.crafting import crafting as CR
 
     G = _setup(monkeypatch, tmp_path)
     t = Trade(tmp_path / "db", providers=[])
@@ -857,8 +857,8 @@ def test_crafted_item_qualities_from_bonus(monkeypatch, tmp_path):
     """1.6.67：制造出来的东西说明框里只有加成行（用户 2026-10-25 F10 那把视差「血红」，OCR 原文）→ 按蓝图和固定品质档倒推
     钨 858、金 916、科力晶 959（一分不差），记平均 911，详情各槽；入库手填各槽也一样；老库存文件没有新表照样能打开"""
     from types import SimpleNamespace as N
-    from sc_mining.crafting import crafting as C
-    from sc_mining.tasks import (
+    from astral_toolkit.crafting import crafting as C
+    from astral_toolkit.tasks import (
         count as t_count,
         goals as t_goals,
         hover as t_hover,
@@ -972,14 +972,14 @@ _GOALS_API = [
 
 def test_nav_goals_controller_routes():
     """导航、目标的每个接口名都由 app/api/navigation.py、app/api/goals.py 接，名单和 Controller 的 ROUTES 一个不多一个不少"""
-    from sc_mining.app.api import router, navigation as CN, goals as CG
+    from astral_toolkit.app.api import router, navigation as CN, goals as CG
 
     router.reset()
     r = router.routes()
     for name in _NAV_API:
-        assert r[name].__module__ == "sc_mining.app.api.navigation", name
+        assert r[name].__module__ == "astral_toolkit.app.api.navigation", name
     for name in _GOALS_API:
-        assert r[name].__module__ == "sc_mining.app.api.goals", name
+        assert r[name].__module__ == "astral_toolkit.app.api.goals", name
     assert sorted(CN.ROUTES) == sorted(_NAV_API) and sorted(CG.ROUTES) == sorted(
         _GOALS_API
     )
@@ -989,7 +989,7 @@ def test_nav_goals_tasks_no_services():
     """tasks/navigation.py、tasks/goals.py 不再反过来引用 app.services"""
     from pathlib import Path
 
-    root = Path(__file__).resolve().parent.parent / "sc_mining" / "tasks"
+    root = Path(__file__).resolve().parent.parent / "astral_toolkit" / "tasks"
     for f in ("navigation.py", "goals.py"):
         text = (root / f).read_text(encoding="utf-8")
         for bad in ("app import services", "_services()", "@api"):
@@ -999,9 +999,9 @@ def test_nav_goals_tasks_no_services():
 def test_nav_goals_router_roundtrip(monkeypatch, tmp_path):
     """只读接口 waypoints：走 router 和直接调 tasks 结果一样（路标文件用临时的）"""
     import json
-    from sc_mining.app.api import router
-    from sc_mining.navigation import navigate as n
-    from sc_mining.tasks import navigation as TN
+    from astral_toolkit.app.api import router
+    from astral_toolkit.navigation import navigate as n
+    from astral_toolkit.tasks import navigation as TN
 
     monkeypatch.setattr(n, "WAYPOINTS", tmp_path / "wp.json")
     n.add_space_waypoint("测试点", "Stanton", (1.0e9, 2.0e9, 3.0e9))

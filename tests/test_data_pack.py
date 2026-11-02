@@ -12,13 +12,13 @@ class _Resp(io.BytesIO):
 
 
 def _setup(monkeypatch, tmp_path, pages):
-    from sc_mining.update import data_pack as P, update_check as U
+    from astral_toolkit.update import data_pack as P, update_check as U
 
     monkeypatch.setattr(U, "GITEE", "at/at")
     monkeypatch.setattr(U, "GITHUB", "at/at")
     monkeypatch.setattr(P, "DATA", tmp_path / "data")
     monkeypatch.setattr(P, "STAMP", tmp_path / "data" / "data_pack.json")
-    from sc_mining.core import paths
+    from astral_toolkit.core import paths
 
     monkeypatch.setattr(
         paths, "DATA", tmp_path / "data"
@@ -107,10 +107,10 @@ def test_bad_checksum_falls_back_to_github_mirror(monkeypatch, tmp_path):
 def test_unreachable_returns_none_and_run_falls_back(monkeypatch, tmp_path):
     P = _setup(monkeypatch, tmp_path, {})
     assert P.update(progress=lambda *_: None) is None
-    from sc_mining import run
-    from sc_mining.update import uex, localization
-    from sc_mining.crafting import build_crafting, shops, loot
-    from sc_mining.navigation import navigate
+    from astral_toolkit import run
+    from astral_toolkit.update import uex, localization
+    from astral_toolkit.crafting import build_crafting, shops, loot
+    from astral_toolkit.navigation import navigate
 
     called = []
     for mod, fn in (
@@ -140,8 +140,8 @@ def test_pack_up_to_date_skips_sources(monkeypatch, tmp_path):
             m["urls"][0]: data,
         },
     )  # noqa: F841
-    from sc_mining import run
-    from sc_mining.update import uex, localization
+    from astral_toolkit import run
+    from astral_toolkit.update import uex, localization
 
     called = []
     monkeypatch.setattr(localization, "update", lambda *a, **k: called.append("loc"))
@@ -153,7 +153,7 @@ def test_pack_up_to_date_skips_sources(monkeypatch, tmp_path):
 
 
 def test_parse_rejects_bad_manifest():
-    from sc_mining.update import data_pack as P
+    from astral_toolkit.update import data_pack as P
 
     good = {
         "version": "2026.10.26-1200",
@@ -184,7 +184,7 @@ def _loot_zip(path, version, items):
 
 def test_loot_detail_reads_bundle_first(monkeypatch, tmp_path):
     """掉落明细先查整包，版本对得上才用；整包里没有的才联网"""
-    from sc_mining.crafting import loot
+    from astral_toolkit.crafting import loot
 
     monkeypatch.setattr(
         loot,
@@ -210,7 +210,7 @@ def test_loot_detail_reads_bundle_first(monkeypatch, tmp_path):
 def test_data_pack_downloads_loot_bundle_only_when_version_changes(
     monkeypatch, tmp_path
 ):
-    from sc_mining.crafting import loot
+    from astral_toolkit.crafting import loot
 
     data, m = _pack(tmp_path, {"shops.json": "{}"})
     lz = _loot_zip(
@@ -232,7 +232,7 @@ def test_data_pack_downloads_loot_bundle_only_when_version_changes(
         m["loot"]["urls"][0]: lz,
     }
     P = _setup(monkeypatch, tmp_path, pages)
-    from sc_mining.update import update_check as U
+    from astral_toolkit.update import update_check as U
 
     real = U._open
     monkeypatch.setattr(U, "_open", lambda url, t: (hits.append(url), real(url, t))[1])
@@ -251,8 +251,8 @@ def test_data_pack_downloads_loot_bundle_only_when_version_changes(
 def test_crawl_stops_on_rate_limit(monkeypatch, tmp_path):
     """全速抓掉落明细：对方限流（429）就停，不生成整包"""
     import urllib.error
-    from sc_mining.crafting import loot
-    from sc_mining.core import net
+    from astral_toolkit.crafting import loot
+    from astral_toolkit.core import net
 
     monkeypatch.setattr(
         loot,

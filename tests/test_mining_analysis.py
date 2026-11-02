@@ -5,7 +5,7 @@ from typing import Any
 
 from types import MappingProxyType
 
-from sc_mining.mining.analysis import (
+from astral_toolkit.mining.analysis import (
     MiningInputs,
     Rank,
     analyze,
@@ -13,7 +13,7 @@ from sc_mining.mining.analysis import (
     lots,
     station_bonus,
 )
-from sc_mining.mining.parse import Scan
+from astral_toolkit.mining.parse import Scan
 
 ZH = {"Tungsten": "钨", "Gold": "金", "Copper": "铜"}
 

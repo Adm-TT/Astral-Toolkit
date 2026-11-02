@@ -278,8 +278,8 @@ def _write_all(tmp_path, **override):
 
 
 def _built(monkeypatch, tmp_path, **override):
-    from sc_mining.gamedata import snapshot
-    from sc_mining.gamedata._build import rebuild_if_needed
+    from astral_toolkit.gamedata import snapshot
+    from astral_toolkit.gamedata._build import rebuild_if_needed
 
     _data_root(monkeypatch, tmp_path)
     _write_all(tmp_path, **override)
@@ -288,7 +288,7 @@ def _built(monkeypatch, tmp_path, **override):
 
 
 def test_schema2_tables_exist(monkeypatch, tmp_path):
-    from sc_mining.gamedata._schema import SCHEMA_VERSION
+    from astral_toolkit.gamedata._schema import SCHEMA_VERSION
 
     assert SCHEMA_VERSION >= 2
     snapshot = _built(monkeypatch, tmp_path)
@@ -345,8 +345,8 @@ def test_starmap_import_applies_fixes_and_norms(monkeypatch, tmp_path):
 
 def test_starmap_without_fixes_file(monkeypatch, tmp_path):
     """有 starmap.json、没有 starmap_fixes.json：坐标原样"""
-    from sc_mining.gamedata import snapshot
-    from sc_mining.gamedata._build import rebuild_if_needed
+    from astral_toolkit.gamedata import snapshot
+    from astral_toolkit.gamedata._build import rebuild_if_needed
 
     _data_root(monkeypatch, tmp_path)
     _write_all(tmp_path)
@@ -512,8 +512,8 @@ def test_mining_spots_keep_rows_without_or_duplicate_id(monkeypatch, tmp_path):
 
 def test_bad_nav_source_does_not_break_items(monkeypatch, tmp_path):
     """导航是可选源：某个文件坏了只影响它自己的表，物品 / 商店照建（审查 2026-11-02 第 3 条）"""
-    from sc_mining.gamedata import snapshot
-    from sc_mining.gamedata._build import rebuild_if_needed
+    from astral_toolkit.gamedata import snapshot
+    from astral_toolkit.gamedata._build import rebuild_if_needed
 
     _data_root(monkeypatch, tmp_path)
     _write_all(tmp_path)
@@ -540,8 +540,8 @@ def test_bad_nav_source_does_not_break_items(monkeypatch, tmp_path):
 
 def test_nav_sources_optional(monkeypatch, tmp_path):
     """批 1 的最小源不带任何导航文件时也能建库（表存在但为空）"""
-    from sc_mining.gamedata import snapshot
-    from sc_mining.gamedata._build import rebuild_if_needed
+    from astral_toolkit.gamedata import snapshot
+    from astral_toolkit.gamedata._build import rebuild_if_needed
     from tests.test_gamedata import _write_min_sources
 
     _data_root(monkeypatch, tmp_path)

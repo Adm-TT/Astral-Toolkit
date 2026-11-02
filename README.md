@@ -43,8 +43,8 @@ AT 靠截屏识别文字、读游戏写出的日志文件工作；不模拟按�
 需要 Windows 10/11 和 Python 3.10–3.13。
 
 1. 双击 `首次安装.bat`：找到合适的 Python（没有就装 3.12），在本文件夹里建 `.venv` 并装好依赖
-2. 运行：`.venv\Scripts\python.exe -m sc_mining.run`
-3. 第一次打开后在「设置与更新」里点「开始更新」（或者运行 `.venv\Scripts\python.exe -m sc_mining.run update`），游戏数据不在仓库里
+2. 运行：`.venv\Scripts\python.exe -m astral_toolkit.run`
+3. 第一次打开后在「设置与更新」里点「开始更新」（或者运行 `.venv\Scripts\python.exe -m astral_toolkit.run update`），游戏数据不在仓库里
 
 跑测试：`.venv\Scripts\python.exe -X utf8 -m tests.run_all`。要先更新过数据；仓库里不带游戏截图，用到截图的测试会自动跳过。
 
@@ -52,20 +52,20 @@ AT 靠截屏识别文字、读游戏写出的日志文件工作；不模拟按�
 
 | 位置 | 内容 |
 |---|---|
-| `sc_mining/app/` | 窗口和后台：`server.py` 启动、本机网页服务；`web/` 界面；`api/` 每个领域一个接口文件（Controller），`router.py` 汇总；`engines/` 后台读屏 / 导航引擎，`engines/manager.py` 统一管；`hud_state.py` 悬浮窗提示；`overlay.py` 悬浮窗；`tray.py` 托盘 |
-| `sc_mining/tasks/` | 各功能的业务逻辑：交易、库存、目标与制造、导航、采矿、F8 识别、F6 盘点、系统与更新；界面接口经 `app/api/` 转到这里 |
-| `sc_mining/core/` | 基础：路径、设置、版本、性能与识别设备、多语言 |
-| `sc_mining/mining/`、`navigation/`、`crafting/`、`trade/` | 各领域的计算和数据：采矿识别与破碎计算、星图与定位、制造与物品、查价与库存 |
-| `sc_mining/ocr/` | 读屏识别统一入口（各处认字都经这里），引擎本体在 `core/perf.py` |
-| `sc_mining/system/`、`update/` | 和系统、游戏打交道（驾驶位检测、问题反馈等）；数据下载与升级 |
-| `sc_mining/run.py`、`selftest.py` | 命令行入口、自检 |
+| `astral_toolkit/app/` | 窗口和后台：`server.py` 启动、本机网页服务；`web/` 界面；`api/` 每个领域一个接口文件（Controller），`router.py` 汇总；`engines/` 后台读屏 / 导航引擎，`engines/manager.py` 统一管；`hud_state.py` 悬浮窗提示；`overlay.py` 悬浮窗；`tray.py` 托盘 |
+| `astral_toolkit/tasks/` | 各功能的业务逻辑：交易、库存、目标与制造、导航、采矿、F8 识别、F6 盘点、系统与更新；界面接口经 `app/api/` 转到这里 |
+| `astral_toolkit/core/` | 基础：路径、设置、版本、性能与识别设备、多语言 |
+| `astral_toolkit/mining/`、`navigation/`、`crafting/`、`trade/` | 各领域的计算和数据：采矿识别与破碎计算、星图与定位、制造与物品、查价与库存 |
+| `astral_toolkit/ocr/` | 读屏识别统一入口（各处认字都经这里），引擎本体在 `core/perf.py` |
+| `astral_toolkit/system/`、`update/` | 和系统、游戏打交道（驾驶位检测、问题反馈等）；数据下载与升级 |
+| `astral_toolkit/run.py`、`selftest.py` | 命令行入口、自检 |
 | `tests/` | 测试，`run_all.py` 自带运行器，不用装 pytest |
 | `tools/` | 打包、发布、数据包生成等开发工具 |
 | `data/`、`userdata/` | 运行时生成：下载的数据、个人设置和记录（不在仓库里） |
 
 ## 数据来源和致谢
 
-游戏数据来自下列网站和社区项目，权利归原作者所有（`sc_mining/names_zh.json`、`sc_mining/sc_glossary.json` 摘自汉化包，不属于 AGPL，权利归汉化项目）：SCMiner、UEX、SC Market、scmdb.net、starmap.space、星际公民掉落查询（scl.miao.network）、Star Citizen Wiki API、Star Citizen Wiki（矿物品质分档，CC BY-SA 4.0）、erkul.games、SC汉化盒子及社区汉化项目。星图、制造蓝图、采矿点等另有一部分由作者从游戏数据整理生成（生成这部分的构建脚本不在本仓库）。
+游戏数据来自下列网站和社区项目，权利归原作者所有（`astral_toolkit/names_zh.json`、`astral_toolkit/sc_glossary.json` 摘自汉化包，不属于 AGPL，权利归汉化项目）：SCMiner、UEX、SC Market、scmdb.net、starmap.space、星际公民掉落查询（scl.miao.network）、Star Citizen Wiki API、Star Citizen Wiki（矿物品质分档，CC BY-SA 4.0）、erkul.games、SC汉化盒子及社区汉化项目。星图、制造蓝图、采矿点等另有一部分由作者从游戏数据整理生成（生成这部分的构建脚本不在本仓库）。
 
 用到的开源组件（RapidOCR、ONNX Runtime、NumPy、Pillow、OpenCV、mss 等）和字体的许可证原文见 [第三方许可.txt](第三方许可.txt)。
 

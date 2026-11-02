@@ -6,13 +6,13 @@ import zipfile
 def _pkg(path, version, files, top=None):
     top = top or f"Dubhe_{version}"
     with zipfile.ZipFile(path, "w") as z:
-        z.writestr(f"{top}/sc_mining/__init__.py", "")
-        z.writestr(f"{top}/sc_mining/app/server.py", "# server")
+        z.writestr(f"{top}/astral_toolkit/__init__.py", "")
+        z.writestr(f"{top}/astral_toolkit/app/server.py", "# server")
         z.writestr(
-            f"{top}/sc_mining/app/services.py", "# services"
+            f"{top}/astral_toolkit/app/services.py", "# services"
         )  # 必需文件清单（审查 2026-10-28 第 3 条）
-        z.writestr(f"{top}/sc_mining/run.py", "# run")
-        z.writestr(f"{top}/sc_mining/version.py", f'VERSION = "{version}"\n')
+        z.writestr(f"{top}/astral_toolkit/run.py", "# run")
+        z.writestr(f"{top}/astral_toolkit/version.py", f'VERSION = "{version}"\n')
         for name, text in files.items():
             z.writestr(f"{top}/{name}", text)
     return path
@@ -20,13 +20,13 @@ def _pkg(path, version, files, top=None):
 
 def _install(tmp_path):
     root = tmp_path / "天枢"
-    (root / "sc_mining" / "app").mkdir(parents=True)
-    (root / "sc_mining" / "__init__.py").write_text("")
-    (root / "sc_mining" / "app" / "server.py").write_text("# old server")
-    (root / "sc_mining" / "app" / "services.py").write_text("# old services")
-    (root / "sc_mining" / "run.py").write_text("# old run")
-    (root / "sc_mining" / "version.py").write_text('VERSION = "1.5.0"\n')
-    (root / "sc_mining" / "old_module.py").write_text("# 新版本里已经删掉了")
+    (root / "astral_toolkit" / "app").mkdir(parents=True)
+    (root / "astral_toolkit" / "__init__.py").write_text("")
+    (root / "astral_toolkit" / "app" / "server.py").write_text("# old server")
+    (root / "astral_toolkit" / "app" / "services.py").write_text("# old services")
+    (root / "astral_toolkit" / "run.py").write_text("# old run")
+    (root / "astral_toolkit" / "version.py").write_text('VERSION = "1.5.0"\n')
+    (root / "astral_toolkit" / "old_module.py").write_text("# 新版本里已经删掉了")
     (root / "userdata").mkdir()
     (root / "userdata" / "settings.json").write_text('{"mine": true}')
     (root / ".venv").mkdir()
@@ -36,7 +36,7 @@ def _install(tmp_path):
 
 
 def _setup(monkeypatch, tmp_path):
-    from sc_mining.update import upgrade as U
+    from astral_toolkit.update import upgrade as U
 
     root = _install(tmp_path)
     monkeypatch.setattr(U, "ROOT", root)
@@ -69,7 +69,7 @@ def test_find_newer_packages(monkeypatch, tmp_path):
 
 def test_check_rejects_bad_packages(tmp_path):
     import pytest
-    from sc_mining.update import upgrade as U
+    from astral_toolkit.update import upgrade as U
 
     (tmp_path / "Dubhe_9.0.0.zip").write_bytes(b"not a zip")
     with pytest.raises(ValueError):
@@ -90,7 +90,7 @@ def test_apply_keeps_personal_data(monkeypatch, tmp_path):
         tmp_path / "Dubhe_1.6.0.zip",
         "1.6.0",
         {
-            "sc_mining/goals.py": "# new feature",
+            "astral_toolkit/goals.py": "# new feature",
             "requirements.txt": "mss\n",
             "userdata/settings.json": '{"mine": false}',  # 包里就算带了 userdata 也不能覆盖
             "Dubhe.exe": "exe",
@@ -99,11 +99,11 @@ def test_apply_keeps_personal_data(monkeypatch, tmp_path):
     )
     r = U.apply(p, progress=lambda *a: None)
     assert r == {"from": "1.5.0", "to": "1.6.0", "deps": False}
-    assert (root / "sc_mining" / "app" / "server.py").read_text() == "# server"
-    assert (root / "sc_mining" / "goals.py").exists() and (
+    assert (root / "astral_toolkit" / "app" / "server.py").read_text() == "# server"
+    assert (root / "astral_toolkit" / "goals.py").exists() and (
         root / "使用说明.txt"
     ).read_text(encoding="utf-8") == "新说明"
-    assert not (root / "sc_mining" / "old_module.py").exists()  # 新版本删掉的旧代码清掉
+    assert not (root / "astral_toolkit" / "old_module.py").exists()  # 新版本删掉的旧代码清掉
     assert (root / "userdata" / "settings.json").read_text() == '{"mine": true}'
     assert (root / ".venv" / "python.txt").exists()
     assert (
@@ -114,7 +114,7 @@ def test_apply_keeps_personal_data(monkeypatch, tmp_path):
 def test_apply_installs_new_dependencies(monkeypatch, tmp_path):
     U, root = _setup(monkeypatch, tmp_path)
     calls = []
-    import sc_mining.run as run
+    import astral_toolkit.run as run
 
     monkeypatch.setattr(run, "_pip", lambda *a: calls.append(a) or True)
     monkeypatch.setattr(
@@ -134,7 +134,7 @@ def test_apply_installs_new_dependencies(monkeypatch, tmp_path):
 
 def _fake_pip(monkeypatch, ok=True):
     """假 pip：记下装 / 卸的顺序，不真去装"""
-    import sc_mining.run as run
+    import astral_toolkit.run as run
 
     calls = []
     monkeypatch.setattr(
@@ -169,7 +169,7 @@ def test_use_directml_keeps_cpu_when_install_fails(monkeypatch):
 
 def test_use_directml_restores_cpu_when_reinstall_fails(monkeypatch):
     """CPU 版已经卸了、显卡版强制重装又失败：把 CPU 版装回来，返回 False"""
-    import sc_mining.run as run
+    import astral_toolkit.run as run
 
     calls = []
     monkeypatch.setattr(
@@ -212,10 +212,10 @@ def test_upgrade_backs_up_and_rollback_restores(monkeypatch, tmp_path):
     new = _pkg(
         tmp_path / "Dubhe_1.6.0.zip",
         "1.6.0",
-        {"sc_mining/app/server.py": "# new server", "requirements.txt": "mss\n"},
+        {"astral_toolkit/app/server.py": "# new server", "requirements.txt": "mss\n"},
     )
     U.apply(new, progress=lambda m: None)
-    assert (root / "sc_mining" / "app" / "server.py").read_text() == "# new server"
+    assert (root / "astral_toolkit" / "app" / "server.py").read_text() == "# new server"
     backup = root / "userdata" / "backups" / "Dubhe_1.5.0.zip"
     assert backup.exists() and U.check(backup)[1] == (1, 5, 0)
     with zipfile.ZipFile(backup) as z:  # 备份里没有个人数据
@@ -227,11 +227,11 @@ def test_upgrade_backs_up_and_rollback_restores(monkeypatch, tmp_path):
     ] == "升级前自动备份"
     (root / "userdata" / "settings.json").write_text('{"mine": "after"}')
     U.apply(backup, progress=lambda m: None)
-    assert (root / "sc_mining" / "app" / "server.py").read_text() == "# old server"
+    assert (root / "astral_toolkit" / "app" / "server.py").read_text() == "# old server"
     assert (
-        'VERSION = "1.5.0"' in (root / "sc_mining" / "version.py").read_text()
+        'VERSION = "1.5.0"' in (root / "astral_toolkit" / "version.py").read_text()
     )  # 磁盘上的版本号也回去了
-    assert (root / "sc_mining" / "old_module.py").exists()  # 新版删掉的旧模块也回来了
+    assert (root / "astral_toolkit" / "old_module.py").exists()  # 新版删掉的旧模块也回来了
     left = [p.name for p in (root / "userdata" / "backups").glob("Dubhe_*.zip")]
     assert left == ["Dubhe_1.6.0.zip"]  # 回滚时也备份了刚才的新版，只留这一个
     assert (
@@ -263,14 +263,14 @@ def test_rollback_to_oldest_backup_survives_cleanup(monkeypatch, tmp_path):
         _pkg(
             bdir / f"Dubhe_1.4.{i}.zip",
             f"1.4.{i}",
-            {"sc_mining/app/server.py": f"# v1.4.{i}"},
+            {"astral_toolkit/app/server.py": f"# v1.4.{i}"},
         )
         os.utime(
             bdir / f"Dubhe_1.4.{i}.zip", (_t.time() - 100 + i, _t.time() - 100 + i)
         )
     oldest = bdir / "Dubhe_1.4.0.zip"
     U.apply(oldest, progress=lambda m: None)
-    assert (root / "sc_mining" / "app" / "server.py").read_text() == "# v1.4.0"
+    assert (root / "astral_toolkit" / "app" / "server.py").read_text() == "# v1.4.0"
 
 
 def test_backup_failure_aborts_without_touching_files(monkeypatch, tmp_path):
@@ -278,7 +278,7 @@ def test_backup_failure_aborts_without_touching_files(monkeypatch, tmp_path):
     import pytest
 
     U, root = _setup(monkeypatch, tmp_path)
-    new = _pkg(tmp_path / "Dubhe_1.6.0.zip", "1.6.0", {"sc_mining/extra.py": "# new"})
+    new = _pkg(tmp_path / "Dubhe_1.6.0.zip", "1.6.0", {"astral_toolkit/extra.py": "# new"})
 
     def boom(*a, **k):
         raise OSError("磁盘满了")
@@ -287,8 +287,8 @@ def test_backup_failure_aborts_without_touching_files(monkeypatch, tmp_path):
     with pytest.raises(ValueError) as e:
         U.apply(new, progress=lambda m: None)
     assert "没有改动" in str(e.value)
-    assert (root / "sc_mining" / "app" / "server.py").read_text() == "# old server"
-    assert not (root / "sc_mining" / "extra.py").exists()
+    assert (root / "astral_toolkit" / "app" / "server.py").read_text() == "# old server"
+    assert not (root / "astral_toolkit" / "extra.py").exists()
 
 
 def test_adopt_previous_package_after_first_upgrade(monkeypatch, tmp_path):
@@ -326,7 +326,7 @@ def test_beta_backup_shows_in_rollback(monkeypatch, tmp_path):
     ]
     assert U.mark_stable().name == "Dubhe_1.5.0-beta.2.zip"
     live = _pkg(
-        tmp_path / "Dubhe_1.5.0.zip", "1.5.0", {"sc_mining/app/server.py": "# live"}
+        tmp_path / "Dubhe_1.5.0.zip", "1.5.0", {"astral_toolkit/app/server.py": "# live"}
     )
     U.apply(live, progress=lambda m: None)  # beta.2 → 同号正式版：要另打 beta.2 的备份
     assert [p.name for p in (root / "userdata" / "backups").glob("Dubhe_*.zip")] == [

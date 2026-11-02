@@ -1,6 +1,6 @@
-"""重新抓 SCMiner 的地面小矿数据（ROC 车矿、车矿·手采、矿洞手采），重写 sc_mining/gems.py
+"""重新抓 SCMiner 的地面小矿数据（ROC 车矿、车矿·手采、矿洞手采），重写 astral_toolkit/gems.py
 
-用法（在 sc_mining 文件夹里）：.venv\\Scripts\\python.exe -X utf8 tools\\fetch_scminer_gems.py
+用法（在 astral_toolkit 文件夹里）：.venv\\Scripts\\python.exe -X utf8 tools\\fetch_scminer_gems.py
 每种矿读 scminer.rocks/data/mineral-directory/<矿名> 详情页：类型、单块信号、终端价、不稳定性、抗性、全部地点和概率。
 联网失败、页面认不出来的矿保留 gems.py 里原来的数据，不会把文件写坏。
 """
@@ -13,7 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-OUT = ROOT / "sc_mining" / "mining" / "gems.py"
+OUT = ROOT / "astral_toolkit" / "mining" / "gems.py"
 URL = "https://scminer.rocks/data/mineral-directory/{}"
 NAMES = [
     "Janalite",
@@ -117,7 +117,7 @@ def write(gems, day):
 
 def main():
     import time
-    from sc_mining.mining.gems import GEMS
+    from astral_toolkit.mining.gems import GEMS
 
     out, bad = dict(GEMS), []
     for en in NAMES:

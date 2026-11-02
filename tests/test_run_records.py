@@ -3,7 +3,7 @@
 import time
 from datetime import datetime, timedelta, timezone
 
-from sc_mining.core import paths, run_records
+from astral_toolkit.core import paths, run_records
 
 
 def test_record_writes_daily_file(monkeypatch, tmp_path):
@@ -16,7 +16,7 @@ def test_record_writes_daily_file(monkeypatch, tmp_path):
     def fake_runtime_log(line, tag="SYS", level="INFO"):
         mirrored.append((line, tag, level))
 
-    import sc_mining.app.bus as bus
+    import astral_toolkit.app.bus as bus
 
     monkeypatch.setattr(bus, "runtime_log", fake_runtime_log)
 
@@ -89,7 +89,7 @@ def test_path_for_default_today(monkeypatch, tmp_path):
 
 def test_perfmon_on_by_default(monkeypatch):
     """性能记录默认开着（导出日志里的 perf_log.txt 是排查卡顿的唯一数据，2026-11-01 审查）"""
-    from sc_mining.core import perfmon
+    from astral_toolkit.core import perfmon
 
     started = []
 
@@ -122,7 +122,7 @@ def test_read_recent_fills_from_yesterday(monkeypatch, tmp_path):
 
 def test_record_still_mirrors_when_logs_unwritable(monkeypatch, tmp_path):
     """logs 位置被同名文件占了、建不了目录：不抛错，面板那条照样显示"""
-    import sc_mining.app.bus as bus
+    import astral_toolkit.app.bus as bus
 
     blocker = tmp_path / "logs"
     blocker.write_text("not a dir", encoding="utf-8")

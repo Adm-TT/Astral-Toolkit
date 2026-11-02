@@ -1,10 +1,10 @@
 import pytest
 
 """挖矿核心、读屏解析、精炼、制造、导航、游戏辅助"""
-from sc_mining.mining.signals import match_signature  # noqa: E402
-from sc_mining.mining.laser import recommend, evaluate, loadout, verdict, HeadSetup  # noqa: E402, F401
-from sc_mining.mining.refinery import best_stations  # noqa: E402
-from sc_mining.mining import data  # noqa: E402
+from astral_toolkit.mining.signals import match_signature  # noqa: E402
+from astral_toolkit.mining.laser import recommend, evaluate, loadout, verdict, HeadSetup  # noqa: E402, F401
+from astral_toolkit.mining.refinery import best_stations  # noqa: E402
+from astral_toolkit.mining import data  # noqa: E402
 
 AUTHOR = HeadSetup(
     "helix_ii", ["rieger_c3", "rieger_c3", "focus_iii"]
@@ -13,7 +13,7 @@ AUTHOR = HeadSetup(
 
 def _author_mole(monkeypatch, tmp_path):
     """测试用作者的两人 MOLE 配装（不读电脑上真实的设置）"""
-    from sc_mining.core import settings
+    from astral_toolkit.core import settings
 
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
     settings.update(mining_ship="mole", mining_loadouts={"mole": data.AUTHOR_MOLE})
@@ -112,7 +112,7 @@ def test_sell_only_main_cities():
 
 
 def test_i18n_minerals():
-    from sc_mining.core.i18n import mineral_en, mineral_zh
+    from astral_toolkit.core.i18n import mineral_en, mineral_zh
 
     assert mineral_en("量子矿物") == "Quantainium"
     assert mineral_en("量子矿物原矿") == "Quantainium"
@@ -127,8 +127,8 @@ def test_i18n_minerals():
 def test_calibration_from_observations(monkeypatch, tmp_path):
     import tempfile
     from pathlib import Path
-    from sc_mining.mining import laser as calibrate
-    from sc_mining.mining.laser import active_model
+    from astral_toolkit.mining import laser as calibrate
+    from astral_toolkit.mining.laser import active_model
 
     _author_mole(
         monkeypatch, tmp_path
@@ -155,7 +155,7 @@ def test_calibration_from_observations(monkeypatch, tmp_path):
 def test_user_formula_example():
     # 用户给的公式：矿头功率 × 模组功率 × (1 − 抗性) × 5
     # 螺旋2 4080 W + 里格-C3 ×3 → 4080 × 1.25³ × 5 = 39843；20% 抗性 → ×0.8 = 31875
-    from sc_mining.mining import laser  # noqa: F401
+    from astral_toolkit.mining import laser  # noqa: F401
 
     h = HeadSetup("helix_ii", ["rieger_c3"] * 3)
     orig = dict(data.HEADS["helix_ii"])
@@ -177,7 +177,7 @@ def _items(spec):
 
 def test_parse_scan_from_screenshot():
     # 来自用户 2560×1440 截图（MOLE 驾驶位）的扫描面板，故意带了 OCR 常见毛病
-    from sc_mining.mining.parse import rows, parse_scan
+    from astral_toolkit.mining.parse import rows, parse_scan
 
     lines = rows(
         _items(
@@ -226,7 +226,7 @@ def test_parse_scan_from_screenshot():
 
 
 def test_parse_bag():
-    from sc_mining.mining.parse import rows, parse_bag
+    from astral_toolkit.mining.parse import rows, parse_bag
 
     lines = rows(
         _items(
@@ -244,7 +244,7 @@ def test_parse_bag():
 
 def test_real_ocr_output_from_user_pc():
     # 用户电脑上 RapidOCR 对 2K 截图的真实识别结果（含形近字误认）
-    from sc_mining.mining.parse import parse_scan, parse_bag
+    from astral_toolkit.mining.parse import parse_scan, parse_bag
 
     scan = parse_scan(
         [
@@ -282,7 +282,7 @@ def test_real_ocr_output_from_user_pc():
 
 def test_real_ocr_turret_view():
     # 用户电脑上炮塔位截图的真实识别结果
-    from sc_mining.mining.parse import parse_scan, parse_bag
+    from astral_toolkit.mining.parse import parse_scan, parse_bag
 
     s = parse_scan(
         [
@@ -324,7 +324,7 @@ def test_real_ocr_turret_view():
 
 def test_refining_matches_scminer_simulator():
     # SCMiner 精炼模拟器：32 SCU 量子矿，Dinyx/Ferron 产出 14.4 SCU（45%），精炼费 2,560 / 3,200
-    from sc_mining.mining.refinery import refined_scu, refine_fee
+    from astral_toolkit.mining.refinery import refined_scu, refine_fee
 
     bag = {"Quantainium": 32}
     for method, fee in (("Dinyx Solventation", 2560), ("Ferron Exchange", 3200)):
@@ -335,7 +335,7 @@ def test_refining_matches_scminer_simulator():
 
 
 def test_signature_snap_and_scminer_values():
-    from sc_mining.mining.signals import snap
+    from astral_toolkit.mining.signals import snap
 
     assert data.SIGNATURES["Agricium"] == 3885  # SCMiner 值（grimhex 是 3895）
     assert snap("9510") == (9510, False)
@@ -348,7 +348,7 @@ def test_signature_snap_and_scminer_values():
 
 
 def test_where_to_mine():
-    from sc_mining.mining.locations import where, LOCATIONS, _match_zh
+    from astral_toolkit.mining.locations import where, LOCATIONS, _match_zh
 
     assert len(LOCATIONS) == 51
     top = where("Tungsten")[0]
@@ -363,7 +363,7 @@ def test_where_to_mine():
 
 
 def test_crafting_dataset_and_links():
-    from sc_mining.crafting import crafting as C
+    from astral_toolkit.crafting import crafting as C
 
     bps = C.blueprints()
     assert len(bps) == 1618
@@ -386,7 +386,7 @@ def test_crafting_dataset_and_links():
 
 
 def test_menu_has_all_features():
-    from sc_mining.run import MENU
+    from astral_toolkit.run import MENU
 
     titles = " ".join(t for _, t, _ in MENU)
     for word in ("实时读屏", "找矿点", "制造", "更新数据", "导航", "交易"):
@@ -394,7 +394,7 @@ def test_menu_has_all_features():
 
 
 def _nav_data():
-    from sc_mining.navigation import navigate as n
+    from astral_toolkit.navigation import navigate as n
 
     oc = [
         {
@@ -484,7 +484,7 @@ def test_waypoints_and_latlon(tmp=None):
 
 
 def test_overlay_is_optional():
-    from sc_mining.app import overlay
+    from astral_toolkit.app import overlay
 
     h = overlay.Hud()
     h.set("扫描", "金｜8,000 kg\nHelix II｜功率 60%")  # 没有屏幕/tkinter 时不报错
@@ -495,7 +495,7 @@ def test_overlay_is_optional():
 def test_overlay_paint_rules():
     """1.6.61 悬浮窗自己画（DESIGN.md 第 8 节）：底板半透明、字不透明；两列的行数字靠右；表情去掉；
     读数变了直接换（1.6.63）、只有新分区淡入；2K 屏正文 24px；临时提示单独一条、顶掉旧的"""
-    from sc_mining.app import overlay as O
+    from astral_toolkit.app import overlay as O
 
     secs = {
         "盘点": "盘点｜新巴贝奇\n铁 Q800 ×3  2.900 SCU\n塔兰导电石 Q925 ×1  0.495 SCU",
@@ -613,7 +613,7 @@ def test_overlay_paint_rules():
 
 def test_nearby_and_feed():
     from datetime import datetime, timezone
-    from sc_mining.system import showloc  # noqa: F401
+    from astral_toolkit.system import showloc  # noqa: F401
 
     n, d = _nav_data()
     b = d["bodies"]["Daymar"]
@@ -628,7 +628,7 @@ def test_nearby_and_feed():
 def test_settings_roundtrip():
     import tempfile
     from pathlib import Path
-    from sc_mining.core import settings
+    from astral_toolkit.core import settings
 
     old = settings.FILE
     settings.FILE = Path(tempfile.mkdtemp()) / "settings.json"
@@ -644,7 +644,7 @@ def test_settings_roundtrip():
 
 def test_gamelog_vehicle_channel():
     """读游戏日志判断在不在驾驶位"""
-    from sc_mining.system.gamelog import GameLog
+    from astral_toolkit.system.gamelog import GameLog
 
     g = GameLog()
     g.line(
@@ -672,19 +672,19 @@ def test_gamelog_vehicle_channel():
 def test_real_screenshot_scan():
     """原来菜单里的「截图测试」：用你电脑上截的 MOLE 扫描截图跑一遍完整识别（没装 OCR 就跳过）"""
     import pytest
-    from sc_mining.core import paths
+    from astral_toolkit.core import paths
 
     img = paths.SAMPLES / "scan1.png"
     if not img.exists():
         pytest.skip("没有测试截图")
     try:
-        from sc_mining.mining.screen import _recognize
+        from astral_toolkit.mining.screen import _recognize
 
         _recognize()
     except Exception:
         pytest.skip("没装 OCR")
     from PIL import Image
-    from sc_mining.mining import screen
+    from astral_toolkit.mining import screen
 
     scan, bag = screen.analyse(Image.open(img).convert("RGB"))
     assert scan.composition and scan.mass and abs(scan.mass - 43066) / 43066 < 0.02
@@ -692,7 +692,7 @@ def test_real_screenshot_scan():
 
 def test_seat_from_real_log():
     """你 2026-10-20 的日志：上船只加入一次频道、一直不退；离开驾驶位靠 ClearDriver，坐回去靠导航模块的日志"""
-    from sc_mining.system.gamelog import GameLog
+    from astral_toolkit.system.gamelog import GameLog
 
     g = GameLog()
     g.line(
@@ -724,7 +724,7 @@ def test_seat_from_real_log():
 def test_seat_state_after_replaying_real_log():
     from pathlib import Path
     import pytest
-    from sc_mining.system.gamelog import GameLog
+    from astral_toolkit.system.gamelog import GameLog
 
     import os
 
@@ -740,9 +740,9 @@ def test_seat_state_after_replaying_real_log():
 
 def test_ship_loadouts(tmp_path, monkeypatch):
     """勘探者 / 魔像 / MOLE 配装：默认值、自定义保存、非法配装被纠正、矿袋容量跟着船走"""
-    from sc_mining.core import settings
-    from sc_mining.mining import laser
-    from sc_mining.mining.data import SHIPS
+    from astral_toolkit.core import settings
+    from astral_toolkit.mining import laser
+    from astral_toolkit.mining.data import SHIPS
 
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
     # 还没选船：没选过（窗口会先问），临时按出厂 MOLE 算
@@ -783,7 +783,7 @@ def test_ship_loadouts(tmp_path, monkeypatch):
 
 def test_module_resistance_counts():
     """带抗性修正的模组（Overrun -24.8%）要算进有效抗性"""
-    from sc_mining.mining.laser import HeadSetup, evaluate
+    from astral_toolkit.mining.laser import HeadSetup, evaluate
 
     plain = evaluate([HeadSetup("helix_i", [])], None, 5000, 40, 10)
     over = evaluate([HeadSetup("helix_i", ["overrun"])], None, 5000, 40, 10)
@@ -793,14 +793,14 @@ def test_module_resistance_counts():
 def test_signal_markers_both_hud_styles():
     """雷达信号：MOLE 炮塔是橙色图钉 + 淡绿字，勘探者驾驶舱是黄色图钉 + 白字，Perseus 是白色图钉 + 更小的白字，都要认出来（2026-10-23 实测）"""
     import pytest
-    from sc_mining.core import paths
-    from sc_mining.mining import signals
+    from astral_toolkit.core import paths
+    from astral_toolkit.mining import signals
 
     shots = {"sig1.png": 4285, "sig_prospector.png": 7080, "sig_perseus.png": 39000}
     if not all((paths.SAMPLES / f).exists() for f in shots):
         pytest.skip("没有测试截图")
     try:
-        from sc_mining.mining.screen import _recognize
+        from astral_toolkit.mining.screen import _recognize
 
         _recognize()
     except Exception:
@@ -822,19 +822,19 @@ def test_signal_markers_both_hud_styles():
 def test_scan_panel_prospector_white_text():
     """勘探者驾驶舱的扫描面板是白字，左边紧挨着速度表的 "0.0 / 28.2"；货舱的斜杠常认不出（2026-10-23 实测）"""
     import pytest
-    from sc_mining.core import paths
+    from astral_toolkit.core import paths
 
     if not (paths.SAMPLES / "scan_prospector.jpg").exists():
         pytest.skip("没有测试截图")
     try:
-        from sc_mining.mining.screen import _recognize
+        from astral_toolkit.mining.screen import _recognize
 
         _recognize()
     except Exception:
         pytest.skip("没装 OCR")
     from PIL import Image
-    from sc_mining.mining import screen
-    from sc_mining.mining.parse import parse_scan, parse_bag
+    from astral_toolkit.mining import screen
+    from astral_toolkit.mining.parse import parse_scan, parse_bag
 
     scan_lines, bag_lines = screen.find_panels(
         Image.open(paths.SAMPLES / "scan_prospector.jpg").convert("RGB")
@@ -852,7 +852,7 @@ def test_scan_panel_prospector_white_text():
 
 def test_signal_values_outside_table_give_best_guess():
     """信号表外的值不丢掉，给最可能的解释（用户 2026-10-23：不合法就返回可能性最大的）"""
-    from sc_mining.mining.signals import resolve, describe, describe_all
+    from astral_toolkit.mining.signals import resolve, describe, describe_all
 
     assert (
         resolve("21,500") == (21500, False)
@@ -901,7 +901,7 @@ def test_signal_values_outside_table_give_best_guess():
 
 def test_copper_tin_names_not_gold():
     """勘探者面板上的小字「铜矿石」「锡矿石」常认成 钥/網/确 和 锯/继，不能落到「金」"""
-    from sc_mining.core.i18n import mineral_en
+    from astral_toolkit.core.i18n import mineral_en
 
     for t in ("钥矿石", "網矿石", "确矿石", "销矿石", "铜矿石"):
         assert mineral_en(t) == "Copper", t
@@ -913,18 +913,18 @@ def test_copper_tin_names_not_gold():
 def test_scan_panel_prospector_png():
     """勘探者驾驶舱 2560×1440 原图：石头标题、成分矿名都要对（2026-10-23 实测）"""
     import pytest
-    from sc_mining.core import paths
+    from astral_toolkit.core import paths
 
     if not (paths.SAMPLES / "scan_prospector2.png").exists():
         pytest.skip("没有测试截图")
     try:
-        from sc_mining.mining.screen import _recognize
+        from astral_toolkit.mining.screen import _recognize
 
         _recognize()
     except Exception:
         pytest.skip("没装 OCR")
     from PIL import Image
-    from sc_mining.mining import screen
+    from astral_toolkit.mining import screen
 
     s, bag = screen.analyse(
         Image.open(paths.SAMPLES / "scan_prospector2.png").convert("RGB")
@@ -949,7 +949,7 @@ def test_snow_ground_panels_and_signals():
     采矿助手只出过一次结果）；地面的信号图钉照常认"""
     import pytest
     from pathlib import Path
-    from sc_mining.mining import screen, signals
+    from astral_toolkit.mining import screen, signals
 
     d = Path(__file__).parent / "ingame"
     if not (d / "g1523_09.png").exists():
@@ -983,7 +983,7 @@ def test_fog_signal_boxes_found():
     import pytest
     from pathlib import Path
     from PIL import Image
-    from sc_mining.mining import signals
+    from astral_toolkit.mining import signals
 
     d = Path(__file__).parent / "ingame"
     if not (d / "calliope_fog_80000.png").exists():
@@ -1007,7 +1007,7 @@ def test_fog_signals_read():
     import pytest
     from pathlib import Path
     from PIL import Image
-    from sc_mining.mining import screen, signals
+    from astral_toolkit.mining import screen, signals
 
     d = Path(__file__).parent / "ingame"
     if not (d / "calliope_fog_80000.png").exists():
@@ -1025,8 +1025,8 @@ def test_fog_signals_read():
 def test_cockpit_hud_numbers_are_not_a_scan_panel():
     """勘探者驾驶舱右边的高度表、气压被拼成「质量 0.7、抗性 76」：不算面板（以前因此信号识别整段暂停）；
     真面板哪怕只读到下半截（组成 + 成分行）也算"""
-    from sc_mining.mining.parse import parse_scan
-    from sc_mining.mining.screen import panel_seen
+    from astral_toolkit.mining.parse import parse_scan
+    from astral_toolkit.mining.screen import panel_seen
 
     junk = [
         "？",
@@ -1064,7 +1064,7 @@ def test_cockpit_hud_numbers_are_not_a_scan_panel():
 def test_deflood_keeps_text_on_bright_background():
     """亮背景（雾 / 雪）上的白字：整片背景都会被当成「白色」，deflood 之后只剩字；暗背景上的字不受影响"""
     import numpy as np
-    from sc_mining.mining.screen import deflood
+    from astral_toolkit.mining.screen import deflood
 
     a = np.full((120, 200), 212, np.uint8)  # 雾
     a[50:62, 40:42] = a[50:62, 60:62] = 248  # 两笔竖画（字）
@@ -1089,7 +1089,7 @@ def test_fog_half_panel_read():
     import sys
     from pathlib import Path
     from PIL import Image
-    from sc_mining.mining import screen
+    from astral_toolkit.mining import screen
 
     d = Path(__file__).parent / "ingame"
     if not (d / "calliope_161036.png").exists():
@@ -1118,7 +1118,7 @@ def test_fog_half_panel_read():
 def test_parse_low_contrast_panel_lines():
     """雪地上 OCR 常见的错：「组成 7,835CU」（S 认成 5、小数点成逗号）、砬→位/脑/敬、钨→韩；
     几个矿名一样像时按石头本身的矿算"""
-    from sc_mining.mining.parse import parse_scan
+    from astral_toolkit.mining.parse import parse_scan
 
     s = parse_scan(
         [
@@ -1160,7 +1160,7 @@ def test_parse_total_scu_and_unlabeled_mass():
     """总 SCU 的小数点被切块拆开（「组成 (7. .84 SCU)」）要拼回 7.84，以前读成 84、精炼量多算 10 倍；
     小数点整个丢了（「84 SCU」）不采信。质量标签没认出时，「13,586」「13,596」都不能当成一行成分
     （2026-10-24 外部补丁；13,596 那种带 96 的是 1.6.43 补上的）"""
-    from sc_mining.mining.parse import parse_scan
+    from astral_toolkit.mining.parse import parse_scan
 
     head = ["钨矿石", "质量: 13,586", "抗性: 23%", "不稳定性: 12.45"]
     tail = ["45.20% 钨矿石 662", "54.80% 惰性物质 0"]
@@ -1189,7 +1189,7 @@ def test_parse_total_scu_and_unlabeled_mass():
 def test_parse_stray_numbers_in_composition_ignored():
     """「组成」那行之后读不懂的行照旧跳过：成分区多出来的单独数字（品质「662」、行尾的「1」，玩家日志里见过）
     不能拿去补不稳定性、把读不全的帧变成「有效」，也不能把质量改掉（1.6.43）"""
-    from sc_mining.mining.parse import parse_scan
+    from astral_toolkit.mining.parse import parse_scan
 
     s = parse_scan(
         [
@@ -1233,9 +1233,9 @@ def test_parse_stray_numbers_in_composition_ignored():
 def test_crafted_head_quality(tmp_path, monkeypatch):
     """自造矿头（1.6.41）：发射器（萨达瑞晶）+ 汇流排（铜）的品质决定激光功率，破碎方案按自造的功率算。
     两个槽的加成相加（1.6.47 起；数据里没有合并规则，游戏制造终端、SCM、Crafter 三处都是相加：947 + 958 → +36.20%）"""
-    from sc_mining.core import settings
-    from sc_mining.mining import laser, quality
-    from sc_mining.tasks import mining as t_mining
+    from astral_toolkit.core import settings
+    from astral_toolkit.mining import laser, quality
+    from astral_toolkit.tasks import mining as t_mining
 
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
     # 档位按各自材料：萨达瑞晶、铜各有 7 档 + 1000 完美（starcitizen.tools 品质表）
@@ -1359,7 +1359,7 @@ def test_crafted_head_quality(tmp_path, monkeypatch):
 
 def test_laser_power_naming_on_craft_page():
     """制造页：采矿激光的「冲击力」其实是激光功率，另外给出发射器 + 汇流排的合计（相加，1.6.47）"""
-    from sc_mining.crafting import crafting as C
+    from astral_toolkit.crafting import crafting as C
 
     bp = next(b for b in C.blueprints() if b["n"] == "Helix II Mining Laser")
     text = C.describe(bp, with_locations=False)
@@ -1377,7 +1377,7 @@ def test_laser_power_naming_on_craft_page():
     ] and eff[0]["material"] == "萨达瑞晶"
     assert C.laser_total(bp, {1: 971, 2: 958})["text"].startswith("激光功率合计 +37.2%")
     assert C.laser_total(bp, {1: 971})["mult"] is None
-    from sc_mining.tasks import (
+    from astral_toolkit.tasks import (
         goals as t_goals,
     )  # 目标页「品质影响」：点「计算」也带合计
 
@@ -1399,7 +1399,7 @@ def test_panel_cut_and_chroma_shift():
     """读不全的原因（1.6.42）：面板顶着屏幕右边（16:10 屏幕）、字有色差重影（1080p 开着「色差」）"""
     import numpy as np
     from PIL import Image
-    from sc_mining.mining import screen
+    from astral_toolkit.mining import screen
 
     img = Image.new("RGB", (2560, 1600))
     ox, oy = int(screen.SEARCH[0] * 2560), int(screen.SEARCH[1] * 1600)  # noqa: F841
@@ -1431,8 +1431,8 @@ def test_panel_cut_and_chroma_shift():
 
 
 def test_vote_partial_needs_two_frames():
-    from sc_mining.mining import screen
-    from sc_mining.mining.parse import Scan
+    from astral_toolkit.mining import screen
+    from astral_toolkit.mining.parse import Scan
 
     a = Scan(
         mass=745,
@@ -1457,8 +1457,8 @@ def test_craft_stats_and_detail_structure(monkeypatch, tmp_path):
     """制造页改版（1.6.47）：属性统计（基础 → 强化 → 变化，几个槽影响同一属性时相加）、标题标签（尺寸 / 等级 / 类别）、
     结构化的材料槽位、去哪挖、蓝图来源带掉率。成品基础值来自 data/item_stats.json（star-citizen.wiki 整理的游戏数据，按 uuid 对上）"""
     import json
-    from sc_mining.crafting import crafting as C
-    from sc_mining.tasks import goals as t_goals
+    from astral_toolkit.crafting import crafting as C
+    from astral_toolkit.tasks import goals as t_goals
 
     bp = next(b for b in C.blueprints() if b["n"] == "Helix II Mining Laser")
     st = C.stats(bp, {1: 947, 2: 958})
@@ -1490,7 +1490,7 @@ def test_craft_stats_and_detail_structure(monkeypatch, tmp_path):
             }
         },
     }
-    from sc_mining.gamedata import itemstats as gd_stats
+    from astral_toolkit.gamedata import itemstats as gd_stats
 
     # 属性数据走游戏数据层（批 3）：这一段换成假数据，后面的真数据断言再换回来
     real = gd_stats.item, gd_stats.version
@@ -1566,8 +1566,8 @@ def test_craft_stats_and_detail_structure(monkeypatch, tmp_path):
 
 def test_gear_labels_bilingual():
     """矿头、模组、手持工具统一「中文 English」（2026-10-26 用户定）：中文取汉化包、去掉型号；汉化包里没有中文的只写英文"""
-    from sc_mining.core.i18n import gear_label
-    from sc_mining.mining.data import HEADS, MODULES, GADGETS
+    from astral_toolkit.core.i18n import gear_label
+    from astral_toolkit.mining.data import HEADS, MODULES, GADGETS
 
     assert gear_label("Hofstede-S2") == "霍夫斯泰德 Hofstede-S2"
     assert (
@@ -1596,9 +1596,9 @@ def test_gear_labels_bilingual():
 
 def test_gear_view_has_cards_and_summary(monkeypatch, tmp_path):
     """配置区：每个矿头装上模组后的读数、汇总（总功率、可破碎质量）、预设；改配置后汇总跟着变"""
-    from sc_mining.core import settings
-    from sc_mining.tasks import mining as t_mining
-    from sc_mining.mining.data import AUTHOR_MOLE
+    from astral_toolkit.core import settings
+    from astral_toolkit.tasks import mining as t_mining
+    from astral_toolkit.mining.data import AUTHOR_MOLE
 
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
     g = t_mining.set_mining_gear(ship="mole")
@@ -1633,7 +1633,7 @@ def test_gear_view_has_cards_and_summary(monkeypatch, tmp_path):
 def test_mining_area_from_position():
     """2026-10-27 用户反馈：尼克斯太空扫到贝沙电气石。按实时位置判断产矿区（SCMiner 地点矿表）：
     尼克斯两条环带按离恒星的距离判断（基格 48.0 Gm、冰川环带 15.0 Gm）；派罗星团；星球地表；远离这些的太空不刷船挖矿"""
-    from sc_mining.mining import mining_area as M
+    from astral_toolkit.mining import mining_area as M
 
     keeger = M.area(
         (-4634409388.2, -47775658122.7, -42640.1), "Nyx"
@@ -1662,7 +1662,7 @@ def test_mining_area_from_position():
 def test_signatures_only_ores_that_spawn_here():
     """只报当地会刷的矿：基格带 7200 是贝沙电气石 ×2（此地 18%）；HUR-L1 不刷贝沙电气石 → 报当地最接近的并说明；
     空旷太空不报船挖矿；不知道在哪就和以前一样"""
-    from sc_mining.mining import mining_area as M, signals as S
+    from astral_toolkit.mining import mining_area as M, signals as S
 
     keeger = M.area((-4634409388.2, -47775658122.7, -42640.1), "Nyx")
     hl1 = M._result(M._table("HUR-L1"))
@@ -1681,7 +1681,7 @@ def test_signatures_only_ores_that_spawn_here():
 def test_radar_uses_game_rock_types():
     """2026-10-27 游戏数据：雷达信号按「石头种类」给。SCMiner 的矿物表把石头里夹带的少量矿也算进去了：
     基格带按 SCMiner 有金 18%，但游戏里基格带根本不刷金石（金只夹在贝沙电气石石头里）→ 金 ×2（7,170）不能报成金"""
-    from sc_mining.mining import mining_area as M, signals as S
+    from astral_toolkit.mining import mining_area as M, signals as S
 
     if not M.rocks_table():
         pytest.skip("没有 data/mining_rocks.json")
@@ -1714,8 +1714,8 @@ def test_radar_uses_game_rock_types():
 def test_review_102_area_never_guesses(monkeypatch):
     """2026-10-27 补审：只靠坐标猜的星系不能拿来排除矿种（亚伦光环会被猜成尼克斯 → 报「不刷」）；
     派罗星图缺地点列表 = 不知道，不是「不刷」"""
-    from sc_mining.navigation import navigate as n
-    from sc_mining.mining import mining_area as M
+    from astral_toolkit.navigation import navigate as n
+    from astral_toolkit.mining import mining_area as M
 
     data = n.load()
     if not data.get("points"):
@@ -1741,11 +1741,11 @@ def test_review_102_area_never_guesses(monkeypatch):
 def test_review_102_place_names_without_ini(monkeypatch, tmp_path):
     """新装还没下汉化包：派罗地名用随包的地点代号表，不显示 PYR3"""
     import json
-    import sc_mining.gamedata as G
-    from sc_mining.core import paths
-    from sc_mining.gamedata import _ready
-    from sc_mining.navigation import position as P
-    from sc_mining.update import localization as L
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.core import paths
+    from astral_toolkit.gamedata import _ready
+    from astral_toolkit.navigation import position as P
+    from astral_toolkit.update import localization as L
 
     # 地点代号表在游戏数据库里：tmp_path 当 data/ 根（补一份建库必需的空商店表），不读真实 data/
     (tmp_path / "shops.json").write_text(
@@ -1771,8 +1771,8 @@ def test_review_102_place_names_without_ini(monkeypatch, tmp_path):
 def test_review_104_rocks_reload_and_order(monkeypatch, tmp_path):
     """二审：①更新数据换了石头表不用重启就生效；②同一个信号的几种可能保持「当地概率 × 一团几块」的顺序，不被矿价打乱"""
     import json
-    import sc_mining.gamedata as G
-    from sc_mining.mining import mining_area as M, signals as S
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.mining import mining_area as M, signals as S
     from tests.test_gamedata_b1 import _setup
 
     _setup(monkeypatch, tmp_path)
@@ -1796,8 +1796,8 @@ def test_review_104_rocks_reload_and_order(monkeypatch, tmp_path):
 def test_game_mining_spots_and_pyro_areas():
     """2026-10-27 核对游戏数据：派罗 15 个小行星群、86 个远矿站能量子、刷深空小行星（以前当成阿克罗团）；
     派罗拉格朗日点有子云（派1/派2 暖带 01、派3 暖带 02、派5 冷带 01、派6 冷带 02）；导航「挖矿点」能按矿搜"""
-    from sc_mining.navigation import navigate as n
-    from sc_mining.mining import mining_area as M
+    from astral_toolkit.navigation import navigate as n
+    from astral_toolkit.mining import mining_area as M
 
     sp = n.mining_spots()
     if not sp or not M.rocks_table().get("areas", {}).get("Deep Space Asteroids"):
@@ -1830,9 +1830,9 @@ def test_game_mining_spots_and_pyro_areas():
 
 def test_review_104_final(monkeypatch, tmp_path):
     """1.0.4 发版前二审：派罗 L 点缺石头表时不能判成「不刷」；只认正式服数据；星图改正文件坏了不崩"""
-    from sc_mining.navigation import navigate as n
-    from sc_mining.mining import mining_area as M
-    from sc_mining.crafting.build_crafting import pick_live, latest_live, live_version
+    from astral_toolkit.navigation import navigate as n
+    from astral_toolkit.mining import mining_area as M
+    from astral_toolkit.crafting.build_crafting import pick_live, latest_live, live_version
 
     # 1. 缺表 → None（不过滤），不是「此处不刷船挖矿」
     try:
@@ -1858,7 +1858,7 @@ def test_review_104_final(monkeypatch, tmp_path):
     )
     assert live_version(fs[2]) == "4.10.2-live.5"
     # 4. 改正文件结构不对：跳过坏条目，不崩（建库时套改正；文件不是 JSON 时建库当作没有，传进来是 None）
-    from sc_mining.navigation.starmap import fix_points
+    from astral_toolkit.navigation.starmap import fix_points
 
     pts = {
         "points": [
@@ -1878,8 +1878,8 @@ def test_review_104_final(monkeypatch, tmp_path):
 def test_signal_mixed_named_and_fixed(monkeypatch, tmp_path):
     """2026-10-27 借鉴别的识别工具：两种石头混在一团（加起来正好相等才算）、玩家自己给信号起名、
     按形近数字改过的读数不算准确"""
-    from sc_mining.mining import signals as S
-    from sc_mining.mining.data import SIGNATURES
+    from astral_toolkit.mining import signals as S
+    from astral_toolkit.mining.data import SIGNATURES
 
     a, b = sorted(SIGNATURES, key=lambda m: SIGNATURES[m])[:2]
     singles = set(S.all_signatures())
@@ -1912,7 +1912,7 @@ def test_signal_mixed_named_and_fixed(monkeypatch, tmp_path):
 def test_fill_name_exact_tier_before_one_edit():
     """2026-10-27 录制：火神石面板第一行矿名没认出「4.77% 510」（游戏写的是原硅 510）。510 只有硅有这一档，
     要补成硅 510；以前先试「差一个字」，补成了石头里已有的石英、品质改成 710，几帧之间硅 / 石英来回跳"""
-    from sc_mining.mining.parse import _fix_by_tiers
+    from astral_toolkit.mining.parse import _fix_by_tiers
 
     comp = [
         (None, 4.77, 510),

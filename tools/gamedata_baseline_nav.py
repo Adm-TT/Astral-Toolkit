@@ -90,8 +90,8 @@ def _pt(p):
 
 def _offline():
     """说了不联网就真不联网：starmap.load() 没有 starmap.json 时会下载，这里让它直接报错（收口 2）"""
-    from sc_mining.core import net
-    from sc_mining.navigation import starmap
+    from astral_toolkit.core import net
+    from astral_toolkit.navigation import starmap
 
     def no_net(*a, **k):
         raise OSError("基线工具不联网：缺 data/starmap.json 请先「更新数据」")
@@ -101,8 +101,8 @@ def _offline():
 
 
 def collect():
-    from sc_mining.core.paths import DATA, file_stamp
-    from sc_mining.navigation import names, navigate, position, starmap, transit
+    from astral_toolkit.core.paths import DATA, file_stamp
+    from astral_toolkit.navigation import names, navigate, position, starmap, transit
 
     _offline()
     out = {}

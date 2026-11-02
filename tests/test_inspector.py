@@ -3,7 +3,7 @@
 import unittest
 from unittest.mock import patch, MagicMock  # noqa: F401
 
-from sc_mining.ocr import OcrToken
+from astral_toolkit.ocr import OcrToken
 
 
 class MockImage:
@@ -20,7 +20,7 @@ class MockImage:
 
 class TestItemInspector(unittest.TestCase):
     def test_import_and_helpers(self):
-        from sc_mining.trade.inspector import (
+        from astral_toolkit.trade.inspector import (
             HOVER_REGIONS,  # noqa: F401
             get_hover_regions,
             parse_qlabel,
@@ -59,17 +59,17 @@ class TestItemInspector(unittest.TestCase):
         self.assertTrue(_is_mineral("塔兰导电石", "Taranite"))
         self.assertFalse(_is_mineral("能量突击步枪", "P4-AR Rifle"))
 
-    @patch("sc_mining.trade.inspector._read_tooltip")
+    @patch("astral_toolkit.trade.inspector._read_tooltip")
     def test_inspect_item_miss(self, mock_read):
-        from sc_mining.trade.inspector import inspect_item
+        from astral_toolkit.trade.inspector import inspect_item
 
         mock_read.return_value = ([], None, "整屏")
         res = inspect_item(MockImage(), (500, 500))
         self.assertIsNone(res)
 
-    @patch("sc_mining.trade.inspector._read_tooltip")
+    @patch("astral_toolkit.trade.inspector._read_tooltip")
     def test_inspect_item_mineral(self, mock_read):
-        from sc_mining.trade.inspector import inspect_item
+        from astral_toolkit.trade.inspector import inspect_item
 
         toks = [
             OcrToken(text="塔兰导电石", confidence=0.99, box=(100, 50, 100, 20)),
@@ -86,10 +86,10 @@ class TestItemInspector(unittest.TestCase):
         self.assertEqual(res["unit"], "SCU")
         self.assertEqual(res["where"], "30-50%")
 
-    @patch("sc_mining.trade.inspector.cell_labels")
-    @patch("sc_mining.trade.inspector._read_tooltip")
+    @patch("astral_toolkit.trade.inspector.cell_labels")
+    @patch("astral_toolkit.trade.inspector._read_tooltip")
     def test_inspect_item_normal_with_cell(self, mock_read, mock_cell):
-        from sc_mining.trade.inspector import inspect_item
+        from astral_toolkit.trade.inspector import inspect_item
 
         toks = [
             OcrToken(text="医疗笔", confidence=0.99, box=(100, 50, 80, 20)),
@@ -105,9 +105,9 @@ class TestItemInspector(unittest.TestCase):
         self.assertEqual(res["qty"], 5)
         self.assertEqual(res["unit"], "个")
 
-    @patch("sc_mining.trade.inspector.inspect_item")
+    @patch("astral_toolkit.trade.inspector.inspect_item")
     def test_count_read_item(self, mock_inspect):
-        from sc_mining.tasks.count import _read_item
+        from astral_toolkit.tasks.count import _read_item
 
         mock_inspect.return_value = {
             "zh": "测试物品",
@@ -124,13 +124,13 @@ class TestItemInspector(unittest.TestCase):
         self.assertEqual(res["qty"], 2)
 
     def test_tooltip_title_and_anchor(self):
-        from sc_mining.trade.inspector import (
+        from astral_toolkit.trade.inspector import (
             tooltip_pick,
             tooltip_name,
             plausible_name,
             _is_anchor,
         )
-        from sc_mining.trade.console import tooltip_pick as console_tooltip_pick
+        from astral_toolkit.trade.console import tooltip_pick as console_tooltip_pick
 
         # 确保向后兼容重导出一致
         self.assertIs(tooltip_pick, console_tooltip_pick)
@@ -174,8 +174,8 @@ class TestItemInspector(unittest.TestCase):
     def test_fold_deduplication(self):
         # console._fold 在 names._fold_en 的基础上再把 l 统一成 i：OCR 常把罗马数字 II 认成 ll，
         # 比较 OCR 认出的名字和市场名字时要当成一样（1.1.1 的行为）；所以和 _fold_en 不再完全相同
-        from sc_mining.trade.console import _fold as console_fold
-        from sc_mining.trade.names import _fold_en
+        from astral_toolkit.trade.console import _fold as console_fold
+        from astral_toolkit.trade.names import _fold_en
 
         self.assertEqual(
             console_fold("P4-AR Rifle (Custom)"),
@@ -188,7 +188,7 @@ class TestItemInspector(unittest.TestCase):
 
 def test_inspect_item_raw_and_canon(monkeypatch):
     """返回里带纠正前的名字 raw 和汉化包标准名 canon；没对上时 canon 为 None"""
-    from sc_mining.trade import inspector, names
+    from astral_toolkit.trade import inspector, names
 
     toks = [OcrToken("医疗芼", 90, (100, 50, 80, 20))]
     monkeypatch.setattr(
@@ -215,8 +215,8 @@ def test_inspect_item_raw_and_canon(monkeypatch):
 def test_hover_sends_raw_and_canon_to_train_data(monkeypatch):
     """F8 收错题：传给 train_data.from_tooltip 的是「认成了什么」和「应该是什么」两组名字"""
     import types
-    from sc_mining.tasks import hover as Hv
-    from sc_mining.system import train_data
+    from astral_toolkit.tasks import hover as Hv
+    from astral_toolkit.system import train_data
 
     toks = [OcrToken("医疗芼", 90, (100, 50, 80, 20))]
     res = {
@@ -269,8 +269,8 @@ def test_hover_sends_raw_and_canon_to_train_data(monkeypatch):
 
 def test_craft_override_for_count(monkeypatch):
     """F6 盘点（craft_override=True）：加成和蓝图完全对上就用倒推的品质和各槽品质；F8 默认格子上读到品质就不倒推"""
-    from sc_mining.trade import inspector
-    from sc_mining.crafting import crafting
+    from astral_toolkit.trade import inspector
+    from astral_toolkit.crafting import crafting
 
     toks = [OcrToken("能量突击步枪", 90, (100, 50, 80, 20))]
     slots = [{"slot": "Frame", "q": 700}]
@@ -301,8 +301,8 @@ def test_craft_override_for_count(monkeypatch):
 
 
 def test_count_read_item_uses_craft_override(monkeypatch):
-    from sc_mining.trade import inspector
-    from sc_mining.tasks.count import _read_item
+    from astral_toolkit.trade import inspector
+    from astral_toolkit.tasks.count import _read_item
 
     seen = {}
     monkeypatch.setattr(

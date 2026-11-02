@@ -30,14 +30,14 @@ def _ms(fn, n=N):
 
 
 def main():
-    from sc_mining.core import perf
-    from sc_mining.tasks import hover as S
-    from sc_mining.ocr import recognize
-    from sc_mining.mining import screen
-    from sc_mining.navigation import displayinfo
+    from astral_toolkit.core import perf
+    from astral_toolkit.tasks import hover as S
+    from astral_toolkit.ocr import recognize
+    from astral_toolkit.mining import screen
+    from astral_toolkit.navigation import displayinfo
 
     out = [
-        f"## {time.strftime('%F %T')} 版本 {__import__('sc_mining.core.version', fromlist=['VERSION']).VERSION}"
+        f"## {time.strftime('%F %T')} 版本 {__import__('astral_toolkit.core.version', fromlist=['VERSION']).VERSION}"
     ]
     t = time.perf_counter()
     perf.rapidocr()

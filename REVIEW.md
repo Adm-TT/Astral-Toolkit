@@ -8,7 +8,7 @@
 - 升级与回滚：丢失或改坏 userdata；装不上、回不去；测试版 / 正式版版本判断错。
 - 库存与目标：数量算错、撤销不完整、扣料错、记录丢失。
 - 模拟输入：出现任何模拟键盘或鼠标输入（发给 AT 自己窗口的消息不算）。
-- 接口层：路由名或字段语义变了，前端 `sc_mining/app/web/` 没跟上。
+- 接口层：路由名或字段语义变了，前端 `astral_toolkit/app/web/` 没跟上。
 - 本机服务：不校验令牌，或没有只监听 127.0.0.1。
 - 联网：没有超时，或失败后没有退回旧数据。
 - 问题反馈：设置里关掉后仍在上传。
@@ -48,8 +48,8 @@
 ```
 .venv/
 tests/fixtures/
-sc_mining/names_zh.json  sc_mining/sc_glossary.json
-sc_mining/app/web/fonts/
+astral_toolkit/names_zh.json  astral_toolkit/sc_glossary.json
+astral_toolkit/app/web/fonts/
 tools/shell/ATShell/bin/  tools/shell/ATShell/obj/
 ```
 
@@ -64,6 +64,6 @@ tools/shell/ATShell/bin/  tools/shell/ATShell/obj/
 ## 常见误报（审查器曾反复报错、实际是故意为之的）
 
 - 依赖用 `--no-deps` 安装、`pip check` 报 rapidocr 缺 onnxruntime：故意的，装的是 onnxruntime-directml，它提供同名模块。
-- `sc_mining/navigation/displayinfo.py` 里把 `Pos:` 后面的连续空格换成 `#`：故意让丢了负号的坐标帧解析失败、被丢弃，不是乱码处理错误。
-- `sc_mining/navigation/gridtext.py` 同时试两种字宽、取误差小的：故意的，兼容 1080p 和 1440p 以上的 HUD 缩放。
+- `astral_toolkit/navigation/displayinfo.py` 里把 `Pos:` 后面的连续空格换成 `#`：故意让丢了负号的坐标帧解析失败、被丢弃，不是乱码处理错误。
+- `astral_toolkit/navigation/gridtext.py` 同时试两种字宽、取误差小的：故意的，兼容 1080p 和 1440p 以上的 HUD 缩放。
 - 测试里写死的时间戳和坐标是样例数据，不是 bug。

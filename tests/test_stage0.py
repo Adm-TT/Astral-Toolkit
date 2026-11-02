@@ -6,20 +6,20 @@ from decimal import Decimal
 
 
 def test_router_ok_envelope():
-    from sc_mining.app.api import router
+    from astral_toolkit.app.api import router
 
     r = router.call("about_info")
     assert r["ok"] is True and isinstance(r["data"], dict)
 
 
 def test_router_unknown():
-    from sc_mining.app.api import router
+    from astral_toolkit.app.api import router
 
     assert router.call("没有这个") == {"ok": False, "error": "没有 没有这个"}
 
 
 def test_router_error_envelope():
-    from sc_mining.app.api import router
+    from astral_toolkit.app.api import router
 
     def bad():
         raise ValueError("坏了")
@@ -35,8 +35,8 @@ def test_router_error_envelope():
 def test_router_collects_controller_routes(monkeypatch, tmp_path):
     """阶段 1–3 的 Controller：api/ 下的模块带 ROUTES，不改 router 就收进来（假模块放临时目录，不碰源码目录）"""
     import sys
-    from sc_mining.app import api
-    from sc_mining.app.api import router
+    from astral_toolkit.app import api
+    from astral_toolkit.app.api import router
 
     (tmp_path / "x_stage0_ctl.py").write_text(
         'ROUTES = {"x_test": lambda: 1}\n', encoding="utf-8"
@@ -50,14 +50,14 @@ def test_router_collects_controller_routes(monkeypatch, tmp_path):
             "about_info" in router.routes()
         )  # 原有的 Controller 照样在（阶段 4 起没有 services.API 兜底）
     finally:
-        sys.modules.pop("sc_mining.app.api.x_stage0_ctl", None)
+        sys.modules.pop("astral_toolkit.app.api.x_stage0_ctl", None)
         monkeypatch.restore()
         router.reset()
     assert "x_test" not in router.routes()
 
 
 def test_router_json_safe():
-    from sc_mining.app.api import router
+    from astral_toolkit.app.api import router
 
     try:
         router.routes()["x_dec"] = lambda: Decimal("1.5")
@@ -70,8 +70,8 @@ def test_router_same_as_http():
     import json
     import urllib.request
     from http.server import ThreadingHTTPServer
-    from sc_mining.app.server import Handler, TOKEN
-    from sc_mining.app.api import router
+    from astral_toolkit.app.server import Handler, TOKEN
+    from astral_toolkit.app.api import router
 
     srv = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -107,7 +107,7 @@ def _raw_post(port, headers, body=b""):
 def test_post_rejects_before_reading_body():
     """不带令牌、请求体太大、Content-Length 不对：不读请求体直接拒绝（审查 2026-10-31：以前先按 Content-Length
     把请求体整个读进内存再验令牌，本机任何程序不带令牌就能让 AT 吃掉上 GB 内存）"""
-    from sc_mining.app.server import Server, Handler, TOKEN
+    from astral_toolkit.app.server import Server, Handler, TOKEN
 
     srv = Server(("127.0.0.1", 0), Handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -139,7 +139,7 @@ def test_no_synthetic_input():
     """1.1.2：AT 不再模拟任何键盘 / 鼠标输入（防挂机、双击 W 自动跑、自动输入 /showlocation、抢前台按 Alt 都删了）。
     发给自己窗口的 PostMessage / SendMessage 不算"""
     import re
-    from sc_mining.core import paths
+    from astral_toolkit.core import paths
 
     bad = re.compile(
         r"SendInput|keybd_event|mouse_event|KEYEVENTF|_KEYBDINPUT|pyautogui|pynput|pydirectinput|SetCursorPos|WM_KEYDOWN|WM_CHAR"
@@ -168,7 +168,7 @@ ENGINES = (
 
 
 def test_engine_manager_singleton():
-    from sc_mining.app.engines.manager import EngineManager
+    from astral_toolkit.app.engines.manager import EngineManager
 
     m = EngineManager.get_instance()
     assert m is EngineManager.get_instance()
@@ -177,8 +177,8 @@ def test_engine_manager_singleton():
 
 
 def test_start_all_needs_agreed(monkeypatch):
-    from sc_mining.core import settings
-    from sc_mining.app.engines.manager import EngineManager
+    from astral_toolkit.core import settings
+    from astral_toolkit.app.engines.manager import EngineManager
 
     m = EngineManager.get_instance()
     monkeypatch.setattr(settings, "load", lambda: {"agreed": False, "live_on": True})
@@ -191,7 +191,7 @@ def test_start_all_needs_agreed(monkeypatch):
 
 
 def test_stop_all_sets_events(monkeypatch):
-    from sc_mining.app.engines.manager import EngineManager
+    from astral_toolkit.app.engines.manager import EngineManager
 
     m = EngineManager.get_instance()
     monkeypatch.setattr(
@@ -205,7 +205,7 @@ def test_stop_all_sets_events(monkeypatch):
 def _run_main(monkeypatch, tmp_path, shell):
     """server.main(open_ui=True) 跑一遍：网页服务、托盘、引擎、子进程都换成假的。
     shell：假的 ATShell.exe 路径（None = 没有外壳）。返回 (子进程命令行列表, 其它调用)"""
-    from sc_mining.app import (
+    from astral_toolkit.app import (
         server,
         bus,
         overlay,
@@ -215,9 +215,9 @@ def _run_main(monkeypatch, tmp_path, shell):
         instance,
         http_server,
     )
-    from sc_mining.tasks import system as t_sys
-    from sc_mining.app.engines.manager import EngineManager
-    from sc_mining.core import paths, perf
+    from astral_toolkit.tasks import system as t_sys
+    from astral_toolkit.app.engines.manager import EngineManager
+    from astral_toolkit.core import paths, perf
 
     calls, popen = [], []
 
@@ -296,11 +296,11 @@ def _run_main(monkeypatch, tmp_path, shell):
 def test_main_opens_shell_or_edge(monkeypatch, tmp_path):
     """open_ui 时窗口只走 ATShell，没有外壳才开 Edge 应用窗口；PyWebview 窗口已删（2026-10-31）"""
     import importlib.util
-    from sc_mining.app import server
+    from astral_toolkit.app import server
 
     url = "http://127.0.0.1:12345/#t=" + server.TOKEN
-    assert importlib.util.find_spec("sc_mining.app.window") is None
-    assert importlib.util.find_spec("sc_mining.app.api.bridge") is None
+    assert importlib.util.find_spec("astral_toolkit.app.window") is None
+    assert importlib.util.find_spec("astral_toolkit.app.api.bridge") is None
 
     shell = tmp_path / "shell" / "ATShell.exe"
     popen, calls = _run_main(monkeypatch, tmp_path, shell)
@@ -321,7 +321,7 @@ def test_appjs_no_pywebview():
     from pathlib import Path
 
     js = (
-        Path(__file__).resolve().parent.parent / "sc_mining" / "app" / "web" / "app.js"
+        Path(__file__).resolve().parent.parent / "astral_toolkit" / "app" / "web" / "app.js"
     ).read_text(encoding="utf-8")
     assert "pywebview" not in js.lower()
     body = js[js.index("function shellSync()") :]
@@ -332,7 +332,7 @@ def test_appjs_no_pywebview():
 def test_server_split_keeps_old_names():
     """server.py 按职责拆成 http_server / launcher / instance（整改第 1 批，2026-10-31）：
     外面用的旧名字从 server 照样拿得到，是同一个对象；令牌、监听地址的检查只在 http_server 一处"""
-    from sc_mining.app import server, http_server, launcher, instance
+    from astral_toolkit.app import server, http_server, launcher, instance
 
     for name, mod in (
         ("Server", http_server),
@@ -354,7 +354,7 @@ def test_server_split_keeps_old_names():
 
 def test_stock_kind_mineral_not_swallowed():
     """库存类别：矿物要认成「矿物」（抽 OCR 模块时删了 tasks.hover 的转出，stock 的导入失败被吞掉，矿物全成了「材料」）"""
-    from sc_mining.tasks import stock
+    from astral_toolkit.tasks import stock
 
     assert stock._stock_kind("塔兰导电石", "Taranite", "scu") == "矿物"
     assert stock._stock_kind("", "Taranite", "scu") == "矿物"
@@ -364,10 +364,10 @@ def test_stock_kind_mineral_not_swallowed():
 
 def test_frozen_main_old_helper_args_exit(monkeypatch):
     """打包版收到老版本的 helpers / ocrworker 参数：直接退出，不把整个 AT 跑起来"""
-    from sc_mining import frozen_main
-    from sc_mining.core import paths
+    from astral_toolkit import frozen_main
+    from astral_toolkit.core import paths
 
-    from sc_mining import run
+    from astral_toolkit import run
 
     seeded = []
     monkeypatch.setattr(frozen_main, "_velopack", lambda: None)
@@ -386,7 +386,7 @@ def test_frozen_main_old_helper_args_exit(monkeypatch):
 
 def test_startup_drops_stale_helper_files():
     """老版本留下的重启请求文件：启动时（paths.migrate）删掉，没有代码再读它"""
-    from sc_mining.core import migration
+    from astral_toolkit.core import migration
 
     names = [
         p.name for p in migration._get_delete_list()
@@ -397,9 +397,9 @@ def test_startup_drops_stale_helper_files():
 def test_live_fail_off_without_hud(monkeypatch):
     """悬浮窗没建起来时采矿助手出错：照样关掉、存 live_on=False、告诉窗口（以前收尾时擦悬浮窗抛错，线程死掉，界面一直显示在运行）"""
     import threading
-    from sc_mining.app import bus, hud_state
-    from sc_mining.app.engines import live as live_mod
-    from sc_mining.core import settings
+    from astral_toolkit.app import bus, hud_state
+    from astral_toolkit.app.engines import live as live_mod
+    from astral_toolkit.core import settings
 
     saved, pub = [], []
     monkeypatch.setattr(hud_state, "_hud", lambda: None)
@@ -417,7 +417,7 @@ def test_live_fail_off_without_hud(monkeypatch):
 def test_settings_ignore_removed_keys(monkeypatch, tmp_path):
     """老设置文件里删掉的功能（autorun、防挂机、双击间隔）读不进来，也不在默认值里"""
     import json
-    from sc_mining.core import settings
+    from astral_toolkit.core import settings
 
     old = (
         "autorun",
@@ -441,9 +441,9 @@ def test_settings_ignore_removed_keys(monkeypatch, tmp_path):
 
 def test_migrate_moves_deletes_and_is_idempotent(monkeypatch, tmp_path):
     """migrate()：旧位置的文件搬到新位置、要删的删掉、已有的新文件不覆盖、重复调用不出事"""
-    from sc_mining.core import paths
+    from astral_toolkit.core import paths
 
-    root, code = tmp_path / "root", tmp_path / "root" / "sc_mining"
+    root, code = tmp_path / "root", tmp_path / "root" / "astral_toolkit"
     user, data = tmp_path / "user", tmp_path / "data"
     code.mkdir(parents=True)
     for k, v in {

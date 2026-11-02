@@ -71,7 +71,7 @@ def build():
             )
         )
     py = Path(sys.base_prefix) / "LICENSE.txt"
-    font = ROOT / "sc_mining" / "app" / "web" / "fonts" / "OFL.txt"
+    font = ROOT / "astral_toolkit" / "app" / "web" / "fonts" / "OFL.txt"
     parts.append("一、组件列表")
     parts.append(
         f"- Python {sys.version.split()[0]}：Python Software Foundation License"
@@ -118,7 +118,7 @@ def build():
             ),
         )
     add("D-DIN 字体", [font] if font.is_file() else [])
-    dejavu = ROOT / "sc_mining" / "fonts" / "LICENSE-DejaVu.txt"
+    dejavu = ROOT / "astral_toolkit" / "fonts" / "LICENSE-DejaVu.txt"
     add("DejaVu Sans Mono 字体", [dejavu] if dejavu.is_file() else [])
     # 安装包没附原文、许可证是 Apache-2.0 的（flatbuffers、rapidocr-onnxruntime；RapidOCR 的模型来自 PaddleOCR，也是 Apache-2.0）：
     # Apache-2.0 要求附全文，从环境里别的组件附带的 Apache 原文取一份

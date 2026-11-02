@@ -111,8 +111,8 @@ _CRAFT_SOURCES = {
 
 
 def _built(monkeypatch, tmp_path, **override):
-    from sc_mining.gamedata import snapshot
-    from sc_mining.gamedata._build import rebuild_if_needed
+    from astral_toolkit.gamedata import snapshot
+    from astral_toolkit.gamedata._build import rebuild_if_needed
 
     _data_root(monkeypatch, tmp_path)
     _write_min_sources(tmp_path, **{**_CRAFT_SOURCES, **override})
@@ -122,7 +122,7 @@ def _built(monkeypatch, tmp_path, **override):
 
 def test_blueprints_rows_keys_and_norms(monkeypatch, tmp_path):
     """标量原样、「名字#序号」编号与 crafting.assign_keys 一致、两套比较键、u 空允许、item_id 只在 items 里有的才填"""
-    from sc_mining.crafting.crafting import _fold_name, _search_norm, assign_keys
+    from astral_toolkit.crafting.crafting import _fold_name, _search_norm, assign_keys
 
     snapshot = _built(monkeypatch, tmp_path)
     bps = _CRAFT_SOURCES["crafting.json"]["blueprints"]
@@ -205,7 +205,7 @@ def test_crafting_meta_and_names_not_stored(monkeypatch, tmp_path):
 
 
 def test_wikelo_tables(monkeypatch, tmp_path):
-    from sc_mining.crafting.wikelo import _fold
+    from astral_toolkit.crafting.wikelo import _fold
 
     snapshot = _built(monkeypatch, tmp_path)
     with snapshot() as s:
@@ -280,8 +280,8 @@ def test_print_spots_and_ship_items(monkeypatch, tmp_path):
 
 def test_craft_sources_optional_and_bad_rows_skipped(monkeypatch, tmp_path):
     """五份源都可选：缺了空表、坏一条跳一条，不影响 items / shops"""
-    from sc_mining.gamedata import snapshot
-    from sc_mining.gamedata._build import rebuild_if_needed
+    from astral_toolkit.gamedata import snapshot
+    from astral_toolkit.gamedata._build import rebuild_if_needed
 
     _data_root(monkeypatch, tmp_path)
     _write_min_sources(tmp_path)  # 没有任何 schema 4 源
@@ -347,8 +347,8 @@ def test_craft_sources_optional_and_bad_rows_skipped(monkeypatch, tmp_path):
 
 def test_schema4_bumps_data_version_from_schema3_sources(monkeypatch, tmp_path):
     """同样的源，多一份 schema 4 的源文件内容版本就变；schema / importer 版本升了也会变（公式里带两个版本号，升级后自动重建）"""
-    from sc_mining.gamedata._build import data_version
-    from sc_mining.gamedata._sources import read_sources
+    from astral_toolkit.gamedata._build import data_version
+    from astral_toolkit.gamedata._sources import read_sources
 
     _data_root(monkeypatch, tmp_path)
     _write_min_sources(tmp_path)
@@ -368,7 +368,7 @@ def test_min_sources_unchanged():
 
 
 def test_loot_rows_norm_columns_and_meta(monkeypatch, tmp_path):
-    from sc_mining.crafting.loot import _fold
+    from astral_toolkit.crafting.loot import _fold
 
     snapshot = _built(monkeypatch, tmp_path)
     with snapshot() as s:
@@ -393,8 +393,8 @@ def test_loot_rows_norm_columns_and_meta(monkeypatch, tmp_path):
 
 def test_loot_index_meta_absent_without_file(monkeypatch, tmp_path):
     """没有 loot_index.json：没有 meta 键（批 4 据此判「没有掉落索引」）；有文件但没 rows：有键、表空"""
-    from sc_mining.gamedata import snapshot
-    from sc_mining.gamedata._build import rebuild_if_needed
+    from astral_toolkit.gamedata import snapshot
+    from astral_toolkit.gamedata._build import rebuild_if_needed
 
     _data_root(monkeypatch, tmp_path)
     _write_min_sources(tmp_path)
@@ -415,7 +415,7 @@ def test_loot_index_meta_absent_without_file(monkeypatch, tmp_path):
 
 
 def test_wiki_classes_cls_and_alt_lowercased(monkeypatch, tmp_path):
-    from sc_mining.crafting.loot import _fold
+    from astral_toolkit.crafting.loot import _fold
 
     wiki = {
         "items": [
@@ -447,8 +447,8 @@ def test_wiki_classes_cls_and_alt_lowercased(monkeypatch, tmp_path):
 
 
 def test_zh_name_pairs_equal_names_table_rule(monkeypatch, tmp_path):
-    from sc_mining.gamedata._import import _names_table
-    from sc_mining.gamedata._sources import read_sources
+    from astral_toolkit.gamedata._import import _names_table
+    from astral_toolkit.gamedata._sources import read_sources
 
     snapshot = _built(monkeypatch, tmp_path)
     expect = list(_names_table(read_sources(tmp_path)).items())
@@ -519,7 +519,7 @@ def test_alias_pairs_unfiltered(monkeypatch, tmp_path):
 
 def test_wiki_items_odd_types_do_not_break_build(monkeypatch, tmp_path):
     """n 是数字、alt 是数字 / 字符串：旧 _wiki_classes 吞错返回空集，这里跳过 / 当空；n 缺失照旧折叠成 ''"""
-    from sc_mining.crafting.loot import _fold
+    from astral_toolkit.crafting.loot import _fold
 
     wiki = {
         "items": [

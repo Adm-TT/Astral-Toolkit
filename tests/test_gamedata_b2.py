@@ -11,10 +11,10 @@ from tests.test_gamedata_nav import _NAV_SOURCES, _write_all
 
 def _setup(monkeypatch, tmp_path, **override):
     """tmp_path 当 data/ 根、写最小源（物品 + 导航）；就绪标记、后台线程记录换成新的；星图文件路径指到 tmp_path"""
-    import sc_mining.gamedata as G
-    from sc_mining.core import paths
-    from sc_mining.gamedata import _ready
-    from sc_mining.navigation import starmap
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.core import paths
+    from astral_toolkit.gamedata import _ready
+    from astral_toolkit.navigation import starmap
 
     tmp_path.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(paths, "DATA", tmp_path)
@@ -27,7 +27,7 @@ def _setup(monkeypatch, tmp_path, **override):
 
 def _legacy_starmap(tmp_path):
     """以前 starmap.load() 的做法：读 starmap.json、套 starmap_fixes.json、bodies 补 name"""
-    from sc_mining.navigation.starmap import fix_points
+    from astral_toolkit.navigation.starmap import fix_points
 
     data = json.loads((tmp_path / "starmap.json").read_text(encoding="utf-8"))
     fix_points(
@@ -42,7 +42,7 @@ def _legacy_starmap(tmp_path):
 
 
 def test_data_dict_shape_matches_legacy(monkeypatch, tmp_path):
-    from sc_mining.navigation import starmap
+    from astral_toolkit.navigation import starmap
 
     _setup(monkeypatch, tmp_path)
     d = starmap.load()
@@ -73,8 +73,8 @@ def test_data_dict_shape_matches_legacy(monkeypatch, tmp_path):
 
 def test_starmap_load_refreshes_after_rebuild(monkeypatch, tmp_path):
     """更新数据后导航立刻用新星图：换代后 load() 返回新内容"""
-    import sc_mining.gamedata as G
-    from sc_mining.navigation import starmap
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.navigation import starmap
 
     _setup(monkeypatch, tmp_path)
     old = starmap.load()
@@ -90,8 +90,8 @@ def test_starmap_load_refreshes_after_rebuild(monkeypatch, tmp_path):
 
 def test_starmap_update_runs_inside_updating(monkeypatch, tmp_path):
     """starmap.update() 写 starmap.json 在 gamedata.updating() 里（退出时重建库），联网不在里面"""
-    import sc_mining.gamedata as G
-    from sc_mining.navigation import starmap
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.navigation import starmap
 
     _setup(monkeypatch, tmp_path)
     (tmp_path / "starmap.json").unlink()
@@ -121,8 +121,8 @@ def test_starmap_update_reports_rebuild_failure(monkeypatch, tmp_path):
     """星图下载写好了、但出口重建库失败：不能再说「已更新」，要说还在用旧星图（整改第 1 批第 2 条）"""
     import builtins
 
-    from sc_mining.gamedata import _build
-    from sc_mining.navigation import starmap
+    from astral_toolkit.gamedata import _build
+    from astral_toolkit.navigation import starmap
 
     _setup(monkeypatch, tmp_path)
     fake = dict(
@@ -152,7 +152,7 @@ def test_starmap_update_reports_rebuild_failure(monkeypatch, tmp_path):
 
 def test_starmap_load_downloads_when_no_file(monkeypatch, tmp_path):
     """还没有 starmap.json：和以前一样先下载一次再读"""
-    from sc_mining.navigation import starmap
+    from astral_toolkit.navigation import starmap
 
     _setup(monkeypatch, tmp_path)
     src = (tmp_path / "starmap.json").read_text(encoding="utf-8")
@@ -185,7 +185,7 @@ def _more_points():
 
 def test_find_point_internal_case_insensitive_first_match(monkeypatch, tmp_path):
     """内部名不分大小写；同一内部名两个点取源里第一个（商店「最近买点」靠它定位）"""
-    from sc_mining.navigation import position
+    from astral_toolkit.navigation import position
 
     _setup(monkeypatch, tmp_path)
     p = position.find_point(internal="dup_x")
@@ -195,7 +195,7 @@ def test_find_point_internal_case_insensitive_first_match(monkeypatch, tmp_path)
 
 
 def test_find_point_name_norm(monkeypatch, tmp_path):
-    from sc_mining.navigation import position
+    from astral_toolkit.navigation import position
 
     _setup(monkeypatch, tmp_path)
     assert (position.find_point(name="hurston-L1") or {})["i"] == "HUR_L1"
@@ -206,14 +206,14 @@ def test_find_point_name_norm(monkeypatch, tmp_path):
 
 
 def test_find_point_pyro_roman(monkeypatch, tmp_path):
-    from sc_mining.navigation import position
+    from astral_toolkit.navigation import position
 
     _setup(monkeypatch, tmp_path, **_more_points())
     assert (position.find_point(name="Pyro III") or {})["n"] == "Bloom"
 
 
 def test_from_code_lagrange(monkeypatch, tmp_path):
-    from sc_mining.navigation import position
+    from astral_toolkit.navigation import position
 
     _setup(monkeypatch, tmp_path, **_more_points())
     assert (position.from_code("RR_P1_L1") or {})["n"] == "PYR1 L1"
@@ -227,14 +227,14 @@ def test_from_code_lagrange(monkeypatch, tmp_path):
 
 def _no_ini(monkeypatch):
     """汉化包当作没有（不读真实 data/loc），地点代号只剩 place_codes_zh；place_name 的缓存前后都清掉"""
-    from sc_mining.navigation import position
+    from astral_toolkit.navigation import position
 
     monkeypatch.setattr(position, "_ini_cache", {"ini": {}})
     position._place_name.cache_clear()
 
 
 def test_poi_zh_extra_overrides(monkeypatch, tmp_path):
-    from sc_mining.navigation import names
+    from astral_toolkit.navigation import names
 
     _setup(monkeypatch, tmp_path)
     assert names.poi_zh("Lorville") == "洛维尔（新）"  # places_extra_zh 盖过 places_zh
@@ -242,7 +242,7 @@ def test_poi_zh_extra_overrides(monkeypatch, tmp_path):
 
 
 def test_poi_zh_strips_bracket_notes(monkeypatch, tmp_path):
-    from sc_mining.navigation import names
+    from astral_toolkit.navigation import names
 
     _setup(monkeypatch, tmp_path)
     assert names.poi_zh("Everus Harbor [F]") == "艾维拉斯港"
@@ -252,7 +252,7 @@ def test_poi_zh_strips_bracket_notes(monkeypatch, tmp_path):
 
 def test_place_name_prefix_shortest_then_first(monkeypatch, tmp_path):
     """斯坦顿拉格朗日站汉化包没有时，按 places_zh 里以「arcl1」开头的最短键；同样长取源里靠前的。只看 places_zh"""
-    from sc_mining.navigation import position
+    from astral_toolkit.navigation import position
 
     _setup(
         monkeypatch,
@@ -274,7 +274,7 @@ def test_place_name_prefix_shortest_then_first(monkeypatch, tmp_path):
 
 def test_place_name_code_table_then_ini(monkeypatch, tmp_path):
     """地点代号：汉化包有就用汉化包的，没有再用随包的代号表（以前两份合成一张表、汉化包盖过代号表）"""
-    from sc_mining.navigation import position
+    from astral_toolkit.navigation import position
 
     _setup(
         monkeypatch,
@@ -295,8 +295,8 @@ def test_place_name_code_table_then_ini(monkeypatch, tmp_path):
 def test_place_name_follows_data_version(monkeypatch, tmp_path):
     """汉化包更新时 reset_names 在 updating() 里、库还没换代；别的线程这时查到旧名记进缓存，
     换代以后 place_name 也要用上新库里的地名，不能一直显示旧的"""
-    from sc_mining import gamedata
-    from sc_mining.navigation import position
+    from astral_toolkit import gamedata
+    from astral_toolkit.navigation import position
 
     _setup(
         monkeypatch,
@@ -319,7 +319,7 @@ def test_place_name_follows_data_version(monkeypatch, tmp_path):
 
 
 def test_zh_name_station_suffix_fallback(monkeypatch, tmp_path):
-    from sc_mining.navigation import position
+    from astral_toolkit.navigation import position
 
     _setup(monkeypatch, tmp_path, **{"places_zh.json": {"checkmate": "死局空间站"}})
     assert position._zh_name("Checkmate Station") == "死局空间站"
@@ -331,7 +331,7 @@ def test_zh_name_station_suffix_fallback(monkeypatch, tmp_path):
 
 def test_city_places_equal_to_legacy_transform(monkeypatch, tmp_path):
     """建库时变换好的城市地点读出来，和以前 _city_rows(city_places.json) 逐条相等（同名加序号、重复 id 加 +、@sys 空间点、up）"""
-    from sc_mining.navigation import transit
+    from astral_toolkit.navigation import transit
 
     _setup(monkeypatch, tmp_path)
     got = transit.city_places()
@@ -345,7 +345,7 @@ def test_city_places_equal_to_legacy_transform(monkeypatch, tmp_path):
 
 
 def test_station_lifts_equal_to_legacy(monkeypatch, tmp_path):
-    from sc_mining.navigation import transit
+    from astral_toolkit.navigation import transit
 
     _setup(monkeypatch, tmp_path)
     got = transit.station_lifts()
@@ -355,8 +355,8 @@ def test_station_lifts_equal_to_legacy(monkeypatch, tmp_path):
 
 def test_amenity_targets_resolves_three_ref_kinds(monkeypatch, tmp_path):
     """设施的 poi / point(_id) / body 三种引用按当前星图回查；星图单独更新后，设施跟着用新坐标"""
-    import sc_mining.gamedata as G
-    from sc_mining.navigation import transit
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.navigation import transit
 
     amen = _NAV_SOURCES["place_amenities.json"] + [
         {
@@ -406,9 +406,9 @@ def test_transit_does_not_read_json(monkeypatch, tmp_path):
     """数据目录里只有游戏数据库、没有那几份 JSON：城市地点、电梯、设施照样能用"""
     import shutil
 
-    from sc_mining.core import paths
-    from sc_mining.gamedata import _ready
-    from sc_mining.navigation import starmap, transit
+    from astral_toolkit.core import paths
+    from astral_toolkit.gamedata import _ready
+    from astral_toolkit.navigation import starmap, transit
 
     a = _setup(monkeypatch, tmp_path / "a")
     want = (
@@ -436,8 +436,8 @@ def test_transit_does_not_read_json(monkeypatch, tmp_path):
 
 def test_mining_spots_divides_by_1000_and_merges(monkeypatch, tmp_path):
     """挖矿点从库读：坐标米 → 千米（保留 3 位），没有英文名用 id；挖矿点更新后跟着变"""
-    import sc_mining.gamedata as G
-    from sc_mining.navigation import navigate
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.navigation import navigate
 
     spots = _NAV_SOURCES["mining_spots.json"] + [
         dict(
@@ -492,7 +492,7 @@ def test_mining_spots_divides_by_1000_and_merges(monkeypatch, tmp_path):
 
 def test_mining_spots_skips_row_without_name(monkeypatch, tmp_path):
     """挖矿点英文名和 id 都空：跳过这一条，搜索不崩（以前 r["id"] 抛 KeyError 被吞，也是丢这一条）"""
-    from sc_mining.navigation import navigate
+    from astral_toolkit.navigation import navigate
 
     nameless = dict(
         sys="Pyro", zh="", en="", kind="cluster", area="", x=1000.0, y=0.0, z=0.0
@@ -509,10 +509,10 @@ def test_mining_spots_skips_row_without_name(monkeypatch, tmp_path):
 
 def test_search_without_db_still_searches(monkeypatch, tmp_path):
     """调用方自己传星图、游戏数据库建不出来：照常搜（地名退化成空），不抛（整改第 1 批第 1 条）"""
-    import sc_mining.gamedata as G
-    from sc_mining.core import paths
-    from sc_mining.gamedata import _ready
-    from sc_mining.navigation import navigate
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.core import paths
+    from astral_toolkit.gamedata import _ready
+    from astral_toolkit.navigation import navigate
 
     empty = tmp_path / "empty"
     empty.mkdir()
@@ -531,7 +531,7 @@ def test_search_without_db_still_searches(monkeypatch, tmp_path):
 
 def test_navigate_has_no_starmap_private_imports():
     """星图、地名、城市地点以前的读文件缓存（_data / _data_stamp / _places_zh / _city / _amen …）都删干净了"""
-    from sc_mining.navigation import names, navigate, starmap, transit
+    from astral_toolkit.navigation import names, navigate, starmap, transit
 
     for mod, gone in (
         (
@@ -556,9 +556,9 @@ def test_navigate_has_no_starmap_private_imports():
 
 def test_amenity_targets_pins_one_snapshot(monkeypatch, tmp_path):
     """设施表和城里的点钉在同一个快照里：星图取好之后整个过程只读一次清单（收口 2，待做 ⑰）"""
-    from sc_mining.gamedata import _db
-    from sc_mining.navigation import transit
-    from sc_mining.navigation import starmap as sm
+    from astral_toolkit.gamedata import _db
+    from astral_toolkit.navigation import transit
+    from astral_toolkit.navigation import starmap as sm
 
     _setup(monkeypatch, tmp_path)
     data = sm.load()

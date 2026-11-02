@@ -39,7 +39,7 @@
     <Content Include="icon.ico" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="icon.png" CopyToOutputDirectory="PreserveNewest" />
     <!-- AT 标志（标题栏里画，和网页侧栏同一个文件；2026-10-28） -->
-    <Content Include="..\..\..\sc_mining\app\web\at-mark-dark.svg" Link="at-mark-dark.svg" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="..\..\..\sc_mining\app\web\at-mark-light.svg" Link="at-mark-light.svg" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\..\astral_toolkit\app\web\at-mark-dark.svg" Link="at-mark-dark.svg" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\..\astral_toolkit\app\web\at-mark-light.svg" Link="at-mark-light.svg" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

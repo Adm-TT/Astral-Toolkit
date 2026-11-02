@@ -2,7 +2,7 @@
 
 版本：1.0 · 架构建议稿  
 日期：2026-11-02  
-范围：整个 `sc_mining` 主程序包，包括采矿、导航、物品查询、制造/维科洛、库存、目标和后台运行机制。  
+范围：整个 `astral_toolkit` 主程序包，包括采矿、导航、物品查询、制造/维科洛、库存、目标和后台运行机制。  
 源码基线：`release/1.1.4-beta.1`，提交 `c67b15d20c855e04f269eb747093df0d68c8fee1`。  
 配套文件：`2026-11-02-gamedata-design.md`。数据库分离由另一条工作线实施；本文件规定它与功能模块的边界。
 
@@ -69,14 +69,14 @@ AT 采用**模块化单体**：一个 Python 后端进程承载功能模块，�
 
 | 已确认现象 | 源码依据 | 架构影响 |
 |---|---|---|
-| 采矿任务模块在导入时取得引擎单例，包含导航标记/HUD 投影逻辑 | [tasks/mining.py](https://github.com/Adm-TT/Astral-Toolkit/blob/c67b15d20c855e04f269eb747093df0d68c8fee1/sc_mining/tasks/mining.py#L18) | 导入业务入口可能初始化运行对象；导航展示职责落在采矿任务中 |
-| `scan_view()` 同时做采矿计算、制造/目标提示、文本和界面字典组装 | [tasks/mining.py:381](https://github.com/Adm-TT/Astral-Toolkit/blob/c67b15d20c855e04f269eb747093df0d68c8fee1/sc_mining/tasks/mining.py#L381) | 业务变化容易同时影响 HTTP、HUD 和后台扫描 |
-| 实时引擎用 `_T()` 动态导入任务，再写系统模块的最近结果 | [live.py:16](https://github.com/Adm-TT/Astral-Toolkit/blob/c67b15d20c855e04f269eb747093df0d68c8fee1/sc_mining/app/engines/live.py#L16)、[live.py:589](https://github.com/Adm-TT/Astral-Toolkit/blob/c67b15d20c855e04f269eb747093df0d68c8fee1/sc_mining/app/engines/live.py#L589) | 动态导入绕过了导入时循环，运行时职责仍互相依赖 |
-| 引擎管理器还启动更新、反馈补发、索引和 OCR 预热 | [manager.py:41](https://github.com/Adm-TT/Astral-Toolkit/blob/c67b15d20c855e04f269eb747093df0d68c8fee1/sc_mining/app/engines/manager.py#L41) | 资源初始化和业务调用需要集中装配、分别管理生命周期 |
-| 目标规划默认向上调用 `tasks.trade`，失败后自行创建 `Trade` | [crafting/goals.py:362](https://github.com/Adm-TT/Astral-Toolkit/blob/c67b15d20c855e04f269eb747093df0d68c8fee1/sc_mining/crafting/goals.py#L362) | 计算入口隐藏了持久化对象创建和加载行为 |
-| 库存已有事务、修订号、预览与确认机制 | [trade/inventory.py](https://github.com/Adm-TT/Astral-Toolkit/blob/c67b15d20c855e04f269eb747093df0d68c8fee1/sc_mining/trade/inventory.py#L29)、[storage.py:85](https://github.com/Adm-TT/Astral-Toolkit/blob/c67b15d20c855e04f269eb747093df0d68c8fee1/sc_mining/trade/storage.py#L85) | 这些机制应保留并封装，不与可重建游戏资料合并 |
-| OCR 已有独立入口与兼容封装 | [ocr/engine.py](https://github.com/Adm-TT/Astral-Toolkit/blob/c67b15d20c855e04f269eb747093df0d68c8fee1/sc_mining/ocr/engine.py#L1) | 可复用现有识别能力，重点调整资源归属和调用方式 |
-| F8 先输出本地信息，再由 hover-more 补市场价与掉落 | [tasks/hover.py:141](https://github.com/Adm-TT/Astral-Toolkit/blob/c67b15d20c855e04f269eb747093df0d68c8fee1/sc_mining/tasks/hover.py#L141) | 渐进输出需要阶段与请求身份，不能把跨线程补充视为同一个数据库快照 |
+| 采矿任务模块在导入时取得引擎单例，包含导航标记/HUD 投影逻辑 | [tasks/mining.py](https://github.com/Adm-TT/Astral-Toolkit/blob/c67b15d20c855e04f269eb747093df0d68c8fee1/astral_toolkit/tasks/mining.py#L18) | 导入业务入口可能初始化运行对象；导航展示职责落在采矿任务中 |
+| `scan_view()` 同时做采矿计算、制造/目标提示、文本和界面字典组装 | [tasks/mining.py:381](https://github.com/Adm-TT/Astral-Toolkit/blob/c67b15d20c855e04f269eb747093df0d68c8fee1/astral_toolkit/tasks/mining.py#L381) | 业务变化容易同时影响 HTTP、HUD 和后台扫描 |
+| 实时引擎用 `_T()` 动态导入任务，再写系统模块的最近结果 | [live.py:16](https://github.com/Adm-TT/Astral-Toolkit/blob/c67b15d20c855e04f269eb747093df0d68c8fee1/astral_toolkit/app/engines/live.py#L16)、[live.py:589](https://github.com/Adm-TT/Astral-Toolkit/blob/c67b15d20c855e04f269eb747093df0d68c8fee1/astral_toolkit/app/engines/live.py#L589) | 动态导入绕过了导入时循环，运行时职责仍互相依赖 |
+| 引擎管理器还启动更新、反馈补发、索引和 OCR 预热 | [manager.py:41](https://github.com/Adm-TT/Astral-Toolkit/blob/c67b15d20c855e04f269eb747093df0d68c8fee1/astral_toolkit/app/engines/manager.py#L41) | 资源初始化和业务调用需要集中装配、分别管理生命周期 |
+| 目标规划默认向上调用 `tasks.trade`，失败后自行创建 `Trade` | [crafting/goals.py:362](https://github.com/Adm-TT/Astral-Toolkit/blob/c67b15d20c855e04f269eb747093df0d68c8fee1/astral_toolkit/crafting/goals.py#L362) | 计算入口隐藏了持久化对象创建和加载行为 |
+| 库存已有事务、修订号、预览与确认机制 | [trade/inventory.py](https://github.com/Adm-TT/Astral-Toolkit/blob/c67b15d20c855e04f269eb747093df0d68c8fee1/astral_toolkit/trade/inventory.py#L29)、[storage.py:85](https://github.com/Adm-TT/Astral-Toolkit/blob/c67b15d20c855e04f269eb747093df0d68c8fee1/astral_toolkit/trade/storage.py#L85) | 这些机制应保留并封装，不与可重建游戏资料合并 |
+| OCR 已有独立入口与兼容封装 | [ocr/engine.py](https://github.com/Adm-TT/Astral-Toolkit/blob/c67b15d20c855e04f269eb747093df0d68c8fee1/astral_toolkit/ocr/engine.py#L1) | 可复用现有识别能力，重点调整资源归属和调用方式 |
+| F8 先输出本地信息，再由 hover-more 补市场价与掉落 | [tasks/hover.py:141](https://github.com/Adm-TT/Astral-Toolkit/blob/c67b15d20c855e04f269eb747093df0d68c8fee1/astral_toolkit/tasks/hover.py#L141) | 渐进输出需要阶段与请求身份，不能把跨线程补充视为同一个数据库快照 |
 
 当前主程序已有分层意图，也有可复用模块。问题集中在**分层约束没有贯穿初始化、运行状态和跨功能协作**。目标架构沿用有效部分，将这些缺口补齐。
 
@@ -182,23 +182,23 @@ flowchart TB
 
 | 路径 | 内容与迁移原则 |
 |---|---|
-| `sc_mining/bootstrap.py` | 唯一应用装配入口；按 desktop/CLI/test 场景创建对象 |
-| `sc_mining/app/api/` | 保留现有路由名称；改为依赖注入后的薄控制器 |
-| `sc_mining/app/presenters/` | HTTP、SSE、HUD 结果转换与本地化排版 |
-| `sc_mining/app/web/`、`app/overlay.py` | 保留前端和绘制实现；逐步只接受展示模型 |
-| `sc_mining/tasks/` | 每项功能的服务与命令；复杂流程可在本目录按功能拆子包 |
-| `sc_mining/runtime/` | mining/nav/hover/count/position 等 worker，会话控制、结果状态、生命周期 |
-| `sc_mining/mining/`、`navigation/`、`crafting/` | 保留现有有效算法；将 I/O 与呈现移出 |
-| `sc_mining/catalog/`、`inventory/`、`goals/` | 从现有 crafting/trade 中按职责逐批迁出 |
-| `sc_mining/contracts/identity.py` | 物品引用等少量跨模块值类型 |
-| `sc_mining/gamedata/` | 配套数据库方案规定的查询、快照、构建和发布 |
-| `sc_mining/infrastructure/platform/` | 抓屏、前台检测、热键状态、投影所需平台数据 |
-| `sc_mining/infrastructure/persistence/` | 玩家数据库、设置、目标/路标文件适配 |
-| `sc_mining/infrastructure/providers/` | UEX、SCM 等网络访问与报价缓存适配 |
-| `sc_mining/ocr/` | 保留现有引擎兼容入口；通过受管理的 OCR 资源提供服务 |
-| `sc_mining/update/` | 获取与验证更新输入；源提交和游戏库发布交给统一更新边界 |
-| `sc_mining/core/` | 逐步缩小为无业务反向依赖的基础工具，不再追加跨功能状态 |
-| `sc_mining/trade/` | 过渡期保留兼容入口；最后按调用者清单移除已迁出部分 |
+| `astral_toolkit/bootstrap.py` | 唯一应用装配入口；按 desktop/CLI/test 场景创建对象 |
+| `astral_toolkit/app/api/` | 保留现有路由名称；改为依赖注入后的薄控制器 |
+| `astral_toolkit/app/presenters/` | HTTP、SSE、HUD 结果转换与本地化排版 |
+| `astral_toolkit/app/web/`、`app/overlay.py` | 保留前端和绘制实现；逐步只接受展示模型 |
+| `astral_toolkit/tasks/` | 每项功能的服务与命令；复杂流程可在本目录按功能拆子包 |
+| `astral_toolkit/runtime/` | mining/nav/hover/count/position 等 worker，会话控制、结果状态、生命周期 |
+| `astral_toolkit/mining/`、`navigation/`、`crafting/` | 保留现有有效算法；将 I/O 与呈现移出 |
+| `astral_toolkit/catalog/`、`inventory/`、`goals/` | 从现有 crafting/trade 中按职责逐批迁出 |
+| `astral_toolkit/contracts/identity.py` | 物品引用等少量跨模块值类型 |
+| `astral_toolkit/gamedata/` | 配套数据库方案规定的查询、快照、构建和发布 |
+| `astral_toolkit/infrastructure/platform/` | 抓屏、前台检测、热键状态、投影所需平台数据 |
+| `astral_toolkit/infrastructure/persistence/` | 玩家数据库、设置、目标/路标文件适配 |
+| `astral_toolkit/infrastructure/providers/` | UEX、SCM 等网络访问与报价缓存适配 |
+| `astral_toolkit/ocr/` | 保留现有引擎兼容入口；通过受管理的 OCR 资源提供服务 |
+| `astral_toolkit/update/` | 获取与验证更新输入；源提交和游戏库发布交给统一更新边界 |
+| `astral_toolkit/core/` | 逐步缩小为无业务反向依赖的基础工具，不再追加跨功能状态 |
+| `astral_toolkit/trade/` | 过渡期保留兼容入口；最后按调用者清单移除已迁出部分 |
 
 **先分离职责，后移动文件。** 同一批先建立可验证接口，再按需要迁移路径；大规模改名与行为变化不能塞进同一个 PR。
 
@@ -738,12 +738,12 @@ C 和 D 是不同的试点。D 初期可使用封装后的**整条旧资料路�
 
 补充源码依据：
 
-- [物品索引及缓存键](https://github.com/Adm-TT/Astral-Toolkit/blob/c67b15d20c855e04f269eb747093df0d68c8fee1/sc_mining/crafting/itemsearch.py#L68)
-- [UEX 的缓存刷新入口](https://github.com/Adm-TT/Astral-Toolkit/blob/c67b15d20c855e04f269eb747093df0d68c8fee1/sc_mining/update/data_pack.py#L176)
-- [商店数据构建](https://github.com/Adm-TT/Astral-Toolkit/blob/c67b15d20c855e04f269eb747093df0d68c8fee1/sc_mining/crafting/shops.py#L83)
-- [星图加载与缓存版本](https://github.com/Adm-TT/Astral-Toolkit/blob/c67b15d20c855e04f269eb747093df0d68c8fee1/sc_mining/navigation/starmap.py#L207)
-- [矿点文件读取](https://github.com/Adm-TT/Astral-Toolkit/blob/c67b15d20c855e04f269eb747093df0d68c8fee1/sc_mining/mining/mining_area.py#L238)
-- [库存身份与游戏身份的区别](https://github.com/Adm-TT/Astral-Toolkit/blob/c67b15d20c855e04f269eb747093df0d68c8fee1/sc_mining/trade/gamekey.py#L1)
+- [物品索引及缓存键](https://github.com/Adm-TT/Astral-Toolkit/blob/c67b15d20c855e04f269eb747093df0d68c8fee1/astral_toolkit/crafting/itemsearch.py#L68)
+- [UEX 的缓存刷新入口](https://github.com/Adm-TT/Astral-Toolkit/blob/c67b15d20c855e04f269eb747093df0d68c8fee1/astral_toolkit/update/data_pack.py#L176)
+- [商店数据构建](https://github.com/Adm-TT/Astral-Toolkit/blob/c67b15d20c855e04f269eb747093df0d68c8fee1/astral_toolkit/crafting/shops.py#L83)
+- [星图加载与缓存版本](https://github.com/Adm-TT/Astral-Toolkit/blob/c67b15d20c855e04f269eb747093df0d68c8fee1/astral_toolkit/navigation/starmap.py#L207)
+- [矿点文件读取](https://github.com/Adm-TT/Astral-Toolkit/blob/c67b15d20c855e04f269eb747093df0d68c8fee1/astral_toolkit/mining/mining_area.py#L238)
+- [库存身份与游戏身份的区别](https://github.com/Adm-TT/Astral-Toolkit/blob/c67b15d20c855e04f269eb747093df0d68c8fee1/astral_toolkit/trade/gamekey.py#L1)
 
 ## 附录 B：交接清单
 

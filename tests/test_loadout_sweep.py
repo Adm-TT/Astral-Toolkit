@@ -7,10 +7,10 @@ import time
 
 
 def test_every_loadout(monkeypatch, tmp_path):
-    from sc_mining.core import settings
-    from sc_mining.mining import laser
-    from sc_mining.mining.data import SHIPS, HEADS, MODULES, GADGETS
-    from sc_mining.tasks import mining as t_mining
+    from astral_toolkit.core import settings
+    from astral_toolkit.mining import laser
+    from astral_toolkit.mining.data import SHIPS, HEADS, MODULES, GADGETS
+    from astral_toolkit.tasks import mining as t_mining
 
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
 
@@ -20,7 +20,7 @@ def test_every_loadout(monkeypatch, tmp_path):
             out *= 1 + (p or 0) / 100
         return out
 
-    from sc_mining.tasks import mining as t_mining  # noqa: F811
+    from astral_toolkit.tasks import mining as t_mining  # noqa: F811
 
     def mult(*ps):  # noqa: F811
         out = 1.0

@@ -22,7 +22,7 @@ BUILD = Path(
 DIST = BUILD / "dist"
 OUT = DIST / "AT"
 sys.path.insert(0, str(ROOT))
-from sc_mining.core.paths import BUILD_DIR  # noqa: E402
+from astral_toolkit.core.paths import BUILD_DIR  # noqa: E402
 
 # 以后 BUILD_DIR 改名时，旧目录名也要留在这个排除表里，否则游戏数据原文件会被打进安装包
 SKIP_DATA_DIRS = {
@@ -94,10 +94,10 @@ def main():
 
     os.environ["PYTHONPATH"] = str(
         ROOT
-    )  # PyInstaller 在单独的进程里找包，要让它也找得到 sc_mining
-    # sc_mining 自带的数据文件（网页界面、汉化对照、图标、字体……）和全部模块：逐个列出，不依赖 PyInstaller 自己去找
-    # （第一次构建时 --collect-data sc_mining 报「not a package」，数据文件全漏了，2026-10-26）
-    pkg = ROOT / "sc_mining"
+    )  # PyInstaller 在单独的进程里找包，要让它也找得到 astral_toolkit
+    # astral_toolkit 自带的数据文件（网页界面、汉化对照、图标、字体……）和全部模块：逐个列出，不依赖 PyInstaller 自己去找
+    # （第一次构建时 --collect-data astral_toolkit 报「not a package」，数据文件全漏了，2026-10-26）
+    pkg = ROOT / "astral_toolkit"
     extra = []
     for f in sorted(pkg.rglob("*")):
         if not f.is_file() or "__pycache__" in f.parts:
@@ -117,7 +117,7 @@ def main():
         "--name",
         "AT",
         "--icon",
-        str(ROOT / "sc_mining" / "app" / "icon.ico"),
+        str(ROOT / "astral_toolkit" / "app" / "icon.ico"),
         "--distpath",
         str(DIST),
         "--workpath",
@@ -135,7 +135,7 @@ def main():
         "velopack",  # Velopack 安装、升级、卸载时的入口（frozen_main._velopack）
         "--exclude-module",
         "tests",
-        str(ROOT / "sc_mining" / "frozen_main.py"),
+        str(ROOT / "astral_toolkit" / "frozen_main.py"),
     ]
     print("PyInstaller", " ".join(args[:6]), "…")
     PyInstaller.__main__.run(args)
@@ -150,7 +150,7 @@ def main():
     lost = [f for f in DATA_MUST if not (ROOT / "data" / f).is_file()]
     if lost:  # 没有 data/ 会静默打出不带数据的安装包（玩家装完一片空）
         raise SystemExit(
-            f"❌ 项目 data\\ 里缺 {'、'.join(lost)}，不能打包（先跑 sc_mining.run update 或 make_data_pack 准备数据）"
+            f"❌ 项目 data\\ 里缺 {'、'.join(lost)}，不能打包（先跑 astral_toolkit.run update 或 make_data_pack 准备数据）"
         )
     data_out = OUT / "data"
     if data_out.exists():
@@ -176,12 +176,12 @@ def main():
 
     total, internal, data = _size(OUT), _size(OUT / "_internal"), _size(data_out)
     must = [
-        "sc_mining/sc_glossary.json",
-        "sc_mining/names_zh.json",
-        "sc_mining/app/web/index.html",
-        "sc_mining/app/web/app.js",
-        "sc_mining/app/icon.ico",
-        "sc_mining/app/web/fonts/D-DIN.ttf",
+        "astral_toolkit/sc_glossary.json",
+        "astral_toolkit/names_zh.json",
+        "astral_toolkit/app/web/index.html",
+        "astral_toolkit/app/web/app.js",
+        "astral_toolkit/app/icon.ico",
+        "astral_toolkit/app/web/fonts/D-DIN.ttf",
     ]
     lost = [m for m in must if not (OUT / "_internal" / m).exists()]
     lost += [f"data/{f}" for f in DATA_MUST if not (data_out / f).is_file()]
@@ -257,7 +257,7 @@ def installer():
     """Inno Setup 编安装程序。Gitee 发行版单个附件上限 100 MB，超了直接报错"""
     version = re.search(
         r'VERSION = "([^"]+)"',
-        (ROOT / "sc_mining" / "core" / "version.py").read_text(encoding="utf-8"),
+        (ROOT / "astral_toolkit" / "core" / "version.py").read_text(encoding="utf-8"),
     ).group(1)
     out_dir = ROOT / "dist"
     out_dir.mkdir(exist_ok=True)

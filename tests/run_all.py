@@ -13,9 +13,9 @@ os.environ["AT_FEEDBACK_OFF"] = "1"  # 测试里不往服务器发问题反馈�
 from tests.minipytest import run_all, tmpdir  # noqa: E402
 
 _tmp = tmpdir()
-from sc_mining.navigation import navigate as _nav  # noqa: E402
-from sc_mining.navigation import waypoints as _wp  # noqa: E402
-from sc_mining.navigation import celestial as _cel  # noqa: E402
+from astral_toolkit.navigation import navigate as _nav  # noqa: E402
+from astral_toolkit.navigation import waypoints as _wp  # noqa: E402
+from astral_toolkit.navigation import celestial as _cel  # noqa: E402
 
 _nav.CALIB = _cel.CALIB = (
     _tmp / "rotation_calib.json"
@@ -26,16 +26,16 @@ _nav.LAST = _cel.LAST = (
 _nav.WAYPOINTS = _wp.WAYPOINTS = (
     _tmp / "waypoints.json"
 )  # 读路标的测试别读到本机的真实路标
-from sc_mining.core import paths as _paths  # noqa: E402
+from astral_toolkit.core import paths as _paths  # noqa: E402
 
 # import 时把 DATA 下的路径绑成模块常量的模块，趁 paths.DATA 还是真实目录先导入一遍：
 # 以前 crafting/loot 第一次 import 发生在 test_mining 里某条把 DATA 换成临时目录的测试中（经 position → places.code_zh → ensure →
 # 建库 → import_loot），INDEX / DETAILS 从此绑在临时目录，test_wikelo_materials_all_have_source 在库已建好时总被跳过（收口 2，待做 ㉑）
-import sc_mining.crafting.loot  # noqa: E402, F401
-import sc_mining.crafting.shops  # noqa: E402, F401
-import sc_mining.crafting.wikelo  # noqa: E402, F401
-import sc_mining.update.localization  # noqa: E402, F401
-import sc_mining.update.uex  # noqa: E402, F401
+import astral_toolkit.crafting.loot  # noqa: E402, F401
+import astral_toolkit.crafting.shops  # noqa: E402, F401
+import astral_toolkit.crafting.wikelo  # noqa: E402, F401
+import astral_toolkit.update.localization  # noqa: E402, F401
+import astral_toolkit.update.uex  # noqa: E402, F401
 
 _OLD_USER = _paths.USER
 _paths.USER = _tmp  # 运行时才取 paths.USER 的（地点编号、锁文件、升级目录）也写临时目录；import 时绑定的各测试自己 patch
@@ -46,10 +46,10 @@ _paths.LOGS = (
 
 
 def _off_userdata():
-    """已经 import 的 sc_mining 模块里，import 时就绑定好、还指着真实 userdata 的路径，全搬到临时目录。
+    """已经 import 的 astral_toolkit 模块里，import 时就绑定好、还指着真实 userdata 的路径，全搬到临时目录。
     以前漏了 navigate.USER：测试会读真实 userdata 里的星系编号表（2026-10-31 审查）"""
     for m in list(sys.modules.values()):
-        if not getattr(m, "__name__", "").startswith("sc_mining"):
+        if not getattr(m, "__name__", "").startswith("astral_toolkit"):
             continue
         for k, v in list(vars(m).items()):
             if isinstance(v, Path) and v.is_relative_to(_OLD_USER):

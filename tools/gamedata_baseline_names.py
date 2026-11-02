@@ -41,9 +41,9 @@ GAMEKEY = ["Medpen", "Lawson Mining Laser", "zzz"]
 
 
 def collect():
-    from sc_mining.core import i18n
-    from sc_mining.core.paths import DATA, cached_json, file_stamp
-    from sc_mining.trade import gamekey, names
+    from astral_toolkit.core import i18n
+    from astral_toolkit.core.paths import DATA, cached_json, file_stamp
+    from astral_toolkit.trade import gamekey, names
 
     out = {}
     table = names.table()

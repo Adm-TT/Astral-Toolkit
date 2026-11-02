@@ -46,9 +46,9 @@ def _git_head():
 
 
 def _offline():
-    from sc_mining.core import net
-    from sc_mining.navigation import starmap
-    from sc_mining.update import uex
+    from astral_toolkit.core import net
+    from astral_toolkit.navigation import starmap
+    from astral_toolkit.update import uex
 
     def no_net(*a, **k):
         raise OSError("基线工具不联网")
@@ -63,7 +63,7 @@ def _json(path):
 
 
 def _area_all(out, spots, points):
-    from sc_mining.mining import mining_area as M
+    from astral_toolkit.mining import mining_area as M
 
     for g in NYX_POINTS:
         out[f"area({g}, Nyx)"] = M.area(g, "Nyx")
@@ -103,10 +103,10 @@ def _area_all(out, spots, points):
 
 def collect():
     _offline()
-    from sc_mining.core.paths import DATA, file_stamp
-    from sc_mining.mining import data, locations, mining_area as M
-    from sc_mining.mining import parse, refinery, shipsig, signals
-    from sc_mining.navigation import navigate
+    from astral_toolkit.core.paths import DATA, file_stamp
+    from astral_toolkit.mining import data, locations, mining_area as M
+    from astral_toolkit.mining import parse, refinery, shipsig, signals
+    from astral_toolkit.navigation import navigate
 
     out = {}
     spots = _json(DATA / "mining_spots.json")

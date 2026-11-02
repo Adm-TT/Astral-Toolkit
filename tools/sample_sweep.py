@@ -63,9 +63,9 @@ def run(fn):
 
 def one(label, p):
     from PIL import Image
-    from sc_mining.mining import screen, signals
-    from sc_mining.navigation import displayinfo
-    from sc_mining.tasks import mining as S, hover as _H
+    from astral_toolkit.mining import screen, signals
+    from astral_toolkit.navigation import displayinfo
+    from astral_toolkit.tasks import mining as S, hover as _H
 
     img = Image.open(p).convert("RGB")
     W, H = img.size

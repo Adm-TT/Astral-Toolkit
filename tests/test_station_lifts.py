@@ -7,7 +7,7 @@ import pytest
 
 def test_parse_inner_zone():
     """最里层 Zone 行三个数都是 m：只记名字（inner_zone），星系坐标照旧用 SolarSystem / Root 那两行"""
-    from sc_mining.navigation import displayinfo as di
+    from astral_toolkit.navigation import displayinfo as di
 
     lines = [
         "Zone: Hangar_SmallFront_RestStop_906008046493 Pos: 16.86m -88.26m 5.97m",
@@ -39,7 +39,7 @@ def test_parse_inner_zone():
 
 
 def _station(tmp_path, monkeypatch):
-    from sc_mining.navigation import navigate as n
+    from astral_toolkit.navigation import navigate as n
 
     areas = {
         "ObjectContainer_Entry": {"en": "Lobby", "zh": "大厅", "zone": True},
@@ -187,9 +187,9 @@ def _station(tmp_path, monkeypatch):
 
 def _db(monkeypatch, tmp_path):
     """批 2 起城市地点、空间站电梯走游戏数据层：tmp_path 当 data/ 根，补一份空商店表（建库必需的源），查询时建库"""
-    import sc_mining.gamedata as G
-    from sc_mining.core import paths
-    from sc_mining.gamedata import _ready
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.core import paths
+    from astral_toolkit.gamedata import _ready
 
     (tmp_path / "shops.json").write_text(
         json.dumps({"fmt": 2, "fetched": 0, "items": {}, "rows": []}), encoding="utf-8"
@@ -367,7 +367,7 @@ def test_station_leg_switch_lift_without_lobby_frame(monkeypatch, tmp_path):
 
 
 def test_car_number_changed():
-    from sc_mining.navigation import navigate as n
+    from astral_toolkit.navigation import navigate as n
 
     assert n._car_no("TransitCarriage elev util 904902949100") == "904902949100"
     assert not n._car_changed("904902949036", "9049O2949O36") and n._car_changed(
@@ -380,7 +380,7 @@ def test_lifts_rotated_station():
     """转了 90° 的 TransitManager：门要先转它的朝向再加位置；不转的话点离本区域的门几千米，自检能查出来（第 25 轮复审）"""
     import math
 
-    from sc_mining.navigation import lifts_geom as UL
+    from astral_toolkit.navigation import lifts_geom as UL
 
     q90 = (math.cos(math.pi / 4), 0.0, 0.0, math.sin(math.pi / 4))  # 绕 z 转 90°
     mp, rel = (1000.0, 0.0, 0.0), (2000.0, 0.0, 0.0)
@@ -397,7 +397,7 @@ def test_lifts_rotated_station():
 
 def test_zone_kind_numbered_names():
     """区域名的编号是名字的一部分：两边都不去编号；认错一个字母也认；两个只差一位的名字分不清就不认（审查 2026-10-28）"""
-    from sc_mining.navigation import navigate as n
+    from astral_toolkit.navigation import navigate as n
 
     st = {
         "areas": {
@@ -422,7 +422,7 @@ def test_zone_kind_numbered_names():
 
 def test_lift_rows_skip_bad_station(monkeypatch, tmp_path):
     """station_lifts.json 里结构不对的站跳过，别的照常"""
-    from sc_mining.navigation import navigate as n
+    from astral_toolkit.navigation import navigate as n
 
     good = {
         "areas": {},
@@ -475,7 +475,7 @@ def test_lift_rows_skip_bad_station(monkeypatch, tmp_path):
 
 def test_pos_zone_change_counts_as_moved():
     """进电梯站着不动：区域名变成轿厢也算变了（导航要马上提示选哪站）；轿厢的随机编号变了不算"""
-    from sc_mining.app.engines import pos
+    from astral_toolkit.app.engines import pos
 
     a = {"inner_zone": "TransitCarriage elev util 904902949036"}
     assert pos._zone_base(a) == pos._zone_base(
@@ -499,13 +499,13 @@ def test_nav_engine_station_branch(monkeypatch, tmp_path):
     import types
 
     n, ps = _station(tmp_path, monkeypatch)
-    from sc_mining.tasks import mining as t_mining, navigation as t_nav, system as t_sys
-    from sc_mining.app.engines.manager import EngineManager
+    from astral_toolkit.tasks import mining as t_mining, navigation as t_nav, system as t_sys
+    from astral_toolkit.app.engines.manager import EngineManager
 
     em = EngineManager.get_instance()
-    from sc_mining.app import hud_state
-    from sc_mining.app import bus
-    from sc_mining.app.engines import nav as nav_mod
+    from astral_toolkit.app import hud_state
+    from astral_toolkit.app import bus
+    from astral_toolkit.app.engines import nav as nav_mod
 
     tgt = ps["rr_x"]
     monkeypatch.setattr(n, "load", lambda: {"bodies": {}, "pois": [], "points": []})
@@ -633,8 +633,8 @@ def test_city_leg_orbital_station(monkeypatch, tmp_path):
 def test_showlocation_only_waits_for_player(monkeypatch):
     """AT 不替玩家打字（整改第 4 批）：showlocation 只等剪贴板出现新坐标；同一时间只等一份"""
     import threading
-    from sc_mining.navigation import navigate as n
-    from sc_mining.system import showloc
+    from astral_toolkit.navigation import navigate as n
+    from astral_toolkit.system import showloc
 
     assert not hasattr(showloc, "send_showlocation") and not hasattr(showloc, "_send")
     monkeypatch.setattr(n, "read_clipboard", lambda: "old")
@@ -669,7 +669,7 @@ def test_no_synthetic_input_in_nav_files():
     import re
     from pathlib import Path
 
-    root = Path(__file__).resolve().parent.parent / "sc_mining"
+    root = Path(__file__).resolve().parent.parent / "astral_toolkit"
     files = [
         root / "system" / "showloc.py",
         root / "tasks" / "navigation.py",
@@ -693,7 +693,7 @@ def test_no_synthetic_input_in_nav_files():
 
 def test_browser_page_titled_star_citizen_is_not_game(monkeypatch):
     """标题以「Star Citizen」开头的浏览器窗口不是游戏：读得到进程名就以进程名为准（审查 2026-10-31）"""
-    from sc_mining.system import showloc
+    from astral_toolkit.system import showloc
 
     if not showloc.WIN:
         pytest.skip("只有 Windows")
@@ -712,7 +712,7 @@ def test_browser_page_titled_star_citizen_is_not_game(monkeypatch):
 
 def test_space_guide_uses_top_right_hints(monkeypatch):
     """太空导航定星系带上右上角线索（不再只按最近星球猜）；不给就用位置线程登记的来源（审查 2026-10-31）"""
-    from sc_mining.navigation import navigate as n
+    from astral_toolkit.navigation import navigate as n
 
     seen = []
     monkeypatch.setattr(
@@ -737,8 +737,8 @@ def test_space_guide_uses_top_right_hints(monkeypatch):
 
 def test_ore_go_name_clash_and_recorded_system(monkeypatch):
     """原矿「去这里」：同一分钟同种矿不撞名；用记录时定下的星系（审查 2026-10-31）"""
-    from sc_mining.tasks import navigation as t_nav
-    from sc_mining.mining import ore_log
+    from astral_toolkit.tasks import navigation as t_nav
+    from astral_toolkit.mining import ore_log
 
     rec = {
         "id": "abcd1234ef",
@@ -766,7 +766,7 @@ def test_ore_go_name_clash_and_recorded_system(monkeypatch):
 
 def test_here_hints_only_for_where_you_are(monkeypatch):
     """右上角线索只用在「坐标就是你现在的位置」时：粘贴的远处坐标不套用当前星系（审查 2026-10-31）"""
-    from sc_mining.tasks import navigation as t_nav
+    from astral_toolkit.tasks import navigation as t_nav
 
     pos = type("P", (), {})()
     pos.current = (0.0, (1e9, 0.0, 0.0), {})
@@ -781,9 +781,9 @@ def test_here_hints_only_for_where_you_are(monkeypatch):
 def test_here_watch_save_error_is_reported(monkeypatch):
     """「用当前位置新建」存路标出错：悬浮窗提示、写日志，线程不悄悄退出（审查 2026-10-31）"""
     import time as _t
-    from sc_mining.tasks import navigation as t_nav
-    from sc_mining.navigation import navigate as n
-    from sc_mining.system import showloc
+    from astral_toolkit.tasks import navigation as t_nav
+    from astral_toolkit.navigation import navigate as n
+    from astral_toolkit.system import showloc
 
     notes, logs = [], []
     monkeypatch.setattr(n, "read_clipboard", lambda: "old")
@@ -807,7 +807,7 @@ def test_here_watch_save_error_is_reported(monkeypatch):
 
 def test_nav_log_has_no_user_folder():
     """nav_log.txt 会进反馈包：用户目录换成 ~（审查 2026-10-31）"""
-    from sc_mining.tasks.navigation import _no_home
+    from astral_toolkit.tasks.navigation import _no_home
 
     s = _no_home(
         "File \"C:\\Users\\张 三\\AppData\\Local\\AT\\current\\x.py\", line 3 | c:/users/bob/a.json | 'D:\\\\Users\\\\x\\\\b'"
@@ -818,7 +818,7 @@ def test_nav_log_has_no_user_folder():
 
 def test_last_position_written_at_most_every_30s(monkeypatch, tmp_path):
     """last_position.json 最多 30 秒写一次、原子写（以前 0.2 秒一次，审查 2026-10-31）"""
-    from sc_mining.navigation import navigate as n
+    from astral_toolkit.navigation import navigate as n
 
     monkeypatch.setattr(n, "LAST", tmp_path / "last_position.json")
     monkeypatch.setattr(n, "_last_at", [0.0])
@@ -830,7 +830,7 @@ def test_last_position_written_at_most_every_30s(monkeypatch, tmp_path):
 
 def test_read_forward_returns_end_of_last_full_line(monkeypatch, tmp_path):
     """分块读 Game.log：返回最后一个完整行的结尾，下次不重读半行（审查 2026-10-31）"""
-    from sc_mining.navigation import position as P
+    from astral_toolkit.navigation import position as P
 
     p = tmp_path / "Game.log"
     data = b"Inventory a\nxx\nInventory b\nhalf"
@@ -847,7 +847,7 @@ def test_read_forward_returns_end_of_last_full_line(monkeypatch, tmp_path):
 def test_pos_hints_use_latest_read_even_when_hovering():
     """悬停不动（坐标没变）时线索也要在：按最近一次读到的算，不按坐标最后一次变化算（复审 2026-10-31）"""
     import time as _t
-    from sc_mining.app.engines.pos import _Pos
+    from astral_toolkit.app.engines.pos import _Pos
 
     p = object.__new__(_Pos)
     p.latest = (_t.time() - 60, (1.0, 2.0, 3.0), {"zone": "old"})
@@ -865,8 +865,8 @@ def test_mark_here_prompts_and_no_double_wait(monkeypatch):
     """记路标热键：先在悬浮窗提示输入 /showlocation（挂到等完）；「用当前位置新建」已经在等时不再等第二份（第 4 批审查）"""
     import threading
     import time as _t
-    from sc_mining.system import showloc
-    from sc_mining.tasks import navigation as t_nav
+    from astral_toolkit.system import showloc
+    from astral_toolkit.tasks import navigation as t_nav
 
     notes = []
     monkeypatch.setattr(

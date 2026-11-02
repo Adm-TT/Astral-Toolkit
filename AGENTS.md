@@ -6,7 +6,7 @@
 - 一句话：《星际公民》的免费、非官方中文玩家工具——读屏识别采矿信号和扫描面板、制造蓝图、导航、物品查询、库存和目标清单。给开着游戏边玩边看的中文玩家用。
 - 技术栈：Python 3.12（venv + pip，依赖锁版本）；本机 HTTP 服务 + 原生 JS 前端；窗口外壳 C# WinUI3 + WebView2（ATShell，退回 Edge `--app`）；识别用 RapidOCR + ONNX Runtime（CPU / DirectML）；打包 PyInstaller + Velopack；没有数据库，数据是本地 JSON 文件。
 - 目标：
-  1. 1.1.3（新架构）正式版已发布（2026-11-01）；之后保持稳定，按模块继续拆分（OCR 已拆到 `sc_mining/ocr/`）。
+  1. 1.1.3（新架构）正式版已发布（2026-11-01）；之后保持稳定，按模块继续拆分（OCR 已拆到 `astral_toolkit/ocr/`）。
   2. 导航（主城、空间站内设施）准确可用。
   3. 项目规范化：本文件、REVIEW.md、PR 模板、验证命令全部落地。
 - 非目标：不读写游戏内存、不改游戏文件、不注入；不做挂机、自动战斗、自动开船、自动交易；不用竞品代码；不收费、不卖数据。详见 `产品设计文档.md` 第 3、9 节。
@@ -14,7 +14,7 @@
 ## 约定
 
 - 代码风格由 formatter 和 linter（ruff）决定，不要手工争论格式。
-- 分层：界面接口 `sc_mining/app/api/` → 业务 `sc_mining/tasks/` → 领域 `sc_mining/{mining,navigation,crafting,trade}/`；接口层不写业务逻辑，领域层不碰界面。
+- 分层：界面接口 `astral_toolkit/app/api/` → 业务 `astral_toolkit/tasks/` → 领域 `astral_toolkit/{mining,navigation,crafting,trade}/`；接口层不写业务逻辑，领域层不碰界面。
 - 只读屏幕、不碰游戏：不模拟任何键盘或鼠标输入（读剪贴板、读按键状态做热键不算）。
 - 联网的地方必须有超时和失败提示，失败了继续用旧数据。
 - 文本输出（文档、报告、说明、记录）一律用 Markdown（`.md`）。例外：打进安装包给玩家看的 `使用说明.txt`、`免责声明.txt`、`商标和图标说明.txt`、`第三方许可.txt` 保持 `.txt`（玩家双击直接用记事本打开）。
@@ -33,7 +33,7 @@
 ## 准备环境（第一次）
 
 - 需要：Windows 10/11、Python 3.12（`py` 启动器）、.NET SDK（编 ATShell 用）。
-- 游戏数据 `data/` 和截图样本 `tests/samples/` 由项目负责人提供，放进对应目录；部分测试和截图回归需要它们。数据也可以运行 `.venv\Scripts\python.exe -X utf8 -m sc_mining.run update` 下载数据包。
+- 游戏数据 `data/` 和截图样本 `tests/samples/` 由项目负责人提供，放进对应目录；部分测试和截图回归需要它们。数据也可以运行 `.venv\Scripts\python.exe -X utf8 -m astral_toolkit.run update` 下载数据包。
 
 ## 验证命令（做完任何改动后必须跑，并把输出贴出来）
 
@@ -63,7 +63,7 @@ rem 构建（PyInstaller + ATShell；需打包依赖和 .NET SDK）
 - 说"完成"之前必须实际运行上面的命令，并展示结果，不接受口头确认。
 - 通过远程工具操作这台电脑时，单条命令 60 秒会断线：全量测试、建库这类长命令用 `Invoke-CimMethod Win32_Process Create` 起后台 `cmd /c … > 日志文件` 再读文件，别在前台等。
 - UI 变更：在 ATShell 窗口里跑一遍，截图并对照 `产品设计文档.md` 第 5 节；悬浮窗变更要在游戏里看。
-- 涉及读屏识别（`sc_mining/{mining,navigation}/`、`sc_mining/app/engines/`、`sc_mining/ocr/`、`sc_mining/trade/inspector.py`、`sc_mining/tasks/{hover,count,mining}.py`）的改动：额外运行 `.venv\Scripts\python.exe -X utf8 tools\sample_sweep.py`（真实截图全量回归），高风险的再由负责人实机验证。
+- 涉及读屏识别（`astral_toolkit/{mining,navigation}/`、`astral_toolkit/app/engines/`、`astral_toolkit/ocr/`、`astral_toolkit/trade/inspector.py`、`astral_toolkit/tasks/{hover,count,mining}.py`）的改动：额外运行 `.venv\Scripts\python.exe -X utf8 tools\sample_sweep.py`（真实截图全量回归），高风险的再由负责人实机验证。
 - 发版时才打安装包：`.venv\Scripts\python.exe -X utf8 tools\build_velopack.py "更新内容"`（vpk 位置见脚本里的 `VPK`）。
 
 ## 提交前流程

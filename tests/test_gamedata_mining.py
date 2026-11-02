@@ -61,8 +61,8 @@ _MINING_SOURCES = {
 
 
 def _built(monkeypatch, tmp_path, **override):
-    from sc_mining.gamedata import snapshot
-    from sc_mining.gamedata._build import rebuild_if_needed
+    from astral_toolkit.gamedata import snapshot
+    from astral_toolkit.gamedata._build import rebuild_if_needed
 
     _data_root(monkeypatch, tmp_path)
     _write_min_sources(tmp_path, **{**_MINING_SOURCES, **override})
@@ -97,8 +97,8 @@ def test_mining_rock_entries_roundtrip_by_section(monkeypatch, tmp_path):
 
 
 def test_mining_rocks_absent_means_no_meta_key(monkeypatch, tmp_path):
-    from sc_mining.gamedata import snapshot
-    from sc_mining.gamedata._build import rebuild_if_needed
+    from astral_toolkit.gamedata import snapshot
+    from astral_toolkit.gamedata._build import rebuild_if_needed
 
     _data_root(monkeypatch, tmp_path)
     _write_min_sources(
@@ -160,8 +160,8 @@ def test_refinery_yields_whole_station_json(monkeypatch, tmp_path):
 
 def test_mining_sources_optional_and_odd_shapes(monkeypatch, tmp_path):
     """三份都可选、形状不对不拖垮建库"""
-    from sc_mining.gamedata import snapshot
-    from sc_mining.gamedata._build import rebuild_if_needed
+    from astral_toolkit.gamedata import snapshot
+    from astral_toolkit.gamedata._build import rebuild_if_needed
 
     _data_root(monkeypatch, tmp_path)
     _write_min_sources(

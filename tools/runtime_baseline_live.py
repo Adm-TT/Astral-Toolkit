@@ -61,13 +61,13 @@ def _patch(rec, tmp):
     import importlib
 
     # 全用 Any：这里就是要换模块属性
-    bus: Any = importlib.import_module("sc_mining.app.bus")
-    hud_state: Any = importlib.import_module("sc_mining.app.hud_state")
-    paths: Any = importlib.import_module("sc_mining.core.paths")
-    settings: Any = importlib.import_module("sc_mining.core.settings")
-    goals: Any = importlib.import_module("sc_mining.tasks.goals")
-    navigation: Any = importlib.import_module("sc_mining.tasks.navigation")
-    system: Any = importlib.import_module("sc_mining.tasks.system")
+    bus: Any = importlib.import_module("astral_toolkit.app.bus")
+    hud_state: Any = importlib.import_module("astral_toolkit.app.hud_state")
+    paths: Any = importlib.import_module("astral_toolkit.core.paths")
+    settings: Any = importlib.import_module("astral_toolkit.core.settings")
+    goals: Any = importlib.import_module("astral_toolkit.tasks.goals")
+    navigation: Any = importlib.import_module("astral_toolkit.tasks.navigation")
+    system: Any = importlib.import_module("astral_toolkit.tasks.system")
 
     bus.publish = rec.publish
     for m in (hud_state, navigation, system):
@@ -82,9 +82,9 @@ def _patch(rec, tmp):
 def _drive(frames, clock, front=None):
     """跑完一轮：frames 用完后喂空白帧，等它自己过期、自动关闭（_auto_off）；最后走一遍 stop"""
     from PIL import Image
-    from sc_mining.app.engines import live as live_mod
-    from sc_mining.mining import screen
-    from sc_mining.tasks import mining
+    from astral_toolkit.app.engines import live as live_mod
+    from astral_toolkit.mining import screen
+    from astral_toolkit.tasks import mining
 
     blank = Image.new("RGB", (1920, 1080))
     live = live_mod._Live()
@@ -119,8 +119,8 @@ def _drive(frames, clock, front=None):
 
 def _samples(rec, clock):
     from PIL import Image
-    from sc_mining.mining import screen
-    from sc_mining.mining.signals import find_signatures
+    from astral_toolkit.mining import screen
+    from astral_toolkit.mining.signals import find_signatures
 
     frames, used = [], []
     for p in sorted((ROOT / "tests" / "samples").iterdir()):
@@ -140,8 +140,8 @@ def _samples(rec, clock):
 
 def _scripted(rec, clock):
     from PIL import Image
-    from sc_mining.mining import screen
-    from sc_mining.mining.parse import Scan
+    from astral_toolkit.mining import screen
+    from astral_toolkit.mining.parse import Scan
 
     fixed = base._fixed_scans()
     a = next(s for k, s in fixed.items() if k.startswith("文本:"))

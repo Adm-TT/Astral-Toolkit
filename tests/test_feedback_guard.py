@@ -45,6 +45,6 @@ def test_minipytest_install_forces_feedback_off_without_package_import():
 
 
 def test_feedback_enabled_is_false_under_tests():
-    from sc_mining.system import feedback_up
+    from astral_toolkit.system import feedback_up
 
     assert feedback_up.enabled() is False

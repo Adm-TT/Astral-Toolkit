@@ -13,7 +13,7 @@ class _Snap:
 
 
 def test_version_cache_rebuilds_on_new_version():
-    from sc_mining.gamedata._cache import VersionCache
+    from astral_toolkit.gamedata._cache import VersionCache
 
     c = VersionCache()
     calls = []
@@ -34,7 +34,7 @@ def test_version_cache_rebuilds_on_new_version():
 
 
 def test_version_cache_clear_and_peek():
-    from sc_mining.gamedata._cache import VersionCache
+    from astral_toolkit.gamedata._cache import VersionCache
 
     c = VersionCache()
     assert c.peek() is None
@@ -49,7 +49,7 @@ def test_version_cache_clear_and_peek():
 
 def test_version_cache_get_for_none_key():
     """还没有库（版本 None）：和以前的字典写法一样照样缓存在 None 下；给了 key_after 就在算完后用它再取一次键（stockplaces 的用法）"""
-    from sc_mining.gamedata._cache import VersionCache
+    from astral_toolkit.gamedata._cache import VersionCache
 
     c = VersionCache()
     calls = []
@@ -68,7 +68,7 @@ def test_version_cache_identity_mode():
     """identity=True：按 is 比，内容相等的另一个对象不命中；缓存持有键，旧键对象不会被回收后地址复用"""
     import gc
 
-    from sc_mining.gamedata._cache import VersionCache
+    from astral_toolkit.gamedata._cache import VersionCache
 
     c = VersionCache(identity=True)
     k1 = (1, 2)
@@ -89,12 +89,12 @@ def test_topics_share_version_cache(monkeypatch, tmp_path):
     """items.candidates / shops.catalog / stockplaces.places / itemsearch 索引：换代后都重算，同代内是同一份"""
     import json
 
-    import sc_mining.gamedata as G
-    from sc_mining.crafting import itemsearch as IS
-    from sc_mining.crafting import stockplaces as SP
-    from sc_mining.gamedata import items as gd_items
-    from sc_mining.gamedata import shops as gd_shops
-    from sc_mining.gamedata._cache import VersionCache
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.crafting import itemsearch as IS
+    from astral_toolkit.crafting import stockplaces as SP
+    from astral_toolkit.gamedata import items as gd_items
+    from astral_toolkit.gamedata import shops as gd_shops
+    from astral_toolkit.gamedata._cache import VersionCache
     from tests.test_gamedata import _write_min_sources
 
     _setup(monkeypatch, tmp_path)
@@ -130,9 +130,9 @@ def test_stockplaces_index_follows_current_places_across_generations(
     """连换两代、中间只调 places() 不调 _index()：_index() 里的对象必须属于当前这份 places()（复审第 1 条：以前按 id 当键会误命中）"""
     import json
 
-    import sc_mining.gamedata as G
-    from sc_mining.crafting import stockplaces as SP
-    from sc_mining.gamedata._cache import VersionCache
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.crafting import stockplaces as SP
+    from astral_toolkit.gamedata._cache import VersionCache
     from tests.test_gamedata import _write_min_sources
 
     _setup(monkeypatch, tmp_path)
@@ -160,9 +160,9 @@ def test_stockplaces_index_follows_current_places_across_generations(
 def _fake_localization(monkeypatch, tmp_path, aliases, zh_names=None, with_build=False):
     """让 localization.rebuild 不读真汉化、不联网：汉化源是个假 .ini，各转换函数返回给定内容；
     with_build 时本机"有构建输入"，走 BUILD_LOCK 里的蓝图 + 维科洛重建（也换成记录器）"""
-    from sc_mining.crafting import build_crafting
-    from sc_mining.crafting import wikelo
-    from sc_mining.update import data_pack, localization as L
+    from astral_toolkit.crafting import build_crafting
+    from astral_toolkit.crafting import wikelo
+    from astral_toolkit.update import data_pack, localization as L
 
     ini = tmp_path / "fake.ini"
     ini.write_text("", encoding="utf-8")
@@ -194,8 +194,8 @@ def _fake_localization(monkeypatch, tmp_path, aliases, zh_names=None, with_build
 
 def test_localization_rebuild_runs_inside_updating(monkeypatch, tmp_path):
     """汉化重建写的四份源文件在一个 updating() 里；蓝图 / 维科洛重建（schema 4 起是库的源）在**另一个** updating() 里、BUILD_LOCK 在它里面（锁顺序 写锁 → BUILD_LOCK，GD-B3 请求）"""
-    from sc_mining.crafting import build_crafting
-    from sc_mining.update import localization as L
+    from astral_toolkit.crafting import build_crafting
+    from astral_toolkit.update import localization as L
 
     _setup(monkeypatch, tmp_path)
     state = _count_updating(monkeypatch)
@@ -225,9 +225,9 @@ def test_localization_rebuild_db_rebuilt_even_if_crafting_build_fails(
     """四份源文件写完就在第一个 updating() 出口重建了库；之后蓝图重建抛异常只影响第二段（以前靠 clear_caches 里的钩子兜，现在不需要）"""
     import json
 
-    import sc_mining.gamedata as G
-    from sc_mining.crafting import build_crafting
-    from sc_mining.update import localization as L
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.crafting import build_crafting
+    from astral_toolkit.update import localization as L
     from tests.minipytest import raises
 
     _setup(monkeypatch, tmp_path)
@@ -248,7 +248,7 @@ def test_localization_rebuild_db_rebuilt_even_if_crafting_build_fails(
 
 
 def test_loot_update_runs_inside_updating(monkeypatch, tmp_path):
-    from sc_mining.crafting import loot
+    from astral_toolkit.crafting import loot
 
     _setup(monkeypatch, tmp_path)
     state = _count_updating(monkeypatch)
@@ -271,8 +271,8 @@ def test_itemsearch_sees_new_aliases_after_localization_rebuild(monkeypatch, tmp
     """汉化重建改了 name_aliases.json：靠 updating() 出口重建库，物品搜索下次就看到新旧写法——不再需要 clear_caches 里的补建库钩子"""
     import json
 
-    import sc_mining.gamedata as G
-    from sc_mining.update import data_pack, localization as L
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.update import data_pack, localization as L
 
     _setup(monkeypatch, tmp_path)
     IS = _fresh_search(monkeypatch)
@@ -295,12 +295,12 @@ def test_is_game_source_recognizes_starmap_update(monkeypatch, tmp_path):
     """navigate.update 其实是 starmap.update：本机 starmap.json 是游戏数据版 → 跳过网站更新；网站版 → 不跳过"""
     import json
 
-    from sc_mining import run
-    from sc_mining.core import paths
-    from sc_mining.navigation import navigate
+    from astral_toolkit import run
+    from astral_toolkit.core import paths
+    from astral_toolkit.navigation import navigate
 
     monkeypatch.setattr(paths, "DATA", tmp_path)
-    assert navigate.update.__module__ == "sc_mining.navigation.starmap"
+    assert navigate.update.__module__ == "astral_toolkit.navigation.starmap"
     (tmp_path / "starmap.json").write_text(
         json.dumps({"source": paths.SRC_GAME}), encoding="utf-8"
     )
@@ -319,10 +319,10 @@ def test_make_data_pack_web_ok_names_starmap_too(monkeypatch, tmp_path):
     import sys
     from pathlib import Path
 
-    from sc_mining import run
-    from sc_mining.core import paths
-    from sc_mining.crafting import loot
-    from sc_mining.update import data_pack
+    from astral_toolkit import run
+    from astral_toolkit.core import paths
+    from astral_toolkit.crafting import loot
+    from astral_toolkit.update import data_pack
     from tests.minipytest import raises
 
     M = runpy.run_path(
@@ -358,6 +358,6 @@ def test_make_data_pack_web_ok_names_starmap_too(monkeypatch, tmp_path):
     with raises(Stop):
         M["main"](["--no-loot"])
     assert len(calls) == 1 and set(calls[0]["web_ok"]) == {
-        "sc_mining.navigation.navigate",
-        "sc_mining.navigation.starmap",
+        "astral_toolkit.navigation.navigate",
+        "astral_toolkit.navigation.starmap",
     }

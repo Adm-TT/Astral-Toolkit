@@ -62,10 +62,10 @@ def _git_head():
 
 def _freeze_world():
     """断网、时间写死、配装写死"""
-    from sc_mining import gamedata
-    from sc_mining.core import net, settings
-    from sc_mining.navigation import starmap
-    from sc_mining.update import uex
+    from astral_toolkit import gamedata
+    from astral_toolkit.core import net, settings
+    from astral_toolkit.navigation import starmap
+    from astral_toolkit.update import uex
 
     def no_net(*a, **k):
         raise OSError("基线工具不联网")
@@ -84,7 +84,7 @@ def _freeze_world():
 
 
 def _fixed_scans():
-    from sc_mining.mining.parse import Scan, parse_scan
+    from astral_toolkit.mining.parse import Scan, parse_scan
 
     out = {f"文本:{k}": parse_scan(v) for k, v in TEXT_SCANS.items()}
     out["写死:面板被挡"] = Scan(
@@ -131,7 +131,7 @@ def _fixed_scans():
 
 def _sample_scans():
     from PIL import Image
-    from sc_mining.mining import screen
+    from astral_toolkit.mining import screen
 
     out = {}
     for p in sorted((ROOT / "tests" / "samples").iterdir()):
@@ -149,7 +149,7 @@ def _sample_scans():
 
 def _goal_map(scan):
     """目标清单有一条：石头里第一种矿缺 2 SCU、品质门槛 600"""
-    from sc_mining.tasks import goals
+    from astral_toolkit.tasks import goals
 
     en = next(
         (n for n, _, _ in scan.composition if n and n != "Inert Materials"), "Gold"
@@ -167,14 +167,14 @@ def _goal_map(scan):
 
 
 def _view(scan, bag, cut):
-    from sc_mining.tasks import mining
+    from astral_toolkit.tasks import mining
 
     return mining.scan_view(scan, bag, cut=cut)
 
 
 def _branch_cases(out, Scan, goals):
     """真实数据走不到的分支：临时改精炼站表 / 方案 / 目标，跑完还原"""
-    from sc_mining.mining import data, laser
+    from astral_toolkit.mining import data, laser
 
     copper = Scan(
         rock="Gold",
@@ -242,7 +242,7 @@ def _branch_cases(out, Scan, goals):
 
 def _manual_cases(out):
     """手动输入：只算破碎方案；不合法的只记异常类型"""
-    from sc_mining.tasks import mining
+    from astral_toolkit.tasks import mining
 
     manual: Any = mining.manual_scan  # 故意也传字符串，和接口层一样
     for label, args in (
@@ -269,10 +269,10 @@ def _manual_cases(out):
 
 def _timing_cases(out, Scan):
     """语义变化（有意，RT-B2）：输入取好之后全局表 / 设置被改"""
-    from sc_mining.app.presenters import mining as present
-    from sc_mining.core import settings
-    from sc_mining.mining import analysis, data
-    from sc_mining.tasks import mining
+    from astral_toolkit.app.presenters import mining as present
+    from astral_toolkit.core import settings
+    from astral_toolkit.mining import analysis, data
+    from astral_toolkit.tasks import mining
 
     scan = Scan(
         rock="Gold",
@@ -316,8 +316,8 @@ def _timing_cases(out, Scan):
 
 def collect():
     _freeze_world()
-    from sc_mining.mining.parse import Scan
-    from sc_mining.tasks import goals
+    from astral_toolkit.mining.parse import Scan
+    from astral_toolkit.tasks import goals
 
     scans = {**_fixed_scans(), **_sample_scans()}
     out: dict[str, Any] = {"scan 清单": {k: repr(s) for k, s in scans.items()}}

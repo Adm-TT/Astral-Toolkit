@@ -1,27 +1,27 @@
 """交易底层：物品目录、库存数据库、中英文名、OCR 行解析、价格统计、市场缓存、UEX/SCM 数据源"""
 
-from sc_mining.trade.storage import Database
-from sc_mining.trade.catalog import Catalog
-from sc_mining.trade.models import Item
+from astral_toolkit.trade.storage import Database
+from astral_toolkit.trade.catalog import Catalog
+from astral_toolkit.trade.models import Item
 import sqlite3  # noqa: F401
 import pytest
-from sc_mining.trade.inventory import Inventory
-from sc_mining.trade.models import Item, StockKey, StockLine  # noqa: F811
+from astral_toolkit.trade.inventory import Inventory
+from astral_toolkit.trade.models import Item, StockKey, StockLine  # noqa: F811
 from datetime import datetime, timezone
-from sc_mining.trade.models import Item  # noqa: F811
-from sc_mining.ocr import OcrToken
-from sc_mining.trade.names import to_english, has_chinese
-from sc_mining.trade.parser import parse_inventory
-from sc_mining.trade.market_service import MarketService
+from astral_toolkit.trade.models import Item  # noqa: F811
+from astral_toolkit.ocr import OcrToken
+from astral_toolkit.trade.names import to_english, has_chinese
+from astral_toolkit.trade.parser import parse_inventory
+from astral_toolkit.trade.market_service import MarketService
 from dataclasses import replace
 from pathlib import Path
 import shutil  # noqa: F401
 from PIL import Image, ImageDraw, ImageFont  # noqa: F401
-from sc_mining.trade.models import Item, ImportRow  # noqa: F811
-from sc_mining.trade.parser import parse_inventory, validate_rows  # noqa: F811
+from astral_toolkit.trade.models import Item, ImportRow  # noqa: F811
+from astral_toolkit.trade.parser import parse_inventory, validate_rows  # noqa: F811
 from datetime import datetime, timedelta, timezone  # noqa: F811
 from decimal import Decimal as D
-from sc_mining.trade.models import (
+from astral_toolkit.trade.models import (
     PriceKey,
     Quote,
     Snapshot,
@@ -29,16 +29,16 @@ from sc_mining.trade.models import (
     StockKey,  # noqa: F811
     StockLine,  # noqa: F811
 )  # noqa: F811
-from sc_mining.trade.pricing import aggregate, value_stock
-from sc_mining.trade.history import History
-from sc_mining.trade.models import Item, PriceKey, PriceStats, ProviderResult  # noqa: F811
+from astral_toolkit.trade.pricing import aggregate, value_stock
+from astral_toolkit.trade.history import History
+from astral_toolkit.trade.models import Item, PriceKey, PriceStats, ProviderResult  # noqa: F811
 import json
 from datetime import datetime, timezone, timedelta  # noqa: F811
 from decimal import Decimal
 from tests import fakehttp as httpx
-from sc_mining.trade.providers.http import HttpTransport, SourceError, decimal_price
-from sc_mining.trade.providers.uex import UexProvider
-from sc_mining.trade.providers.scm import ScmProvider
+from astral_toolkit.trade.providers.http import HttpTransport, SourceError, decimal_price
+from astral_toolkit.trade.providers.uex import UexProvider
+from astral_toolkit.trade.providers.scm import ScmProvider
 
 
 # ======================================================================
@@ -203,8 +203,8 @@ def test_whitespace_same_location_move_cannot_create_stock(inv):
 def test_short_names_not_in_name_table():
     """汉化包里物品的「简称」（视差步枪HD、刀轴Arbor S00、导弹 [红外]灾星 XII-IR）后面跟的是型号 / 尺寸代码，不是英文名：
     重建对照表时跳过，已有的对照表读进来时也筛掉（以前「视差步枪」→ HD，物品查询搜不到视差步枪，1.6.41）"""
-    from sc_mining.update import localization as L
-    from sc_mining.trade import names
+    from astral_toolkit.update import localization as L
+    from astral_toolkit.trade import names
 
     ini = {
         "item_Namevolt_rifle_energy_01": "视差 能量突击步枪\\nParallax Energy Assault Rifle",
@@ -569,7 +569,7 @@ def test_refresh_total_timeout(tmp_path, monkeypatch):
 
 
 def test_cli_stock_line_units(tmp_path):
-    from sc_mining.trade.console import Trade, _cli_line, ore_item
+    from astral_toolkit.trade.console import Trade, _cli_line, ore_item
 
     t = Trade(tmp_path, providers=[])
     ore, gun = Item("q", "Quantainium (Raw)"), Item("g", "FR-86")
@@ -587,8 +587,8 @@ def test_cli_stock_line_units(tmp_path):
 
 
 def test_trade_dir_follows_install_not_env(tmp_path, monkeypatch):
-    from sc_mining.core import paths
-    from sc_mining.trade import console as C
+    from astral_toolkit.core import paths
+    from astral_toolkit.trade import console as C
 
     monkeypatch.setattr(paths, "VELOPACK", True)
     monkeypatch.setattr(paths, "USER", tmp_path / "Local" / "AT_userdata")
@@ -759,7 +759,7 @@ def test_cancel_stops_before_request():
 
 
 def test_scm_far_future_expiry_avoids_platform_timestamp_range(monkeypatch):
-    import sc_mining.trade.providers.scm as scm_module
+    import astral_toolkit.trade.providers.scm as scm_module
 
     class LimitedDatetime(datetime):
         @classmethod
@@ -790,7 +790,7 @@ _NAMES = {
 
 
 def _names(monkeypatch):
-    from sc_mining.trade import names
+    from astral_toolkit.trade import names
 
     monkeypatch.setattr(names, "table", lambda: dict(_NAMES))
     return names
@@ -838,7 +838,7 @@ def test_canonical_name_fixes_ocr_misreads(monkeypatch):
 def test_label_uses_corrected_chinese_name(monkeypatch, tmp_path):
     """库存里记着 F8 认错的中文名（冷冻舱（刻度））：显示时按汉化包纠正"""
     _names(monkeypatch)
-    from sc_mining.trade.console import Trade
+    from astral_toolkit.trade.console import Trade
 
     t = Trade(tmp_path / "db", providers=[])
     t.catalog.upsert([Item("uex:1", "CryoPod"), Item("uex:2", "Taranite")])
@@ -854,7 +854,7 @@ def _tok(text, x, y, w=40, h=14):
 
 def test_tooltip_row_quality_and_amount():
     """说明框内容行「塔兰导电石Taranite｜925｜0.495 SCU」：品质 925、数量 0.495 SCU；「容量：1.00SCU」不算"""
-    from sc_mining.trade.inspector import tooltip_row
+    from astral_toolkit.trade.inspector import tooltip_row
 
     toks = [
         _tok("塔兰导电石Taranite", 100, 50, 120),
@@ -876,7 +876,7 @@ def test_tooltip_row_quality_and_amount():
 
 def test_cell_quality_and_count_labels():
     """格子左上角「575Q」是品质（Q 常被认成 0：907Q → 9070，0Q → QQ），右上角「200x」是数量，「200/200」两样都不是"""
-    from sc_mining.trade.inspector import parse_qlabel, parse_count, cell_labels
+    from astral_toolkit.trade.inspector import parse_qlabel, parse_count, cell_labels
 
     assert [
         parse_qlabel(t)
@@ -912,13 +912,13 @@ def test_cell_quality_and_count_labels():
 
 def test_inventory_cell_labels_real_screens():
     """真截图（2026-10-23 用户发的物品栏）：20 个格子的品质全对（其中 7 个 Q 被认成 0），0Q 是 0，200x / 3x 是数量，200/200 不算"""
-    from sc_mining.trade.inspector import cell_labels, tooltip_row  # noqa: F401
+    from astral_toolkit.trade.inspector import cell_labels, tooltip_row  # noqa: F401
 
     d = Path(__file__).parent / "ingame"
     if not (d / "inv_grid.png").exists():
         pytest.skip("没有物品栏截图")
     try:
-        from sc_mining.ocr import recognize
+        from astral_toolkit.ocr import recognize
 
         recognize(Image.new("RGB", (40, 20)))
     except Exception:
@@ -966,8 +966,8 @@ def test_inventory_cell_labels_real_screens():
 def test_tooltip_zh_only_medal_not_description():
     """2026-10-27 F8 反馈：勋章 / 计算板说明框只有中文名、最下面是「容量：1.00SCU」。以前按「容量」往上找，
     把说明最后一截「越。」当成名字；只有中文名的也查不到英文名"""
-    from sc_mining.trade.console import tooltip_pick
-    from sc_mining.trade.names import canonical
+    from astral_toolkit.trade.console import tooltip_pick
+    from astral_toolkit.trade.names import canonical
 
     toks = [
         _tok("地球联合帝国（UEE）六排勋章（完好）", 100, 50, 260),
@@ -997,14 +997,14 @@ def test_tooltip_zh_only_medal_not_description():
 def test_tooltip_double_picks_bright():
     """2026-10-27 负责人：两个说明框叠在一起（上面亮的是鼠标指着的，下面暗的是身上装备的对比框）只认亮的那个。
     以前认成了下面的「焦焰 RYT “血统红” 多功能工具」"""
-    from sc_mining.trade.inspector import _read_tooltip
-    from sc_mining.trade.names import canonical
+    from astral_toolkit.trade.inspector import _read_tooltip
+    from astral_toolkit.trade.names import canonical
 
     d = Path(__file__).parent / "ingame"
     if not (d / "hover_double.jpg").exists():
         pytest.skip("没有叠框截图")
     try:
-        from sc_mining.ocr import recognize
+        from astral_toolkit.ocr import recognize
 
         recognize(Image.new("RGB", (40, 20)))
     except Exception:
@@ -1052,14 +1052,14 @@ _STOCK_API = [
 
 def test_trade_stock_controller_routes():
     """交易、库存的每个接口名都由 app/api/trade.py、app/api/stock.py 接，名单和 Controller 的 ROUTES 一个不多一个不少"""
-    from sc_mining.app.api import router, trade as CT, stock as CS
+    from astral_toolkit.app.api import router, trade as CT, stock as CS
 
     router.reset()
     r = router.routes()
     for name in _TRADE_API:
-        assert r[name].__module__ == "sc_mining.app.api.trade", name
+        assert r[name].__module__ == "astral_toolkit.app.api.trade", name
     for name in _STOCK_API:
-        assert r[name].__module__ == "sc_mining.app.api.stock", name
+        assert r[name].__module__ == "astral_toolkit.app.api.stock", name
     assert sorted(CT.ROUTES) == sorted(_TRADE_API) and sorted(CS.ROUTES) == sorted(
         _STOCK_API
     )
@@ -1067,7 +1067,7 @@ def test_trade_stock_controller_routes():
 
 def test_trade_stock_tasks_no_services():
     """tasks/trade.py、tasks/stock.py 不再反过来引用 app.services"""
-    root = Path(__file__).resolve().parent.parent / "sc_mining" / "tasks"
+    root = Path(__file__).resolve().parent.parent / "astral_toolkit" / "tasks"
     for f in ("trade.py", "stock.py"):
         text = (root / f).read_text(encoding="utf-8")
         for bad in ("app import services", "_services()", "@api"):
@@ -1076,9 +1076,9 @@ def test_trade_stock_tasks_no_services():
 
 def test_trade_stock_router_roundtrip(monkeypatch, tmp_path):
     """只读接口 stock_places：走 router 和直接调 tasks 结果一样"""
-    from sc_mining.app.api import router
-    from sc_mining.tasks import trade as TT, stock as TS
-    from sc_mining.trade.console import Trade
+    from astral_toolkit.app.api import router
+    from astral_toolkit.tasks import trade as TT, stock as TS
+    from astral_toolkit.trade.console import Trade
 
     t = Trade(tmp_path / "db", providers=[])
     monkeypatch.setattr(TT, "trade", lambda: t)

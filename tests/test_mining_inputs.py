@@ -3,11 +3,11 @@
 from contextlib import contextmanager
 from typing import Any
 
-from sc_mining import gamedata
-from sc_mining.mining import data, laser, refinery
-from sc_mining.mining.analysis import analyze
-from sc_mining.mining.parse import Scan
-from sc_mining.tasks import goals, mining
+from astral_toolkit import gamedata
+from astral_toolkit.mining import data, laser, refinery
+from astral_toolkit.mining.analysis import analyze
+from astral_toolkit.mining.parse import Scan
+from astral_toolkit.tasks import goals, mining
 
 BAG = {"Gold": 10.0}
 

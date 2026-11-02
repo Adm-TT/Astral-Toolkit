@@ -3,21 +3,21 @@
 import pytest
 from datetime import datetime, timezone
 from decimal import Decimal as D
-from sc_mining.trade import console as C
-from sc_mining.trade.models import (
+from astral_toolkit.trade import console as C
+from astral_toolkit.trade.models import (
     Item,
     PriceKey,
     PriceStats,
     ProviderResult,
     ImportRow,
 )
-from sc_mining.ocr import OcrToken
+from astral_toolkit.ocr import OcrToken
 import time
-from sc_mining.crafting import shops, wikelo
+from astral_toolkit.crafting import shops, wikelo
 import json, time  # noqa: E401, F401, F811
-from sc_mining.crafting import shops, loot, acquire  # noqa: F811
-from sc_mining.navigation import position
-from sc_mining.gamedata._cache import VersionCache as _VC
+from astral_toolkit.crafting import shops, loot, acquire  # noqa: F811
+from astral_toolkit.navigation import position
+from astral_toolkit.gamedata._cache import VersionCache as _VC
 
 
 # ======================================================================
@@ -253,9 +253,9 @@ def _shops_db(monkeypatch, tmp_path, data, starmap=None, copy=()):
     """商店查询走游戏数据层（批 1）：把假商店表写成 shops.json、在临时目录建库，只把库目录指过去；
     paths.DATA 不动（别的数据照旧读真实 data/）。shops._data 也照旧换掉，给还在用 load() 的地方。
     starmap：假星图（批 2 起 find_point 走库），给了就一起写成 starmap.json 建进库；copy：再拷进去一起建库的源文件"""
-    from sc_mining import gamedata
-    from sc_mining.core import paths
-    from sc_mining.gamedata import _build, _paths, _ready
+    from astral_toolkit import gamedata
+    from astral_toolkit.core import paths
+    from astral_toolkit.gamedata import _build, _paths, _ready
 
     src = tmp_path / "gamedata_src"
     src.mkdir(exist_ok=True)
@@ -295,7 +295,7 @@ def _shops_db(monkeypatch, tmp_path, data, starmap=None, copy=()):
 def _nav_db(monkeypatch, tmp_path):
     """城里导航的用例（批 2 起城市地点 / 城外设施 / 空间站电梯走游戏数据层）：tmp_path 里写好的这几份源，
     加上真实星图（有就带上，以前这些用例也读真实星图），建成临时库；改了源再调一次就重建"""
-    from sc_mining.core import paths
+    from astral_toolkit.core import paths
 
     real = [paths.DATA / f for f in ("starmap.json", "starmap_fixes.json")]
     mine = [
@@ -634,8 +634,8 @@ def test_nearest_distinct_places_and_loot_grouping(monkeypatch, tmp_path):
 
 
 def test_app_scan_view_and_manual():
-    from sc_mining.mining.parse import parse_scan
-    from sc_mining.tasks import mining as t_mining
+    from astral_toolkit.mining.parse import parse_scan
+    from astral_toolkit.tasks import mining as t_mining
 
     s = parse_scan(
         [
@@ -669,7 +669,7 @@ def test_app_scan_view_and_manual():
 def test_app_task_log_routing():
     import queue as _q
     import sys
-    from sc_mining.app import bus
+    from astral_toolkit.app import bus
 
     old = sys.stdout
     bus.install_router()
@@ -704,7 +704,7 @@ def test_app_server_roundtrip():
     import threading as _t
     import urllib.request as _u
     from http.server import ThreadingHTTPServer
-    from sc_mining.app.server import Handler, TOKEN
+    from astral_toolkit.app.server import Handler, TOKEN
 
     srv = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     _t.Thread(target=srv.serve_forever, daemon=True).start()
@@ -756,7 +756,7 @@ def test_app_server_roundtrip():
 
 def test_displayinfo_parse():
     """游戏右上角 r_DisplayInfo 的文字（取自你 2026-10-20 新巴贝奇医院的截图）"""
-    from sc_mining.navigation.displayinfo import parse
+    from astral_toolkit.navigation.displayinfo import parse
 
     lines = [
         "Zone: ObjectContainer-Ground Lobby Pos: -4.61m 74.93m 11.71m",
@@ -785,8 +785,8 @@ def test_displayinfo_parse():
 
 
 def test_displayinfo_feeds_locate(monkeypatch):
-    from sc_mining.navigation import navigate
-    from sc_mining.navigation.displayinfo import parse
+    from astral_toolkit.navigation import navigate
+    from astral_toolkit.navigation.displayinfo import parse
 
     if not navigate.CACHE.exists():
         import pytest
@@ -801,7 +801,7 @@ def test_displayinfo_feeds_locate(monkeypatch):
 
 
 def test_displayinfo_local_beats_rotation_math():
-    from sc_mining.navigation import navigate
+    from astral_toolkit.navigation import navigate
 
     if not navigate.CACHE.exists():
         import pytest
@@ -842,7 +842,7 @@ def test_displayinfo_local_beats_rotation_math():
 
 def test_log_place_is_specific(monkeypatch):
     """顶部「位置」要显示具体地点（新巴贝奇），不是星球（微科星）"""
-    from sc_mining.navigation import position
+    from astral_toolkit.navigation import position
 
     zh = {
         "newbabbage": "新巴贝奇",
@@ -870,7 +870,7 @@ def test_log_place_is_specific(monkeypatch):
 
 def test_displayinfo_real_ocr_lines():
     """你电脑上 RapidOCR 读你截图右上角的真实结果（S 认成 5、O 认成 0）"""
-    from sc_mining.navigation.displayinfo import parse
+    from astral_toolkit.navigation.displayinfo import parse
 
     d = parse(
         [
@@ -890,7 +890,7 @@ def test_displayinfo_real_ocr_lines():
 def test_displayinfo_1080p_root_line_noise():
     """1080p 玩家反馈（2026-10-30，F10 五次）：Root 那行字小常被认岔——Pos 认成 P0s、数字间多个点或减号。
     以前纠错会把 P0s 也当数字改成 P05，两行对不上就当没读到，导航一直提示「读不到位置」"""
-    from sc_mining.navigation.displayinfo import parse, _fix_numbers
+    from astral_toolkit.navigation.displayinfo import parse, _fix_numbers
 
     sysl = (
         "Zone:SolarSystem 876187763260 Pos:-18930550.7051km -2610477.0938km 22.9634km"
@@ -942,12 +942,12 @@ def test_displayinfo_1080p_root_line_noise():
 
 def test_reader_backoff_capped_while_navigating(monkeypatch):
     """导航开着时读不到，最多隔 max_gap 秒再试（以前最长一分钟，玩家看到的位置隔 40–90 秒才动一下）"""
-    from sc_mining.navigation import displayinfo as D
+    from astral_toolkit.navigation import displayinfo as D
 
     monkeypatch.setattr(
         D, "read", lambda allow_yield=True: {**D.parse([]), "fast": False}
     )
-    from sc_mining.system import showloc
+    from astral_toolkit.system import showloc
 
     monkeypatch.setattr(showloc, "game_foreground", lambda: True)
     r = D.Reader(every=1.0)
@@ -968,7 +968,7 @@ def test_reader_backoff_capped_while_navigating(monkeypatch):
 def test_nav_tip_texts():
     """窗口状态和悬浮窗提示说法一致（审查 2026-10-30）：读得到不提示；8–30 秒前读到过有上次结果标暂停；
     刚开始没结果只说等待；更久 / 从没读到才教开调试信息"""
-    from sc_mining.app.engines.nav import nav_tip
+    from astral_toolkit.app.engines.nav import nav_tip
 
     st, tip = nav_tip(True, 100.0, 101.0, True, "H")
     assert tip == "" and "实时" in st
@@ -982,8 +982,8 @@ def test_nav_tip_texts():
 
 
 def test_first_run_agreement(monkeypatch, tmp_path):
-    from sc_mining.core import settings
-    from sc_mining.tasks import system as t_sys
+    from astral_toolkit.core import settings
+    from astral_toolkit.tasks import system as t_sys
 
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
     started = []
@@ -999,17 +999,17 @@ def test_live_scan_updates_when_read_gets_more_complete(monkeypatch, tmp_path):
     """画面不动时：第一次读到的成分不全，后面读全了也要更新（不能停在不完整的结果上）"""
     import threading, time as _t  # noqa: E401
     from PIL import Image
-    from sc_mining.mining import screen, signals
-    from sc_mining.core import paths
+    from astral_toolkit.mining import screen, signals
+    from astral_toolkit.core import paths
 
     monkeypatch.setattr(
         paths, "log", lambda name: tmp_path / name
     )  # 别往电脑上真实的扫描记录里写
     monkeypatch.setattr(paths, "shots", lambda name: tmp_path)
-    from sc_mining.mining.parse import Scan
-    from sc_mining.tasks import mining as t_mining
-    import sc_mining.app.engines.live as live_mod
-    from sc_mining.app import bus
+    from astral_toolkit.mining.parse import Scan
+    from astral_toolkit.tasks import mining as t_mining
+    import astral_toolkit.app.engines.live as live_mod
+    from astral_toolkit.app import bus
 
     img = Image.new("RGB", (320, 180), (20, 20, 20))
     part = Scan(
@@ -1051,8 +1051,8 @@ def test_live_scan_updates_when_read_gets_more_complete(monkeypatch, tmp_path):
     monkeypatch.setattr(
         t_mining, "_game_front", lambda: None
     )  # 不看真电脑上哪个窗口在最前面
-    from sc_mining.tasks import navigation as t_nav, system as t_sys
-    from sc_mining.app import hud_state
+    from astral_toolkit.tasks import navigation as t_nav, system as t_sys
+    from astral_toolkit.app import hud_state
 
     _v = lambda: type(  # noqa: E731
         "H", (), {"set": lambda *a: None, "clear": lambda *a: None}
@@ -1084,8 +1084,8 @@ def test_live_scan_updates_when_read_gets_more_complete(monkeypatch, tmp_path):
 
 def test_tooltip_name_food_without_english_name():
     """食物说明框只有中文名，下面是「NDR:20 免疫下降」「剩余容量：100%」这类属性行，不能当名字（实测 肉串）"""
-    from sc_mining.trade import console as C
-    from sc_mining.ocr import OcrToken
+    from astral_toolkit.trade import console as C
+    from astral_toolkit.ocr import OcrToken
 
     T = lambda text, x, y: OcrToken(text, 90, (x, y, max(20, len(text) * 9), 18))  # noqa: E731
     toks = [
@@ -1104,7 +1104,7 @@ def test_tooltip_name_food_without_english_name():
 
 
 def test_display_label_lagrange_station():
-    from sc_mining.navigation.position import display_label as d
+    from astral_toolkit.navigation.position import display_label as d
 
     assert d("RR P2 L4 CLINIC(LZ:R P24)") == "死局空间站"
     assert d("RR P2 L4(LZ:RR P24)") == "死局空间站"
@@ -1116,11 +1116,11 @@ def test_status_keeps_displayinfo_place_when_reader_goes_stale():
     """切屏后右上角暂时读不到，位置还显示死局空间站，不跳回别的；游戏日志里有更新的地点才换。
     2026-10-26 起不导航也一直读右上角（实时位置）：右上角读到的比日志新就用右上角的"""
     import time
-    from sc_mining.tasks import system as t_sys
-    from sc_mining.app.engines.manager import EngineManager
+    from astral_toolkit.tasks import system as t_sys
+    from astral_toolkit.app.engines.manager import EngineManager
 
     em = EngineManager.get_instance()
-    import sc_mining.navigation.position as P
+    import astral_toolkit.navigation.position as P
 
     old = P.current, P.from_log, em.pos.label, em.nav.target
     try:
@@ -1147,16 +1147,16 @@ def test_status_keeps_displayinfo_place_when_reader_goes_stale():
 def test_single_instance_lock_file(monkeypatch, tmp_path):
     """只开一个：第一个拿到锁，第二个拿不到；第一个放开后又能拿到（用临时文件夹，电脑上开着天枢也不影响）"""
     import subprocess, sys  # noqa: E401
-    from sc_mining.core import paths
-    from sc_mining.app import server as S
+    from astral_toolkit.core import paths
+    from astral_toolkit.app import server as S
 
     monkeypatch.setattr(paths, "USER", tmp_path)
     first = S._try_lock()
     assert first is not None
     try:  # 另一个进程（模拟第二个天枢）拿不到
         code = (
-            "from pathlib import Path; from sc_mining.core import paths; paths.USER = Path(%r); "
-            "from sc_mining.app import server as S; print(S._try_lock() is None)"
+            "from pathlib import Path; from astral_toolkit.core import paths; paths.USER = Path(%r); "
+            "from astral_toolkit.app import server as S; print(S._try_lock() is None)"
             % str(tmp_path)
         )
         out = subprocess.run(
@@ -1194,7 +1194,7 @@ def test_log_location_found_far_back_and_updates(monkeypatch, tmp_path):
 
 def test_mask_overlay_blacks_out_hud():
     from PIL import Image
-    from sc_mining.core.perf import mask_overlay
+    from astral_toolkit.core.perf import mask_overlay
 
     img = Image.new("RGB", (100, 100), (255, 255, 255))
     mask_overlay(img, 50, 50, rect=(60, 60, 80, 70))  # 截图从屏幕 (50,50) 开始
@@ -1210,7 +1210,7 @@ def test_hud_prices_fall_back_when_no_minimum():
     """UEX 常常没有最低价：用均价，再没有用 7 天均价，并标明是哪种价"""
     from decimal import Decimal as D
     from types import SimpleNamespace as N
-    from sc_mining.trade.console import hud_prices
+    from astral_toolkit.trade.console import hud_prices
 
     st = lambda src, mn, mean, wk: N(  # noqa: E731
         key=N(source=src), minimum=mn, mean=mean, week_mean=wk
@@ -1280,7 +1280,7 @@ def test_log_location_learns_ids_and_follows_moves(monkeypatch, tmp_path):
 def test_hud_market_min_max_mean_and_hide_empty():
     from decimal import Decimal as D
     from types import SimpleNamespace as N
-    from sc_mining.trade.console import hud_market
+    from astral_toolkit.trade.console import hud_market
 
     key = N(source="uex")
     st = lambda mn, mean, wk=None: N(key=key, minimum=mn, mean=mean, week_mean=wk)  # noqa: E731
@@ -1303,15 +1303,15 @@ def test_hover_overlay_updates_before_network(monkeypatch, tmp_path):
     """F8：名字和本机数据先上悬浮窗，联网的（市场匹配、查价、掉落）在后台；后台慢也不耽误悬浮窗"""
     import threading, time  # noqa: E401
     from PIL import Image
-    from sc_mining.tasks import (
+    from astral_toolkit.tasks import (
         hover as t_hover,
         mining as t_mining,
         navigation as t_nav,
         system as t_sys,
     )
-    from sc_mining.app import hud_state
-    from sc_mining.trade import console as C
-    from sc_mining.ocr import OcrToken
+    from astral_toolkit.app import hud_state
+    from astral_toolkit.trade import console as C
+    from astral_toolkit.ocr import OcrToken
 
     T = lambda text, x, y: OcrToken(text, 90, (x, y, max(20, len(text) * 9), 18))  # noqa: E731
     toks = [
@@ -1321,7 +1321,7 @@ def test_hover_overlay_updates_before_network(monkeypatch, tmp_path):
     ]
     calls = []
     monkeypatch.setattr(
-        "sc_mining.ocr.recognize",
+        "astral_toolkit.ocr.recognize",
         lambda img, urgent=False, offset=(0, 0): (
             calls.append((img.size, urgent)) or toks
         ),
@@ -1338,7 +1338,7 @@ def test_hover_overlay_updates_before_network(monkeypatch, tmp_path):
         t_hover, "trade", lambda: C.Trade(tmp_path, [])
     )  # 后台线程不开真实库存库、没有联网的价格源
     monkeypatch.setattr(
-        "sc_mining.crafting.loot.info", lambda *a, **k: {}
+        "astral_toolkit.crafting.loot.info", lambda *a, **k: {}
     )  # 掉落查询也不联网
     shown = []
 
@@ -1368,8 +1368,8 @@ def test_hover_overlay_updates_before_network(monkeypatch, tmp_path):
 
 
 def test_match_tooltip_uses_local_catalog_without_network(tmp_path):
-    from sc_mining.trade import console as C
-    from sc_mining.trade.models import Item
+    from astral_toolkit.trade import console as C
+    from astral_toolkit.trade.models import Item
 
     class Boom:
         source = "uex"
@@ -1397,7 +1397,7 @@ class _FakeClient:
 
     def get(self, url, params=None, headers=None, timeout=15):
         import json, time  # noqa: E401, F811
-        from sc_mining.trade.providers.http import _Response
+        from astral_toolkit.trade.providers.http import _Response
 
         self.calls.append((url, dict(params or {})))
         time.sleep(self.delay)
@@ -1410,9 +1410,9 @@ class _FakeClient:
 def test_scm_orders_downloaded_once_and_pages_in_parallel():
     import time
     from datetime import datetime, timezone
-    from sc_mining.trade.models import Item
-    from sc_mining.trade.providers.http import HttpTransport
-    from sc_mining.trade.providers.scm import ScmProvider
+    from astral_toolkit.trade.models import Item
+    from astral_toolkit.trade.providers.http import HttpTransport
+    from astral_toolkit.trade.providers.scm import ScmProvider
 
     def handler(url, params):
         if "orders/page" in url:
@@ -1434,9 +1434,9 @@ def test_scm_orders_downloaded_once_and_pages_in_parallel():
 def test_market_sources_are_queried_at_the_same_time(tmp_path):
     import time
     from datetime import datetime, timezone
-    from sc_mining.trade.market_service import MarketService
-    from sc_mining.trade.models import Item, ProviderResult
-    from sc_mining.trade.storage import Database
+    from astral_toolkit.trade.market_service import MarketService
+    from astral_toolkit.trade.models import Item, ProviderResult
+    from astral_toolkit.trade.storage import Database
 
     class Slow:
         def __init__(self, source):
@@ -1456,8 +1456,8 @@ def test_market_sources_are_queried_at_the_same_time(tmp_path):
 
 
 def test_tooltip_anchor_tolerates_missing_char():
-    from sc_mining.trade import console as C
-    from sc_mining.ocr import OcrToken
+    from astral_toolkit.trade import console as C
+    from astral_toolkit.ocr import OcrToken
 
     T = lambda text, x, y: OcrToken(text, 90, (x, y, max(20, len(text) * 9), 18))  # noqa: E731
     toks = [
@@ -1476,8 +1476,8 @@ def test_tooltip_anchor_tolerates_missing_char():
 def test_displayinfo_reads_only_needed_lines_after_first_time(monkeypatch):
     """右上角：第一次整块认、记下要用的几行在哪；之后只认这几行；认出来对不上就重新整块认"""
     from PIL import Image
-    from sc_mining.navigation import displayinfo as D
-    from sc_mining.ocr import OcrToken
+    from astral_toolkit.navigation import displayinfo as D
+    from astral_toolkit.ocr import OcrToken
 
     D._layout.update(at=0.0, boxes=None)
     T = lambda text, x, y: OcrToken(text, 90, (x, y, len(text) * 9, 20))  # noqa: E731
@@ -1491,12 +1491,12 @@ def test_displayinfo_reads_only_needed_lines_after_first_time(monkeypatch):
         T(t, 1740 - len(t) * 9, 20 + 40 * i) for i, t in enumerate(lines)
     ]
     monkeypatch.setattr(
-        "sc_mining.ocr.recognize",
+        "astral_toolkit.ocr.recognize",
         lambda img, **k: full_calls.append(img.size) or toks,
     )
     answers = iter(lines + lines + ["乱码"] * 3)
     monkeypatch.setattr(
-        "sc_mining.ocr.read_line",
+        "astral_toolkit.ocr.read_line",
         lambda img: line_calls.append(img.size) or (next(answers), 0.9),
     )
     img = Image.new("RGB", (2560, 1440))
@@ -1514,7 +1514,7 @@ def test_displayinfo_reads_only_needed_lines_after_first_time(monkeypatch):
 
 
 def test_perf_log_line_format():
-    from sc_mining.core import perfmon
+    from astral_toolkit.core import perfmon
 
     m = perfmon.Monitor()
     m.prev = {"天枢": (10.0, 200.0, 300.0), "窗口(Edge)": (5.0, 150.0, 120.0)}
@@ -1534,7 +1534,7 @@ def test_perf_log_line_format():
 
 def test_displayinfo_local_cross_checked_with_campos():
     """星球局部坐标和 CamPos Planet Zone（同一个位置，单位米）两行对得上才算可靠"""
-    from sc_mining.navigation.displayinfo import parse
+    from astral_toolkit.navigation.displayinfo import parse
 
     base = [
         "Zone: OOC_Stanton_4_Microtech Pos: 520.9152km 419.2893km 744.0843km",
@@ -1557,9 +1557,9 @@ def test_displayinfo_local_cross_checked_with_campos():
 
 def test_nav_bearing_is_steady_when_standing_still(monkeypatch, tmp_path):
     """站着不动：右上角那行有时认不出，位置也不在「游戏给的」和「推算的」之间来回跳，显示的方位不变"""
-    from sc_mining.navigation import navigate as n
-    from sc_mining.tasks import mining as t_mining
-    import sc_mining.app.engines.nav as nav_mod
+    from astral_toolkit.navigation import navigate as n
+    from astral_toolkit.tasks import mining as t_mining
+    import astral_toolkit.app.engines.nav as nav_mod
 
     if not n.CACHE.exists():
         import pytest
@@ -1607,8 +1607,8 @@ def test_nav_bearing_is_steady_when_standing_still(monkeypatch, tmp_path):
 
 
 def test_bearing_text_and_deadband():
-    from sc_mining.navigation import navigate as n
-    import sc_mining.app.engines.nav as nav_mod
+    from astral_toolkit.navigation import navigate as n
+    import astral_toolkit.app.engines.nav as nav_mod
 
     assert n.deg_text(359.6) == "000" and n.deg_text(5.2) == "005"
     st = nav_mod._Steady()
@@ -1624,8 +1624,8 @@ def test_bearing_text_and_deadband():
 def test_nav_uses_display_info_waypoints_use_showlocation():
     """导航实时方位只读右上角调试信息（不往游戏里打字）；自定义路标只用 /showlocation（2026-10-23 用户要求）"""
     import inspect
-    from sc_mining.tasks import navigation as t_nav
-    import sc_mining.app.engines.nav as nav_mod
+    from astral_toolkit.tasks import navigation as t_nav
+    import astral_toolkit.app.engines.nav as nav_mod
 
     run = inspect.getsource(nav_mod._Nav._run)
     assert (
@@ -1639,7 +1639,7 @@ def test_nav_uses_display_info_waypoints_use_showlocation():
 
 def test_mix_plan_matches_guide_example():
     """攻略图里的例子：S1 绿柱石 0.14 SCU，860 的低料 + 967 的高料，按 902 混 → 低 0.085 + 高 0.055，高料占 39%"""
-    from sc_mining import crafting as c
+    from astral_toolkit import crafting as c
 
     r = c.mix_plan(0.14, 900, [(860, 1), (967, 1)])
     assert r["ok"] and r["goal"] == 902
@@ -1657,7 +1657,7 @@ def test_mix_plan_matches_guide_example():
 
 
 def test_mix_targets_from_blueprint():
-    from sc_mining import crafting as c
+    from astral_toolkit import crafting as c
 
     bp = next((b for b in c.blueprints() if b["n"] == "QuadraCell"), None)
     if bp is None:
@@ -1671,15 +1671,15 @@ def test_mix_targets_from_blueprint():
 def test_blas_threads_limited():
     """numpy 的数学库只开 1 个线程（不然 32 线程的电脑一加载就预留 740MB 内存）"""
     import os
-    import sc_mining  # noqa: F401
+    import astral_toolkit  # noqa: F401
 
     assert os.environ.get("OPENBLAS_NUM_THREADS") == "1"
 
 
 def test_ship_signature_match():
     """截面对得上：短剑正对时的截面应该把短剑排第一；离谱的数对不上任何船"""
-    from sc_mining.core.paths import DATA
-    from sc_mining.mining import shipsig
+    from astral_toolkit.core.paths import DATA
+    from astral_toolkit.mining import shipsig
 
     if not (DATA / "ship_signatures.json").exists():
         pytest.skip("没有舰船截面数据")
@@ -1695,11 +1695,11 @@ def test_ship_signature_match():
 def test_update_log_reaches_window(monkeypatch):
     """更新数据时几个源并行下载：各线程的输出都要进窗口的更新记录"""
     import sys
-    from sc_mining.app import bus
-    import sc_mining.run as run
-    from sc_mining.update import localization, uex
-    from sc_mining.crafting import build_crafting, shops, loot
-    from sc_mining.navigation import navigate
+    from astral_toolkit.app import bus
+    import astral_toolkit.run as run
+    from astral_toolkit.update import localization, uex
+    from astral_toolkit.crafting import build_crafting, shops, loot
+    from astral_toolkit.navigation import navigate
 
     logs = []
     monkeypatch.setattr(bus, "publish", lambda kind, msg: logs.append((kind, msg)))
@@ -1712,8 +1712,8 @@ def test_update_log_reaches_window(monkeypatch):
         (loot, "update"),
     ):
         monkeypatch.setattr(m, n, lambda name=m.__name__: print(f"{name} ok"))
-    from sc_mining.update import data_pack
-    import sc_mining.gamedata as G
+    from astral_toolkit.update import data_pack
+    import astral_toolkit.gamedata as G
 
     monkeypatch.setattr(
         data_pack, "update", lambda progress=print: None
@@ -1734,9 +1734,9 @@ def test_update_log_reaches_window(monkeypatch):
 def test_space_waypoint(monkeypatch, tmp_path):
     """太空里用当前位置新建路标：记星系坐标；导航给直线距离、先跳到哪、对准哪个标记"""
     import time, math  # noqa: E401, F401
-    from sc_mining.navigation import navigate as n
-    from sc_mining.tasks import mining as t_mining, navigation as t_nav, system as t_sys
-    from sc_mining.app import hud_state
+    from astral_toolkit.navigation import navigate as n
+    from astral_toolkit.tasks import mining as t_mining, navigation as t_nav, system as t_sys
+    from astral_toolkit.app import hud_state
 
     if not n.CACHE.exists():
         pytest.skip("没有星图数据")
@@ -1766,7 +1766,7 @@ def test_space_waypoint(monkeypatch, tmp_path):
         lambda *a, **k: type("T", (), {"start": lambda self: None})(),
     )  # 悬浮窗短提示 6 秒后自己收起：别在补丁还原后建真悬浮窗
     monkeypatch.setattr(
-        __import__("sc_mining.core.paths", fromlist=["log"]),
+        __import__("astral_toolkit.core.paths", fromlist=["log"]),
         "log",
         lambda name: tmp_path / name,
     )  # 真的写记录（写到临时目录），以前把记录函数换掉，没发现它和导航记录重名、一调用就报错
@@ -1805,8 +1805,8 @@ def test_camdir_steering():
     """右上角 CamDir（俯仰 横滚 偏航）→ 机头要怎么转。用 2026-10-23 微科星轨道的真实截图核对过约定：
     CamDir 23 9 -142、Root Pos (22461632.7352, 37186362.6645, 799.5096) km，画面里地平线在中心略下方"""
     import math
-    from sc_mining.navigation.displayinfo import parse
-    from sc_mining.navigation import navigate as n
+    from astral_toolkit.navigation.displayinfo import parse
+    from astral_toolkit.navigation import navigate as n
 
     assert parse(["CamDir: 23 9 -142 FOV: 70 Focal: 3.00"])["camdir"] == (23, 9, -142)
     assert parse(["CamD1r 12 -1 72 F0V: 60"])["camdir"] == (
@@ -1841,13 +1841,13 @@ def test_camdir_steering():
 
 def test_mark_here_hotkey(monkeypatch, tmp_path):
     """游戏里按 F7：等玩家自己在聊天框输入 /showlocation（AT 不替你打字），用剪贴板里的坐标记路标（太空里记星系坐标）；不读右上角"""
-    from sc_mining.navigation import navigate as n
-    from sc_mining.system import showloc
-    from sc_mining.tasks import mining as t_mining, navigation as t_nav, system as t_sys
-    from sc_mining.app.engines.manager import EngineManager
+    from astral_toolkit.navigation import navigate as n
+    from astral_toolkit.system import showloc
+    from astral_toolkit.tasks import mining as t_mining, navigation as t_nav, system as t_sys
+    from astral_toolkit.app.engines.manager import EngineManager
 
     em = EngineManager.get_instance()
-    from sc_mining.app import hud_state
+    from astral_toolkit.app import hud_state
     import threading
 
     if not n.CACHE.exists():
@@ -1871,7 +1871,7 @@ def test_mark_here_hotkey(monkeypatch, tmp_path):
         lambda force=False: (_ for _ in ()).throw(AssertionError("不该读右上角")),
     )
     monkeypatch.setattr(
-        __import__("sc_mining.core.paths", fromlist=["log"]),
+        __import__("astral_toolkit.core.paths", fromlist=["log"]),
         "log",
         lambda name: tmp_path / name,
     )  # 真的写记录（写到临时目录），以前把记录函数换掉，没发现它和导航记录重名、一调用就报错
@@ -1914,7 +1914,7 @@ def test_mark_here_hotkey(monkeypatch, tmp_path):
 
 
 def test_parse_showlocation_clip():
-    from sc_mining.navigation.navigate import parse_clip
+    from astral_toolkit.navigation.navigate import parse_clip
 
     assert parse_clip("Coordinates: x:-18930539540.1 y:-2610158765.2 z:295000.3") == (
         -18930539540.1,
@@ -1926,7 +1926,7 @@ def test_parse_showlocation_clip():
 
 def test_camdir_sign_filter():
     """CamDir 漏了负号（-142 认成 142）：这次不用；转过 ±180° 是真的转了，照用"""
-    from sc_mining.app.engines.nav import _CamFilter
+    from astral_toolkit.app.engines.nav import _CamFilter
 
     f = _CamFilter()
     assert f.check((23, 9, -142)) == (23, 9, -142)
@@ -1939,8 +1939,8 @@ def test_camdir_sign_filter():
 def test_export_logs(monkeypatch, tmp_path):
     """导出日志：日志 + 设置 + 系统说明打包到桌面；窗口文件夹（浏览器数据）不打进去"""
     import zipfile
-    from sc_mining.core import paths
-    from sc_mining.tasks import hover as t_hover, system as t_sys
+    from astral_toolkit.core import paths
+    from astral_toolkit.tasks import hover as t_hover, system as t_sys
 
     user = tmp_path / "userdata"
     (user / "logs").mkdir(parents=True)
@@ -1974,9 +1974,9 @@ def test_export_logs(monkeypatch, tmp_path):
 
 def test_live_scan_resumes_after_restart(monkeypatch, tmp_path):
     """原矿扫描开着时天枢重启 / 升级：重启后自动接着扫（以前重启后就关了，信号识别也跟着没了）"""
-    from sc_mining.core import settings
-    from sc_mining.tasks import mining as t_mining, system as t_sys
-    from sc_mining.app.engines.manager import EngineManager
+    from astral_toolkit.core import settings
+    from astral_toolkit.tasks import mining as t_mining, system as t_sys
+    from astral_toolkit.app.engines.manager import EngineManager
 
     em = EngineManager.get_instance()
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
@@ -1988,9 +1988,9 @@ def test_live_scan_resumes_after_restart(monkeypatch, tmp_path):
         monkeypatch.setattr(getattr(em, name), "start", lambda: None)
     monkeypatch.setattr(t_sys, "_online_loop", lambda: None)  # 测试里不联网检查更新
     monkeypatch.setattr(em.game_events, "start", lambda: None)  # 不读真实 Game.log
-    from sc_mining.core import perf
-    from sc_mining.core.perfmon import monitor
-    from sc_mining.crafting import itemsearch
+    from astral_toolkit.core import perf
+    from astral_toolkit.core.perfmon import monitor
+    from astral_toolkit.crafting import itemsearch
 
     monkeypatch.setattr(perf, "rapidocr", lambda: None)  # 不预热 OCR
     monkeypatch.setattr(monitor, "start", lambda: None)  # 不起 perfmon 常驻线程
@@ -2012,11 +2012,11 @@ def test_live_scan_resumes_after_restart(monkeypatch, tmp_path):
 def test_where_now_ground_or_space(monkeypatch):
     """信号表外的值要知道玩家在地面还是太空：小行星带 → 太空；贴着星球 → 地面；高空 → 太空"""
     import time
-    from sc_mining.tasks import navigation as t_nav
-    from sc_mining.app.engines.manager import EngineManager
+    from astral_toolkit.tasks import navigation as t_nav
+    from astral_toolkit.app.engines.manager import EngineManager
 
     em = EngineManager.get_instance()
-    from sc_mining.navigation import navigate
+    from astral_toolkit.navigation import navigate
 
     monkeypatch.setattr(t_nav, "_WHERE", {"t": 0.0, "v": None, "tried": 0.0})
     monkeypatch.setattr(
@@ -2046,7 +2046,7 @@ def test_where_now_ground_or_space(monkeypatch):
 
 def test_wikelo_detail_sticky_and_names_clean():
     """维科洛兑换：右边详情跟着页面滚动；汉化名末尾的反斜杠去掉"""
-    from sc_mining.core import paths
+    from astral_toolkit.core import paths
 
     css = (paths.CODE / "app" / "web" / "style.css").read_text(encoding="utf-8")
     js = (paths.CODE / "app" / "web" / "app.js").read_text(encoding="utf-8")
@@ -2054,7 +2054,7 @@ def test_wikelo_detail_sticky_and_names_clean():
         ".split > .sticky { position: sticky" in css
         and 'id="wout" class="sticky"' in js
     )
-    from sc_mining.crafting import wikelo
+    from astral_toolkit.crafting import wikelo
 
     for c in wikelo.load():
         for r in c["req"]:
@@ -2064,8 +2064,8 @@ def test_wikelo_detail_sticky_and_names_clean():
 def test_wikelo_materials_all_have_source(monkeypatch):
     """每样维科洛材料都要有「去哪弄」：商店 / 挖矿 / 特殊说明 / 开箱掉落（用户 2026-10-23：不知道就查，补齐为止）"""
     import pytest
-    from sc_mining.crafting import wikelo, loot
-    from sc_mining.trade.console import material_source
+    from astral_toolkit.crafting import wikelo, loot
+    from astral_toolkit.trade.console import material_source
 
     cs = wikelo.load()
     if not cs or not loot.load_index(False):
@@ -2078,11 +2078,11 @@ def test_wikelo_materials_all_have_source(monkeypatch):
 def test_craft_blueprint_dictionary():
     """制造页的蓝图字典：按类别 / 子类 / 部位 / 厂商筛选、分页，筛选项带数量"""
     import pytest
-    from sc_mining import crafting
+    from astral_toolkit import crafting
 
     if not crafting.blueprints():
         pytest.skip("没有制造数据")
-    from sc_mining.tasks.goals import craft_browse, craft_detail
+    from astral_toolkit.tasks.goals import craft_browse, craft_detail
 
     r = craft_browse()
     assert r["total"] == len(crafting.blueprints()) and len(r["rows"]) == 60
@@ -2108,8 +2108,8 @@ def test_craft_same_name_blueprints_distinct():
     """同名两份配方（比如 Main Powerplant）：列表编号不同，点开看到各自的材料（二审 2026-10-23 发现的 bug）"""
     import pytest
     from collections import Counter
-    from sc_mining import crafting
-    from sc_mining.tasks.goals import craft_browse, craft_detail
+    from astral_toolkit import crafting
+    from astral_toolkit.tasks.goals import craft_browse, craft_detail
 
     dup = next(
         (n for n, c in Counter(b["n"] for b in crafting.blueprints()).items() if c > 1),
@@ -2143,12 +2143,12 @@ def _live_run(
     front：游戏在不在最前面（默认判断不了 = 照常认，不看真电脑的前台窗口）；grabs：记下每次截图的时间"""
     import threading, time as _t  # noqa: E401
     from PIL import Image
-    from sc_mining.mining import screen, signals
-    from sc_mining.core import paths
-    from sc_mining.mining.parse import Scan
-    from sc_mining.tasks import mining as t_mining
-    import sc_mining.app.engines.live as live_mod
-    from sc_mining.app import bus
+    from astral_toolkit.mining import screen, signals
+    from astral_toolkit.core import paths
+    from astral_toolkit.mining.parse import Scan
+    from astral_toolkit.tasks import mining as t_mining
+    import astral_toolkit.app.engines.live as live_mod
+    from astral_toolkit.app import bus
 
     monkeypatch.setattr(paths, "log", lambda name: tmp_path / name)
     monkeypatch.setattr(paths, "shots", lambda name: tmp_path)
@@ -2168,8 +2168,8 @@ def _live_run(
         return (s or Scan(), ({}, None, None))
 
     hud = []
-    from sc_mining.tasks import navigation as t_nav, system as t_sys
-    from sc_mining.app import hud_state
+    from astral_toolkit.tasks import navigation as t_nav, system as t_sys
+    from astral_toolkit.app import hud_state
 
     _v = lambda: type(  # noqa: E731
         "H",
@@ -2208,7 +2208,7 @@ def _live_run(
 
 
 def _rock(mass, res, instab, scu, comp):
-    from sc_mining.mining.parse import Scan
+    from astral_toolkit.mining.parse import Scan
 
     return Scan(
         rock=None,
@@ -2222,7 +2222,7 @@ def _rock(mass, res, instab, scu, comp):
 
 def test_vote_needs_stable_composition_and_same_rock_checks_resistance():
     """成分没读稳（两帧百分比对不上）不算稳定；质量差不多但抗性不同的是两块石头（审查建议 2026-10-23）"""
-    from sc_mining.mining import screen
+    from astral_toolkit.mining import screen
 
     a = _rock(
         10000, 20, 5.0, 10.0, [("Copper", 40.0, 500), ("Inert Materials", 60.0, 0)]
@@ -2252,7 +2252,7 @@ def test_live_rebuilds_queue_and_expires_old_result(monkeypatch, tmp_path):
         scans and not scans[0].get("stale") and scans[-1].get("stale")
     )  # 先出结果，后来同一条结果带「已过期」再发
     assert ("clear", "扫描") in hud and ("clear", "矿袋") in hud
-    from sc_mining.app import bus
+    from astral_toolkit.app import bus
 
     q = bus.subscribe()  # 窗口刷新/重连：补发的也是过期的那条
     try:
@@ -2283,8 +2283,8 @@ def test_live_republishes_corrected_total_scu(monkeypatch, tmp_path):
 def test_live_session_isolation(monkeypatch, tmp_path):
     """快速停了又开：旧会话的停止开关已经按下，就算线程还没退出也不会再干活（日志写到临时目录）"""
     import threading
-    from sc_mining.core import paths
-    import sc_mining.app.engines.live as live_mod
+    from astral_toolkit.core import paths
+    import astral_toolkit.app.engines.live as live_mod
 
     monkeypatch.setattr(paths, "log", lambda name: tmp_path / name)
     monkeypatch.setattr(paths, "shots", lambda name: tmp_path)
@@ -2307,7 +2307,7 @@ def test_live_session_isolation(monkeypatch, tmp_path):
 def test_live_stop_during_compute_publishes_nothing(monkeypatch, tmp_path):
     """算破碎方案的时候用户按了停止：算完不能再把旧结果推到窗口和悬浮窗（复审 2026-10-23）"""
     import threading
-    from sc_mining.tasks import mining as t_mining
+    from astral_toolkit.tasks import mining as t_mining
 
     real = t_mining.scan_view
     ev = threading.Event()
@@ -2416,7 +2416,7 @@ def test_live_pauses_when_game_not_in_front(monkeypatch, tmp_path):
 
 def test_game_front_unknown_does_not_pause(monkeypatch):
     """判断不了游戏在不在最前面（不是 Windows、这一刻没有前台窗口、出错）返回 None：采矿助手照常认，不能因此停掉"""
-    from sc_mining.system import showloc
+    from astral_toolkit.system import showloc
 
     if not showloc.WIN:
         assert showloc.game_front() is None
@@ -2444,7 +2444,7 @@ def test_game_front_unknown_does_not_pause(monkeypatch):
 
 def test_vote_name_and_percent_voted_together():
     """矿名和百分比要一起投票：Copper 40,40 / Copper 60 / Gold 60,60 不能拼出只出现过一次的「Copper 60%」"""
-    from sc_mining.mining import screen
+    from astral_toolkit.mining import screen
 
     rows = [
         ("Copper", 40.0),
@@ -2467,7 +2467,7 @@ def test_vote_name_and_percent_voted_together():
 def test_vote_tolerates_last_digit_jitter_with_real_readings():
     """末位抖动（质量 12431 / 12437、抗性 20 / 21、百分比 45.22 / 45.27）也要投出结果（2026-10-24 外部补丁）；
     结果只用实际读到过的数，不取平均——抗性 20.5%、百分比 45.245 面板上没有（1.6.43）"""
-    from sc_mining.mining import screen
+    from astral_toolkit.mining import screen
 
     def comp(p):
         return [("Copper", p, 600), ("Inert Materials", round(100 - p, 2), 0)]
@@ -2497,7 +2497,7 @@ def test_enqueue_rock_keeps_votes_on_one_bad_frame():
     """投票队列（2026-10-24 外部补丁）：读稳以后中间认错一帧（质量少认一位）不清空，那一帧不进队列；
     真换了石头要连续两帧一致才清空重计（新石头因此晚出 1 帧）"""
     import collections
-    from sc_mining.mining import screen
+    from astral_toolkit.mining import screen
 
     screen._reject.clear()
     comp = [("Copper", 40.0, 500), ("Inert Materials", 60.0, 0)]
@@ -2523,13 +2523,13 @@ def test_enqueue_rock_keeps_votes_on_one_bad_frame():
 def test_space_fix_navigation(monkeypatch, tmp_path):
     """太空路标一键定位：两次 /showlocation 之间直线飞 → 距离、近了多少、偏离角、多久到；不读右上角（2026-10-23 用户定的方案）"""
     import time as _t
-    from sc_mining.navigation import navigate as n
-    from sc_mining.core import paths
-    from sc_mining.tasks import navigation as t_nav
-    from sc_mining.app.engines.manager import EngineManager
+    from astral_toolkit.navigation import navigate as n
+    from astral_toolkit.core import paths
+    from astral_toolkit.tasks import navigation as t_nav
+    from astral_toolkit.app.engines.manager import EngineManager
 
     em = EngineManager.get_instance()
-    from sc_mining.app import bus
+    from astral_toolkit.app import bus
 
     if not n.CACHE.exists():
         pytest.skip("没有星图数据")
@@ -2537,7 +2537,7 @@ def test_space_fix_navigation(monkeypatch, tmp_path):
     if not data.get("points"):
         pytest.skip("没有星图数据")
     monkeypatch.setattr(paths, "log", lambda name: tmp_path / name)
-    from sc_mining.core import settings
+    from astral_toolkit.core import settings
 
     monkeypatch.setattr(
         settings,
@@ -2580,8 +2580,8 @@ def test_space_fix_navigation(monkeypatch, tmp_path):
     clip = {"t": "旧东西"}
     monkeypatch.setattr(n, "read_clipboard", lambda: clip["t"])
     hud = {}
-    from sc_mining.tasks import mining as t_mining, system as t_sys
-    from sc_mining.app import hud_state
+    from astral_toolkit.tasks import mining as t_mining, system as t_sys
+    from astral_toolkit.app import hud_state
 
     _v = lambda: type(  # noqa: E731
         "H",
@@ -2622,14 +2622,14 @@ def test_space_fix_navigation(monkeypatch, tmp_path):
 def test_space_fix_dedupe_and_session(monkeypatch, tmp_path):
     """审查 1.6.23：剪贴板监听和 F9 拿到同一份坐标只算一次；导航结束 / 换目标后，旧的定位结果不再发出来"""
     import time as _t
-    from sc_mining.navigation import navigate as n
-    from sc_mining.core import paths, settings
-    from sc_mining.tasks import mining as t_mining, navigation as t_nav, system as t_sys
-    from sc_mining.app.engines.manager import EngineManager
+    from astral_toolkit.navigation import navigate as n
+    from astral_toolkit.core import paths, settings
+    from astral_toolkit.tasks import mining as t_mining, navigation as t_nav, system as t_sys
+    from astral_toolkit.app.engines.manager import EngineManager
 
     em = EngineManager.get_instance()
-    from sc_mining.app import hud_state
-    from sc_mining.app import bus
+    from astral_toolkit.app import hud_state
+    from astral_toolkit.app import bus
 
     if not n.CACHE.exists():
         pytest.skip("没有星图数据")
@@ -2712,9 +2712,9 @@ def test_space_fix_dedupe_and_session(monkeypatch, tmp_path):
 
 def test_hotkey_conflicts(monkeypatch):
     """物品识别热键不能设成记路标 / 一键定位的键；已有冲突要明确说哪个失效"""
-    from sc_mining.core import settings
-    from sc_mining.tasks import system as t_sys
-    from sc_mining.app import bus
+    from astral_toolkit.core import settings
+    from astral_toolkit.tasks import system as t_sys
+    from astral_toolkit.app import bus
 
     store = {
         **settings.DEFAULTS,
@@ -2743,13 +2743,13 @@ def test_hotkey_conflicts(monkeypatch):
 def test_nav_mode_switch(monkeypatch, tmp_path):
     """导航页的开关：星球上的路标可以切到太空导航（一键定位），太空路标只能用太空导航；正在导航就按新方式重新开始"""
     import json, time as _t  # noqa: E401, F401, F811
-    from sc_mining.navigation import navigate as n
-    from sc_mining.core import settings, paths
-    from sc_mining.tasks import mining as t_mining, navigation as t_nav, system as t_sys
-    from sc_mining.app.engines.manager import EngineManager
+    from astral_toolkit.navigation import navigate as n
+    from astral_toolkit.core import settings, paths
+    from astral_toolkit.tasks import mining as t_mining, navigation as t_nav, system as t_sys
+    from astral_toolkit.app.engines.manager import EngineManager
 
     em = EngineManager.get_instance()
-    from sc_mining.app import hud_state
+    from astral_toolkit.app import hud_state
 
     if not n.CACHE.exists():
         pytest.skip("没有星图数据")
@@ -2821,8 +2821,8 @@ def test_nav_mode_switch(monkeypatch, tmp_path):
 def test_halo_routes_match_scminer():
     """小行星带导航：对照 SCMiner 的 Aaron Halo Flight Computer（ARC-L1 出发，第 5 带）
     SCMiner：CRU-L3 12.7 Gm/389 Mm、CRU-L4 14.3/345、Hurston 13.5/192、Crusader 33.2/177、CRU-L5 39.5/151"""
-    from sc_mining.navigation import halo
-    from sc_mining.navigation import navigate as n
+    from astral_toolkit.navigation import halo
+    from astral_toolkit.navigation import navigate as n
 
     if not n.CACHE.exists():
         pytest.skip("没有星图数据")
@@ -2872,12 +2872,12 @@ def test_halo_routes_match_scminer():
 def test_halo_services(monkeypatch, tmp_path):
     """小行星带页的接口：选项、路线、挂到悬浮窗；挂着方案时按 F9 或自己输 /showlocation 核对在不在带里（复审 1.6.24 补的情形）"""
     import time as _t
-    from sc_mining.navigation import halo
-    from sc_mining.core import paths, settings
-    from sc_mining.system import showloc
-    from sc_mining.navigation import navigate as n
-    from sc_mining.tasks import navigation as t_nav
-    from sc_mining.app.engines.manager import EngineManager
+    from astral_toolkit.navigation import halo
+    from astral_toolkit.core import paths, settings
+    from astral_toolkit.system import showloc
+    from astral_toolkit.navigation import navigate as n
+    from astral_toolkit.tasks import navigation as t_nav
+    from astral_toolkit.app.engines.manager import EngineManager
 
     em = EngineManager.get_instance()
     if not n.CACHE.exists():
@@ -2895,8 +2895,8 @@ def test_halo_services(monkeypatch, tmp_path):
     }  # 挂上之前就在剪贴板里的旧坐标：不算
     monkeypatch.setattr(n, "read_clipboard", lambda: clip["t"])
     hud = {}
-    from sc_mining.tasks import mining as t_mining, system as t_sys
-    from sc_mining.app import hud_state
+    from astral_toolkit.tasks import mining as t_mining, system as t_sys
+    from astral_toolkit.app import hud_state
 
     _v = lambda: type(  # noqa: E731
         "H",
@@ -2984,7 +2984,7 @@ def test_halo_services(monkeypatch, tmp_path):
 
 def test_halo_where_edges():
     """判带用没四舍五入的半径：离内边界还差 400 km 不能说已经在带里"""
-    from sc_mining.navigation import halo
+    from astral_toolkit.navigation import halo
 
     w = halo.where((20.2296e9, 0, 0))
     assert (
@@ -3004,9 +3004,9 @@ def test_halo_where_edges():
 def test_names_follow_game_localization(tmp_path, monkeypatch):
     """中文名以游戏里装的汉化为准（2026-10-23 用户要求）：尺寸写 S1/S2，类别照「物品类型」，
     舰船部件按类名取名字（同名不同物品不再张冠李戴），双语包才拿来用"""
-    from sc_mining.update import localization
-    from sc_mining.crafting import build_crafting as B
-    from sc_mining import crafting
+    from astral_toolkit.update import localization
+    from astral_toolkit.crafting import build_crafting as B
+    from astral_toolkit import crafting
 
     assert (
         crafting.SUB_ZH["size3"] == "S3"
@@ -3057,7 +3057,7 @@ def test_names_follow_game_localization(tmp_path, monkeypatch):
         "\n".join(f"item_NameX{i}=激流{i}Torrent{i}\\n[量子]" for i in range(80)),
         encoding="utf-8",
     )
-    from sc_mining.core import settings
+    from astral_toolkit.core import settings
 
     monkeypatch.setattr(settings, "load", lambda: {"game_log": str(live / "Game.log")})
     assert localization.game_ini() == loc / "global.ini"
@@ -3074,10 +3074,10 @@ def test_item_search_finds_everything():
     """物品查询搜索（1.6.41）：商店、掉落、汉化包一起搜，每件东西用完整的中文名、英文名都搜得到；
     视差步枪 → 视差 能量突击步枪（基础款在前，2026-10-23 用户报搜不到）；汉化包简称带出来的假英文名（视差步枪 → HD）不再有；
     商店和掉落数据里都没有的也搜得到，点开写明「商店和掉落数据里都没有」，能造的带上蓝图"""
-    from sc_mining.crafting import itemsearch as I
-    from sc_mining import crafting
-    from sc_mining.trade import names
-    from sc_mining.tasks import trade as t_trade
+    from astral_toolkit.crafting import itemsearch as I
+    from astral_toolkit import crafting
+    from astral_toolkit.trade import names
+    from astral_toolkit.tasks import trade as t_trade
 
     rows = I._build()["rows"]
     if len(rows) < 1000:
@@ -3149,8 +3149,8 @@ def test_item_search_finds_everything():
 def test_mineral_in_item_search_with_nav():
     """矿物并进物品页搜索：去哪挖的每个地点带导航方式——Aaron Halo 进小行星带导航（挑这种矿最多的带），
     星球 / 卫星去导航页搜它，拉格朗日点矿区和没有地点数据的小行星带只给提示（2026-10-23 用户要求拆掉找矿点页）"""
-    from sc_mining.tasks import trade as t_trade
-    from sc_mining.mining.locations import where
+    from astral_toolkit.tasks import trade as t_trade
+    from astral_toolkit.mining.locations import where
 
     if not where("Taranite"):
         pytest.skip("没有矿点数据")
@@ -3176,7 +3176,7 @@ def test_mineral_in_item_search_with_nav():
 
 def test_ground_gems_searchable_with_locations():
     """SCMiner 的 ROC 车矿、手采矿也能在百货集搜到：类型、信号、地点（2026-10-25 用户要求）；Hathor 矿洞写「校准站矿洞」、不能导航"""
-    from sc_mining.tasks import trade as t_trade
+    from astral_toolkit.tasks import trade as t_trade
 
     assert (
         t_trade.mineral_search(q="杰金")[0]["en"] == "Jaclium"
@@ -3198,9 +3198,9 @@ def test_craft_filter_by_mineral_and_item_hud_expires(monkeypatch):
     """扫描 / 矿物页「可制造 N 份蓝图」→ 制造页按这种矿筛选，带品质门槛的标出够不够；
     悬浮窗「物品」结果过一段时间自动收起（2026-10-23 用户：一直挂着不消失）"""
     import time as _t
-    from sc_mining import crafting
-    from sc_mining.tasks import goals as t_goals, trade as t_trade
-    from sc_mining.app import hud_state
+    from astral_toolkit import crafting
+    from astral_toolkit.tasks import goals as t_goals, trade as t_trade
+    from astral_toolkit.app import hud_state
 
     if not crafting.blueprints():
         pytest.skip("没有制造数据")
@@ -3246,7 +3246,7 @@ def test_craft_filter_by_mineral_and_item_hud_expires(monkeypatch):
     assert "mat" not in t_goals.craft_browse()
     # 物品悬浮窗定时收起；中途又写了新内容就按新内容重新计时
     hud = {}
-    from sc_mining.tasks import mining as t_mining, navigation as t_nav, system as t_sys
+    from astral_toolkit.tasks import mining as t_mining, navigation as t_nav, system as t_sys
 
     _v = lambda: type(  # noqa: E731
         "H",
@@ -3274,10 +3274,10 @@ def test_hover_ignores_chat_hud_and_markers(monkeypatch):
     """F8 物品识别：全局聊天「[全局]某人：…」、飞船 HUD、地点标记不能当成物品（2026-10-23 用户日志）；
     整屏找的时候必须名字下面紧跟「体积/制造商/物品类型…」才算说明框"""
     from PIL import Image
-    from sc_mining.trade import console as C
-    from sc_mining import ocr
-    from sc_mining.ocr import OcrToken
-    from sc_mining.tasks import hover as t_hover
+    from astral_toolkit.trade import console as C
+    from astral_toolkit import ocr
+    from astral_toolkit.ocr import OcrToken
+    from astral_toolkit.tasks import hover as t_hover
 
     T = lambda text, x, y: OcrToken(text, 90, (x, y, max(20, len(text) * 9), 18))  # noqa: E731
     chat = [
@@ -3341,7 +3341,7 @@ def test_hover_ignores_chat_hud_and_markers(monkeypatch):
 def test_live_signals_pause_while_scan_panel_open(monkeypatch, tmp_path):
     """对着石头看扫描面板时不认信号（面板上的质量 13,586 会被当成信号，2026-10-23 用户反馈）；
     面板一出现悬浮窗的信号就收起，面板关了再继续认"""
-    from sc_mining.mining.parse import Scan
+    from astral_toolkit.mining.parse import Scan
 
     a = Scan(
         rock="Iron",
@@ -3357,7 +3357,7 @@ def test_live_signals_pause_while_scan_panel_open(monkeypatch, tmp_path):
         calls.append(1)
         return [(13586, False, "13,586", (0, 0, 10, 10))]
 
-    from sc_mining.tasks import goals as t_goals, navigation as t_nav
+    from astral_toolkit.tasks import goals as t_goals, navigation as t_nav
 
     monkeypatch.setattr(
         t_nav, "_where_now", lambda: None
@@ -3374,8 +3374,8 @@ def test_live_signals_pause_while_scan_panel_open(monkeypatch, tmp_path):
 
 def test_goal_shortage_marked_everywhere(monkeypatch):
     """目标还缺的材料：扫描结果、悬浮窗、信号、物品页、矿物页都标出来；精炼后的量给 SCU 和 uSCU（2026-10-23 用户要求）"""
-    from sc_mining.mining.parse import parse_scan
-    from sc_mining.tasks import (
+    from astral_toolkit.mining.parse import parse_scan
+    from astral_toolkit.tasks import (
         count as t_count,
         goals as t_goals,
         hover as t_hover,
@@ -3383,7 +3383,7 @@ def test_goal_shortage_marked_everywhere(monkeypatch):
         stock as t_stock,
         trade as t_trade,
     )
-    from sc_mining.crafting import goals as G
+    from astral_toolkit.crafting import goals as G
 
     gold = {
         "en": "Gold",
@@ -3453,7 +3453,7 @@ def test_goal_shortage_marked_everywhere(monkeypatch):
         ("363", "49.41%", False),
     ]
     assert r["gain"][1][2] == "aUEC" and r["advice"]["heads"]
-    from sc_mining.app.presenters.mining import scu_text
+    from astral_toolkit.app.presenters.mining import scu_text
 
     assert scu_text(0.42) == "420,000 uSCU（0.420 SCU）" and scu_text(3.5).startswith(
         "3.50 SCU（3,500,000 uSCU）"
@@ -3479,8 +3479,8 @@ def test_goal_shortage_marked_everywhere(monkeypatch):
 def test_hover_unsure_names_and_anchor_lines():
     """2026-10-23 全量样本测试发现：中间没把握时会把碎字（「力 mnoc」）、地点标记、系统界面当物品；
     靠「体积」往上找名字时会把「制造商：灰猫工业」当名字"""
-    from sc_mining.trade import console as C
-    from sc_mining.ocr import OcrToken
+    from astral_toolkit.trade import console as C
+    from astral_toolkit.ocr import OcrToken
 
     T = lambda text, x, y: OcrToken(text, 90, (x, y, max(20, len(text) * 9), 18))  # noqa: E731
     assert C.plausible_name("受辐射的瓦拉卡蛋", "IradiatedValakkar Egg")
@@ -3510,7 +3510,7 @@ def test_hover_unsure_names_and_anchor_lines():
 def test_mask_own_window_too():
     """盖在游戏上的天枢主窗口也涂黑（窗口里的实时栏有信号值 / 质量，会被当成游戏里的字）"""
     from PIL import Image
-    from sc_mining.core.perf import mask_overlay, own_window_rects
+    from astral_toolkit.core.perf import mask_overlay, own_window_rects
 
     img = Image.new("RGB", (200, 100), (255, 255, 255))
     mask_overlay(img, 0, 0, rect=(10, 10, 20, 20), own=[(100, 50, 150, 90)])
@@ -3521,10 +3521,10 @@ def test_mask_own_window_too():
 
 def test_waypoint_from_pasted_showlocation(monkeypatch, tmp_path):
     """路标页粘贴 /showlocation 的输出：先预览认出星球 / 经纬度，再起名保存（2026-10-23 用户要求，取代填经纬度）"""
-    from sc_mining.navigation import navigate as n
-    from sc_mining.core import paths
-    from sc_mining.tasks import mining as t_mining, navigation as t_nav, system as t_sys
-    from sc_mining.app import hud_state
+    from astral_toolkit.navigation import navigate as n
+    from astral_toolkit.core import paths
+    from astral_toolkit.tasks import mining as t_mining, navigation as t_nav, system as t_sys
+    from astral_toolkit.app import hud_state
 
     if not n.CACHE.exists():
         pytest.skip("没有星图数据")
@@ -3589,15 +3589,15 @@ def test_feedback_report_bundle(monkeypatch, tmp_path):
     存成 userdata\\feedback\\<时间>_<类型>（文件夹 + zip）；导出把所有 zip 再打包到桌面；清空"""
     import json, zipfile  # noqa: E401, F811
     from PIL import Image
-    from sc_mining.core import paths
-    from sc_mining.mining import screen
-    from sc_mining.tasks import (
+    from astral_toolkit.core import paths
+    from astral_toolkit.mining import screen
+    from astral_toolkit.tasks import (
         hover as t_hover,
         mining as t_mining,
         navigation as t_nav,
         system as t_sys,
     )
-    from sc_mining.app import hud_state
+    from astral_toolkit.app import hud_state
 
     monkeypatch.setattr(paths, "USER", tmp_path, raising=False)
     monkeypatch.setattr(paths, "LOGS", tmp_path / "logs", raising=False)
@@ -3634,7 +3634,7 @@ def test_feedback_report_bundle(monkeypatch, tmp_path):
     for _m in (t_hover, t_sys):
         monkeypatch.setattr(_m, "WIN", _v)
     screen.LAST_RAW.update(t=1.0, scan=["扫描结果", "质量： 123"], bag=[])
-    from sc_mining.runtime.results import MINING_SIGNALS, ResultStore
+    from astral_toolkit.runtime.results import MINING_SIGNALS, ResultStore
 
     results = ResultStore()
     monkeypatch.setattr(t_sys._engines(), "results", results)
@@ -3685,8 +3685,8 @@ def test_feedback_report_bundle(monkeypatch, tmp_path):
     assert any(
         "问题反馈" in w for w in t_sys.hotkey_conflicts({"trade_capture_key": "F10"})
     )
-    from sc_mining.core import settings
-    from sc_mining.app import bus
+    from astral_toolkit.core import settings
+    from astral_toolkit.app import bus
 
     store = dict(settings.DEFAULTS)  # 不读写真实设置
     monkeypatch.setattr(settings, "load", lambda: dict(store))
@@ -3702,8 +3702,8 @@ def test_feedback_report_bundle(monkeypatch, tmp_path):
 def test_scan_view_lots_by_quality(monkeypatch):
     """成分表（1.6.42）：石头里每一份（矿 × 品质、惰性物质）一行；同一种矿两种品质标高 / 低；品质写第几档；
     精炼按份算（精炼保留品质，不同品质精炼完还是分开的）；目标按每一份判断品质门槛；悬浮窗写惰性占比和高品质那份"""
-    from sc_mining.mining.parse import parse_scan
-    from sc_mining.tasks import (
+    from astral_toolkit.mining.parse import parse_scan
+    from astral_toolkit.tasks import (
         count as t_count,
         goals as t_goals,
         hover as t_hover,
@@ -3711,7 +3711,7 @@ def test_scan_view_lots_by_quality(monkeypatch):
         stock as t_stock,
         trade as t_trade,
     )
-    from sc_mining.crafting import goals as G
+    from astral_toolkit.crafting import goals as G
 
     tung = {
         "en": "Tungsten",
@@ -3781,8 +3781,8 @@ def test_scan_view_lots_by_quality(monkeypatch):
 def test_scan_view_when_panel_cut_off():
     """面板被屏幕右边挡住（16:10 屏幕上鼹鼠炮塔，2026-10-23 用户反馈）：只有质量、抗性、不稳定性和成分占比，
     照样给破碎方案，写明品质和总 SCU 看不到、调大 FOV视野"""
-    from sc_mining.mining.parse import Scan
-    from sc_mining.tasks import mining as t_mining
+    from astral_toolkit.mining.parse import Scan
+    from astral_toolkit.tasks import mining as t_mining
 
     c = Scan(
         rock="Ouratite",
@@ -3815,8 +3815,8 @@ def test_scan_view_when_panel_cut_off():
 def test_live_cut_panel_gives_breaking_plan(monkeypatch, tmp_path):
     """面板顶着屏幕右边、品质和总 SCU 读不到：两帧一致就出「只有破碎方案」的结果，不当成读不全（不留图）"""
     import time as _t
-    from sc_mining.mining import screen
-    from sc_mining.mining.parse import Scan
+    from astral_toolkit.mining import screen
+    from astral_toolkit.mining.parse import Scan
 
     c = Scan(
         rock="Ouratite",
@@ -3852,8 +3852,8 @@ def test_live_cut_panel_gives_breaking_plan(monkeypatch, tmp_path):
 
 def test_live_miss_hint_reason(monkeypatch, tmp_path):
     """读不全时告诉玩家原因：面板被屏幕右边挡住 → 调大 FOV视野；面板不见了提示收起"""
-    from sc_mining.mining import screen
-    from sc_mining.mining.parse import Scan
+    from astral_toolkit.mining import screen
+    from astral_toolkit.mining.parse import Scan
 
     half = Scan(
         rock="Ouratite",
@@ -3881,9 +3881,9 @@ def test_item_search_wiki_gap_fill_and_tail_name_keys():
       采矿模组的英文补上 Module，燃料舱第二行的属性串不当中文名；
     ②英文 wiki（游戏数据）的物品清单只补别处都没有的英文名（标 wiki），中文名只信汉化包；涂装、飞船内部通用件不补；
     ③只有掉落数据的物品也带上 wiki 的类型 / 尺寸当分类"""
-    from sc_mining.update.localization import zh2en_items
-    from sc_mining.crafting import itemsearch as I
-    from sc_mining.tasks import trade as t_trade
+    from astral_toolkit.update.localization import zh2en_items
+    from astral_toolkit.crafting import itemsearch as I
+    from astral_toolkit.tasks import trade as t_trade
 
     t = zh2en_items(
         {
@@ -3901,11 +3901,11 @@ def test_item_search_wiki_gap_fill_and_tail_name_keys():
         "巨灵": "Gargant",
         "研磨 刮削模块": "Abrade Scraper Module",
     }
-    from sc_mining.core import paths
+    from astral_toolkit.core import paths
 
     if not (paths.DATA / "wiki_items.json").exists():
         pytest.skip("没有 wiki 物品数据")
-    from sc_mining.gamedata import names as gd_names
+    from astral_toolkit.gamedata import names as gd_names
 
     assert len(gd_names.wiki_classes()) > 7000
     hit = t_trade.item_search("Hartmoore Inverter")[0]
@@ -3938,10 +3938,10 @@ def test_item_desc_and_alias_from_wiki(monkeypatch, tmp_path):
     """物品描述和英文名对齐（1.6.49）：①描述来自 wiki 的游戏官方中文说明（data/wiki_items.json 的 d），物品页显示；
     ②汉化包的英文名按游戏内部类名（item_Name_<类名>）对到 wiki 正名，写错 / 过时的（Bulldog → Badger、Monolith Arms → Monolith Armor Arms）
       记进 name_aliases.json，搜旧写法也能找到正名；③wiki 清单带类名 cls"""
-    from sc_mining.update import localization as L
-    from sc_mining.crafting import itemsearch as I
-    from sc_mining.core import paths
-    from sc_mining.tasks import trade as t_trade
+    from astral_toolkit.update import localization as L
+    from astral_toolkit.crafting import itemsearch as I
+    from astral_toolkit.core import paths
+    from astral_toolkit.tasks import trade as t_trade
 
     if not (paths.DATA / "wiki_items.json").exists():
         pytest.skip("没有 wiki 物品数据")
@@ -3988,18 +3988,18 @@ def test_item_desc_and_alias_from_wiki(monkeypatch, tmp_path):
 
 def test_ore_log_record_and_hotkeys(monkeypatch, tmp_path):
     """1.6.70 原矿记录：记最近一块矿（窗口里点的不带坐标）、删除能撤销；所有热键都能改，原矿记录键能清掉"""
-    from sc_mining.mining import ore_log
-    from sc_mining.core import settings
-    from sc_mining.tasks import navigation as t_nav, system as t_sys
-    from sc_mining.app import bus
-    from sc_mining.app import hud_state
+    from astral_toolkit.mining import ore_log
+    from astral_toolkit.core import settings
+    from astral_toolkit.tasks import navigation as t_nav, system as t_sys
+    from astral_toolkit.app import bus
+    from astral_toolkit.app import hud_state
 
     monkeypatch.setattr(ore_log, "FILE", tmp_path / "ore_log.json")
     monkeypatch.setattr(bus, "publish", lambda *a, **k: None)
     _v = lambda *a, **k: None  # noqa: E731
     for _m in (t_nav, t_sys, hud_state):
         monkeypatch.setattr(_m, "_note_hud", _v)
-    from sc_mining.runtime.results import MINING_SCAN, ResultStore
+    from astral_toolkit.runtime.results import MINING_SCAN, ResultStore
 
     results = ResultStore()
     monkeypatch.setattr(t_nav._M, "results", results)
@@ -4069,9 +4069,9 @@ def test_ore_log_record_and_hotkeys(monkeypatch, tmp_path):
 
 def test_gear_change_marks_live_for_recalc(monkeypatch, tmp_path):
     """改配装后，采矿助手正在显示的石头要按新配装重算：set_mining_gear 给 _live 打记号"""
-    from sc_mining.core import settings
-    from sc_mining.tasks import mining as t_mining
-    from sc_mining.app.engines.manager import EngineManager
+    from astral_toolkit.core import settings
+    from astral_toolkit.tasks import mining as t_mining
+    from astral_toolkit.app.engines.manager import EngineManager
 
     em = EngineManager.get_instance()
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
@@ -4084,8 +4084,8 @@ def test_gear_change_marks_live_for_recalc(monkeypatch, tmp_path):
 
 def test_item_names_and_categories_unified():
     """物品名「中文 English」（2026-10-26）：采矿装备的中文不带型号、中文也搜得到；蓝图同样写法；商店分类用游戏里的中文"""
-    from sc_mining.core.i18n import gear_zh_of_item, shop_cat_zh
-    from sc_mining.crafting import display_name
+    from astral_toolkit.core.i18n import gear_zh_of_item, shop_cat_zh
+    from astral_toolkit.crafting import display_name
 
     assert (
         gear_zh_of_item("Hofstede-S2 Mining Laser") == "霍夫斯泰德"
@@ -4111,7 +4111,7 @@ def test_item_names_and_categories_unified():
         display_name({"n": "Karna Rifle", "z": "卡纳 步枪"}) == "卡纳 步枪 Karna Rifle"
         and display_name({"n": "X", "z": ""}) == "X"
     )
-    from sc_mining.tasks import trade as t_trade
+    from astral_toolkit.tasks import trade as t_trade
 
     rows = t_trade.item_search("霍夫斯泰德")
     assert any(
@@ -4124,8 +4124,8 @@ def test_item_names_and_categories_unified():
 
 def test_disclaimer_and_about_have_required_notices():
     """免责声明和关于页（2026-10-26）：CIG 要求的非官方声明和权利人、版权、EULA 自动化风险、要求注明的数据来源"""
-    from sc_mining.core import paths
-    from sc_mining.tasks import system as t_sys
+    from astral_toolkit.core import paths
+    from astral_toolkit.tasks import system as t_sys
 
     h = (paths.CODE / "app" / "web" / "disclaimer.html").read_text(encoding="utf-8")
     for must in (
@@ -4156,7 +4156,7 @@ def test_disclaimer_and_about_have_required_notices():
 def test_pyro_place_names_from_localization():
     """2026-10-27 用户反馈：派罗很多空间站、星球显示成 PYR4-L1 这种代号。汉化包里都有正式名：
     有站的点用站名（RR_P1_L2 → 焰联-远程站-1-2），空点用点本身的叫法（派1 PYR1 L1）；星球、跳跃点也一样"""
-    from sc_mining.navigation import position as P, navigate as n
+    from astral_toolkit.navigation import position as P, navigate as n
 
     if not P.ini_name("RR_P2_L4"):
         pytest.skip("没有汉化包")
@@ -4182,7 +4182,7 @@ def test_pyro_place_names_from_localization():
 
 def test_poi_rule_names():
     """洞穴、前哨这类社区起的名字（汉化包里没有）按规则翻，编号原样保留"""
-    from sc_mining.navigation.navigate import rule_zh
+    from astral_toolkit.navigation.navigate import rule_zh
 
     assert rule_zh("Rock Cave #12, Fauna") == "岩石洞穴 #12（有动物）"
     assert (
@@ -4197,8 +4197,8 @@ def test_poi_rule_names():
 def test_showlocation_keys_freed(monkeypatch, tmp_path):
     """2026-10-27 用户定：/showlocation 只在必要时用，「记录路标」「一键定位」默认不绑；老玩家存着的也清一次（之后自己绑的不再动）"""
     import json  # noqa: F811
-    from sc_mining.core import settings
-    from sc_mining.tasks import navigation as t_nav, system as t_sys
+    from astral_toolkit.core import settings
+    from astral_toolkit.tasks import navigation as t_nav, system as t_sys
 
     f = tmp_path / "settings.json"
     monkeypatch.setattr(settings, "FILE", f)
@@ -4236,9 +4236,9 @@ def test_showlocation_keys_freed(monkeypatch, tmp_path):
 def test_nav_marker_projection():
     """导航记号（2026-10-27）：目标投到屏幕上的位置；画面外贴边画箭头；不盖右上角调试信息；记号和瞄准环能画出来"""
     import math
-    from sc_mining.navigation import navigate as n
-    from sc_mining.app import overlay as o
-    from sc_mining.navigation.displayinfo import parse, REGION
+    from astral_toolkit.navigation import navigate as n
+    from astral_toolkit.app import overlay as o
+    from astral_toolkit.navigation.displayinfo import parse, REGION
 
     assert parse(["CamDir: 23 9 -142 FOV: 78 Focal: 0.10"])["fov"] == 78
     assert parse(["CamDir: 23 9 -142 FOV: 999"])["fov"] is None
@@ -4284,7 +4284,7 @@ def test_nav_marker_projection():
 def test_game_events_from_log(tmp_path):
     """游戏日志事件（2026-10-27，按 4.10.2 的真实日志行）：选量子目标、量子到达、管辖区、禁火区、监管区域、重生；
     只读打开以后新写的部分；游戏重开（日志变小）从头读"""
-    from sc_mining.system.gamelog import GameEvents, EventTail
+    from astral_toolkit.system.gamelog import GameEvents, EventTail
 
     L = [
         "<2026-10-24T10:46:36.173Z> [Notice] <Player Selected Quantum Target - Local> [ItemNavigation][CL][40004] | NOT AUTH | "
@@ -4327,8 +4327,8 @@ def test_game_events_from_log(tmp_path):
 def test_city_nav(monkeypatch, tmp_path):
     """城内导航：读 city_places.json（坏行跳过、改了文件重读），按米显示、8 米内到达、上下楼层提示"""
     import json  # noqa: F811
-    from sc_mining.navigation import navigate as n
-    from sc_mining.tasks import mining as t_mining
+    from astral_toolkit.navigation import navigate as n
+    from astral_toolkit.tasks import mining as t_mining
 
     rows = [
         {
@@ -4407,8 +4407,8 @@ def test_city_nav_review(monkeypatch, tmp_path):
     """二审城内导航的 5 个问题：同名地点串号、记号没校准、手动定位到达标准、坏数据、详情页叫人量子跳"""
     import json  # noqa: F811
     from datetime import datetime, timezone  # noqa: F401
-    from sc_mining.navigation import navigate as n
-    from sc_mining.tasks import navigation as t_nav
+    from astral_toolkit.navigation import navigate as n
+    from astral_toolkit.tasks import navigation as t_nav
 
     base = {
         "city": "NewBabbage",
@@ -4475,7 +4475,7 @@ def test_city_nav_review(monkeypatch, tmp_path):
 
 def test_city_arrive_hysteresis_and_near():
     """2026-10-27 实测：到了在 7–9 米来回跳 → 进 8 米算到、出 15 米才算离开；15 米内不给转向角度"""
-    from sc_mining.navigation import navigate as n
+    from astral_toolkit.navigation import navigate as n
 
     assert n.city_arrived(7.5) and not n.city_arrived(9)
     assert n.city_arrived(12, before=True) and not n.city_arrived(16, before=True)
@@ -4500,8 +4500,8 @@ def test_feedback_upload_pack_send_retry(tmp_path, monkeypatch):
     import io
     import zipfile
     from PIL import Image
-    from sc_mining.system import feedback_up as F
-    from sc_mining.core import paths, settings
+    from astral_toolkit.system import feedback_up as F
+    from astral_toolkit.core import paths, settings
 
     monkeypatch.setattr(paths, "USER", tmp_path)
     monkeypatch.setattr(settings, "load", lambda: {"feedback_upload": True})
@@ -4584,7 +4584,7 @@ def test_feedback_upload_pack_send_retry(tmp_path, monkeypatch):
 
 def test_signal_harvestable_2000():
     """地面 2,000 的倍数是可采集物（植物、菌菇等）：2026-10-27 实测 10,000 = 5 个"""
-    from sc_mining.mining import signals
+    from astral_toolkit.mining import signals
 
     lines = signals.describe_all([(10000, False, "10000", None)], where="ground")
     assert lines == ["信号 10,000 → 可采集物 ×5（植物、菌菇等）"]
@@ -4593,7 +4593,7 @@ def test_signal_harvestable_2000():
 def test_displayinfo_yields_to_mining(monkeypatch):
     """采矿助手看着面板时，读位置字模认不出也不退回识别引擎（2026-10-27 录制：抢引擎让悬浮窗晚 10–18 秒）；
     强制读（判断地面/太空）照常用识别引擎"""
-    from sc_mining.navigation import displayinfo as D, gridtext
+    from astral_toolkit.navigation import displayinfo as D, gridtext
 
     calls = []
     monkeypatch.setattr(gridtext, "ready", lambda h: True)
@@ -4603,7 +4603,7 @@ def test_displayinfo_yields_to_mining(monkeypatch):
         "_full_read",
         lambda piece, h: calls.append(1) or {**D.parse([]), "global": (1e7, 1e7, 1e7)},
     )
-    import sc_mining.core.perf as P
+    import astral_toolkit.core.perf as P
     from PIL import Image
 
     monkeypatch.setattr(P, "grab_region", lambda r: Image.new("RGB", (400, 300)))
@@ -4613,7 +4613,7 @@ def test_displayinfo_yields_to_mining(monkeypatch):
     info = D.read()
     assert info.get("yielded") and not info["global"] and not calls
     r = D.Reader(every=1.0)
-    monkeypatch.setattr("sc_mining.system.showloc.game_foreground", lambda: True)
+    monkeypatch.setattr("astral_toolkit.system.showloc.game_foreground", lambda: True)
     assert r.poll() is None and not calls and r.misses == 0  # 让路不算没读到
     r.poll(force=True)
     assert calls == [1] and r.info and r.info["global"]  # 强制读不让
@@ -4626,8 +4626,8 @@ def test_nav_nearest(monkeypatch, tmp_path):
     位置不知道只列出来；汉化名自带的英文不重复"""
     import json  # noqa: F811
     import time
-    from sc_mining.navigation import navigate as n
-    from sc_mining.tasks import navigation as t_nav
+    from astral_toolkit.navigation import navigate as n
+    from astral_toolkit.tasks import navigation as t_nav
 
     if not n.CACHE.exists():
         pytest.skip("没有星图数据")
@@ -4740,7 +4740,7 @@ def test_city_route(monkeypatch, tmp_path):
     """城里分段路线（2026-10-27）：远了走到站台 → 坐地铁（同线直达 / 在共同的站换乘一次）→ 出站；近了直接走；
     只有一个站的线不算；当前步骤标 →"""
     import json  # noqa: F811
-    from sc_mining.navigation import navigate as n
+    from astral_toolkit.navigation import navigate as n
 
     def pt(x, y, z):
         return {"x": x, "y": y, "z": z}
@@ -4895,7 +4895,7 @@ def test_site_menu(monkeypatch, tmp_path):
     """主城 / 空间站里的分类菜单（2026-10-27）：拉格朗日点的站用星系坐标；离站 6 km 内算在站里，只列这个站的；
     按站自己的「上」分楼层；同一个站里重名才加编号；名字双语"""
     import json  # noqa: F811
-    from sc_mining.navigation import navigate as n
+    from astral_toolkit.navigation import navigate as n
 
     base = dict(
         city="rr_hur_l1",
@@ -4986,9 +4986,9 @@ def test_train_data(monkeypatch, tmp_path):
     开关关了不存；每天有上限；跑测试时不发"""
     import json  # noqa: F811
     from PIL import Image
-    from sc_mining.system import train_data as T
-    from sc_mining.core import settings, paths
-    from sc_mining.ocr import OcrToken
+    from astral_toolkit.system import train_data as T
+    from astral_toolkit.core import settings, paths
+    from astral_toolkit.ocr import OcrToken
 
     monkeypatch.setattr(paths, "USER", tmp_path)
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
@@ -5054,7 +5054,7 @@ def test_rotation_phase_calibration(tmp_path, monkeypatch):
     """右上角同时给了星系坐标和星球坐标 → 反推自转相位：算回来和原值一样；连续两次一致才写文件；写了以后 rotation_deg 用校准值"""
     import math
     from datetime import datetime, timezone
-    from sc_mining.navigation import navigate as n
+    from astral_toolkit.navigation import navigate as n
 
     if not n.CACHE.exists():
         pytest.skip("没有星图数据")

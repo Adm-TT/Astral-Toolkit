@@ -3,14 +3,14 @@
 全部用 tmp_path 当 data/ 根（monkeypatch paths.DATA），不读真实 data/、不写 userdata/。"""
 
 from tests.test_gamedata import _write_min_sources
-from sc_mining.gamedata._cache import VersionCache as _VC
+from astral_toolkit.gamedata._cache import VersionCache as _VC
 
 
 def _setup(monkeypatch, tmp_path, **override):
     """tmp_path 当 data/ 根、写最小源；就绪标记和后台线程记录换成新的（每个测试一个新库目录）"""
-    import sc_mining.gamedata as G
-    from sc_mining.core import paths
-    from sc_mining.gamedata import _ready
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.core import paths
+    from astral_toolkit.gamedata import _ready
 
     tmp_path.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(paths, "DATA", tmp_path)
@@ -24,8 +24,8 @@ def _setup(monkeypatch, tmp_path, **override):
 
 
 def test_ensure_builds_when_missing(monkeypatch, tmp_path):
-    import sc_mining.gamedata as G
-    from sc_mining.gamedata._manifest import read_manifest
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.gamedata._manifest import read_manifest
 
     _setup(monkeypatch, tmp_path)
     assert read_manifest() is None
@@ -36,8 +36,8 @@ def test_ensure_builds_when_missing(monkeypatch, tmp_path):
 
 
 def test_ensure_waits_for_warm_up(monkeypatch, tmp_path):
-    import sc_mining.gamedata as G
-    from sc_mining.gamedata._manifest import read_manifest
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.gamedata._manifest import read_manifest
 
     _setup(monkeypatch, tmp_path)
     t = G.warm_up()
@@ -48,9 +48,9 @@ def test_ensure_waits_for_warm_up(monkeypatch, tmp_path):
 
 
 def test_ensure_raises_when_no_sources(monkeypatch, tmp_path):
-    import sc_mining.gamedata as G
-    from sc_mining.core import paths
-    from sc_mining.gamedata import _ready
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.core import paths
+    from astral_toolkit.gamedata import _ready
     from tests.minipytest import raises
 
     _setup(monkeypatch, tmp_path)
@@ -64,8 +64,8 @@ def test_ensure_raises_when_no_sources(monkeypatch, tmp_path):
 
 def test_shops_queries_empty_when_db_unavailable(monkeypatch, tmp_path):
     """库建不出来（没有 shops.json）：F8 / 哪买 / 可买 查不到东西，但不往外抛（和以前读不到文件一样）"""
-    from sc_mining.core import paths
-    from sc_mining.crafting import shops
+    from astral_toolkit.core import paths
+    from astral_toolkit.crafting import shops
 
     _setup(monkeypatch, tmp_path)
     monkeypatch.setattr(paths, "DATA", tmp_path / "empty")
@@ -84,9 +84,9 @@ def test_shops_queries_empty_when_db_unavailable(monkeypatch, tmp_path):
 
 def test_ensure_backs_off_after_failure(monkeypatch, tmp_path):
     """建库失败后 30 秒内再查：直接抛，不再拿锁读源重试；过了时限再试一次"""
-    import sc_mining.gamedata as G
-    from sc_mining.core import paths
-    from sc_mining.gamedata import _build, _ready
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.core import paths
+    from astral_toolkit.gamedata import _build, _ready
     from tests.minipytest import raises
 
     _setup(monkeypatch, tmp_path)
@@ -113,8 +113,8 @@ def test_ensure_backs_off_after_failure(monkeypatch, tmp_path):
 
 def test_ensure_wraps_non_gamedata_errors(monkeypatch, tmp_path):
     """写锁 mkdir / open 这类 OSError 也包成 GamedataError：功能模块只接这一种（GD-B6 审查第 2 条）"""
-    import sc_mining.gamedata as G
-    from sc_mining.gamedata import _build
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.gamedata import _build
     from tests.minipytest import raises
 
     _setup(monkeypatch, tmp_path)
@@ -131,8 +131,8 @@ def test_ensure_wraps_non_gamedata_errors(monkeypatch, tmp_path):
 
 
 def test_ensure_fast_path_after_first_success(monkeypatch, tmp_path):
-    import sc_mining.gamedata as G
-    from sc_mining.gamedata import _build
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.gamedata import _build
 
     _setup(monkeypatch, tmp_path)
     G.ensure()
@@ -146,7 +146,7 @@ def test_ensure_fast_path_after_first_success(monkeypatch, tmp_path):
 
 
 def test_items_get_all_and_order(monkeypatch, tmp_path):
-    from sc_mining.gamedata import items
+    from astral_toolkit.gamedata import items
 
     _setup(monkeypatch, tmp_path)
     rows = items.all()
@@ -164,7 +164,7 @@ def test_items_get_all_and_order(monkeypatch, tmp_path):
 
 
 def test_items_candidates_aliases_and_cache(monkeypatch, tmp_path):
-    from sc_mining.gamedata import items
+    from astral_toolkit.gamedata import items
 
     _setup(monkeypatch, tmp_path)
     c = items.candidates()
@@ -177,8 +177,8 @@ def test_items_candidates_aliases_and_cache(monkeypatch, tmp_path):
 
 
 def test_items_names_and_zh_keys(monkeypatch, tmp_path):
-    from sc_mining.crafting.itemsearch import zh_key
-    from sc_mining.gamedata import items
+    from astral_toolkit.crafting.itemsearch import zh_key
+    from astral_toolkit.gamedata import items
 
     _setup(monkeypatch, tmp_path)
     kinds = [k for k, _n, _m in items.names_of("medpen")]
@@ -189,7 +189,7 @@ def test_items_names_and_zh_keys(monkeypatch, tmp_path):
 
 
 def test_items_by_name_and_source_id(monkeypatch, tmp_path):
-    from sc_mining.gamedata import items
+    from astral_toolkit.gamedata import items
 
     _setup(monkeypatch, tmp_path)
 
@@ -206,7 +206,7 @@ def test_items_by_name_and_source_id(monkeypatch, tmp_path):
 
 
 def test_items_search(monkeypatch, tmp_path):
-    from sc_mining.gamedata import items
+    from astral_toolkit.gamedata import items
 
     _setup(monkeypatch, tmp_path)
     hits = items.search("law")
@@ -218,7 +218,7 @@ def test_items_search(monkeypatch, tmp_path):
 
 
 def test_shops_rows_buyable_places(monkeypatch, tmp_path):
-    from sc_mining.gamedata import shops
+    from astral_toolkit.gamedata import shops
 
     _setup(monkeypatch, tmp_path)
     rows = shops.rows_for_item(171)
@@ -229,7 +229,7 @@ def test_shops_rows_buyable_places(monkeypatch, tmp_path):
 
 
 def test_shops_lagrange_rows(monkeypatch, tmp_path):
-    from sc_mining.gamedata import shops
+    from astral_toolkit.gamedata import shops
     from tests.test_gamedata import _MIN_SOURCES
 
     src = dict(_MIN_SOURCES["shops.json"])
@@ -258,7 +258,7 @@ def test_shops_lagrange_rows(monkeypatch, tmp_path):
 
 
 def test_prices_city_prices(monkeypatch, tmp_path):
-    from sc_mining.gamedata import prices
+    from astral_toolkit.gamedata import prices
 
     _setup(monkeypatch, tmp_path)
     cp = prices.city_prices()
@@ -272,8 +272,8 @@ def test_prices_city_prices(monkeypatch, tmp_path):
 
 
 def test_topic_calls_share_outer_snapshot(monkeypatch, tmp_path):
-    import sc_mining.gamedata as G
-    from sc_mining.gamedata import items, shops
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.gamedata import items, shops
     from tests.test_gamedata import _MIN_SOURCES
 
     _setup(monkeypatch, tmp_path)
@@ -304,7 +304,7 @@ def _shops_with_rows(*extra):
 
 
 def test_raw_places_from_gamedata(monkeypatch, tmp_path):
-    from sc_mining.crafting import stockplaces as SP
+    from astral_toolkit.crafting import stockplaces as SP
 
     _setup(monkeypatch, tmp_path)
     assert SP._raw_places() == [
@@ -313,8 +313,8 @@ def test_raw_places_from_gamedata(monkeypatch, tmp_path):
 
 
 def test_raw_places_fallback_when_no_db(monkeypatch, tmp_path):
-    from sc_mining.core import paths
-    from sc_mining.crafting import stockplaces as SP
+    from astral_toolkit.core import paths
+    from astral_toolkit.crafting import stockplaces as SP
 
     _setup(monkeypatch, tmp_path)
     monkeypatch.setattr(paths, "DATA", tmp_path / "empty")  # 建不出库：保底列表
@@ -322,8 +322,8 @@ def test_raw_places_fallback_when_no_db(monkeypatch, tmp_path):
 
 
 def test_places_refresh_after_version_change(monkeypatch, tmp_path):
-    import sc_mining.gamedata as G
-    from sc_mining.crafting import stockplaces as SP
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.crafting import stockplaces as SP
 
     _setup(monkeypatch, tmp_path)
     monkeypatch.setattr(SP, "_PLACES", _VC())
@@ -355,8 +355,8 @@ def test_places_refresh_after_name_files_rebuild(monkeypatch, tmp_path):
     """汉化包换了：名字文件是建库源，重建后版本变，places() 自己换新；不再靠 clear_caches 按名字清（收口 2）"""
     import json
 
-    import sc_mining.gamedata as G
-    from sc_mining.crafting import stockplaces as SP
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.crafting import stockplaces as SP
 
     _setup(monkeypatch, tmp_path)
     monkeypatch.setattr(SP, "_PLACES", _VC())
@@ -371,8 +371,8 @@ def test_places_refresh_after_name_files_rebuild(monkeypatch, tmp_path):
 
 
 def test_station_at_uses_lagrange_rows(monkeypatch, tmp_path):
-    from sc_mining.crafting import shops
-    from sc_mining.navigation import position
+    from astral_toolkit.crafting import shops
+    from astral_toolkit.navigation import position
 
     row = [
         171,
@@ -411,8 +411,8 @@ def _fake_data_module():
 def test_apply_live_reads_gamedata(monkeypatch, tmp_path):
     import json
 
-    import sc_mining.gamedata as G
-    from sc_mining.update import uex
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.update import uex
 
     _setup(monkeypatch, tmp_path)
     monkeypatch.setattr(uex, "OUT", tmp_path / "prices.json")
@@ -438,7 +438,7 @@ def test_apply_live_reads_gamedata(monkeypatch, tmp_path):
 
 
 def test_apply_live_zero_price_keeps_builtin(monkeypatch, tmp_path):
-    from sc_mining.update import uex
+    from astral_toolkit.update import uex
 
     _setup(
         monkeypatch,
@@ -455,7 +455,7 @@ def test_apply_live_zero_price_keeps_builtin(monkeypatch, tmp_path):
 
 
 def test_apply_live_false_when_no_prices_file(monkeypatch, tmp_path):
-    from sc_mining.update import uex
+    from astral_toolkit.update import uex
 
     _setup(monkeypatch, tmp_path)
     (tmp_path / "prices.json").unlink()
@@ -469,8 +469,8 @@ def _count_updating(monkeypatch):
     """把 gamedata.updating 换成计数器；返回 (计数, 写文件时是不是在边界里)"""
     from contextlib import contextmanager
 
-    import sc_mining.gamedata as G
-    from sc_mining.core import paths
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.core import paths
 
     state = {"n": 0, "inside": False, "writes": []}
 
@@ -493,7 +493,7 @@ def _count_updating(monkeypatch):
 
 
 def test_refresh_runs_inside_updating(monkeypatch, tmp_path):
-    from sc_mining.update import uex
+    from astral_toolkit.update import uex
 
     _setup(monkeypatch, tmp_path)
     state = _count_updating(monkeypatch)
@@ -504,7 +504,7 @@ def test_refresh_runs_inside_updating(monkeypatch, tmp_path):
 
 
 def test_shops_update_runs_inside_updating(monkeypatch, tmp_path):
-    from sc_mining.crafting import shops
+    from astral_toolkit.crafting import shops
 
     _setup(monkeypatch, tmp_path)
     state = _count_updating(monkeypatch)
@@ -534,7 +534,7 @@ _F2 = ["Pyro", "Pyro I", "", "", "", "W"]
 
 
 def _shop_setup(monkeypatch, tmp_path):
-    from sc_mining.crafting import shops
+    from astral_toolkit.crafting import shops
 
     rows = [
         [171, "Shop D", "Stanton · D", 500.0, 0.0, "4.10", _F2],
@@ -553,8 +553,8 @@ def _shop_setup(monkeypatch, tmp_path):
 
 
 def test_catalog_verbatim_and_folded(monkeypatch, tmp_path):
-    from sc_mining.crafting.shops import _fold
-    from sc_mining.gamedata import shops as gs
+    from astral_toolkit.crafting.shops import _fold
+    from astral_toolkit.gamedata import shops as gs
 
     _setup(monkeypatch, tmp_path)
     c = gs.catalog()
@@ -604,7 +604,7 @@ def test_where_sorts_buy_asc_sell_desc(monkeypatch, tmp_path):
 
 
 def test_nearest_dedups_place(monkeypatch, tmp_path):
-    from sc_mining.navigation import position
+    from astral_toolkit.navigation import position
 
     shops = _shop_setup(monkeypatch, tmp_path)
     monkeypatch.setattr(shops, "shop_point", lambda f: {"i": f[5]})
@@ -650,8 +650,8 @@ def _legacy_build(monkeypatch, tmp_path):
     """迁移前 itemsearch._build_locked() 的合并规则（只在测试里留一份，对照用）：直接读最小源 JSON"""
     import json
 
-    from sc_mining.core.i18n import gear_zh_of_item
-    from sc_mining.crafting.itemsearch import (
+    from astral_toolkit.core.i18n import gear_zh_of_item
+    from astral_toolkit.crafting.itemsearch import (
         _has_cjk,
         _trigrams,
         _variant,
@@ -659,8 +659,8 @@ def _legacy_build(monkeypatch, tmp_path):
         en_key,
         zh_key,
     )
-    from sc_mining.gamedata._import import _names_table
-    from sc_mining.gamedata._sources import read_sources
+    from astral_toolkit.gamedata._import import _names_table
+    from astral_toolkit.gamedata._sources import read_sources
 
     src = read_sources(tmp_path)
     data = json.loads((tmp_path / "shops.json").read_text(encoding="utf-8"))
@@ -762,7 +762,7 @@ def _legacy_build(monkeypatch, tmp_path):
 
 
 def _fresh_search(monkeypatch):
-    from sc_mining.crafting import itemsearch as IS
+    from astral_toolkit.crafting import itemsearch as IS
 
     monkeypatch.setattr(IS, "_cache", _VC())
     return IS
@@ -796,7 +796,7 @@ def test_itemsearch_find_matches_json_build_on_sample(monkeypatch, tmp_path):
 def test_itemsearch_cache_keyed_by_version(monkeypatch, tmp_path):
     import json
 
-    import sc_mining.gamedata as G
+    import astral_toolkit.gamedata as G
 
     _setup(monkeypatch, tmp_path)
     IS = _fresh_search(monkeypatch)
@@ -815,14 +815,14 @@ def test_itemsearch_cache_keyed_by_version(monkeypatch, tmp_path):
 def test_query_during_rebuild_sees_old_or_new_never_error(monkeypatch, tmp_path):
     import threading
 
-    import sc_mining.gamedata as G
+    import astral_toolkit.gamedata as G
 
     _setup(monkeypatch, tmp_path)
     IS = _fresh_search(monkeypatch)
     IS._build()
     errors, empty = [], []
 
-    from sc_mining.crafting import shops
+    from astral_toolkit.crafting import shops
 
     def worker():
         for _ in range(200):
@@ -845,7 +845,7 @@ def test_query_during_rebuild_sees_old_or_new_never_error(monkeypatch, tmp_path)
 
 
 def test_itemsearch_does_not_read_json(monkeypatch, tmp_path):
-    import sc_mining.gamedata as G
+    import astral_toolkit.gamedata as G
 
     _setup(monkeypatch, tmp_path)
     G.ensure()
@@ -856,7 +856,7 @@ def test_itemsearch_does_not_read_json(monkeypatch, tmp_path):
 
 
 def test_itemsearch_empty_when_db_unavailable(monkeypatch, tmp_path):
-    from sc_mining.core import paths
+    from astral_toolkit.core import paths
 
     _setup(monkeypatch, tmp_path)
     monkeypatch.setattr(
@@ -873,8 +873,8 @@ def test_ensure_rebuilds_stale_db(monkeypatch, tmp_path):
     """升级时安装包换了源文件（不经过 updating()）：进程里第一次查询前要按源核对，别用旧库"""
     import json
 
-    import sc_mining.gamedata as G
-    from sc_mining.gamedata import _ready, prices
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.gamedata import _ready, prices
 
     _setup(monkeypatch, tmp_path)
     G.ensure()
@@ -889,9 +889,9 @@ def test_ensure_rebuilds_old_schema(monkeypatch, tmp_path):
     """清单还是旧表结构（从旧版升级上来）：重建，不拿旧库去查新表"""
     import json
 
-    import sc_mining.gamedata as G
-    from sc_mining.gamedata import _ready, shops
-    from sc_mining.gamedata._paths import manifest_path
+    import astral_toolkit.gamedata as G
+    from astral_toolkit.gamedata import _ready, shops
+    from astral_toolkit.gamedata._paths import manifest_path
 
     _setup(monkeypatch, tmp_path)
     G.ensure()
@@ -908,7 +908,7 @@ def test_ensure_rebuilds_old_schema(monkeypatch, tmp_path):
 
 def test_apply_live_db_unavailable_keeps_builtin(monkeypatch, tmp_path):
     """库建不出来（shops.json 坏了）：不覆盖内置表，也不再退回读 prices.json"""
-    from sc_mining.update import uex
+    from astral_toolkit.update import uex
 
     _setup(monkeypatch, tmp_path)
     (tmp_path / "shops.json").write_text("{坏", encoding="utf-8")
@@ -924,7 +924,7 @@ def test_query_while_new_content_is_published(monkeypatch, tmp_path):
     import json
     import threading
 
-    import sc_mining.gamedata as G
+    import astral_toolkit.gamedata as G
 
     _setup(monkeypatch, tmp_path)
     IS = _fresh_search(monkeypatch)
