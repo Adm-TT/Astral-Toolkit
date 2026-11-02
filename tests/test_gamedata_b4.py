@@ -365,7 +365,9 @@ def test_find_does_not_read_json(monkeypatch, tmp_path):
 
     _find_setup(monkeypatch, tmp_path)
     monkeypatch.setattr(loot, "load_index", boom)
-    monkeypatch.setattr(itemsearch, "wiki_items", boom)
+    assert not hasattr(
+        itemsearch, "wiki_items"
+    )  # 读 JSON 的那份收口 2 删了；类名走 gamedata.names.wiki_classes
     assert [h[0] for h in loot.find("Citadel Core")] == [
         "c4",
         "c3",
@@ -393,7 +395,7 @@ def test_clear_caches_still_safe(monkeypatch, tmp_path):
     )  # 不碰真实 mining.data
     assert loot.find("Combat Knife")
     data_pack.clear_caches()
-    assert isinstance(loot._folded, dict)
+    assert not hasattr(loot, "_folded")  # 收口 2 删了这个只被 clear_caches 写的壳
     assert [h[0] for h in loot.find("Combat Knife")] == ["k2"]
 
 
@@ -628,7 +630,16 @@ def test_mine_info_none_when_db_unavailable(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path, **_loot_src(_ROCKS))
     _detail_env(monkeypatch, tmp_path)
     monkeypatch.setattr(paths, "DATA", tmp_path / "empty")
+    calls = []
+    monkeypatch.setattr(loot, "update", lambda *a, **kw: calls.append("update"))
+    monkeypatch.setattr(
+        loot, "load_index", lambda *a, **kw: calls.append("load_index")
+    )  # 连读本地索引也不该走到（不然 _detail_env 指的那份文件在，这条会空过）
     assert loot.mine_info("carinite", online=False) is None
+    assert loot.mine_info("carinite", online=True) is None
+    assert (
+        calls == []
+    )  # 库不可用 ≠ 没有索引：查询路径不联网、不读 JSON（收口 2，待做 ⑮）
 
 
 # ---------------------------------------------------------------- Task 4：输出不变与更新流程保持

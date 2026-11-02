@@ -418,7 +418,7 @@ def test_suggest_tie_order_follows_table(monkeypatch, tmp_path):
     assert new[1][:2] == [("医疗笔", "Medpen"), ("医疗 笔", "Old Medpen Name")]
 
 
-def test_table_refreshes_after_rebuild_and_cache_clear_kept(monkeypatch, tmp_path):
+def test_table_refreshes_after_rebuild_without_cache_clear(monkeypatch, tmp_path):
     import sc_mining.gamedata as G
     from sc_mining.trade import names
     from sc_mining.update import data_pack, uex
@@ -435,10 +435,10 @@ def test_table_refreshes_after_rebuild_and_cache_clear_kept(monkeypatch, tmp_pat
     assert names._index() is not i1
     assert names.canonical("新名字", "") == ("新名字", "New Name")
     assert names.zh_for("New Name") == "新名字"
-    # localization._write_name_files 直接按名字调这两个（外面 try/except 会吞掉 AttributeError）
-    assert hasattr(names.table, "cache_clear") and hasattr(names._index, "cache_clear")
-    names.table.cache_clear()
-    names._index.cache_clear()
+    # 收口 2 删了 cache_clear 壳：缓存只跟版本走，谁也不用按名字清
+    assert not hasattr(names.table, "cache_clear") and not hasattr(
+        names._index, "cache_clear"
+    )
     monkeypatch.setattr(uex, "apply_live", lambda *a, **k: None)
     data_pack.clear_caches()
     assert names.table()["新名字"] == "New Name"
@@ -474,8 +474,6 @@ def test_names_does_not_read_json_or_call_loaders(monkeypatch, tmp_path):
         p.unlink()  # data/ 只剩 gamedata/
     monkeypatch.setattr(shops, "load", boom)
     monkeypatch.setattr(loot, "load_index", boom)
-    names.table.cache_clear()
-    names._index.cache_clear()
     assert names.table()["医疗笔"] == "Medpen"
     assert names.canonical("", "Medpen") == ("医疗笔", "Medpen")
 

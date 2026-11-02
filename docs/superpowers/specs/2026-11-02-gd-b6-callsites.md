@@ -13,10 +13,10 @@
 | `trade/names.table()` | 读 `zh_names.json` + `zh_only_names.json`，用 `_junk(en, _known_names())` 过滤，返回 `{中文: 英文}` dict（`lru_cache(maxsize=1)`） | 公共层把 `_import._names_table(sources)` 的结果**原样按顺序**存进新表 `zh_name_pairs`；`table()` 从 `gamedata.names.zh_pairs()` 组装同一个 dict，按库版本缓存；删掉 `_known_names()`（连带删掉对 `shops.load / loot.load_index` 的依赖） |
 | `trade/names._index()` | 在 `table()` 上建 `{_norm_zh(zh): (zh, en)}`、`{_fold_en(en): (zh, en)}` 两个 dict（`setdefault`，首个胜出） | 算法不动；缓存改成跟着 `table()` 那份对象走（`VersionCache(identity=True)`，同批 1 `stockplaces._index`） |
 | `to_english / canonical / zh_for / suggest` | 只消费 `table()` / `_index()` | 不改 |
-| `has_chinese / split_bilingual / _fold_en / _norm_zh / _junk / _CODE` | 纯函数，不读数据 | 不改；**`_junk / _norm_zh / _fold_en` 被 `gamedata/_import.py` import 复用，签名和规则不能动**（动了要升 `IMPORTER_VERSION`） |
+| `has_chinese / split_bilingual / _fold_en / _norm_zh / _junk / _CODE` | 纯函数，不读数据 | 不改；对照表的组装规则只在 `gamedata/_import._names_table` 一处，`trade/names` 不再有第二份；**`_junk / _norm_zh / _fold_en / _CODE` 被 `_import` 复用，改了要升 `_build.IMPORTER_VERSION`** |
 | `trade/gamekey._index / resolve` | `wiki_items()`（`cached_json`）+ 直接读 `loot_index.json`、`name_aliases.json` 建三个 dict | 公共层新表 `wiki_items` / `wiki_alt_classes` / `name_alias_pairs`（原样）+ 已有 `loot_rows`；`gamekey` 从 `gamedata.names` 取四份有序行，**在自己模块里**按原 `setdefault / 赋值` 语义建 dict，按库版本缓存 |
 | `core/i18n` | 只读包内随程序带的 `sc_glossary.json`（`GLOSSARY` 常量，三个 `lru_cache`） | **不迁、不改**（§4） |
-| `crafting/itemsearch.wiki_items()` | `cached_json(wiki_items.json)` | **本批不删**：`crafting/loot._wiki_classes`（批 4）和 `update/localization.wiki_class_names`（更新流程）还在用（§5） |
+| `crafting/itemsearch.wiki_items()` | `cached_json(wiki_items.json)` | **本批不删**：`crafting/loot._wiki_classes`（批 4）和 `update/localization.wiki_class_names`（更新流程）还在用（§5）。**收口 2（GD-K7）已删**：两处都改读 `gamedata.names.wiki_classes()` |
 
 ## 1. zh_names.json + zh_only_names.json → `names.table()`
 
@@ -82,7 +82,7 @@
 
 `i18n` **没有任何一处读 `paths.DATA`**。`names_zh.json`（包内）的读者是 `update/localization.names_source()`（没有游戏汉化包时的兜底源），也不是 `i18n`。用户汉化包 `global.ini`（`localization.read_ini`）是用户数据，不入库。→ 文件清单里 `core/i18n.py` **不改**；基线工具仍抽查几个 `i18n` 函数当护栏。
 
-## 5. `crafting/itemsearch.wiki_items()` —— 本批不删
+## 5. `crafting/itemsearch.wiki_items()` —— 本批不删（收口 2 / GD-K7 已删，改读 `gamedata.names.wiki_classes()`）
 
 | 读者 | 批次 | 迁后 |
 |---|---|---|
@@ -123,7 +123,7 @@
 | `tasks/trade.py` L195 `_zh_of` | `names.table()`，反查 dict **挂在函数属性 `_zh_of._rev` 上永不失效**（更新数据后不刷新——现状缺陷，不在本批文件清单） | 不改；§9 第 4 条 |
 | `tasks/trade.py` L106/L211/L391/L459 | `i18n.shop_cat_zh / gear_zh_of_item / mineral_zh / station_zh` | 不改 |
 | `crafting/loot.py` L116、L425-461 | `itemsearch.wiki_items`、`i18n.mineral_*` | 不改（批 4） |
-| `update/localization.py` L112-120 | `itemsearch.wiki_items` | 不改 |
+| `update/localization.py` L112-120 | `itemsearch.wiki_items` | 不改（收口 2 改读 `gamedata.names.wiki_classes`） |
 | `update/localization.py` L304-310 `_write_name_files` | `names.table.cache_clear()`、`names._index.cache_clear()`——**直接调，不判 `hasattr`**（外面包了 `try/except Exception`，属性没了会静默失效） | 不改；靠保留 `cache_clear` 属性 |
 | `update/data_pack.py` L192 `clear_caches` | `_clear("trade.names", "table", "_index")`（判 `hasattr`） | 不改 |
 | `gamedata/_import.py` L17-41 | `trade.names._fold_en / _junk / _norm_zh` | 不改；`trade/names.py` **模块顶层不能 import `gamedata`**（建库时会循环），一律函数内延迟 import |

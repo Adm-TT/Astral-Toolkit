@@ -351,20 +351,22 @@ def test_places_refresh_after_version_change(monkeypatch, tmp_path):
     assert (SP.match("Lorville") or {}).get("en") == "Lorville"
 
 
-def test_places_cache_clear_still_works(monkeypatch, tmp_path):
-    from sc_mining.crafting import stockplaces as SP
-    from sc_mining.update.data_pack import clear_caches
+def test_places_refresh_after_name_files_rebuild(monkeypatch, tmp_path):
+    """汉化包换了：名字文件是建库源，重建后版本变，places() 自己换新；不再靠 clear_caches 按名字清（收口 2）"""
+    import json
 
-    from sc_mining.update import uex
+    import sc_mining.gamedata as G
+    from sc_mining.crafting import stockplaces as SP
 
     _setup(monkeypatch, tmp_path)
-    monkeypatch.setattr(
-        uex, "apply_live", lambda m: False
-    )  # 真 clear_caches 会读真实 prices.json、改 mining.data
     monkeypatch.setattr(SP, "_PLACES", _VC())
     monkeypatch.setattr(SP, "_INDEX", _VC())
     first = SP.places()
-    clear_caches()  # 汉化包换了：data_pack 按名字清 places / _index
+    assert SP.places() is first and not hasattr(SP.places, "cache_clear")
+    with G.updating():
+        (tmp_path / "places_zh.json").write_text(
+            json.dumps({"X": "换了"}), encoding="utf-8"
+        )
     assert SP.places() is not first
 
 

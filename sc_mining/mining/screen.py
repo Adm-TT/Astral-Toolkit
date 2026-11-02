@@ -1,7 +1,7 @@
 """读屏主程序（Windows，本地离线）
 
-python -m sc_mining.screen            实时读屏，扫描结果一变就输出推荐
-python -m sc_mining.screen 截图.png   用截图测试识别效果
+python -m sc_mining.mining.screen            实时读屏，扫描结果一变就输出推荐
+python -m sc_mining.mining.screen 截图.png   用截图测试识别效果
 
 读取区域按屏幕比例定位，1080p / 1440p / 4K 都适用；区域故意取得比面板大，
 面板位置有点偏移也没关系，真正定位靠标签文字（见 parse.py）。

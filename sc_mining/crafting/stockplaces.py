@@ -131,19 +131,10 @@ _INDEX: VersionCache = VersionCache(
 )  # 键是 places() 那份对象本身（按 is 比）：跟着它走
 
 
-def _clear_cache():
-    """data_pack.clear_caches 按名字清（汉化包换了时地点中文名也要重算）"""
-    _PLACES.clear()
-    _INDEX.clear()
-
-
 def places():
     """所有地点：[{label, zh, en, sys, sys_zh, planet_zh, moon_zh, path, kind, keys}]，按星系、星球排好。
     键是建之前读到的版本：建的过程中发布了新库，下次会重算；之前还没有库（这次刚建好）才记建好后的"""
     return _PLACES.get_for(_data_version(), _build_places, key_after=_data_version)
-
-
-setattr(places, "cache_clear", _clear_cache)
 
 
 def _build_places():
@@ -209,9 +200,6 @@ def _index():
         return idx
 
     return _INDEX.get_for(ps, build)  # 跟着 places() 那份走
-
-
-setattr(_index, "cache_clear", _clear_cache)
 
 
 def match(text, system=None):

@@ -386,9 +386,11 @@ def test_frozen_main_old_helper_args_exit(monkeypatch):
 
 def test_startup_drops_stale_helper_files():
     """老版本留下的重启请求文件：启动时（paths.migrate）删掉，没有代码再读它"""
-    from sc_mining.core import paths
+    from sc_mining.core import migration
 
-    names = [p.name for p in paths._DELETE]  # 清单在每次取的时候按当前的 paths 现算
+    names = [
+        p.name for p in migration._get_delete_list()
+    ]  # 清单在每次取的时候按当前的 paths 现算
     assert "restart_request" in names
 
 

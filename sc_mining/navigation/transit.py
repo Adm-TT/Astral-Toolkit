@@ -172,18 +172,23 @@ def amenity_targets(
     kind: str, data: Optional[Dict[str, Any]] = None
 ) -> List[Dict[str, Any]]:
     """城外有这类设施的地点（data/place_amenities.json，从游戏数据层读）→ 导航目标。
-    设施里的引用（poi / point / body）按传进来的星图回查；库不可用当作没有设施"""
+    设施里的引用（poi / point / body）按传进来的星图回查；库不可用当作没有设施。
+    设施表和城里的点在一个快照里取（以前各开各的，换代那一刻可能新设施对旧城点；收口 2）。
+    星图先在快照外取：load() 第一次用时会下载并重建库，钉在快照里就只能看到重建前的旧库"""
     data = data or load()
     try:
-        rows = gamedata.places.amenities(kind)
+        gamedata.ensure()
+        with gamedata.snapshot():
+            rows = gamedata.places.amenities(kind)
+            inside = {q.get("city") for q in city_targets(kind)}
     except gamedata.GamedataError:
         rows = []
+        inside = {q.get("city") for q in city_targets(kind)}
     pois: Dict[str, Dict[str, Any]] = {}
     for q in data["pois"]:
         pois.setdefault(_norm(q["n"]), q)
     pts = {q["n"]: q for q in data.get("points") or []}
     pts_id = {q["i"]: q for q in data.get("points") or [] if q.get("i")}
-    inside = {q.get("city") for q in city_targets(kind)}
     out: List[Dict[str, Any]] = []
     for r in rows:
         if r["rec"] in inside:

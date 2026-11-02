@@ -617,8 +617,12 @@ def test_itemstats_item_shapes(monkeypatch, tmp_path):
 def test_itemstats_none_for_unknown(monkeypatch, tmp_path):
     from sc_mining.crafting import itemstats
 
-    _setup(monkeypatch, tmp_path, **{"item_stats.json": copy.deepcopy(_STATS)})
-    for u in ("", None, "不存在"):
+    src = copy.deepcopy(_STATS)
+    src["items"][
+        "uuid-empty"
+    ] = {}  # 源里的空条目：以前 .get(uuid) or None 是 None，现在也不入库（收口 2）
+    _setup(monkeypatch, tmp_path, **{"item_stats.json": src})
+    for u in ("", None, "不存在", "uuid-empty"):
         assert itemstats.item(u) is None and itemstats.tags(u) == {}
         assert itemstats.base_value(u, "health_maxhealth") == (None, "")
 
@@ -726,7 +730,7 @@ def test_wikelo_build_runs_inside_updating(monkeypatch, tmp_path):
 
 
 def test_update_rebuilds_once_and_checks_outside_write_lock(monkeypatch, tmp_path):
-    """update()：比版本 / 下载只在 BUILD_LOCK 里、不进 updating；两份文件重建套一层 updating，库只重建一次"""
+    """update()：比版本 / 下载不拿写锁也不拿 BUILD_LOCK（收口 2）；两份文件重建套一层 updating，库只重建一次"""
     import sc_mining.gamedata as G
     from sc_mining.crafting import build_crafting, crafting, wikelo
     from sc_mining.gamedata import _lock
@@ -770,7 +774,7 @@ def test_update_rebuilds_once_and_checks_outside_write_lock(monkeypatch, tmp_pat
         "builtins.print", lambda *a, **k: out.append(" ".join(map(str, a)))
     )
     build_crafting.update()
-    assert seen == {"write_lock_depth": 0, "build_lock": True}
+    assert seen == {"write_lock_depth": 0, "build_lock": False}
     assert made == [("bp", 0), ("wk", 0)]
     assert [x for x, _ in log] == ["updating"] * 3 and not any(held for _, held in log)
     assert n[0] == 1 and G.last_error() is None

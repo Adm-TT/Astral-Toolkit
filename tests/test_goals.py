@@ -326,41 +326,40 @@ def test_stock_suggest_and_named_add(monkeypatch, tmp_path):
             "钛": "Titanium",
         },
     )
-    names._index.cache_clear()
-    try:
-        rows = t_stock.stock_suggest(q="冷冻")
-        assert {
-            "zh": "冷冻舱（剜度）",
-            "en": "CryoPod (Vanduul)",
-            "kind": "物品",
-            "unit": "个",
-        } in rows
-        ore = t_stock.stock_suggest(q="taran")[0]
-        assert (
-            ore["en"] == "Taranite" and ore["kind"] == "矿物" and ore["unit"] == "SCU"
-        )
-        r = t_stock.stock_add_named(
-            name="冷冻舱（剜度）",
-            en="CryoPod (Vanduul)",
-            zh="冷冻舱（剜度）",
-            kind="物品",
-            qty="35",
-            unit="个",
-            quality="0",
-            location="新巴贝奇",
-        )
-        assert "added" in r and any(
-            x["qty"] == 35 and x["unit"] == "个" for x in r["rows"]
-        )
-        r = t_stock.stock_add_named(
-            name="冷冻舱（刻度）", qty="2", unit="", quality="", location="A"
-        )  # 没点选、名字认错：按汉化包纠正
-        assert "冷冻舱（剜度）" in r["added"]
-        assert "error" in t_stock.stock_add_named(
-            name="钛", qty="1", unit="桶", location="A"
-        )
-    finally:
-        names._index.cache_clear()
+    rows = t_stock.stock_suggest(q="冷冻")
+    assert {
+        "zh": "冷冻舱（剜度）",
+        "en": "CryoPod (Vanduul)",
+        "kind": "物品",
+        "unit": "个",
+    } in rows
+    ore = t_stock.stock_suggest(q="taran")[0]
+    assert ore["en"] == "Taranite" and ore["kind"] == "矿物" and ore["unit"] == "SCU"
+    r = t_stock.stock_add_named(
+        name="冷冻舱（剜度）",
+        en="CryoPod (Vanduul)",
+        zh="冷冻舱（剜度）",
+        kind="物品",
+        qty="35",  # pyright: ignore[reportArgumentType]  # 网页传来的是字符串，测的就是这个
+        unit="个",
+        quality="0",
+        location="新巴贝奇",
+    )
+    assert "added" in r and any(x["qty"] == 35 and x["unit"] == "个" for x in r["rows"])
+    r = t_stock.stock_add_named(
+        name="冷冻舱（刻度）",
+        qty="2",  # pyright: ignore[reportArgumentType]
+        unit="",
+        quality="",
+        location="A",
+    )  # 没点选、名字认错：按汉化包纠正
+    assert "冷冻舱（剜度）" in r["added"]
+    assert "error" in t_stock.stock_add_named(
+        name="钛",
+        qty="1",  # pyright: ignore[reportArgumentType]
+        unit="桶",
+        location="A",
+    )
 
 
 def test_stock_places_list_and_match():

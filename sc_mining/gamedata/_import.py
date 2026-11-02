@@ -46,7 +46,7 @@ def _lst(v: Any) -> list:
 
 
 def _known_en(sources: dict[str, SourceBytes]) -> set[str]:
-    """trade/names._known_names()：商店和掉落里所有英文名（折叠过）——但从已读的源算，不碰模块缓存"""
+    """迁移前 trade/names._known_names()（107a760 之前）的规则：商店和掉落里所有英文名（折叠过）——从已读的源算，不碰模块缓存"""
     from ..trade.names import _fold_en
 
     out: set[str] = set()
@@ -58,7 +58,8 @@ def _known_en(sources: dict[str, SourceBytes]) -> set[str]:
 
 
 def _names_table(sources: dict[str, SourceBytes]) -> dict[str, str]:
-    """trade/names.table() L16-38 的规则：去假英文名；zh_only_names 只补中文 ≥3 字且还没有的"""
+    """中英对照表的组装规则（唯一一份；迁移前在 trade/names.table()，107a760 之前）：去假英文名；zh_only_names 只补中文 ≥3 字且还没有的。
+    用到的 trade/names._junk / _norm_zh / _fold_en / _CODE 改了要升 _build.IMPORTER_VERSION"""
     from ..trade.names import _junk, _norm_zh
 
     zh_names = _d(sources, "zh_names.json", None)
@@ -807,14 +808,15 @@ def import_wikelo(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> 
 def import_item_stats(
     conn: sqlite3.Connection, sources: dict[str, SourceBytes]
 ) -> None:
-    """每件一行；size / mass 不是数字存 NULL（行保留——itemstats.item 照样会返回这条）；s 整段 JSON，存不下的当 {}"""
+    """每件一行；size / mass 不是数字存 NULL（行保留——itemstats.item 照样会返回这条）；s 整段 JSON，存不下的当 {}。
+    值不是 dict 或是空 dict 的条目不入库（迁移前 `.get(uuid) or None` 对 {} 也是 None；收口 2，importer 7）"""
     import json
 
     raw = _d(sources, "item_stats.json", {}) or {}
     items = raw.get("items") if isinstance(raw, dict) else None
     rows = []
     for i, (uuid, v) in enumerate(items.items() if isinstance(items, dict) else ()):
-        if not isinstance(v, dict):
+        if not isinstance(v, dict) or not v:
             continue
         try:
             stats_json = json.dumps(

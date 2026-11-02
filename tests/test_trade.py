@@ -793,71 +793,59 @@ def _names(monkeypatch):
     from sc_mining.trade import names
 
     monkeypatch.setattr(names, "table", lambda: dict(_NAMES))
-    names._index.cache_clear()
     return names
 
 
 def test_canonical_name_fixes_ocr_misreads(monkeypatch):
     """认错一个字、丢一个字、中英连写都对回汉化包里的标准名；英文名优先；对不上的不乱猜"""
     names = _names(monkeypatch)
-    try:
-        assert names.canonical("冷冻舱（刻度）", "") == (
-            "冷冻舱（剜度）",
-            "CryoPod (Vanduul)",
-        )
-        assert names.canonical("冷冻舱（度）", "") == (
-            "冷冻舱（剜度）",
-            "CryoPod (Vanduul)",
-        )
-        assert names.canonical("随便", "CryoPod (Vanduul)") == (
-            "冷冻舱（剜度）",
-            "CryoPod (Vanduul)",
-        )
-        assert (
-            names.canonical("", "Irradiated ValakkarFang(Apex)")[0]
-            == "受辐射的瓦拉卡獠牙（巅峰期）"
-        )
-        assert (
-            names.canonical("受辐射的瓦拉卡獠牙（峰期）", "")[1]
-            == "Irradiated Valakkar Fang (Apex)"
-        )
-        assert names.canonical("塔兰导电石Taranite", "") == (
-            "塔兰导电石",
-            "Taranite",
-        )  # 矿物：中英连写拆开
-        assert names.split_bilingual("铁 Iron") == (
-            "铁",
-            "Iron",
-        ) and names.split_bilingual("冷冻舱") == ("冷冻舱", "")
-        assert names.canonical("完全不相干的字", "") is None
-        assert (
-            names.zh_for("CryoPod") == "冷冻舱"
-            and names.zh_for("Taranite") == "塔兰导电石"
-        )
-        hits = names.suggest("冷冻")
-        assert ("冷冻舱", "CryoPod") in hits and (
-            "冷冻舱（剜度）",
-            "CryoPod (Vanduul)",
-        ) in hits
-        assert names.suggest("cryo")[0] == ("冷冻舱", "CryoPod")
-    finally:
-        names._index.cache_clear()
+    assert names.canonical("冷冻舱（刻度）", "") == (
+        "冷冻舱（剜度）",
+        "CryoPod (Vanduul)",
+    )
+    assert names.canonical("冷冻舱（度）", "") == (
+        "冷冻舱（剜度）",
+        "CryoPod (Vanduul)",
+    )
+    assert names.canonical("随便", "CryoPod (Vanduul)") == (
+        "冷冻舱（剜度）",
+        "CryoPod (Vanduul)",
+    )
+    got = names.canonical("", "Irradiated ValakkarFang(Apex)")
+    assert got is not None and got[0] == "受辐射的瓦拉卡獠牙（巅峰期）"
+    got = names.canonical("受辐射的瓦拉卡獠牙（峰期）", "")
+    assert got is not None and got[1] == "Irradiated Valakkar Fang (Apex)"
+    assert names.canonical("塔兰导电石Taranite", "") == (
+        "塔兰导电石",
+        "Taranite",
+    )  # 矿物：中英连写拆开
+    assert names.split_bilingual("铁 Iron") == (
+        "铁",
+        "Iron",
+    ) and names.split_bilingual("冷冻舱") == ("冷冻舱", "")
+    assert names.canonical("完全不相干的字", "") is None
+    assert (
+        names.zh_for("CryoPod") == "冷冻舱" and names.zh_for("Taranite") == "塔兰导电石"
+    )
+    hits = names.suggest("冷冻")
+    assert ("冷冻舱", "CryoPod") in hits and (
+        "冷冻舱（剜度）",
+        "CryoPod (Vanduul)",
+    ) in hits
+    assert names.suggest("cryo")[0] == ("冷冻舱", "CryoPod")
 
 
 def test_label_uses_corrected_chinese_name(monkeypatch, tmp_path):
     """库存里记着 F8 认错的中文名（冷冻舱（刻度））：显示时按汉化包纠正"""
-    names = _names(monkeypatch)
+    _names(monkeypatch)
     from sc_mining.trade.console import Trade
 
-    try:
-        t = Trade(tmp_path / "db", providers=[])
-        t.catalog.upsert([Item("uex:1", "CryoPod"), Item("uex:2", "Taranite")])
-        t.catalog.add_alias("uex:1", "冷冻舱（刻度）")
-        t.catalog.add_alias("uex:2", "塔兰导电石Taranite")
-        assert t.label("uex:1") == "冷冻舱（剜度）（CryoPod）"
-        assert t.label("uex:2") == "塔兰导电石（Taranite）"
-    finally:
-        names._index.cache_clear()
+    t = Trade(tmp_path / "db", providers=[])
+    t.catalog.upsert([Item("uex:1", "CryoPod"), Item("uex:2", "Taranite")])
+    t.catalog.add_alias("uex:1", "冷冻舱（刻度）")
+    t.catalog.add_alias("uex:2", "塔兰导电石Taranite")
+    assert t.label("uex:1") == "冷冻舱（剜度）（CryoPod）"
+    assert t.label("uex:2") == "塔兰导电石（Taranite）"
 
 
 def _tok(text, x, y, w=40, h=14):

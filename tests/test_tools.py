@@ -3897,7 +3897,9 @@ def test_item_search_wiki_gap_fill_and_tail_name_keys():
 
     if not (paths.DATA / "wiki_items.json").exists():
         pytest.skip("没有 wiki 物品数据")
-    assert len(I.wiki_items()) > 7000
+    from sc_mining.gamedata import names as gd_names
+
+    assert len(gd_names.wiki_classes()) > 7000
     hit = t_trade.item_search("Hartmoore Inverter")[0]
     # 2026-10-27 起汉化包只写中文名的物品也有英文名（data/zh_only_names.json）：带中文名、来源是汉化包
     assert (
