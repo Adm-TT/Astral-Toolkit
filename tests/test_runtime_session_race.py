@@ -98,6 +98,36 @@ class _ErrorWorker(FakeWorker):
         return [("bus", "live", {"running": False})]
 
 
+def test_join_of_a_stuck_session_is_not_fooled_by_a_finished_one():
+    """join(A) 只能等 A：B 已经退出了也不能拿 B 的线程当 A 回了"""
+    gate = Gate()
+    worker = FakeWorker(restart_while_stopping=True)
+    worker.gate = gate
+    loop, _, _ = make_loop(worker, join_timeout=0.02)
+    try:
+        sid_a = _start(loop, worker)
+        assert gate.entered.wait(WAIT)
+        old = loop._current.session  # type: ignore[union-attr]
+        loop.request_stop_current(StopInfo("user"))
+        assert not loop.join(session_id=sid_a)
+        worker.gate = None
+        sid_b = loop.start()
+        assert sid_b is not None and _wait_state(loop, RunState.RUNNING)
+        # B 正常停掉；A 还卡着。join(A) 必须还是 False
+        assert (
+            loop.request_stop(old, StopInfo("user")) is False
+        )  # 旧会话的停止命令不管用
+        loop.request_stop_current(StopInfo("user"))
+        assert loop.join(session_id=sid_b)
+        assert not loop.join(session_id=sid_a, timeout=0.05), "A 还卡在 tick 里"
+        gate.release.set()
+        assert loop.join(session_id=sid_a, timeout=WAIT)
+    finally:
+        loop.request_stop_current(StopInfo("user"))
+        gate.release.set()
+        loop.join(session_id=loop.state().session_id)
+
+
 def test_r1_join_waits_only_its_own_session():
     """T1 停 A（A 卡在 tick 里）→ T2 开 B → T1 才 join(A)：等的是 A，B 一直是 RUNNING"""
     gate = Gate()
@@ -321,11 +351,14 @@ def test_r7_run_flag_never_written_backwards():
         t = threading.Thread(target=starter, daemon=True)
         t.start()
         assert _wait_until(lambda: loop.state().state is RunState.RUNNING, 5)
-        gate.release.set()  # A 的 False 这才写进去
+        assert not started.is_set(), (
+            "start() 应该被 flag 锁挡在写盘那一步（不能先写完再被覆盖）"
+        )
+        gate.release.set()  # A 的 False 这才写进去，B 再按最新期望值写 True
         assert started.wait(WAIT)
         assert holder["sid"] is not None
         assert _wait_until(lambda: "live_on" and loop._flag_want is True, 5)
-        assert saved[-1] is True, saved
+        assert saved == [True, False, True], saved
         assert loop.state().state is RunState.RUNNING
     finally:
         gate.release.set()
