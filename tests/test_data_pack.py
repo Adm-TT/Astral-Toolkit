@@ -20,7 +20,9 @@ def _setup(monkeypatch, tmp_path, pages):
     monkeypatch.setattr(P, "STAMP", tmp_path / "data" / "data_pack.json")
     from sc_mining.core import paths
 
-    monkeypatch.setattr(paths, "DATA", tmp_path / "data")  # 装完会重建游戏数据库：也指向临时目录，别碰真实 data/
+    monkeypatch.setattr(
+        paths, "DATA", tmp_path / "data"
+    )  # 装完会重建游戏数据库：也指向临时目录，别碰真实 data/
     (tmp_path / "data").mkdir(exist_ok=True)
 
     def fake_open(url, timeout):
@@ -191,9 +193,7 @@ def test_loot_detail_reads_bundle_first(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(loot, "CACHE_DIR", tmp_path / "loot")
     monkeypatch.setattr(loot, "_zip", {"z": None, "mtime": None, "version": None})
-    monkeypatch.setattr(
-        loot, "load_index", lambda auto=True: {"version": "4.10.2LIVE", "rows": []}
-    )
+    monkeypatch.setattr(loot, "_index_meta", lambda: {"version": "4.10.2LIVE"})
     monkeypatch.setattr(
         loot, "_get", lambda *a, **k: (_ for _ in ()).throw(OSError("不该联网"))
     )
@@ -202,9 +202,7 @@ def test_loot_detail_reads_bundle_first(monkeypatch, tmp_path):
         loot, "_get", lambda url, timeout=60: {"net": url.endswith("u2.json")}
     )
     assert loot.detail("u2") == {"net": True}  # 整包里没有：现查
-    monkeypatch.setattr(
-        loot, "load_index", lambda auto=True: {"version": "4.11.0LIVE", "rows": []}
-    )
+    monkeypatch.setattr(loot, "_index_meta", lambda: {"version": "4.11.0LIVE"})
     monkeypatch.setattr(loot, "_get", lambda url, timeout=60: {"new": True})
     assert loot.detail("u1") == {"new": True}  # 游戏版本变了：旧整包不用
 
