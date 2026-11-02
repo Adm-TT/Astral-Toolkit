@@ -483,7 +483,9 @@ ENTRIES = {
     "where": where,
     "craft": craft,
     "trade": trade,
-    "nav": lambda: __import__("astral_toolkit.navigation.navigate", fromlist=["ask"]).ask(),
+    "nav": lambda: __import__(
+        "astral_toolkit.navigation.navigate", fromlist=["ask"]
+    ).ask(),
 }
 
 

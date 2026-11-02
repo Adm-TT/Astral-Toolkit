@@ -103,7 +103,9 @@ def test_apply_keeps_personal_data(monkeypatch, tmp_path):
     assert (root / "astral_toolkit" / "goals.py").exists() and (
         root / "使用说明.txt"
     ).read_text(encoding="utf-8") == "新说明"
-    assert not (root / "astral_toolkit" / "old_module.py").exists()  # 新版本删掉的旧代码清掉
+    assert not (
+        root / "astral_toolkit" / "old_module.py"
+    ).exists()  # 新版本删掉的旧代码清掉
     assert (root / "userdata" / "settings.json").read_text() == '{"mine": true}'
     assert (root / ".venv" / "python.txt").exists()
     assert (
@@ -231,7 +233,9 @@ def test_upgrade_backs_up_and_rollback_restores(monkeypatch, tmp_path):
     assert (
         'VERSION = "1.5.0"' in (root / "astral_toolkit" / "version.py").read_text()
     )  # 磁盘上的版本号也回去了
-    assert (root / "astral_toolkit" / "old_module.py").exists()  # 新版删掉的旧模块也回来了
+    assert (
+        root / "astral_toolkit" / "old_module.py"
+    ).exists()  # 新版删掉的旧模块也回来了
     left = [p.name for p in (root / "userdata" / "backups").glob("Dubhe_*.zip")]
     assert left == ["Dubhe_1.6.0.zip"]  # 回滚时也备份了刚才的新版，只留这一个
     assert (
@@ -278,7 +282,9 @@ def test_backup_failure_aborts_without_touching_files(monkeypatch, tmp_path):
     import pytest
 
     U, root = _setup(monkeypatch, tmp_path)
-    new = _pkg(tmp_path / "Dubhe_1.6.0.zip", "1.6.0", {"astral_toolkit/extra.py": "# new"})
+    new = _pkg(
+        tmp_path / "Dubhe_1.6.0.zip", "1.6.0", {"astral_toolkit/extra.py": "# new"}
+    )
 
     def boom(*a, **k):
         raise OSError("磁盘满了")
@@ -326,7 +332,9 @@ def test_beta_backup_shows_in_rollback(monkeypatch, tmp_path):
     ]
     assert U.mark_stable().name == "Dubhe_1.5.0-beta.2.zip"
     live = _pkg(
-        tmp_path / "Dubhe_1.5.0.zip", "1.5.0", {"astral_toolkit/app/server.py": "# live"}
+        tmp_path / "Dubhe_1.5.0.zip",
+        "1.5.0",
+        {"astral_toolkit/app/server.py": "# live"},
     )
     U.apply(live, progress=lambda m: None)  # beta.2 → 同号正式版：要另打 beta.2 的备份
     assert [p.name for p in (root / "userdata" / "backups").glob("Dubhe_*.zip")] == [

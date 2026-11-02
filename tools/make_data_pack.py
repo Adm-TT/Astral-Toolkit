@@ -54,7 +54,10 @@ def main(argv):
         r = run.update(
             direct=True,
             web_ok=(
-                ("astral_toolkit.navigation.navigate", "astral_toolkit.navigation.starmap")
+                (
+                    "astral_toolkit.navigation.navigate",
+                    "astral_toolkit.navigation.starmap",
+                )
                 if oc
                 else ()
             ),  # navigate.update 的 __module__ 实际是 starmap：两个名字都给（收口 1）

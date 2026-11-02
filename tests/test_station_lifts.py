@@ -499,7 +499,11 @@ def test_nav_engine_station_branch(monkeypatch, tmp_path):
     import types
 
     n, ps = _station(tmp_path, monkeypatch)
-    from astral_toolkit.tasks import mining as t_mining, navigation as t_nav, system as t_sys
+    from astral_toolkit.tasks import (
+        mining as t_mining,
+        navigation as t_nav,
+        system as t_sys,
+    )
     from astral_toolkit.app.engines.manager import EngineManager
 
     em = EngineManager.get_instance()

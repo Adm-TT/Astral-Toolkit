@@ -95,7 +95,11 @@ def test_write_lock_blocks_other_process(monkeypatch, tmp_path):
 
 
 def test_manifest_roundtrip(monkeypatch, tmp_path):
-    from astral_toolkit.gamedata._manifest import Manifest, read_manifest, write_manifest
+    from astral_toolkit.gamedata._manifest import (
+        Manifest,
+        read_manifest,
+        write_manifest,
+    )
 
     _data_root(monkeypatch, tmp_path)
     m = Manifest("g1", "v1", 1, "gamedata-g1.db")
@@ -933,7 +937,11 @@ def test_read_manifest_retries_permission_error(monkeypatch, tmp_path):
     from pathlib import Path
 
     from astral_toolkit.gamedata import _manifest
-    from astral_toolkit.gamedata._manifest import Manifest, read_manifest, write_manifest
+    from astral_toolkit.gamedata._manifest import (
+        Manifest,
+        read_manifest,
+        write_manifest,
+    )
 
     _data_root(monkeypatch, tmp_path)
     m = Manifest("g1", "v1", 1, "gamedata-g1.db")
@@ -957,7 +965,11 @@ def test_read_manifest_gives_up_after_retries(monkeypatch, tmp_path):
     from pathlib import Path
 
     from astral_toolkit.gamedata import GamedataUnavailable, _manifest
-    from astral_toolkit.gamedata._manifest import Manifest, read_manifest, write_manifest
+    from astral_toolkit.gamedata._manifest import (
+        Manifest,
+        read_manifest,
+        write_manifest,
+    )
     from tests.minipytest import raises
 
     _data_root(monkeypatch, tmp_path)
@@ -977,7 +989,11 @@ def test_read_manifest_cached_until_file_changes(monkeypatch, tmp_path):
     from pathlib import Path
 
     from astral_toolkit.gamedata import GamedataUnavailable
-    from astral_toolkit.gamedata._manifest import Manifest, read_manifest, write_manifest
+    from astral_toolkit.gamedata._manifest import (
+        Manifest,
+        read_manifest,
+        write_manifest,
+    )
     from astral_toolkit.gamedata._paths import manifest_path
     from tests.minipytest import raises
 

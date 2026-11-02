@@ -213,7 +213,11 @@ def test_tasks_mining_gets_engine_only_inside_functions():
     assert _toplevel_engine_calls("def f():\n    return _engines().pos") == []
 
 
-_RUNTIME_FORBIDDEN = ("astral_toolkit.app", "astral_toolkit.tasks", "astral_toolkit.gamedata")
+_RUNTIME_FORBIDDEN = (
+    "astral_toolkit.app",
+    "astral_toolkit.tasks",
+    "astral_toolkit.gamedata",
+)
 
 
 def _runtime_violations(source, pkg="astral_toolkit.runtime"):

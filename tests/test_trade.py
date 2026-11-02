@@ -36,7 +36,11 @@ import json
 from datetime import datetime, timezone, timedelta  # noqa: F811
 from decimal import Decimal
 from tests import fakehttp as httpx
-from astral_toolkit.trade.providers.http import HttpTransport, SourceError, decimal_price
+from astral_toolkit.trade.providers.http import (
+    HttpTransport,
+    SourceError,
+    decimal_price,
+)
 from astral_toolkit.trade.providers.uex import UexProvider
 from astral_toolkit.trade.providers.scm import ScmProvider
 

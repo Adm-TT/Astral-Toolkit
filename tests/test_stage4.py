@@ -215,7 +215,10 @@ def test_all_api_names_routed():
     missing = [n for n in _OLD_API_NAMES if n not in r]
     assert not missing, missing
     for n in _OLD_API_NAMES:
-        assert r[n].__module__.startswith("astral_toolkit.app.api."), (n, r[n].__module__)
+        assert r[n].__module__.startswith("astral_toolkit.app.api."), (
+            n,
+            r[n].__module__,
+        )
 
 
 def test_no_services_module():

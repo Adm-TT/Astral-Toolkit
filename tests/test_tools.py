@@ -1735,7 +1735,11 @@ def test_space_waypoint(monkeypatch, tmp_path):
     """太空里用当前位置新建路标：记星系坐标；导航给直线距离、先跳到哪、对准哪个标记"""
     import time, math  # noqa: E401, F401
     from astral_toolkit.navigation import navigate as n
-    from astral_toolkit.tasks import mining as t_mining, navigation as t_nav, system as t_sys
+    from astral_toolkit.tasks import (
+        mining as t_mining,
+        navigation as t_nav,
+        system as t_sys,
+    )
     from astral_toolkit.app import hud_state
 
     if not n.CACHE.exists():
@@ -1843,7 +1847,11 @@ def test_mark_here_hotkey(monkeypatch, tmp_path):
     """游戏里按 F7：等玩家自己在聊天框输入 /showlocation（AT 不替你打字），用剪贴板里的坐标记路标（太空里记星系坐标）；不读右上角"""
     from astral_toolkit.navigation import navigate as n
     from astral_toolkit.system import showloc
-    from astral_toolkit.tasks import mining as t_mining, navigation as t_nav, system as t_sys
+    from astral_toolkit.tasks import (
+        mining as t_mining,
+        navigation as t_nav,
+        system as t_sys,
+    )
     from astral_toolkit.app.engines.manager import EngineManager
 
     em = EngineManager.get_instance()
@@ -2624,7 +2632,11 @@ def test_space_fix_dedupe_and_session(monkeypatch, tmp_path):
     import time as _t
     from astral_toolkit.navigation import navigate as n
     from astral_toolkit.core import paths, settings
-    from astral_toolkit.tasks import mining as t_mining, navigation as t_nav, system as t_sys
+    from astral_toolkit.tasks import (
+        mining as t_mining,
+        navigation as t_nav,
+        system as t_sys,
+    )
     from astral_toolkit.app.engines.manager import EngineManager
 
     em = EngineManager.get_instance()
@@ -2745,7 +2757,11 @@ def test_nav_mode_switch(monkeypatch, tmp_path):
     import json, time as _t  # noqa: E401, F401, F811
     from astral_toolkit.navigation import navigate as n
     from astral_toolkit.core import settings, paths
-    from astral_toolkit.tasks import mining as t_mining, navigation as t_nav, system as t_sys
+    from astral_toolkit.tasks import (
+        mining as t_mining,
+        navigation as t_nav,
+        system as t_sys,
+    )
     from astral_toolkit.app.engines.manager import EngineManager
 
     em = EngineManager.get_instance()
@@ -3246,7 +3262,11 @@ def test_craft_filter_by_mineral_and_item_hud_expires(monkeypatch):
     assert "mat" not in t_goals.craft_browse()
     # 物品悬浮窗定时收起；中途又写了新内容就按新内容重新计时
     hud = {}
-    from astral_toolkit.tasks import mining as t_mining, navigation as t_nav, system as t_sys
+    from astral_toolkit.tasks import (
+        mining as t_mining,
+        navigation as t_nav,
+        system as t_sys,
+    )
 
     _v = lambda: type(  # noqa: E731
         "H",
@@ -3523,7 +3543,11 @@ def test_waypoint_from_pasted_showlocation(monkeypatch, tmp_path):
     """路标页粘贴 /showlocation 的输出：先预览认出星球 / 经纬度，再起名保存（2026-10-23 用户要求，取代填经纬度）"""
     from astral_toolkit.navigation import navigate as n
     from astral_toolkit.core import paths
-    from astral_toolkit.tasks import mining as t_mining, navigation as t_nav, system as t_sys
+    from astral_toolkit.tasks import (
+        mining as t_mining,
+        navigation as t_nav,
+        system as t_sys,
+    )
     from astral_toolkit.app import hud_state
 
     if not n.CACHE.exists():

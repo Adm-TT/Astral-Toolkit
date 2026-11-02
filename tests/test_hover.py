@@ -2,7 +2,11 @@
 
 import unittest
 from astral_toolkit.ocr import OcrToken
-from astral_toolkit.trade.inspector import get_hover_regions, _read_tooltip, HOVER_REGIONS  # noqa: F401
+from astral_toolkit.trade.inspector import (
+    get_hover_regions,
+    _read_tooltip,
+    HOVER_REGIONS,  # noqa: F401
+)
 
 
 class MockImage:

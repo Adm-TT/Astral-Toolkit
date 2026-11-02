@@ -416,7 +416,9 @@ def test_stock_out_set_move_and_places(monkeypatch, tmp_path):
     _v = lambda: t  # noqa: E731
     for _m in (t_count, t_goals, t_hover, t_stock, t_trade):
         monkeypatch.setattr(_m, "trade", _v)
-    monkeypatch.setattr("astral_toolkit.crafting.stockplaces.current_place", lambda: None)
+    monkeypatch.setattr(
+        "astral_toolkit.crafting.stockplaces.current_place", lambda: None
+    )
     # 以前手打的位置（直接写进库存，不经过地点列表）
     t.catalog.upsert([Item("ber", "Beryl"), Item("crp", "CryoPod")])
     old = [
@@ -660,7 +662,9 @@ def test_stock_bins_reserve_ledger_and_values(monkeypatch, tmp_path):
     _v = lambda: t  # noqa: E731
     for _m in (t_count, t_goals, t_hover, t_stock, t_trade):
         monkeypatch.setattr(_m, "trade", _v)
-    monkeypatch.setattr("astral_toolkit.crafting.stockplaces.current_place", lambda: None)
+    monkeypatch.setattr(
+        "astral_toolkit.crafting.stockplaces.current_place", lambda: None
+    )
     add = lambda **k: t_stock.stock_add_named(  # noqa: E731
         **{
             "name": "钛",

@@ -73,7 +73,9 @@ def main(argv):
         print(__doc__)
         return 1
     if not update_check.enabled():
-        print("❌ astral_toolkit/update/update_check.py 里的下载地址（OWN / COS）还没填")
+        print(
+            "❌ astral_toolkit/update/update_check.py 里的下载地址（OWN / COS）还没填"
+        )
         return 1
     rest, installer = list(argv), None
     if "--installer" in rest:

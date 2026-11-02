@@ -1832,7 +1832,11 @@ def test_review_104_final(monkeypatch, tmp_path):
     """1.0.4 发版前二审：派罗 L 点缺石头表时不能判成「不刷」；只认正式服数据；星图改正文件坏了不崩"""
     from astral_toolkit.navigation import navigate as n
     from astral_toolkit.mining import mining_area as M
-    from astral_toolkit.crafting.build_crafting import pick_live, latest_live, live_version
+    from astral_toolkit.crafting.build_crafting import (
+        pick_live,
+        latest_live,
+        live_version,
+    )
 
     # 1. 缺表 → None（不过滤），不是「此处不刷船挖矿」
     try:

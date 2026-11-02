@@ -321,7 +321,11 @@ def test_appjs_no_pywebview():
     from pathlib import Path
 
     js = (
-        Path(__file__).resolve().parent.parent / "astral_toolkit" / "app" / "web" / "app.js"
+        Path(__file__).resolve().parent.parent
+        / "astral_toolkit"
+        / "app"
+        / "web"
+        / "app.js"
     ).read_text(encoding="utf-8")
     assert "pywebview" not in js.lower()
     body = js[js.index("function shellSync()") :]

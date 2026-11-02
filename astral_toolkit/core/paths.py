@@ -122,7 +122,15 @@ def self_cmd(entry, *args):
     独立打包版：AT.exe <入口> …；Python 版：python -m astral_toolkit.run <入口> …"""
     if FROZEN:
         return [sys.executable, entry, *map(str, args)]
-    return [sys.executable, "-X", "utf8", "-m", "astral_toolkit.run", entry, *map(str, args)]
+    return [
+        sys.executable,
+        "-X",
+        "utf8",
+        "-m",
+        "astral_toolkit.run",
+        entry,
+        *map(str, args),
+    ]
 
 
 def data(name):
