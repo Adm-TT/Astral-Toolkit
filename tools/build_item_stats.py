@@ -1,4 +1,4 @@
-"""把可制造物品的成品基础数值从 star-citizen.wiki API（游戏 p4k 解包数据）拉下来，存成 data/item_stats.json
+"""把可制造物品的成品基础数值从 star-citizen.wiki API（wiki 整理的游戏数据）拉下来，存成 data/item_stats.json
 
 在你电脑上：python tools\\build_item_stats.py            → 全部可制造物品（约 1600 个，几分钟）
             python tools\\build_item_stats.py 3bcde69d-…  → 只拉这几个 uuid（调试）

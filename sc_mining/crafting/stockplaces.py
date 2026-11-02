@@ -9,7 +9,8 @@
 
 import re
 from collections import Counter
-from functools import lru_cache
+
+from ..gamedata._cache import VersionCache
 
 SYS_ORDER = ("Stanton", "Pyro", "Nyx")
 SYS_ZH = {"Stanton": "斯坦顿", "Pyro": "派罗", "Nyx": "尼克斯"}
@@ -88,19 +89,16 @@ def _kind(en, city):
 
 
 def _raw_places():
-    """[(星系, 星球, 卫星, 英文名, 是城市)]：商店终端所在的空间站和城市"""
+    """[(星系, 星球, 卫星, 英文名, 是城市)]：商店终端所在的空间站和城市（游戏数据层的商店行，按源顺序）"""
     try:
-        from . import shops
+        from ..gamedata import shops as gd_shops
 
-        rows = shops.load(auto_update=False).get("rows") or []
+        fields = gd_shops.place_fields()
     except Exception:
-        rows = []
+        fields = ()  # 库建不出来：用下面的保底
     out, seen = [], set()
-    for r in rows:
-        f = r[6] if len(r) > 6 else None
-        if not f:
-            continue
-        system, planet, orbit, moon, station, city = (list(f) + [""] * 6)[:6]
+    for f in fields:
+        system, planet, orbit, moon, station, city = f
         name = station or city
         if not name or system not in SYS_ZH or (system, name) in seen:
             continue
@@ -117,9 +115,29 @@ def _raw_places():
     return out or list(_FALLBACK)
 
 
-@lru_cache(maxsize=1)
+def _data_version():
+    try:
+        from ..gamedata import version
+
+        return version()
+    except Exception:
+        return None
+
+
+# 按游戏数据内容版本缓存：更新数据后自己失效（公共工具 gamedata/_cache.VersionCache）
+_PLACES: VersionCache = VersionCache()
+_INDEX: VersionCache = VersionCache(
+    identity=True
+)  # 键是 places() 那份对象本身（按 is 比）：跟着它走
+
+
 def places():
-    """所有地点：[{label, zh, en, sys, sys_zh, planet_zh, moon_zh, path, kind, keys}]，按星系、星球排好"""
+    """所有地点：[{label, zh, en, sys, sys_zh, planet_zh, moon_zh, path, kind, keys}]，按星系、星球排好。
+    键是建之前读到的版本：建的过程中发布了新库，下次会重算；之前还没有库（这次刚建好）才记建好后的"""
+    return _PLACES.get_for(_data_version(), _build_places, key_after=_data_version)
+
+
+def _build_places():
     from ..navigation.navigate import poi_zh
 
     items = []
@@ -171,13 +189,17 @@ def places():
     return tuple(items)
 
 
-@lru_cache(maxsize=1)
 def _index():
-    idx = {}
-    for p in places():
-        for k in p["keys"]:
-            idx.setdefault(k, []).append(p)
-    return idx
+    ps = places()
+
+    def build():
+        idx = {}
+        for p in ps:
+            for k in p["keys"]:
+                idx.setdefault(k, []).append(p)
+        return idx
+
+    return _INDEX.get_for(ps, build)  # 跟着 places() 那份走
 
 
 def match(text, system=None):

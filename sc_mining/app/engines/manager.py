@@ -59,8 +59,10 @@ class EngineManager:
                 target=_sys._online_loop, daemon=True, name="update"
             ).start()
             from ...crafting import itemsearch
+            from ... import gamedata
 
             itemsearch.warm_up()
+            gamedata.warm_up()  # 后台把游戏数据库建好（数据层地基 2026-11-02）
         if not _online.get("fb_retry"):
             _online["fb_retry"] = True
             from ...system import feedback_up

@@ -111,11 +111,14 @@ def update(progress=print):
         "items": {str(k): v for k, v in items.items()},
         "rows": rows,
     }
+    from .. import gamedata
     from ..core.paths import write_json
 
-    write_json(CACHE, data, separators=(",", ":"))
     global _data
-    _data = data
+    # 只把写文件这一步放进更新边界（拿数据目录写锁，退出时重建游戏数据库）：联网那一两分钟不占着锁
+    with gamedata.updating():
+        write_json(CACHE, data, separators=(",", ":"))
+        _data = data
     if progress:
         progress(f"商店数据已更新：{len(items)} 种物品，{len(rows)} 条商店价格")
     return data
@@ -146,26 +149,36 @@ def _fold(s):
     return re.sub(r"[^a-z0-9]", "", (s or "").lower().replace("l", "i"))
 
 
-_folded = {"of": None, "rows": []}
+def _folded_items():
+    """[(id, 英文名, 类别, 折叠后的名字)]，按 shops.json 的顺序；来自游戏数据层的商店物品目录（按内容版本缓存）。
+    库建不出来（没有 shops.json 等）就是空表：和以前读不到文件一样，查不到但不报错（控制台审查 2026-11-02 第 1 条）"""
+    from ..gamedata import GamedataError
+    from ..gamedata import shops as gd_shops
+
+    try:
+        return [(c.uex_item_id, c.en, c.cat, c.folded) for c in gd_shops.catalog()]
+    except GamedataError:
+        return []
 
 
-def _folded_items(data):
-    """[(id, 英文名, 类别, 折叠后的名字)]：数据没换就不重算（以前每查一次要把 5000 多个名字全折叠一遍）"""
-    if _folded["of"] is not data:
-        _folded.update(
-            of=data,
-            rows=[(int(i), n, c, _fold(n)) for i, (n, c) in data["items"].items()],
-        )
-    return _folded["rows"]
+def _rows_for(item_id):
+    """这件物品的商店价格行；不是编号或库建不出来 → 空"""
+    if not _is_id(item_id):
+        return ()
+    from ..gamedata import GamedataError
+    from ..gamedata import shops as gd_shops
+
+    try:
+        return gd_shops.rows_for_item(item_id)
+    except GamedataError:
+        return ()
 
 
 def find(query, limit=12):
     """按名字找物品：[(id, 英文名, 类别)]。中文名先用汉化包对照表换成英文"""
     from ..trade.names import to_english, has_chinese
 
-    rows = _folded_items(
-        load(auto_update=False)
-    )  # F8 / 哪买走这里：只用本机表，过期也不在这联网（细查 2026-10-28：断网时每次 F8 卡 48 秒）
+    rows = _folded_items()  # F8 / 哪买走这里：只用本机库，过期也不在这联网（细查 2026-10-28：断网时每次 F8 卡 48 秒）
     keys = to_english(query) if has_chinese(query) else [query]
     out, seen = [], set()
     for key in keys:
@@ -188,7 +201,7 @@ def find_close(name, cutoff=0.88):
     k = _fold(name)
     if len(k) < 5:
         return None
-    rows = _folded_items(load(auto_update=False))
+    rows = _folded_items()
     best = difflib.get_close_matches(k, [f for *_, f in rows], n=1, cutoff=cutoff)
     if not best:
         return None
@@ -197,15 +210,24 @@ def find_close(name, cutoff=0.88):
 
 def where(item_id):
     """这件东西在哪买/卖：(买的地方 [(价格, 商店, 位置)], 收的地方 [...])，各按价格排好"""
-    data = load(auto_update=False)
+    rows = _rows_for(item_id)
     buy = sorted(
-        (r[3], r[1], r[2]) for r in data["rows"] if r[0] == item_id and r[3] > 0
+        (r.price_buy, r.shop_name, r.place_text) for r in rows if r.price_buy > 0
     )
     sell = sorted(
-        ((r[4], r[1], r[2]) for r in data["rows"] if r[0] == item_id and r[4] > 0),
+        ((r.price_sell, r.shop_name, r.place_text) for r in rows if r.price_sell > 0),
         reverse=True,
     )
     return buy, sell
+
+
+def _is_id(item_id):
+    """以前按 r[0] == item_id 比：和整数编号相等的才对得上（None、字符串一行都对不上）"""
+    return (
+        isinstance(item_id, (int, float))
+        and not isinstance(item_id, bool)
+        and float(item_id).is_integer()  # nan / inf 也只是对不上，不报错
+    )
 
 
 def where_text(item_id, top=6):
@@ -228,9 +250,8 @@ def where_text(item_id, top=6):
 
 def where_by_name(name_en):
     """给维科洛材料等用：按英文名找第一处最便宜的买点，一行说明；找不到返回空"""
-    data = load(auto_update=False)
     k = _fold(name_en)
-    ids = [int(i) for i, (n, _) in data["items"].items() if _fold(n) == k]
+    ids = [i for i, _n, _c, f in _folded_items() if f == k]
     for iid in ids:
         buy, _ = where(iid)
         if buy:
@@ -276,14 +297,15 @@ def nearest(item_id, here, n=3):
     """离 here 最近的 n 个买点：[(距离米, 价格, 商店, 位置)]"""
     from ..navigation.position import distance
 
-    data = load(auto_update=False)
     out = []
-    for r in data["rows"]:
-        if r[0] != item_id or r[3] <= 0:
+    for r in _rows_for(item_id):
+        if r.price_buy <= 0:
             continue
-        p = shop_point(r[6]) if len(r) > 6 else None
+        p = (
+            shop_point(r.fields) if any(r.fields) else None
+        )  # 旧数据没有结构化位置：当成很远
         d = distance(here, p) if (here and p) else float("inf")
-        out.append((d, r[3], r[1], r[2]))
+        out.append((d, r.price_buy, r.shop_name, r.place_text))
     out.sort(key=lambda x: (x[0], x[1]))
     picked, places = [], set()  # 同一个空间站/城市只留一家（最便宜的），凑 3 个不同地点
     for row in out:
@@ -308,21 +330,28 @@ def base_names(name):
 
 
 def buyable(item_id):
-    return any(r[0] == item_id and r[3] > 0 for r in load(auto_update=False)["rows"])
+    """有没有商店卖；库建不出来当没有"""
+    from ..gamedata import GamedataError
+    from ..gamedata import shops as gd_shops
+
+    if not _is_id(item_id):
+        return False
+    try:
+        return gd_shops.buyable(item_id)
+    except GamedataError:
+        return False
 
 
 def variants(name, limit=3):
     """同系列能在商店买到的物品：[(id, 名字, 类别)]，原型排前面"""
-    data = load(auto_update=False)
+    cat = _folded_items()
     out, seen = [], set()
     for b in base_names(name):
         k = _fold(b)
         words = [w for w in re.findall(r"[a-z0-9]+", b.lower()) if len(w) > 2]
-        for i, (n, c) in sorted(data["items"].items(), key=lambda kv: len(kv[1][0])):
-            iid = int(i)
-            if iid in seen or _fold(n) == _fold(name):
+        for iid, n, c, f in sorted(cat, key=lambda r: len(r[1])):
+            if iid in seen or f == _fold(name):
                 continue
-            f = _fold(n)
             if f == k or (words and all(_fold(w) in f for w in words)):
                 if buyable(iid):
                     seen.add(iid)

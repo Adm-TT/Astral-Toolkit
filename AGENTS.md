@@ -25,6 +25,9 @@
 - 基线（`ruff --add-noqa` 加的 `# noqa`、`.basedpyright/baseline.json`）只用来登记接入前的老问题，不准用来掩盖新问题；改了基线要在 PR 里说明。
 - 修 bug 时先找根因，不要只压住症状。
 - 变更保持小而独立：一个 PR 解决一个问题。
+- 涉及方案的改动（新功能、架构调整、接口变化）先写方案文档再动手：放 `docs/superpowers/specs/`，一个方案一个 `.md`，文件名日期开头，顶部保留「变更记录」表；方案后续有改动先在表里加一行再改正文。该目录不进仓库，供负责人送外部复审和并行会话共用。
+- 多个会话并行做一个大改动时：每个会话从负责人指定的基线分支切自己的 worktree（`E:\Game3\AT_wt\<名>`，`data\`、`tests\samples\` 从主仓库拷入）；只改自己计划里列的文件，要动公共层就停下来找控制台（审查合并的那个会话）；交活 = 新上下文审查过、全量测试绿、PR 说明（Testing / Risk / How to revert）和台账放 `E:\Claude公主的书\项目资料\记录\`；不推送、不合并，合并和 baseline 刷新由控制台做。
+- PR 说明分两版：放 `项目资料\记录\` 的私有版可以写本机路径和细节；贴到 GitHub 的必须是中性摘要——没有本机路径、没有内部流程词、没有会话链接。
 - 更多细节见 `产品设计文档.md`（不要把这些细节复制进本文件）。
 
 ## 准备环境（第一次）
@@ -45,7 +48,7 @@ rem lint + 格式检查
 .venv\Scripts\ruff.exe check .
 .venv\Scripts\ruff.exe format --check .
 
-rem 类型检查（自动读 .basedpyright\baseline.json）
+rem 类型检查（自动读 .basedpyright\baseline.json）。只能跑全项目：跑子集会自动改写 baseline.json，跑完 git checkout -- .basedpyright\baseline.json
 .venv\Scripts\basedpyright.exe
 
 rem 单元测试（没装 pytest；新测试文件要加进 tests\run_all.py 的 MODULES）
@@ -58,6 +61,7 @@ rem 构建（PyInstaller + ATShell；需打包依赖和 .NET SDK）
 ```
 
 - 说"完成"之前必须实际运行上面的命令，并展示结果，不接受口头确认。
+- 通过远程工具操作这台电脑时，单条命令 60 秒会断线：全量测试、建库这类长命令用 `Invoke-CimMethod Win32_Process Create` 起后台 `cmd /c … > 日志文件` 再读文件，别在前台等。
 - UI 变更：在 ATShell 窗口里跑一遍，截图并对照 `产品设计文档.md` 第 5 节；悬浮窗变更要在游戏里看。
 - 涉及读屏识别（`sc_mining/{mining,navigation}/`、`sc_mining/app/engines/`、`sc_mining/ocr/`、`sc_mining/trade/inspector.py`、`sc_mining/tasks/{hover,count,mining}.py`）的改动：额外运行 `.venv\Scripts\python.exe -X utf8 tools\sample_sweep.py`（真实截图全量回归），高风险的再由负责人实机验证。
 - 发版时才打安装包：`.venv\Scripts\python.exe -X utf8 tools\build_velopack.py "更新内容"`（vpk 位置见脚本里的 `VPK`）。

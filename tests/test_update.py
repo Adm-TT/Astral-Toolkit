@@ -852,3 +852,102 @@ def test_killswitch_refreshes_when_update_check_off(monkeypatch):
     U._kill["at"] = 0.0
     t_sys._online_info()
     assert calls == [1, 1]
+
+
+def test_game_source_marker(monkeypatch, tmp_path):
+    """数据文件的 source 标记：由游戏数据构建的（新写法、兼容旧数据包的旧写法）更新时不让网站版盖掉；网站来的照常更新"""
+    from sc_mining import run
+    from sc_mining.core import paths
+    from sc_mining.crafting import build_crafting
+
+    monkeypatch.setattr(paths, "DATA", tmp_path)
+    monkeypatch.setattr(build_crafting, "source_rows", lambda: None)
+    f = tmp_path / "crafting.json"
+    for src, want in (
+        (paths.SRC_GAME, True),
+        (paths.SRC_GAME_OLD, True),
+        ("scmdb.net", False),
+    ):
+        f.write_text(json.dumps({"source": src}), encoding="utf-8")
+        assert run._is_game_source(build_crafting.update) is want, src
+    f.unlink()
+    assert run._is_game_source(build_crafting.update) is False
+    assert paths.from_game({"source": paths.SRC_GAME}) and not paths.from_game(None)
+
+
+def test_build_input_rows(monkeypatch, tmp_path):
+    """本机构建输入目录里同版本的蓝图 + 任务文件成对才算；不成对、没有目录都返回 None"""
+    from sc_mining.core import paths
+    from sc_mining.crafting import build_crafting
+
+    monkeypatch.setattr(paths, "DATA", tmp_path)
+    assert build_crafting.source_rows() is None
+    d = tmp_path / paths.BUILD_DIR
+    d.mkdir()
+    bp = d / "crafting_blueprints-4.10.2-live.12913470.json"
+    bp.write_text("{}", encoding="utf-8")
+    assert build_crafting.source_rows() is None
+    (d / "merged-4.10.2-live.12913470.json").write_text("{}", encoding="utf-8")
+    got = build_crafting.source_rows()
+    assert got and got[0] == bp and got[2] == "4.10.2-live.12913470"
+
+
+def test_make_data_pack_keeps_game_starmap(monkeypatch, tmp_path):
+    """本机星图是游戏数据版、却没设好构建目录（或脚本目录里没有合并脚本）：直接停下，不拿网站版盖掉再打进数据包；
+    带 --no-update 不会去网站更新，不用停；设好了：星图合并脚本拿到这份仓库和输入目录（不会去改别的签出）"""
+    import runpy
+    import subprocess
+    from pathlib import Path
+
+    from sc_mining import run
+    from sc_mining.core import paths
+    from sc_mining.update import data_pack
+    from tests.minipytest import raises
+
+    M = runpy.run_path(
+        str(Path(__file__).resolve().parent.parent / "tools" / "make_data_pack.py")
+    )
+
+    monkeypatch.setattr(paths, "DATA", tmp_path)
+    star = tmp_path / "starmap.json"
+    star.write_text(json.dumps({"source": paths.SRC_GAME}), encoding="utf-8")
+    calls = []
+    monkeypatch.setattr(run, "update", lambda **kw: calls.append(kw) or {"results": []})
+    monkeypatch.setenv("AT_SRC_DIR", "")
+    monkeypatch.setenv("AT_DATA_TOOLS", "")
+    assert M["main"]([]) == 2 and calls == []
+    src = tmp_path / "src"
+    (src / "oc_x").mkdir(parents=True)
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    monkeypatch.setenv("AT_SRC_DIR", str(src))
+    monkeypatch.setenv("AT_DATA_TOOLS", str(empty))  # 目录对、里面没有合并脚本
+    assert M["main"]([]) == 2 and calls == []
+
+    class Stop(Exception):
+        pass
+
+    def stop(*a, **kw):
+        raise Stop
+
+    monkeypatch.setattr(
+        data_pack, "make", stop
+    )  # 走到打包这一步就算没停下（也不真打包）
+    with raises(Stop):
+        M["main"](["--no-update", "--no-loot"])
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    (tools / "starmap_merge.py").write_text("", encoding="utf-8")
+    monkeypatch.setenv("AT_DATA_TOOLS", str(tools))
+    seen = []
+
+    def fake_run(cmd, **kw):
+        seen.append((cmd, kw.get("env") or {}))
+        raise Stop
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    with raises(Stop):
+        M["main"](["--no-update"])
+    cmd, env = seen[0]
+    assert cmd[-2].endswith("starmap_merge.py") and cmd[-1] == "--write"
+    assert env["AT_REPO"] == str(M["ROOT"]) and env["AT_SRC_DIR"] == str(src)

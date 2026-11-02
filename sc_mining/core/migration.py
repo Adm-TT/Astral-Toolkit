@@ -70,15 +70,6 @@ def _get_moves():
     ]
 
 
-def __getattr__(name):
-    """兼容 paths._MOVES / _DELETE 等旧引用：按需计算，避免与 paths 循环导入"""
-    if name == "_MOVES":
-        return _get_moves()
-    if name == "_DELETE":
-        return _get_delete_list()
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
 def import_inno() -> int:
     """Velopack 版：老的 Inno 安装版（%LOCALAPPDATA%\\Programs\\AT\\userdata）还在、还没搬过，就复制过来
     （同名文件新的留着，不拿旧的盖）。搬完写标记，以后不再搬。返回复制了几个文件"""

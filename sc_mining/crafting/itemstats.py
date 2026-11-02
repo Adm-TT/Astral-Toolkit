@@ -1,30 +1,29 @@
-"""成品的基础数值（data/item_stats.json，来自 star-citizen.wiki 的游戏解包数据，tools/build_item_stats.py 生成）
+"""成品的基础数值（item_stats.json，来自 star-citizen.wiki 整理的游戏数据，tools/build_item_stats.py 生成；读取走游戏数据层 gamedata.itemstats）
 
 制造页的「属性统计」：基础值 → 按材料品质强化后的值 → 变化。按 uuid 和 scmdb 蓝图对上（bp["u"]）。
-property_key 是 scmdb 蓝图里各槽「品质影响」用的键（health_maxhealth、weapon_damage …），这里把它对到解包数据的字段。
+property_key 是 scmdb 蓝图里各槽「品质影响」用的键（health_maxhealth、weapon_damage …），这里把它对到 wiki 数据的字段。
 数据里没有的属性返回 None：页面上只显示倍率，不显示绝对值。
 """
 
-import json
-from functools import lru_cache
-
-from ..core import paths
-
-
-@lru_cache(maxsize=1)
-def data():
-    p = paths.data("item_stats.json")
-    if not p.exists():
-        return {"version": "", "items": {}}
-    return json.loads(p.read_text(encoding="utf-8"))
-
 
 def item(uuid):
-    return data()["items"].get(uuid or "") or None
+    """一件成品的数据（与 item_stats.json 的 items[uuid] 同形）；没有或库不可用 → None"""
+    from .. import gamedata
+
+    try:
+        return gamedata.itemstats.item(uuid or "")
+    except gamedata.GamedataError:
+        return None
 
 
 def version():
-    return data().get("version", "")
+    """属性数据的版本；没有或库不可用 → ''"""
+    from .. import gamedata
+
+    try:
+        return gamedata.itemstats.version()
+    except gamedata.GamedataError:
+        return ""
 
 
 def _get(d, *path):
@@ -128,7 +127,7 @@ PROPS = {
         lambda s: _get(s, "weapon_modifier", "salvage", "radius_multiplier"),
         "",
     ),
-    # 后坐力三项、装填速度、散布：解包数据里没有对应的基础值，只显示倍率
+    # 后坐力三项、装填速度、散布：wiki 数据里没有对应的基础值，只显示倍率
 }
 
 

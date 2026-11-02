@@ -15,6 +15,7 @@ import threading
 # 2026-10-30 重构阶段 1：直接调别的任务模块和 app.hud_state，不再经 services 转发、出错也不再回头找 services 兜底。
 # 别的任务在函数里 import（任务之间互相引用，顶层 import 会循环），取模块属性，测试换掉的名字能打中。
 from ..app.hud_state import _item_hud
+from ..gamedata._cache import VersionCache
 
 
 def _nav_search(q=""):
@@ -190,13 +191,16 @@ def _wiki_cat(r):
     )
 
 
+# 英文 → 中文反查，跟着 names.table() 那份对象走：更新数据后自己失效（以前挂在函数属性上永不失效）
+_ZH_REV: VersionCache = VersionCache(identity=True)
+
+
 def _zh_of(en):
     try:
         from ..trade.names import table
 
-        rev = getattr(_zh_of, "_rev", None)
-        if rev is None:
-            rev = _zh_of._rev = {v.lower(): k for k, v in table().items()}
+        t = table()
+        rev = _ZH_REV.get_for(t, lambda: {v.lower(): k for k, v in t.items()})
         return rev.get(en.lower(), "")
     except Exception:
         return ""

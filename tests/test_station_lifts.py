@@ -181,8 +181,22 @@ def _station(tmp_path, monkeypatch):
     (tmp_path / "city_places.json").write_text(
         json.dumps(places, ensure_ascii=False), encoding="utf-8"
     )
-    monkeypatch.setattr(n, "DATA", tmp_path)
+    _db(monkeypatch, tmp_path)
     return n, {q["city"]: q for q in n.city_places()}
+
+
+def _db(monkeypatch, tmp_path):
+    """批 2 起城市地点、空间站电梯走游戏数据层：tmp_path 当 data/ 根，补一份空商店表（建库必需的源），查询时建库"""
+    import sc_mining.gamedata as G
+    from sc_mining.core import paths
+    from sc_mining.gamedata import _ready
+
+    (tmp_path / "shops.json").write_text(
+        json.dumps({"fmt": 2, "fetched": 0, "items": {}, "rows": []}), encoding="utf-8"
+    )
+    monkeypatch.setattr(paths, "DATA", tmp_path)
+    monkeypatch.setattr(_ready, "_state", {"done": None, "failed": None})
+    monkeypatch.setattr(G, "_state", {"last_error": None, "warm_thread": None})
 
 
 def test_zone_kind(monkeypatch, tmp_path):
@@ -362,14 +376,11 @@ def test_car_number_changed():
     assert n._car_changed("", "904902949036")
 
 
-def test_unpack_lifts_rotated_station():
+def test_lifts_rotated_station():
     """转了 90° 的 TransitManager：门要先转它的朝向再加位置；不转的话点离本区域的门几千米，自检能查出来（第 25 轮复审）"""
     import math
-    import sys
-    from pathlib import Path
 
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
-    import unpack_lifts as UL
+    from sc_mining.navigation import lifts_geom as UL
 
     q90 = (math.cos(math.pi / 4), 0.0, 0.0, math.sin(math.pi / 4))  # 绕 z 转 90°
     mp, rel = (1000.0, 0.0, 0.0), (2000.0, 0.0, 0.0)

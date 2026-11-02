@@ -1455,10 +1455,9 @@ def test_vote_partial_needs_two_frames():
 
 def test_craft_stats_and_detail_structure(monkeypatch, tmp_path):
     """制造页改版（1.6.47）：属性统计（基础 → 强化 → 变化，几个槽影响同一属性时相加）、标题标签（尺寸 / 等级 / 类别）、
-    结构化的材料槽位、去哪挖、蓝图来源带掉率。成品基础值来自 data/item_stats.json（star-citizen.wiki 解包数据，按 uuid 对上）"""
+    结构化的材料槽位、去哪挖、蓝图来源带掉率。成品基础值来自 data/item_stats.json（star-citizen.wiki 整理的游戏数据，按 uuid 对上）"""
     import json
-    from sc_mining.crafting import crafting as C, itemstats
-    from sc_mining.core import paths
+    from sc_mining.crafting import crafting as C
     from sc_mining.tasks import goals as t_goals
 
     bp = next(b for b in C.blueprints() if b["n"] == "Helix II Mining Laser")
@@ -1491,14 +1490,14 @@ def test_craft_stats_and_detail_structure(monkeypatch, tmp_path):
             }
         },
     }
-    f = tmp_path / "item_stats.json"
-    f.write_text(json.dumps(fake), encoding="utf-8")
-    monkeypatch.setattr(
-        paths,
-        "data",
-        lambda name: f if name == "item_stats.json" else paths.DATA / name,
+    from sc_mining.gamedata import itemstats as gd_stats
+
+    # 属性数据走游戏数据层（批 3）：这一段换成假数据，后面的真数据断言再换回来
+    real = gd_stats.item, gd_stats.version
+    gd_stats.item = lambda uuid, snap=None: json.loads(
+        json.dumps(fake["items"].get(uuid))
     )
-    itemstats.data.cache_clear()
+    gd_stats.version = lambda snap=None: fake["version"]
     try:
         st = C.stats(bp, {0: 501, 1: 947, 2: 958})
         by = {p["name"]: p for p in st["props"]}
@@ -1539,8 +1538,8 @@ def test_craft_stats_and_detail_structure(monkeypatch, tmp_path):
             :1
         ] in ([], ["S0"], ["S1"], ["S2"], ["S3"])
     finally:
-        itemstats.data.cache_clear()
-    # 真数据：Helix II 的成品基础值（star-citizen.wiki 解包）和 SCM 一致；解包里没有的属性（后坐力）只有变化、没有绝对值
+        gd_stats.item, gd_stats.version = real
+    # 真数据：Helix II 的成品基础值（star-citizen.wiki）和 SCM 一致；wiki 数据里没有的属性（后坐力）只有变化、没有绝对值
     assert C.stats(bp, {1: 1000, 2: 1000})["props"][1]["base"] == 4930
     gun = next(
         b
@@ -1642,7 +1641,7 @@ def test_mining_area_from_position():
     assert keeger["name"] == "Keeger Belt" and keeger["minerals"]["Bexalite"] == 18
     assert M.area((15.0e9, 0, 1e6), "Nyx")["name"] == "Glaciem Ring"
     assert M.area((30e9, 0, 0), "Nyx")["minerals"] == {}  # 尼克斯的空旷太空
-    # 派罗「小行星群 FSN-704」用的是深空小行星表（2026-10-27 解物件容器）；阿克罗团单独一张表
+    # 派罗「小行星群 FSN-704」用的是深空小行星表（2026-10-27 核对游戏数据）；阿克罗团单独一张表
     assert M.area((0, 0, 0), "Pyro", location="AsteroidCluster_Pyro_RegionC_FSN-704")[
         "name"
     ] in ("Deep Space Asteroids", "Akiro Cluster")
@@ -1679,8 +1678,8 @@ def test_signatures_only_ores_that_spawn_here():
     assert lines and "此地不刷" in lines[0]
 
 
-def test_radar_uses_unpacked_rock_types():
-    """2026-10-27 解包：雷达信号按「石头种类」给。SCMiner 的矿物表把石头里夹带的少量矿也算进去了：
+def test_radar_uses_game_rock_types():
+    """2026-10-27 游戏数据：雷达信号按「石头种类」给。SCMiner 的矿物表把石头里夹带的少量矿也算进去了：
     基格带按 SCMiner 有金 18%，但游戏里基格带根本不刷金石（金只夹在贝沙电气石石头里）→ 金 ×2（7,170）不能报成金"""
     from sc_mining.mining import mining_area as M, signals as S
 
@@ -1742,14 +1741,23 @@ def test_review_102_area_never_guesses(monkeypatch):
 def test_review_102_place_names_without_ini(monkeypatch, tmp_path):
     """新装还没下汉化包：派罗地名用随包的地点代号表，不显示 PYR3"""
     import json
+    import sc_mining.gamedata as G
+    from sc_mining.core import paths
+    from sc_mining.gamedata import _ready
     from sc_mining.navigation import position as P
     from sc_mining.update import localization as L
 
+    # 地点代号表在游戏数据库里：tmp_path 当 data/ 根（补一份建库必需的空商店表），不读真实 data/
+    (tmp_path / "shops.json").write_text(
+        json.dumps({"fmt": 2, "fetched": 0, "items": {}, "rows": []}), encoding="utf-8"
+    )
     (tmp_path / "place_codes_zh.json").write_text(
         json.dumps({"rr_p3": "轨道讣闻站 (Orbituary)"}, ensure_ascii=False),
         encoding="utf-8",
     )
-    monkeypatch.setattr(L, "DATA", tmp_path)
+    monkeypatch.setattr(paths, "DATA", tmp_path)
+    monkeypatch.setattr(_ready, "_state", {"done": None, "failed": None})
+    monkeypatch.setattr(G, "_state", {"last_error": None, "warm_thread": None})
     monkeypatch.setattr(
         L, "read_ini", lambda *a: (_ for _ in ()).throw(FileNotFoundError())
     )
@@ -1763,17 +1771,17 @@ def test_review_102_place_names_without_ini(monkeypatch, tmp_path):
 def test_review_104_rocks_reload_and_order(monkeypatch, tmp_path):
     """二审：①更新数据换了石头表不用重启就生效；②同一个信号的几种可能保持「当地概率 × 一团几块」的顺序，不被矿价打乱"""
     import json
+    import sc_mining.gamedata as G
     from sc_mining.mining import mining_area as M, signals as S
-    from sc_mining.core import paths
+    from tests.test_gamedata_b1 import _setup
 
-    monkeypatch.setattr(paths, "DATA", tmp_path)
-    M._ROCKS.clear()
+    _setup(monkeypatch, tmp_path)
     assert M.rocks_table() == {}
-    (tmp_path / "mining_rocks.json").write_text(
-        json.dumps({"areas": {"X": {"Iron": 100}}}), encoding="utf-8"
-    )
+    with G.updating():  # 「更新数据」的真实路径：写源、退出时重建
+        (tmp_path / "mining_rocks.json").write_text(
+            json.dumps({"areas": {"X": {"Iron": 100}}}), encoding="utf-8"
+        )
     assert M.rocks_table()["areas"]["X"] == {"Iron": 100}
-    M._ROCKS.clear()
     keeger = {
         "name": "Keeger Belt",
         "zh": "基格",
@@ -1785,8 +1793,8 @@ def test_review_104_rocks_reload_and_order(monkeypatch, tmp_path):
     assert [l.split(" → ")[1].split("｜精炼后")[0] for l in lines] == order  # noqa: E741
 
 
-def test_unpacked_mining_spots_and_pyro_areas():
-    """2026-10-27 解物件容器：派罗 15 个小行星群、86 个远矿站能量子、刷深空小行星（以前当成阿克罗团）；
+def test_game_mining_spots_and_pyro_areas():
+    """2026-10-27 核对游戏数据：派罗 15 个小行星群、86 个远矿站能量子、刷深空小行星（以前当成阿克罗团）；
     派罗拉格朗日点有子云（派1/派2 暖带 01、派3 暖带 02、派5 冷带 01、派6 冷带 02）；导航「挖矿点」能按矿搜"""
     from sc_mining.navigation import navigate as n
     from sc_mining.mining import mining_area as M
@@ -1849,24 +1857,21 @@ def test_review_104_final(monkeypatch, tmp_path):
         and latest_live(fs[:1]) is None
     )
     assert live_version(fs[2]) == "4.10.2-live.5"
-    # 4. 改正文件结构不对：跳过坏条目，不崩
-    monkeypatch.setattr(n, "DATA", tmp_path)
+    # 4. 改正文件结构不对：跳过坏条目，不崩（建库时套改正；文件不是 JSON 时建库当作没有，传进来是 None）
+    from sc_mining.navigation.starmap import fix_points
+
     pts = {
         "points": [
             {"n": "A", "x": 1, "y": 2, "z": 3},
             {"n": "B", "x": 1, "y": 2, "z": 3},
         ]
     }
-    for bad in ("[]", '{"A": 123}', '{"A": ["bad", 0, 0], "B": [7, 8, 9]}', "{坏"):
-        (tmp_path / "starmap_fixes.json").write_text(bad, encoding="utf-8")
+    for bad in ([], {"A": 123}, {"A": ["bad", 0, 0], "B": [7, 8, 9]}, None):
         d = {"points": [dict(p) for p in pts["points"]]}
-        n._apply_fixes(d)
+        fix_points(d, bad)
         assert (d["points"][0]["x"], d["points"][0]["y"]) == (1, 2)
     assert d["points"][1]["x"] == 1  # 最后一个是坏 JSON，整份不用
-    (tmp_path / "starmap_fixes.json").write_text(
-        '{"A": ["bad", 0, 0], "B": [7, 8, 9]}', encoding="utf-8"
-    )
-    n._apply_fixes(d)
+    fix_points(d, {"A": ["bad", 0, 0], "B": [7, 8, 9]})
     assert (d["points"][1]["x"], d["points"][1]["z"]) == (7.0, 9.0)
 
 

@@ -439,7 +439,7 @@ def main():
         "物品：商店掉落都没有的也搜得到（1.6.48）",
         lambda: c.call(
             "item_search", q="Hartmoore Inverter"
-        ),  # 2026-10-28 解包后它有了汉化包名，来源从 wiki 变成 loc
+        ),  # 2026-10-28 补了游戏数据后它有了汉化包名，来源从 wiki 变成 loc
         lambda r: (
             bool(
                 r

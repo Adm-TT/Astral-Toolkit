@@ -16,7 +16,7 @@ import time
 import zipfile
 from pathlib import Path
 
-from ..core.paths import ROOT, USER
+from ..core.paths import BUILD_DIR, ROOT, USER
 from ..core.version import VERSION
 
 NAME = re.compile(
@@ -38,7 +38,8 @@ TOP_FILES = (
     "requirements.txt",
     "README.md",
 )
-SKIP_DATA = {"scmdb", "loc", "unpack"}  # 原始大文件，更新数据时会重新下载
+# 以后 BUILD_DIR 改名时，旧目录名也要留在这个排除表里，否则游戏数据原文件会被打进安装包（升级备份同理）
+SKIP_DATA = {"scmdb", "loc", BUILD_DIR}  # 原始大文件 / 构建输入，更新数据时会重新下载
 SKIP_DATA_FILES = {
     "loot_details.zip"
 }  # 掉落明细整包（约 25 MB，数据包里下载；升级不动它，备份也不带）

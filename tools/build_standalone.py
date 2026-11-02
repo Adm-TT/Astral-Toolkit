@@ -21,11 +21,15 @@ BUILD = Path(
 )  # 和项目放在同一层（2026-10-27 起 E:\\Game3）
 DIST = BUILD / "dist"
 OUT = DIST / "AT"
+sys.path.insert(0, str(ROOT))
+from sc_mining.core.paths import BUILD_DIR  # noqa: E402
+
+# 以后 BUILD_DIR 改名时，旧目录名也要留在这个排除表里，否则游戏数据原文件会被打进安装包
 SKIP_DATA_DIRS = {
     "scmdb",
     "loc",
-    "unpack",
-}  # unpack：作者自己解包出的蓝图 / 任务原文件（2026-10-28），只在作者电脑上用                         # 原始大文件，更新数据时会自动下载（和 tools/pack.py 一致）
+    BUILD_DIR,
+}  # BUILD_DIR：构建输入目录（2026-10-28），只在作者电脑上用                         # 原始大文件，更新数据时会自动下载（和 tools/pack.py 一致）
 SKIP_DATA_FILES = {
     "loot_details.zip"
 }  # 掉落明细整包从 Gitee 下载；data_pack.json 要带上（不然「开始更新」会拿网上更旧的包盖掉，2026-10-28）

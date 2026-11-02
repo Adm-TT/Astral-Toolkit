@@ -4,6 +4,7 @@
 import contextlib
 import importlib
 import inspect
+import os
 import re
 import shutil
 import sys
@@ -111,6 +112,7 @@ class MonkeyPatch:
 
 def install():
     """没有真 pytest 时，把本模块当成 pytest"""
+    os.environ["AT_FEEDBACK_OFF"] = "1"  # 不管从哪进来跑测试，都不往服务器发反馈
     try:
         import pytest  # noqa: F401
     except ImportError:

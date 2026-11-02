@@ -28,6 +28,15 @@ _nav.WAYPOINTS = _wp.WAYPOINTS = (
 )  # 读路标的测试别读到本机的真实路标
 from sc_mining.core import paths as _paths  # noqa: E402
 
+# import 时把 DATA 下的路径绑成模块常量的模块，趁 paths.DATA 还是真实目录先导入一遍：
+# 以前 crafting/loot 第一次 import 发生在 test_mining 里某条把 DATA 换成临时目录的测试中（经 position → places.code_zh → ensure →
+# 建库 → import_loot），INDEX / DETAILS 从此绑在临时目录，test_wikelo_materials_all_have_source 在库已建好时总被跳过（收口 2，待做 ㉑）
+import sc_mining.crafting.loot  # noqa: E402, F401
+import sc_mining.crafting.shops  # noqa: E402, F401
+import sc_mining.crafting.wikelo  # noqa: E402, F401
+import sc_mining.update.localization  # noqa: E402, F401
+import sc_mining.update.uex  # noqa: E402, F401
+
 _OLD_USER = _paths.USER
 _paths.USER = _tmp  # 运行时才取 paths.USER 的（地点编号、锁文件、升级目录）也写临时目录；import 时绑定的各测试自己 patch
 _paths.SHOTS = _tmp / "shots"
@@ -70,6 +79,19 @@ MODULES = [
     "tests.test_nav_modules",
     "tests.test_system_modules",
     "tests.test_run_records",
+    "tests.test_gamedata",
+    "tests.test_gamedata_nav",
+    "tests.test_feedback_guard",
+    "tests.test_gamedata_b1",
+    "tests.test_gamedata_b2",
+    "tests.test_gd_k1",
+    "tests.test_gamedata_craft",
+    "tests.test_gamedata_b3",
+    "tests.test_gamedata_mining",
+    "tests.test_gamedata_arch",
+    "tests.test_gamedata_b4",
+    "tests.test_gamedata_b6",
+    "tests.test_gamedata_b5",
 ]
 
 if __name__ == "__main__":

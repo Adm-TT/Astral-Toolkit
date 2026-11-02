@@ -31,31 +31,19 @@ JUMP = {
 }
 
 
-def points():
-    from .navigate import load
-
-    data = load()
-    if "points" not in data:  # 旧版星图缓存没有拉格朗日点，重新下载一次
-        from . import navigate
-
-        navigate._data = None
-        navigate.update()
-        data = navigate.load()
-    return data.get("points") or []
-
-
 def find_point(name=None, internal=None):
-    pts = points()
+    """星图里的点 {n,i,sys,t,x,y,z}：先按内部名（不分大小写），再按名字（小写去非字母数字）；同名取源里第一个"""
+    from ..gamedata import starmap as gd_starmap
+
     if internal:
-        il = internal.lower()
-        for p in pts:
-            if p["i"].lower() == il:
-                return p
+        p = gd_starmap.point_by_internal(internal)
+        if p:
+            return p
     if name:
         nl = re.sub(r"[^a-z0-9]", "", name.lower())
-        for p in pts:
-            if re.sub(r"[^a-z0-9]", "", p["n"].lower()) == nl:
-                return p
+        p = gd_starmap.point_by_name(nl)
+        if p:
+            return p
         m = re.fullmatch(r"pyro(i{1,3}|iv|v|vi)", nl)
         if m:
             return find_point(internal=f"Pyro{ROMAN[m.group(1).upper()]}")
@@ -81,50 +69,62 @@ def from_code(code):
     return None
 
 
-def _places_zh():
-    import json
-    from ..core.paths import DATA
+def _place_zh(key="", prefix=None):
+    """places_zh 里的中文（只看这一份，不看 places_extra_zh——以前就只读 places_zh.json）：key 精确查；
+    prefix 取以它开头的最短键。查不到、游戏数据库不可用返回 None（以前读不到文件就是空表）"""
+    from ..gamedata import GamedataError, places
 
     try:
-        return json.loads((DATA / "places_zh.json").read_text(encoding="utf-8"))
-    except Exception:
-        return {}
+        if prefix is not None:
+            return places.zh_by_prefix(prefix)
+        return places.zh_of(key)
+    except GamedataError:
+        return None
 
 
-def _zh_name(name, zh):
+def _zh_name(name):
     k = re.sub(r"[^a-z0-9]", "", name.lower())
-    return zh.get(k) or zh.get(re.sub(r"station$", "", k)) or name
+    return _place_zh(k) or _place_zh(re.sub(r"station$", "", k)) or name
 
 
 def _station_at(internal):
     try:
         from ..crafting import shops
+        from ..gamedata import shops as gd_shops
 
-        for r in shops.load(auto_update=False)["rows"]:
-            f = r[6] if len(r) > 6 else None
-            if f and "Lagrange" in (f[2] or "") and (f[4] or f[5]):
-                p = shops.shop_point(f)
-                if p and p["i"] == internal:
-                    return f[4] or f[5]
+        for r in gd_shops.lagrange_rows():  # 轨道带 Lagrange、有站名的商店行
+            f = r.fields
+            p = shops.shop_point(f)
+            if p and p["i"] == internal:
+                return f[4] or f[5]
     except Exception:
         pass
     return ""
 
 
-@lru_cache(maxsize=256)
 def place_name(code):
     """日志里的地点代码 → 具体地点的中文名：Stanton4_NewBabbage → 新巴贝奇，RR_ARC_L1 → 弧 L1 广袤森林站"""
-    zh = _places_zh()
+    return _place_name(code, _data_version())
 
-    def by_prefix(prefix):
-        keys = sorted((k for k in zh if k.startswith(prefix)), key=len)
-        return zh[keys[0]] if keys else ""
 
+def _data_version():
+    """缓存按游戏数据库版本分开：汉化包更新时 reset_names 在 updating() 里、库还没换代，
+    这时别的线程查到的旧名记在旧版本下，换代后自然查新库"""
+    from ..gamedata import GamedataError, version
+
+    try:
+        return version()
+    except GamedataError:
+        return None
+
+
+@lru_cache(maxsize=256)
+def _place_name(code, _version):
     m = re.match(r"RR_(ARC|HUR|CRU|MIC)_L(\d)", code)
     if m:
         return (
             ini_name(f"RR_{m.group(1)}_L{m.group(2)}")
-            or by_prefix(f"{m.group(1).lower()}l{m.group(2)}")
+            or _place_zh(prefix=f"{m.group(1).lower()}l{m.group(2)}")
             or f"{m.group(1)}-L{m.group(2)}"
         )
     m = re.match(r"RR_P(\d)(?:_L(\d))?", code)
@@ -138,17 +138,17 @@ def place_name(code):
         if l:
             station = _station_at(f"P{k}_L{l}")
             if station:
-                return _zh_name(station, zh)
+                return _zh_name(station)
             return ini_name(f"Pyro{k}_L{l}") or f"PYR{k}-L{l}"
         return ini_name(f"Pyro{k}") or f"PYR{k}"
     m = re.match(r"RR_JP_(\w+)", code)
     if m:
         name = JUMP.get(m.group(1), m.group(1))
-        return zh.get(re.sub(r"[^a-z0-9]", "", name.lower()), name)
+        return _place_zh(re.sub(r"[^a-z0-9]", "", name.lower())) or name
     rest = code.split("_", 1)[1] if "_" in code else code
-    key = re.sub(r"[^a-z0-9]", "", rest.lower())
-    if key in zh:
-        return zh[key]
+    hit = _place_zh(re.sub(r"[^a-z0-9]", "", rest.lower()))
+    if hit:
+        return hit
     return re.sub(r"(?<=[a-z])(?=[A-Z])", " ", rest).replace("_", " ")
 
 
@@ -180,14 +180,6 @@ def ini_name(key):
     「死局空间站 (Checkmate)」「派罗 I (Pyro I)」→ 去掉括号里的英文；「弧 L1 广袤森林站\\nARC-L1 …」→ 只要第一行"""
     if "ini" not in _ini_cache:
         table = {}
-        try:  # 随安装包带的地点代号表（新装还没下汉化包时也有中文名）
-            from ..core.paths import DATA
-
-            table.update(
-                json.loads((DATA / "place_codes_zh.json").read_text(encoding="utf-8"))
-            )
-        except Exception:
-            pass
         try:
             from ..update.localization import read_ini
 
@@ -199,14 +191,27 @@ def ini_name(key):
         _ini_cache["ini"] = table
     ini = _ini_cache["ini"]
     k = re.sub(r"\s+", "_", (key or "").strip()).lower()
-    v = ini.get(k) or ini.get(k + ",p") or ""
+    v = _ini_get(ini, k) or _ini_get(ini, k + ",p") or ""
     return re.sub(r"\s*[（(][^（）()]*[A-Za-z][^（）()]*[）)]\s*$", "", v).strip()
+
+
+def _ini_get(ini, k):
+    """汉化包里有就用汉化包的；没有再查随安装包带的地点代号表 place_codes_zh（新装还没下汉化包时也有中文名）。
+    以前两份合成一张表、汉化包盖过代号表，查法等价；游戏数据库不可用时当作没有代号表"""
+    if k in ini:
+        return ini[k]
+    from ..gamedata import GamedataError, places
+
+    try:
+        return places.code_zh(k)
+    except GamedataError:
+        return None
 
 
 def reset_names():
     """汉化包更新后清掉地名缓存，这次运行里马上用上新地名"""
     _ini_cache.clear()
-    place_name.cache_clear()
+    _place_name.cache_clear()
 
 
 def _ini_label(code):

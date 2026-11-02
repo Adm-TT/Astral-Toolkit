@@ -11,7 +11,6 @@
 认不出（斯坦顿的空旷太空、没有矿表的星球）返回 None：调用方不过滤，和以前一样
 """
 
-import json
 import math
 import re
 
@@ -53,25 +52,25 @@ def _body_tables():
     return out
 
 
-_ROCKS = {}
-
-
 def rocks_table():
-    """解包出来的雷达石头表 data/mining_rocks.json（2026-10-27 起，tools/unpack_mining.py 生成，随数据包更新）：
-    {"tiers": 稀有度 → 一团几块, "ores": 矿 → 信号、稀有度, "areas": 地点 → {石头种类: 百分比}}；没有这个文件返回 {}"""
-    from ..core.paths import DATA, cached_json
+    """雷达石头表（游戏数据层，按内容版本缓存，更新数据后自动换新的；调用方别改它）：
+    {"tiers": 稀有度 → 一团几块, "ores": 矿 → 信号、稀有度, "areas": 地点 → {石头种类: 百分比}}；没有数据返回 {}"""
+    from .. import gamedata
 
-    t = cached_json(
-        DATA / "mining_rocks.json", default={}
-    )  # 文件换了（更新数据）就重读，不用重启
-    return t if isinstance(t, dict) else {}
+    try:
+        return gamedata.mining.rocks()
+    except gamedata.GamedataError:
+        return {}
 
 
 def rocks_stamp():
-    """石头表的版本（文件修改时间）：雷达结果按它判断要不要重新发"""
-    from ..core.paths import DATA, file_stamp
+    """游戏数据的内容版本：雷达结果按它判断要不要重新发（任何数据更新都会变，只是多算一次）"""
+    from .. import gamedata
 
-    return file_stamp(DATA / "mining_rocks.json")
+    try:
+        return gamedata.version()
+    except gamedata.GamedataError:
+        return None
 
 
 def _result(row, system=None):
@@ -89,7 +88,7 @@ def _result(row, system=None):
         "minerals": dict(row["minerals"]),
     }
     # 雷达信号是按「石头种类」给的：这里刷哪几种石头（SCMiner 的矿物表把石头里夹带的少量矿也算进去了，
-    # 基格带会多出硼砂、金这些——那里根本没有硼砂石、金石，2026-10-27 解包发现）
+    # 基格带会多出硼砂、金这些——那里根本没有硼砂石、金石，2026-10-27 核对游戏数据发现）
     rocks = (rocks_table().get("areas") or {}).get(row["name"])
     if rocks:
         out["rocks"] = dict(rocks)
@@ -102,7 +101,23 @@ def _no_ore(system):
 
 def area(g, system, body=None, ground=None, location="", zone=""):
     """g：星系坐标（米）；system：星系；body / ground：locate 给的最近星球、是否在地表附近；
-    location / zone：右上角那两段文字。→ {"name", "zh", "system", "minerals"} 或 None（认不出）"""
+    location / zone：右上角那两段文字。→ {"name", "zh", "system", "minerals"} 或 None（认不出）
+    一次判断钉一个快照，石头表、挖矿点、星图同一版本；库不可用就不钉，里面各处当作没有数据"""
+    from .. import gamedata
+
+    try:
+        gamedata.ensure()
+        pin = gamedata.snapshot()
+        pin.__enter__()
+    except gamedata.GamedataError:
+        return _area(g, system, body, ground, location, zone)
+    try:  # 只有进快照的错才吞，下面判断里的错照常往外抛
+        return _area(g, system, body, ground, location, zone)
+    finally:
+        pin.__exit__(None, None, None)
+
+
+def _area(g, system, body, ground, location, zone):
     text = f"{location} {zone}".lower()
     if ground and body:
         return _result(_body_tables().get(str(body).lower()))
@@ -121,7 +136,7 @@ def area(g, system, body=None, ground=None, location="", zone=""):
         flat = text.replace(" ", "_")
         if "akiro" in flat:
             return _named("Akiro Cluster")
-        # 派罗「小行星群 FSN-704」这些和远矿站：游戏里用的是深空小行星表（2026-10-27 解物件容器，以前当成阿克罗团）
+        # 派罗「小行星群 FSN-704」这些和远矿站：游戏里用的是深空小行星表（2026-10-27 核对游戏数据，以前当成阿克罗团）
         if re.search(r"asteroidcluster_pyro|ab_mine_pyro|miningbase_pyro", flat):
             return _named(DEEP)
         if g:
@@ -135,7 +150,7 @@ def area(g, system, body=None, ground=None, location="", zone=""):
             t6 = _body_xyz("Terminus") or _body_xyz("Pyro6")
             if (
                 t6 and math.dist(g, t6) <= 2_000_000_000
-            ):  # 派6 附近有一圈矿（物件容器引用了耶拉环带的刷矿表），范围还没解出来：不过滤
+            ):  # 派6 附近有一圈矿（游戏数据里引用了耶拉环带的刷矿表），范围还没弄清：不过滤
                 return None
             spots = _spots_raw()
             clusters = [
@@ -156,7 +171,7 @@ def area(g, system, body=None, ground=None, location="", zone=""):
         if yela and YELA_RING[0] * 0.95 <= math.dist(g, yela) <= YELA_RING[1] * 1.05:
             return _result(
                 _table("Yela Asteroid Belt")
-            )  # 耶拉环带：星图记录里的环 482,000～782,000 km（解包）
+            )  # 耶拉环带：星图记录里的环 482,000～782,000 km（游戏数据）
         from ..navigation import halo
 
         try:
@@ -164,10 +179,8 @@ def area(g, system, body=None, ground=None, location="", zone=""):
                 return _result(_table("Aaron Halo"))
         except Exception:
             pass
-        from ..navigation.navigate import load
-
         best = None
-        for p in load().get("points") or []:
+        for p in _starmap_points():
             if p["sys"] == "Stanton" and p["t"] == "Lagrange Point":
                 d = math.dist(g, (p["x"], p["y"], p["z"]))
                 if d <= LPOINT_KM * 1000 and (best is None or d < best[0]):
@@ -236,12 +249,12 @@ def _starmap_points():
 
 
 def _spots_raw():
-    try:
-        from ..core.paths import DATA
+    from .. import gamedata
 
-        return json.loads((DATA / "mining_spots.json").read_text(encoding="utf-8"))
-    except Exception:
-        return []
+    try:
+        return gamedata.mining.spots()
+    except gamedata.GamedataError:
+        return ()
 
 
 _KNOWN_SPOT_NO_TABLE = object()  # 找到了挖矿点 / L 点，但石头表里没有它

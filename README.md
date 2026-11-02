@@ -60,12 +60,12 @@ AT 靠截屏识别文字、读游戏写出的日志文件工作；不模拟按�
 | `sc_mining/system/`、`update/` | 和系统、游戏打交道（驾驶位检测、问题反馈等）；数据下载与升级 |
 | `sc_mining/run.py`、`selftest.py` | 命令行入口、自检 |
 | `tests/` | 测试，`run_all.py` 自带运行器，不用装 pytest |
-| `tools/` | 打包、发布、游戏文件解包等开发工具 |
+| `tools/` | 打包、发布、数据包生成等开发工具 |
 | `data/`、`userdata/` | 运行时生成：下载的数据、个人设置和记录（不在仓库里） |
 
 ## 数据来源和致谢
 
-游戏数据来自下列网站和社区项目，权利归原作者所有（`sc_mining/names_zh.json`、`sc_mining/sc_glossary.json` 摘自汉化包，不属于 AGPL，权利归汉化项目）：SCMiner、UEX、SC Market、scmdb.net、starmap.space、星际公民掉落查询（scl.miao.network）、Star Citizen Wiki API、Star Citizen Wiki（矿物品质分档，CC BY-SA 4.0）、erkul.games、SC汉化盒子及社区汉化项目。游戏文件解包用的是 StarBreaker（MIT）。
+游戏数据来自下列网站和社区项目，权利归原作者所有（`sc_mining/names_zh.json`、`sc_mining/sc_glossary.json` 摘自汉化包，不属于 AGPL，权利归汉化项目）：SCMiner、UEX、SC Market、scmdb.net、starmap.space、星际公民掉落查询（scl.miao.network）、Star Citizen Wiki API、Star Citizen Wiki（矿物品质分档，CC BY-SA 4.0）、erkul.games、SC汉化盒子及社区汉化项目。星图、制造蓝图、采矿点等另有一部分由作者从游戏数据整理生成（生成这部分的构建脚本不在本仓库）。
 
 用到的开源组件（RapidOCR、ONNX Runtime、NumPy、Pillow、OpenCV、mss 等）和字体的许可证原文见 [第三方许可.txt](第三方许可.txt)。
 
