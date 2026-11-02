@@ -415,7 +415,7 @@ def test_apply_live_reads_gamedata(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path)
     monkeypatch.setattr(uex, "OUT", tmp_path / "prices.json")
     G.ensure()
-    # 库建好后再改 prices.json 的矿价、不重建：读到的还是库里的（证明矿价不再直接读 JSON）
+    # 库建好后再改 prices.json、不重建：读到的还是库里的（证明矿价和加成都不再直接读 JSON）
     (tmp_path / "prices.json").write_text(
         json.dumps(
             {
@@ -431,8 +431,8 @@ def test_apply_live_reads_gamedata(monkeypatch, tmp_path):
     assert type(m.CITY_PRICES["Aluminum"]["Area18"]) is int  # 和以前读 JSON 一样是整数
     assert m.REFINERIES["ARC-L1"] == (
         "弧 L1",
-        {"Aluminum": 5},
-    )  # 精炼站加成照旧读 prices.json
+        {},
+    )  # 最小源的 prices.json 没有这个站的加成
 
 
 def test_apply_live_zero_price_keeps_builtin(monkeypatch, tmp_path):
@@ -904,29 +904,17 @@ def test_ensure_rebuilds_old_schema(monkeypatch, tmp_path):
     )
 
 
-def test_apply_live_yields_when_db_unavailable(monkeypatch, tmp_path):
-    """库建不出来（shops.json 坏了）：矿价和精炼站加成都退回直接读 prices.json（和迁移前一样）"""
-    import json
-
+def test_apply_live_db_unavailable_keeps_builtin(monkeypatch, tmp_path):
+    """库建不出来（shops.json 坏了）：不覆盖内置表，也不再退回读 prices.json"""
     from sc_mining.update import uex
 
     _setup(monkeypatch, tmp_path)
     (tmp_path / "shops.json").write_text("{坏", encoding="utf-8")
-    (tmp_path / "prices.json").write_text(
-        json.dumps(
-            {
-                "prices": {"Aluminum": {"Area18": 3800}},
-                "yields": {"ARC-L1": {"Aluminum": 5}},
-            }
-        ),
-        encoding="utf-8",
-    )
     monkeypatch.setattr(uex, "OUT", tmp_path / "prices.json")
     m = _fake_data_module()
-    assert uex.apply_live(m) is True
-    assert m.CITY_PRICES["Aluminum"] == {"Area18": 3800, "Lorville": 2}
-    assert type(m.CITY_PRICES["Aluminum"]["Area18"]) is int
-    assert m.REFINERIES["ARC-L1"] == ("弧 L1", {"Aluminum": 5})
+    assert uex.apply_live(m) is False
+    assert m.CITY_PRICES["Aluminum"] == {"Area18": 1, "Lorville": 2}
+    assert m.REFINERIES["ARC-L1"] == ("弧 L1", {})
 
 
 def test_query_while_new_content_is_published(monkeypatch, tmp_path):

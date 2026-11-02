@@ -4,7 +4,7 @@
 
 import json
 
-from tests.test_gamedata_b1 import _setup
+from tests.test_gamedata_b1 import _fake_data_module, _setup
 
 _ROCKS = {
     "tiers": {"common": {"p_cluster": 100.0, "sizes": [[0.1, 6, 6]]}},
@@ -545,3 +545,77 @@ def test_clear_caches_still_safe_for_shipsig(monkeypatch, tmp_path):
     monkeypatch.setattr(uex, "apply_live", lambda m: False)
     data_pack.clear_caches()
     assert shipsig.match(1000)
+
+
+# ---------------------------------------------------------------- Task 4：精炼站加成
+
+
+def _stations(m):
+    m.REFINERIES["CRU-L1"] = ("十字 L1", {"Aluminum": 9})
+    m.REFINERIES["Empty"] = ("空站", {"Aluminum": 9})
+    return m
+
+
+def test_apply_live_yields_from_db_no_json_fallback(monkeypatch, tmp_path):
+    import sc_mining.gamedata as G
+    from sc_mining.update import uex
+
+    _setup(monkeypatch, tmp_path, **{"prices.json": _PRICES})
+    G.ensure()
+    _write(tmp_path, "prices.json", {"yields": {"ARC-L1": {"Aluminum": 999}}})  # 不重建
+    m = _stations(_fake_data_module())
+    refs = m.REFINERIES
+    assert uex.apply_live(m) is True
+    assert m.REFINERIES is refs  # refinery.py 绑定了这个 dict：只换值
+    assert refs["ARC-L1"] == ("弧 L1", {"Aluminum": 5})  # 库里的，不是改过的 JSON
+    assert type(refs["CRU-L1"][1]["Aluminum"]) is float
+    assert refs["Empty"] == ("空站", {})  # {} 把加成清空
+    assert "Bad" not in refs  # 不认识的站不加
+    assert m.CITY_PRICES["Aluminum"] == {"Area18": 3800, "Lorville": 2}
+
+
+def test_apply_live_db_unavailable_keeps_builtin(monkeypatch, tmp_path):
+    from sc_mining.update import uex
+
+    _setup(monkeypatch, tmp_path, **{"prices.json": _PRICES})
+    _write(tmp_path, "shops.json", "{坏")  # 必需源坏了：建不出库
+    _forbid_json_reads(monkeypatch, "prices.json")
+    m = _stations(_fake_data_module())
+    refs, prices = m.REFINERIES, m.CITY_PRICES
+    before = (dict(refs), json.dumps(prices, sort_keys=True))
+    assert uex.apply_live(m) is False
+    assert m.REFINERIES is refs and m.CITY_PRICES is prices
+    assert (dict(refs), json.dumps(prices, sort_keys=True)) == before
+
+
+def test_apply_live_prices_and_yields_same_snapshot(monkeypatch, tmp_path):
+    """矿价和加成在一个快照里读：最外层只开一次（只有最外层进入时读清单）"""
+    import sc_mining.gamedata as G
+    from sc_mining.gamedata import _db
+    from sc_mining.update import uex
+
+    _setup(monkeypatch, tmp_path, **{"prices.json": _PRICES})
+    G.ensure()
+    calls = []
+    real = _db.read_manifest
+
+    def counted():
+        calls.append(1)
+        return real()
+
+    monkeypatch.setattr(_db, "read_manifest", counted)
+    assert uex.apply_live(_fake_data_module()) is True
+    assert len(calls) == 1
+
+
+def test_apply_live_false_when_prices_json_bad_or_empty(monkeypatch, tmp_path):
+    """坏文件、里面没有矿价也没有加成：什么也不覆盖，返回 False，不靠外层吞错"""
+    from sc_mining.update import uex
+
+    for i, bad in enumerate(("{坏", [], {"prices": {}, "yields": {}})):
+        _setup(monkeypatch, tmp_path / str(i), **{"prices.json": _PRICES})
+        _write(tmp_path / str(i), "prices.json", bad)
+        m = _fake_data_module()
+        assert uex.apply_live(m) is False
+        assert m.CITY_PRICES["Aluminum"] == {"Area18": 1, "Lorville": 2}
+        assert m.REFINERIES["ARC-L1"] == ("弧 L1", {})
