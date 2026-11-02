@@ -1,4 +1,5 @@
-"""算法函数吃值（运行结构 RT-B2）：给了快照就不读全局表和设置，不给和以前一样"""
+"""算法函数吃值（运行结构 RT-B2）：给了快照就不读设置和矿价 / 精炼站表，不给和以前一样。
+激光头 / 模组表（laser.HEADS、GADGETS）、APPLY_HEAD_RES 和制造槽缓存还没进 LoadoutFacts，仍读全局（analysis.py:42–44）"""
 
 from contextlib import contextmanager
 from typing import Any

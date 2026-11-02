@@ -186,8 +186,9 @@ def test_analysis_import_is_clean_transitively():
 
 
 def test_tasks_mining_import_creates_no_engine():
-    """导入 tasks.mining 本身不创建引擎。tasks/__init__.py 还会连带导入 count、navigation（它们导入时还在取引擎，
-    已写进 RT-B2 PR「需要别人改」），这里换掉包入口只测这个模块；那两处改完后去掉假包，直接 import astral_toolkit.tasks.mining"""
+    """导入 tasks.mining 本身不创建引擎。tasks/__init__.py 还会连带导入 count、navigation，
+    它们导入时仍在取引擎（count.py:55、navigation.py:76），所以 import astral_toolkit.tasks 目前**会**创建引擎——这里换掉包入口只测 mining 本身。
+    待办：count 归 RT-B5a、navigation 归 RT-B5b（见 RT 会话循环设计稿 §4.3），两处改完后去掉假包，直接测 import astral_toolkit.tasks"""
     code = (
         "import sys, types, pathlib, astral_toolkit;"
         "pkg = types.ModuleType('astral_toolkit.tasks');"
