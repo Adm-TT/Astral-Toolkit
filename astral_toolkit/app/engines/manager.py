@@ -91,10 +91,8 @@ class EngineManager:
 
     def stop_all(self):
         """退出时停线程（原来 server.main() 结尾 finally 里的那几步，原样搬来）"""
-        from ...runtime.session import StopInfo
-
         try:
-            self.live.loop.request_stop_current(StopInfo("shutdown"))
+            self.live.loop.request_shutdown()
             self.nav.stop_ev.set()
         except Exception:
             pass

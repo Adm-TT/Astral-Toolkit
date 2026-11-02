@@ -1989,13 +1989,14 @@ def test_live_scan_resumes_after_restart(monkeypatch, tmp_path):
     from astral_toolkit.core import settings
     from astral_toolkit.tasks import mining as t_mining, system as t_sys
     from astral_toolkit.app.engines.manager import EngineManager
+    from astral_toolkit.runtime.session import StopAttempt
 
     em = EngineManager.get_instance()
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
     settings.update(agreed=True)
     started = []
     monkeypatch.setattr(em.live, "start", lambda: started.append(1))
-    monkeypatch.setattr(em.live, "stop", lambda: None)
+    monkeypatch.setattr(em.live, "stop", lambda: StopAttempt(None, False, False))
     for name in ("hover", "pos", "logwatch"):
         monkeypatch.setattr(getattr(em, name), "start", lambda: None)
     monkeypatch.setattr(t_sys, "_online_loop", lambda: None)  # 测试里不联网检查更新

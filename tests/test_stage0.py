@@ -192,17 +192,13 @@ def test_start_all_needs_agreed(monkeypatch):
 
 def test_stop_all_sets_events(monkeypatch):
     from astral_toolkit.app.engines.manager import EngineManager
-    from astral_toolkit.runtime.session import StopInfo
 
     m = EngineManager.get_instance()
     calls = []
-    monkeypatch.setattr(
-        m.live.loop, "request_stop_current", lambda info=None: calls.append(info)
-    )
+    monkeypatch.setattr(m.live.loop, "request_shutdown", lambda: calls.append(1))
     monkeypatch.setattr(m.nav, "stop_ev", threading.Event())
     m.stop_all()
-    assert [info.reason for info in calls] == ["shutdown"]
-    assert all(isinstance(info, StopInfo) for info in calls)
+    assert calls == [1]
     assert m.nav.stop_ev.is_set()
 
 

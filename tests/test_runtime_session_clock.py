@@ -273,13 +273,15 @@ def test_join_timeout_leaves_stopping_then_worker_exit_marks_stopped():
         gate.release.set()  # 旧线程这时才退出
         assert _wait_state(loop, RunState.STOPPED)
         assert out.live_events() == [{"running": False}], "退出时不再发第二次"
+        assert not loop.state().stop_timeout
         assert loop.join(session_id=_current_id(loop))
     finally:
         gate.release.set()
         loop.join(session_id=_current_id(loop))
 
 
-def test_worker_that_never_exits_is_marked_failed_by_its_own_watchdog():
+def test_worker_that_never_exits_only_gets_stop_timeout_not_failed():
+    """线程没退就不进 FAILED：状态留 STOPPING、stop_timeout 为真，只记一条 record"""
     gate = Gate()
     worker = FakeWorker()
     worker.gate = gate
@@ -289,9 +291,11 @@ def test_worker_that_never_exits_is_marked_failed_by_its_own_watchdog():
         assert gate.entered.wait(WAIT)
         loop.request_stop_current(StopInfo("user"))
         assert not loop.join(session_id=_current_id(loop))
-        assert _wait_state(loop, RunState.FAILED)
+        assert _wait_until(lambda: loop.state().stop_timeout, 5)
         view = loop.state()
-        assert view.last_error == "stop_timeout" and view.worker_alive
+        assert view.state is RunState.STOPPING, "线程还活着，不能标 FAILED"
+        assert view.worker_alive and view.prev_stop_pending
+        assert view.last_error is None
         assert _wait_until(lambda: out.records(), 5)
         assert any("停止超时" in op[2] for op in out.records())
     finally:
@@ -343,6 +347,6 @@ def test_shutdown_keeps_the_run_flag_and_confirms_once():
         loop.request_stop_current(StopInfo("shutdown"))
         assert loop.join(session_id=_current_id(loop))
         assert saved == [("live_on", True)], "退出不改 live_on"
-        assert out.live_events() == [{"running": False}]
+        assert out.ops == [], "shutdown 收尾什么都不发（stop_ops 空）"
     finally:
         loop.request_stop_current(StopInfo("user"))

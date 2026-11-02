@@ -1,6 +1,6 @@
 """会话输出端口（设计稿 v3 §2.1）：op 的种类，以及哪些能在锁里套用
 
-- **锁内类**（只入队 / 写内存）：`bus / hud.set / hud.clear / note`
+- **锁内类**（只入队 / 写内存）：`bus / hud.set / hud.clear / note`，以及 `shared`（写循环自己的共享结果表，循环自己处理、不经过 Output）
 - **锁后类**（写盘）：`log / record`——锁释放后按序执行，且只在锁内检查通过时执行
 
 `Output.apply(op)` 是唯一出口；循环在拿到 op 列表时（锁外）先 `validate_ops`，
@@ -9,7 +9,7 @@
 
 from typing import Any, Iterable, Protocol
 
-LOCK_IN_KINDS = frozenset({"bus", "hud.set", "hud.clear", "note"})
+LOCK_IN_KINDS = frozenset({"bus", "hud.set", "hud.clear", "note", "shared"})
 POST_LOCK_KINDS = frozenset({"log", "record"})
 OP_KINDS = LOCK_IN_KINDS | POST_LOCK_KINDS
 

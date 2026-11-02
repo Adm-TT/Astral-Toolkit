@@ -37,6 +37,7 @@ def _rock(mass=10000.0):
 class _Hud:
     def __init__(self):
         self.calls = []
+        self.notes = []
 
     def set(self, section, text, rich=None):
         self.calls.append(("set", section, text))
@@ -45,7 +46,7 @@ class _Hud:
         self.calls.append(("clear", section))
 
     def note(self, text, secs=6):
-        pass
+        self.notes.append(text)
 
 
 def _fake_view(rock="铜"):
@@ -167,10 +168,10 @@ def test_stop_between_analyze_and_commit_publishes_nothing(monkeypatch, tmp_path
     """① 停止恰好落在算完和提交之间：什么都不发布，ResultStore 不变"""
     live, gate, q, hud = _start_stuck(monkeypatch, tmp_path)
     try:
-        sid = live.stop()
-        assert sid is not None and not live.loop.running()
+        attempt = live.stop()
+        assert attempt.session_id is not None and not live.loop.running()
         gate.release.set()
-        assert live.loop.join(session_id=sid, timeout=WAIT)
+        assert live.loop.join(session_id=attempt.session_id, timeout=WAIT)
         msgs = _drain(q)
         assert not [m for m in msgs if m["kind"] == "scan"]
         assert not [c for c in hud.calls if c[0] == "set"]
@@ -187,8 +188,8 @@ def test_restart_rejects_late_result_of_old_session(monkeypatch, tmp_path):
     live, gate, q, hud = _start_stuck(monkeypatch, tmp_path)
     try:
         first = live.session_id
-        old_sid = live.stop()
-        assert old_sid == first
+        attempt = live.stop()
+        assert attempt.session_id == first
         assert live.start() is not None
         assert live.session_id > first
         _wait_kind(q, "scan")
@@ -197,7 +198,7 @@ def test_restart_rejects_late_result_of_old_session(monkeypatch, tmp_path):
         before = (e.session_id, e.sequence)
         hud_before = len(hud.calls)
         gate.release.set()
-        assert live.loop.join(session_id=old_sid, timeout=WAIT)
+        assert live.loop.join(session_id=first, timeout=WAIT)
         e = live.results.get(MINING_SCAN)
         assert e is not None and e.value["rock"] == "新"
         assert (e.session_id, e.sequence) >= before
@@ -343,7 +344,7 @@ def test_live_false_comes_after_last_scan(monkeypatch, tmp_path):
     """⑥ running=False 排在最后一条 scan 之后，旧线程迟到也不例外"""
     live, gate, q, _ = _start_stuck(monkeypatch, tmp_path)
     try:
-        sid = live.stop()
+        sid = live.stop().session_id
         gate.release.set()
         assert live.loop.join(session_id=sid, timeout=WAIT)
         msgs = _drain(q)
@@ -492,7 +493,7 @@ def test_stop_leaves_session_started_during_join_alone(monkeypatch, tmp_path):
     live, gate, q, hud = _start_stuck(monkeypatch, tmp_path)
     try:
         old = _session(live)
-        old_sid = live.stop()
+        old_sid = live.stop().session_id
         assert old_sid is not None and not live.loop.running()
         hud_before = len(hud.calls)
         assert live.start() is not None
@@ -730,7 +731,7 @@ def test_signal_of_old_session_rejected_after_restart(monkeypatch, tmp_path):
     try:
         assert live.start() is not None
         assert gate.entered.wait(WAIT)
-        old_sid = live.stop()
+        old_sid = live.stop().session_id
         assert live.start() is not None
         _wait_kind(q, "signals")
         gate.release.set()
@@ -770,6 +771,134 @@ def test_worker_keeps_the_session_it_was_started_with(monkeypatch, tmp_path):
         assert live.start() is not None
         assert done.wait(WAIT)
         assert seen and all(sid == 1 for sid, _ in seen)
-        assert all(payload is not None for _, payload in seen)
+        assert all(
+            payload is None for _, payload in seen
+        )  # 采矿没有 payload（热键在 StopInfo 里）
     finally:
         live.stop()
+
+
+def _wait_note(hud, word, timeout=5):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if any(word in note for note in hud.notes):
+            return True
+        time.sleep(0.001)
+    return False
+
+
+def test_stop_note_uses_the_hotkey_from_stop_time(monkeypatch, tmp_path):
+    """运行中改热键：自动关闭 / 出错用尽的提示里是新键（收尾那刻现读，不是开启时的快照）"""
+    clock = {"t": 1000.0}
+    hud, _ = _world(monkeypatch, tmp_path, lambda img: (Scan(), ({}, None, None)))
+    monkeypatch.setattr(time, "time", lambda: clock["t"])
+    live = live_mod._Live(clock=lambda: clock["t"])
+    keys = {"v": "F5"}
+    monkeypatch.setattr(live, "hotkey", lambda: keys["v"])
+    q = _subscribe()
+    try:
+        assert live.start() is not None
+        keys["v"] = "F9"  # 运行中改了热键
+        clock["t"] += 1000.0  # 超过 idle_close → 自动关闭
+        assert _wait_note(hud, "F9"), hud.notes
+        assert not any("F5" in note for note in hud.notes)
+    finally:
+        _finish(live, q)
+
+
+def test_error_note_uses_the_hotkey_from_stop_time(monkeypatch, tmp_path):
+    clock = {"t": 1000.0}
+    hud, _ = _world(monkeypatch, tmp_path, lambda img: (Scan(), ({}, None, None)))
+    monkeypatch.setattr(time, "time", lambda: clock["t"])
+    live = live_mod._Live(clock=lambda: clock["t"])
+    live.retries = 1
+    keys = {"v": "F5"}
+    ticks = {"n": 0}
+
+    def boom(session, ctx, now):
+        from astral_toolkit.runtime.session import Tick
+
+        ticks["n"] += 1
+        if ticks["n"] >= 5:  # 先跑几轮，让测试有机会改热键
+            raise RuntimeError("坏了")
+        return Tick(0.01, {})
+
+    monkeypatch.setattr(live, "tick", boom)
+    monkeypatch.setattr(live, "hotkey", lambda: keys["v"])
+    q = _subscribe()
+    try:
+        assert live.start() is not None
+        assert _wait_until(lambda: ticks["n"] >= 2, 5)
+        keys["v"] = "F7"  # 运行中改热键
+        clock["t"] += 1.0
+        assert _wait_note(hud, "F7"), hud.notes
+        assert not any("F5" in note for note in hud.notes)
+    finally:
+        _finish(live, q)
+
+
+def test_scan_off_flag_is_per_session(monkeypatch, tmp_path):
+    """scan_off 标记进 Ctx：A 在关扫描时被停，开 B 后 B 第一次 scan_off 照常清扫描区"""
+    hud, _ = _world(monkeypatch, tmp_path, lambda img: (_rock(), ({}, None, None)))
+    off = {"scan": True}
+    monkeypatch.setattr(
+        hud_state,
+        "_off",
+        lambda feature: "远程关了" if feature == "scan" and off["scan"] else None,
+    )
+    live = live_mod._Live()
+    q = _subscribe()
+    try:
+        assert live.start() is not None
+        assert _wait_until(lambda: ("clear", "扫描") in hud.calls, 5), (
+            "A 会话没有清扫描区"
+        )
+        first = hud.calls.count(("clear", "扫描"))
+        live.stop()
+        assert live.start() is not None
+        assert _wait_until(lambda: hud.calls.count(("clear", "扫描")) > first, 5), (
+            "B 会话应该重新清一次扫描区（标记按会话）"
+        )
+    finally:
+        off["scan"] = False
+        _finish(live, q)
+
+
+def test_sessions_do_not_share_vote_queue_or_log(monkeypatch, tmp_path):
+    """两个会话不共享投票队列和日志句柄：A 停了以后它的 ctx 关日志，B 的是新对象"""
+    _world(monkeypatch, tmp_path)
+    monkeypatch.setattr(t_mining, "scan_view", lambda *a, **k: _fake_view())
+    live = live_mod._Live()
+    contexts = {}
+    real_setup = live.setup
+
+    def setup(session):
+        ctx = real_setup(session)
+        contexts[session.id] = ctx
+        return ctx
+
+    monkeypatch.setattr(live, "setup", setup)
+    q = _subscribe()
+    try:
+        assert live.start() is not None
+        _wait_kind(q, "scan")
+        live.stop()
+        assert live.start() is not None
+        _wait_kind(q, "scan")
+        a, b = contexts[1], contexts[2]
+        assert a is not b
+        assert a.recent is not b.recent
+        assert a.log is not b.log
+        assert a.log.closed, "A 的日志句柄应该已经关了"
+        assert not b.log.closed
+    finally:
+        _finish(live, q)
+
+
+def _wait_until(predicate, timeout=5):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.001)
+    return False

@@ -132,6 +132,7 @@ class FakeWorker:
     ticks: list = field(default_factory=list)
     calls: list = field(default_factory=list)
     finished: list = field(default_factory=list)
+    hotkey_value: str = "F5"
     last_stop_info: Any = None
     loop: Any = None
     session: Any = None
@@ -146,6 +147,10 @@ class FakeWorker:
     finish_gate: Any = None  # 卡住 finish 的栅栏（测「已停写 Ctx」的顺序）
     resume_gate: Any = None  # 卡住 on_resume 的栅栏（测回调 op 在停止后被丢）
 
+    def hotkey(self):
+        self.calls.append(("hotkey",))
+        return self.hotkey_value
+
     # ---- 纯函数 op 列表
     def start_ops(self, session):
         self.calls.append(("start_ops", session.id))
@@ -155,10 +160,14 @@ class FakeWorker:
         sid = None if session is None else session.id
         self.calls.append(("stop_ops", sid, info.reason))
         self.last_stop_info = info
-        return list(self.stop_ops_list) or [
-            ("bus", "live", {"running": False}),
-            ("record", "FAKE", "引擎已停止", "", "", "INFO"),
-        ]
+        if self.stop_ops_list:
+            return list(self.stop_ops_list)
+        if info.reason == "shutdown":
+            return []  # 和采矿一样：退出收尾什么都不发
+        ops: list = [("bus", "live", {"running": False})]
+        if info.reason == "user":
+            ops.append(("record", "FAKE", "引擎已停止", "", "", "INFO"))
+        return ops
 
     # ---- 工作线程
     def setup(self, session):

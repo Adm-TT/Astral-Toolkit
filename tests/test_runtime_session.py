@@ -156,23 +156,24 @@ def test_late_request_stop_for_old_session_is_refused():
 
 
 def test_state_view_pending_and_worker_alive():
+    """join 超时：会话留在「当前」、状态 STOPPING、stop_timeout 为真；线程退出后转 STOPPED"""
     gate = Gate()
     worker = FakeWorker()
     worker.gate = gate
     loop, _, _ = make_loop(worker, join_timeout=0.02)
     try:
-        sid = _started(loop, worker)
+        _started(loop, worker)
         assert gate.entered.wait(WAIT)
         loop.request_stop_current(StopInfo("user"))
         assert not loop.join(session_id=_current_id(loop)), "线程卡着，join 应该超时"
         view = loop.state()
-        assert view.state is RunState.STOPPING
-        assert view.worker_alive and view.prev_stop_pending
-        assert [p.session_id for p in view.pending] == [sid]
-        assert view.pending[0].alive
+        assert view.state is RunState.STOPPING and view.worker_alive
+        assert view.prev_stop_pending
+        assert view.pending == (), "join 超时不把当前会话挪进 pending（v4）"
+        assert _wait_until(lambda: loop.state().stop_timeout), "看门狗要标 stop_timeout"
         gate.release.set()
         assert _wait_state(loop, RunState.STOPPED)
-        assert _wait_until(lambda: not loop.state().pending)
+        assert _wait_until(lambda: not loop.state().stop_timeout)
         assert not loop.state().worker_alive
     finally:
         gate.release.set()

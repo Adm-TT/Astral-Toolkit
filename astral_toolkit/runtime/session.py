@@ -1,13 +1,16 @@
-"""会话循环（设计稿 v3 §2）：一个引擎的线程、状态、停止、提交边界和计时都收在这里
+"""会话循环（设计稿 v4 §2）：一个引擎的线程、状态、停止、提交边界和计时都收在这里
 
-三条总规矩（v3 §2.0）：
-1. Worker 实例上不放跟会话有关的可变状态：会话 / 尝试的状态全在 Worker 自己定义的 `Ctx`，
-   启动时定下来、整个会话不变的东西（热键名、导航目标）放进 `Session.payload`。
+总规矩（v4 §2.0）：
+1. Worker 实例上不放跟会话有关的可变状态：会话 / 尝试的状态全在 Worker 自己定义的 `Ctx`；
+   启动时定下来、整个会话不变的东西（导航目标、盘点地点）放 `Session.payload`。
+   热键名**不**进 payload：收尾提示要用收尾那一刻的设置，由调用方在锁外读好放进 `StopInfo.hotkey`。
 2. 旧会话不能改新会话：每个会改共享状态的入口都先在锁内核对「传进来的会话就是当前会话、没被取消」。
 3. 只有一条共享输出通道：`commit`；回调返回的 op 也走 `_apply_checked`。
 
+线程还活着就永远不进 FAILED：停止再久也只是 STOPPING + `stop_timeout`。
+
 锁规矩：loop 锁内不调 Worker 方法（`start_ops / stop_ops` 纯函数例外）、不做 OCR / 截图 / 网络 /
-文件 / sleep / join；`_flag_lock` 先于 loop 锁。
+文件 / sleep / join；`_flag_lock` 先于 loop 锁。任一钩子抛异常都记 `HOOK_ERROR` 并照常走状态机。
 """
 
 from __future__ import annotations
@@ -30,7 +33,7 @@ def _never() -> bool:
 
 
 class RunState(Enum):
-    """会话状态（架构稿 §7.4）"""
+    """会话状态（架构稿 §7.4）。FAILED 只在工作线程已经退出后出现（出错用尽）"""
 
     STOPPED = "stopped"
     STARTING = "starting"
@@ -73,10 +76,20 @@ class Stamp:
 
 @dataclass(frozen=True)
 class StopInfo:
-    """一次停止的原因；error 是出错用尽时的最后一条错误文本"""
+    """一次停止的原因；error 是出错用尽时的最后一条错误文本；hotkey 是收尾提示里的热键名（锁外现读）"""
 
     reason: str  # user / idle / error / shutdown / replaced
     error: str = ""
+    hotkey: str = ""
+
+
+@dataclass(frozen=True)
+class StopAttempt:
+    """`_Live.stop()` 的返回：这次停的是哪个会话、线程有没有在超时内退出"""
+
+    session_id: int | None
+    joined: bool
+    timed_out: bool
 
 
 @dataclass(frozen=True)
@@ -95,7 +108,8 @@ class PendingView:
     since: float
     deadline: float
     alive: bool
-    failed: bool
+    stop_timeout: bool = False
+    confirm_sent: bool = False
 
 
 @dataclass(frozen=True)
@@ -109,12 +123,17 @@ class StateView:
     last_error: str | None
     stop_reason: str | None
     pending: tuple[PendingView, ...]
+    stop_timeout: bool = False
     current_alive: bool = False
 
     @property
     def prev_stop_pending(self) -> bool:
-        """还有没有上次停止留下的、没退出的线程"""
-        return any(p.alive for p in self.pending)
+        """「上次停止还没结束」：正在 STOPPING 且线程还活着，或有待结束记录没退"""
+        return (
+            self.stop_timeout
+            or any(p.alive for p in self.pending)
+            or (self.state is RunState.STOPPING and self.current_alive)
+        )
 
     @property
     def worker_alive(self) -> bool:
@@ -138,11 +157,14 @@ class Worker(Protocol):
     stale_after: dict[str, float]
     needs_foreground: bool
     restart_while_stopping: bool
+    loop: "SessionLoop"  # 由 SessionLoop 绑上：tick 里用 loop.stamp / loop.commit / loop.config_rev
 
     @property
     def pause_wait(self) -> float: ...
 
-    loop: "SessionLoop"  # 由 SessionLoop 绑上：tick 里用 loop.stamp / loop.commit / loop.config_rev
+    def hotkey(self) -> str:
+        """收尾提示里的热键名：由循环在工作线程里、锁外调用（现读设置）"""
+        ...
 
     def start_ops(self, session: Session) -> list[Op]: ...
     def stop_ops(self, session: Session | None, info: StopInfo) -> list[Op]: ...
@@ -184,11 +206,12 @@ class _Run:
     session: Session
     thread: threading.Thread
     state: RunState = RunState.STARTING
-    confirmed: bool = False  # 「已停止」确认发过没
-    suppressed: bool = False  # 已有更新会话：确认永远不发，只记一条 record
-    failed: bool = False  # 看门狗判过停止超时
+    confirm_sent: bool = False  # 「已停止」确认发过没
+    superseded: bool = False  # 已被新会话取代（在 _pending 里）
+    stop_timeout: bool = False  # 看门狗判过停止超时（状态仍留 STOPPING）
     error: str = ""
     stop_reason: str | None = None
+    stop_info: StopInfo | None = None
     since: float = 0.0
     deadline: float = 0.0
     active_origin: float = 0.0
@@ -229,6 +252,7 @@ class SessionLoop:
         self._flag_last: bool | None = None
         self._current: _Run | None = None
         self._pending: dict[int, _Run] = {}
+        self._shared: dict[str, Any] = {}
         self._session_id = 0
         self._epoch = 0
         self._config_rev = 0
@@ -247,7 +271,8 @@ class SessionLoop:
                     p.since,
                     p.deadline,
                     p.thread.is_alive(),
-                    p.failed,
+                    p.stop_timeout,
+                    p.confirm_sent,
                 )
                 for p in self._pending.values()
             )
@@ -259,6 +284,7 @@ class SessionLoop:
                 last_error=(cur.error or None) if cur is not None else None,
                 stop_reason=cur.stop_reason if cur is not None else None,
                 pending=pending,
+                stop_timeout=bool(cur is not None and cur.stop_timeout),
                 current_alive=bool(cur is not None and cur.thread.is_alive()),
             )
 
@@ -285,6 +311,10 @@ class SessionLoop:
     def config_rev(self) -> int:
         with self._lock:
             return self._config_rev
+
+    def shared_get(self, name: str) -> Any:
+        with self._lock:
+            return self._shared.get(name)
 
     def lock_held_by_me(self) -> bool:
         """测试辅助：当前线程是否持有 loop 锁"""
@@ -320,9 +350,8 @@ class SessionLoop:
                 if cur.thread.is_alive():
                     if not worker.restart_while_stopping:
                         return None
-                    # 旧线程还在停：交给看门狗，它永远不发「已停止」，只记一条记录
-                    if not cur.confirmed:
-                        cur.suppressed = True
+                    # 旧线程还在停：已被新会话取代，交给它自己的看门狗，以后不再发「已停止」
+                    cur.superseded = True
                     cur.since = self._clock()
                     cur.deadline = cur.since + self._join_timeout
                     self._pending[cur.session.id] = cur
@@ -356,7 +385,7 @@ class SessionLoop:
                     ],
                     deferred,
                 )
-            self._apply_locked(worker.start_ops(session), deferred)
+            self._apply_locked(self._ops_safe(worker.start_ops, session), deferred)
             sid = session.id
         self._run_ops(deferred)
         self._write_flag()
@@ -378,12 +407,7 @@ class SessionLoop:
         self._write_flag()
         return True
 
-    def request_stop_current(
-        self,
-        info: StopInfo | None = None,
-        *,
-        no_session_ops: list[Op] | None = None,
-    ) -> int | None:
+    def request_stop_current(self, info: StopInfo | None = None) -> int | None:
         """按「当前会话」停止；没有在跑的会话时也发一次「已停止」确认（和 dev 一致）"""
         info = info if info is not None else StopInfo("user")
         deferred: list[Op] = []
@@ -404,21 +428,37 @@ class SessionLoop:
                 self._flag_for(info)
                 need_none_ops = True
         if need_none_ops:
-            ops = (
-                no_session_ops
-                if no_session_ops is not None
-                else self._worker.stop_ops(None, info)  # 锁外：可能现读设置
-            )
-            validate_ops(ops)
+            ops = self._ops_safe(
+                self._worker.stop_ops, None, info
+            )  # 锁外：可能现读设置
             with self._lock:
                 cur = self._current
                 if cur is None or cur.state not in (
                     RunState.STARTING,
                     RunState.RUNNING,
                     RunState.PAUSED,
+                    RunState.STOPPING,
                 ):
                     self._apply_locked(ops, deferred)
         self._run_ops(deferred)
+        self._write_flag()
+        return sid
+
+    def request_shutdown(self) -> int | None:
+        """退出专用：有活会话就按 shutdown 停；没有会话不发任何确认"""
+        with self._lock:
+            cur = self._current
+            if cur is not None and cur.state in (
+                RunState.STARTING,
+                RunState.RUNNING,
+                RunState.PAUSED,
+            ):
+                self._stop_locked(cur, StopInfo("shutdown"))
+                sid = cur.session.id
+            elif cur is not None and cur.state is RunState.STOPPING:
+                sid = cur.session.id
+            else:
+                sid = None
         self._write_flag()
         return sid
 
@@ -428,6 +468,7 @@ class SessionLoop:
         self._results.end(run.session.id)
         run.state = RunState.STOPPING
         run.stop_reason = info.reason
+        run.stop_info = info
         if info.error:
             run.error = info.error
         run.paused_at = None
@@ -441,20 +482,22 @@ class SessionLoop:
     def _confirm_stop_locked(
         self, run: _Run, info: StopInfo, deferred: list[Op]
     ) -> None:
-        """唯一发「已停止」的地方：每个会话一次；被新会话取代的只记一条 record"""
-        if run.confirmed:
+        """唯一发「已停止」的地方：① 没确认过 ② 已发过就不发 ③ 被取代只记一条 record ④ 否则套 stop_ops"""
+        if run.confirm_sent:
             return
-        if run.suppressed:
-            run.confirmed = True  # 只记一条
+        if run.superseded:
+            run.confirm_sent = True
             deferred.append(
                 ("record", "MINING", "采矿助手引擎已停止（已被新会话取代）", "")
             )
             return
-        run.confirmed = True
-        self._apply_locked(self._worker.stop_ops(run.session, info), deferred)
+        run.confirm_sent = True
+        self._apply_locked(
+            self._ops_safe(self._worker.stop_ops, run.session, info), deferred
+        )
 
     def join(self, timeout: float | None = None, *, session_id: int) -> bool:
-        """只等 `session_id` 那个会话自己的线程。超时 → 发确认、留 STOPPING、交给它自己的看门狗"""
+        """只等 `session_id` 那个会话自己的线程。超时 → 发确认、留 STOPPING、起它自己的看门狗"""
         with self._lock:
             run = self._find_locked(session_id)
         if run is None:
@@ -471,12 +514,9 @@ class SessionLoop:
             if run is None:
                 return True
             if run.thread.is_alive():
-                self._confirm_stop_locked(
-                    run, StopInfo(run.stop_reason or "user", run.error), deferred
-                )
+                self._confirm_stop_locked(run, self._info_of(run), deferred)
                 run.since = self._clock()
                 run.deadline = run.since + self._join_timeout
-                self._pending[session_id] = run
                 self._ensure_watchdog_locked(run)
         self._run_ops(deferred)
         return False
@@ -495,14 +535,17 @@ class SessionLoop:
             if run.thread.is_alive() and run.thread is not threading.current_thread():
                 run.thread.join(left)
         with self._lock:
-            every = list(self._pending.values())
-            if self._current is not None:
-                every.append(self._current)
             return [
                 PendingView(
-                    p.session.id, p.since, p.deadline, p.thread.is_alive(), p.failed
+                    p.session.id,
+                    p.since,
+                    p.deadline,
+                    p.thread.is_alive(),
+                    p.stop_timeout,
+                    p.confirm_sent,
                 )
-                for p in every
+                for p in list(self._pending.values())
+                + ([self._current] if self._current is not None else [])
                 if p.thread.is_alive()
             ]
 
@@ -513,6 +556,7 @@ class SessionLoop:
         return self._pending.get(session_id)
 
     def _ensure_watchdog_locked(self, run: _Run) -> None:
+        """每条记录最多一个看门狗（幂等）"""
         if run.watchdog is not None:
             return
         watchdog = threading.Thread(
@@ -526,22 +570,18 @@ class SessionLoop:
 
     def _watch(self, session_id: int) -> None:
         with self._lock:
-            run = self._pending.get(session_id)
+            run = self._find_locked(session_id)
         if run is None:
             return
         run.thread.join(self._join_timeout * 3)
         deferred: list[Op] = []
         with self._lock:
-            run = self._pending.get(session_id)
+            run = self._find_locked(session_id)
             if run is None:
                 return
             if not run.thread.is_alive():
                 return  # 已经退了：finally 收尾，别抢
-            run.failed = True
-            cur = self._current
-            if cur is not None and cur is run:
-                cur.state = RunState.FAILED
-                cur.error = "stop_timeout"
+            run.stop_timeout = True  # 线程没退就不进 FAILED，只标出来
             deferred.append(
                 ("record", "MINING", "采矿助手停止超时：旧线程仍未退出", "")
             )
@@ -612,9 +652,11 @@ class SessionLoop:
 
     # ---------------------------------------------------------------- 套用输出
     def _apply_locked(self, ops: Iterable[Op], deferred: list[Op]) -> None:
-        """锁内调用：锁内类立刻套用，锁后类排到释放锁之后"""
+        """锁内调用：锁内类立刻套用（shared 写循环自己的表），锁后类排到释放锁之后"""
         for op in ops:
-            if op[0] in POST_LOCK_KINDS:
+            if op[0] == "shared":
+                self._shared[op[1]] = op[2]
+            elif op[0] in POST_LOCK_KINDS:
                 deferred.append(op)
             else:
                 self._output.apply(op)
@@ -642,6 +684,30 @@ class SessionLoop:
             self._apply_locked(ops, deferred)
         self._run_ops(deferred)
 
+    def _ops_safe(self, fn: Callable[..., list[Op]], *args: Any) -> list[Op]:
+        """调 Worker 的纯函数钩子；抛异常记 HOOK_ERROR、当空列表（不破坏状态机）"""
+        try:
+            ops = fn(*args)
+        except Exception as exc:  # noqa: BLE001 —— 钩子异常不能破坏状态机
+            self._hook_error(getattr(fn, "__name__", "hook"), exc)
+            return []
+        try:
+            validate_ops(ops)
+        except ValueError as exc:
+            self._hook_error(getattr(fn, "__name__", "hook"), exc)
+            return []
+        return list(ops)
+
+    def _hook(self, name: str, fn: Callable[..., Any], *args: Any, default: Any) -> Any:
+        try:
+            return fn(*args)
+        except Exception as exc:  # noqa: BLE001 —— 钩子异常照常走状态机
+            self._hook_error(name, exc)
+            return default
+
+    def _hook_error(self, name: str, exc: BaseException) -> None:
+        self._run_ops([("log", f"HOOK_ERROR {name}: {exc!r}", "MINING")])
+
     def _write_flag(self) -> None:
         """锁外、_flag_lock 里按**最新**期望值写盘；锁序：_flag_lock → loop 锁"""
         flag = self._run_flag
@@ -658,6 +724,17 @@ class SessionLoop:
                 pass
             self._flag_last = want
 
+    def _hotkey_now(self) -> str:
+        """收尾提示里的热键名：锁外现读（Worker 实例上不留）"""
+        hook = getattr(self._worker, "hotkey", None)
+        if hook is None:
+            return ""
+        try:
+            return str(hook())
+        except Exception as exc:  # noqa: BLE001
+            self._hook_error("hotkey", exc)
+            return ""
+
     # ---------------------------------------------------------------- 工作线程
     def _run(self, session: Session) -> None:
         worker = self._worker
@@ -666,7 +743,11 @@ class SessionLoop:
         try:
             for attempt in range(attempts):
                 try:
-                    ctx = worker.setup(session)
+                    try:
+                        ctx = worker.setup(session)
+                    except Exception as exc:  # noqa: BLE001 —— setup 抛算一次尝试失败，照常走重试
+                        self._hook_error("setup", exc)
+                        raise
                     if not self._begin_attempt(session):
                         break
                     self._loop(session, ctx)
@@ -674,21 +755,29 @@ class SessionLoop:
                 except Exception as exc:  # noqa: BLE001 —— 引擎出错要重试 / 收尾
                     if not session.alive():
                         break
-                    worker.on_error(session, ctx, exc)
+                    self._hook(
+                        "on_error", worker.on_error, session, ctx, exc, default=None
+                    )
+                    if ctx is None:
+                        self._run_ops([("log", f"ERROR {exc!r}", "MINING")])
                     if not self._is_current(session):
                         break
                     if attempt + 1 >= attempts:
-                        self.request_stop(session, StopInfo("error", str(exc)))
+                        info = StopInfo("error", str(exc), hotkey=self._hotkey_now())
+                        self.request_stop(session, info)
                         break
-                    self._before_retry(session, ctx, str(exc))
-                    worker.teardown(session, ctx)
+                    self._apply_checked(
+                        session,
+                        self._ops_safe(worker.before_retry, session, ctx, str(exc)),
+                    )
+                    self._hook("teardown", worker.teardown, session, ctx, default=None)
                     ctx = None
                     session.cancel.wait(1.0)
         finally:
-            info = self._info(session)
-            ops = worker.finish(session, ctx, info)
-            worker.teardown(session, ctx)
-            self._finish_thread(session, info, ops)
+            info = self._info_of_session(session)
+            ops = self._hook("finish", worker.finish, session, ctx, info, default=[])
+            self._hook("teardown", worker.teardown, session, ctx, default=None)
+            self._finish_thread(session, info, ops if isinstance(ops, list) else [])
 
     def _begin_attempt(self, session: Session) -> bool:
         with self._lock:
@@ -717,11 +806,13 @@ class SessionLoop:
             if self._is_paused(session):
                 self._leave_pause(session, ctx, now)
             if self._idle_expired(session):
-                self.request_stop(session, StopInfo("idle"))
+                self.request_stop(session, StopInfo("idle", hotkey=self._hotkey_now()))
                 return
             tick = worker.tick(session, ctx, now)
+            if not isinstance(tick, Tick):
+                raise TypeError("tick 必须返回 Tick")
             if self._after_tick(session, ctx, tick):
-                self.request_stop(session, StopInfo("idle"))
+                self.request_stop(session, StopInfo("idle", hotkey=self._hotkey_now()))
                 return
             session.cancel.wait(max(0.0, float(tick.wait)))
 
@@ -738,7 +829,9 @@ class SessionLoop:
             cur.state = RunState.PAUSED
             cur.paused_since = now
             cur.paused_at = now
-        self._apply_checked(session, self._worker.on_pause(session, ctx))
+        self._apply_checked(
+            session, self._ops_safe(self._worker.on_pause, session, ctx)
+        )
 
     def _leave_pause(self, session: Session, ctx: Any, now: float) -> None:
         with self._lock:
@@ -753,7 +846,9 @@ class SessionLoop:
             cur.paused_at = None
             cur.paused_since = None
             cur.state = RunState.RUNNING
-        self._apply_checked(session, self._worker.on_resume(session, ctx, gap))
+        self._apply_checked(
+            session, self._ops_safe(self._worker.on_resume, session, ctx, gap)
+        )
 
     def _is_paused(self, session: Session) -> bool:
         with self._lock:
@@ -814,11 +909,10 @@ class SessionLoop:
         if idle:
             return True
         for channel in stale:
-            self._apply_checked(session, self._worker.on_stale(session, ctx, channel))
+            self._apply_checked(
+                session, self._ops_safe(self._worker.on_stale, session, ctx, channel)
+            )
         return False
-
-    def _before_retry(self, session: Session, ctx: Any, error: str) -> None:
-        self._apply_checked(session, self._worker.before_retry(session, ctx, error))
 
     def _is_current(self, session: Session) -> bool:
         with self._lock:
@@ -830,47 +924,39 @@ class SessionLoop:
                 and cur.state in (RunState.STARTING, RunState.RUNNING, RunState.PAUSED)
             )
 
-    def _info(self, session: Session) -> StopInfo:
+    def _info_of(self, run: _Run) -> StopInfo:
+        return run.stop_info or StopInfo(run.stop_reason or "user", run.error)
+
+    def _info_of_session(self, session: Session) -> StopInfo:
         with self._lock:
             cur = self._current
             if cur is not None and cur.session is session:
-                return StopInfo(
-                    cur.stop_reason or ("error" if cur.error else "user"), cur.error
-                )
+                return self._info_of(cur)
             pending = self._pending.get(session.id)
             if pending is not None:
-                return StopInfo(
-                    pending.stop_reason or ("error" if pending.error else "user"),
-                    pending.error,
-                )
+                return self._info_of(pending)
             return StopInfo("user")
 
     def _finish_thread(self, session: Session, info: StopInfo, ops: list[Op]) -> None:
-        """工作线程退出：finish 已经做完，这里收尾状态和「已停止」"""
-        validate_ops(ops)
+        """工作线程退出：finish / teardown 已做完，这里收尾状态和「已停止」"""
         deferred: list[Op] = []
         with self._lock:
             cur = self._current
             if cur is not None and cur.session is session:
+                self._apply_locked(ops, deferred)  # finish 的锁内类 op（含 shared）
                 self._confirm_stop_locked(cur, info, deferred)
-                if cur.state in (
-                    RunState.STARTING,
-                    RunState.RUNNING,
-                    RunState.PAUSED,
-                    RunState.STOPPING,
-                ):
-                    self._apply_locked(ops, deferred)
-                    cur.state = (
-                        RunState.FAILED if info.reason == "error" else RunState.STOPPED
-                    )
-                    if info.reason == "error" and info.error:
-                        cur.error = info.error
-                self._pending.pop(session.id, None)
+                cur.stop_timeout = False  # 线程这会儿已经退了
+                cur.state = (
+                    RunState.FAILED if info.reason == "error" else RunState.STOPPED
+                )
+                if info.reason == "error" and info.error:
+                    cur.error = info.error
             else:
                 pending = self._pending.pop(session.id, None)
                 if pending is not None:
-                    # 已有更新会话：只执行锁后类 op，不碰 HUD、事件、状态
+                    # 已被新会话取代：只执行锁后类 log，不碰 HUD / 事件 / 状态 / 共享结果
                     for op in ops:
-                        if op[0] in POST_LOCK_KINDS:
+                        if op and op[0] == "log":
                             deferred.append(op)
+                    self._confirm_stop_locked(pending, info, deferred)
         self._run_ops(deferred)

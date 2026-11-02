@@ -389,7 +389,9 @@ def live_start():
 
 def live_stop():
     live = _engines().live
-    live.stop()
+    attempt = live.stop()
+    if attempt.timed_out:
+        return {"running": live.running(), "error": "正在停止，旧线程还没退出"}
     return {"running": live.running()}
 
 

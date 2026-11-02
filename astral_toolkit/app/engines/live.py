@@ -7,18 +7,17 @@ _T("mining").xxx = tasks/mining.py，_H().xxx = app/hud_state.py，_E().live / .
 
 RT-B4：线程 / 停止 / 提交边界 / 暂停 / 过期 / 自动关闭 / 重试都在 runtime/session.py 的 SessionLoop；
 这里只写一轮识别（Worker）。一个会话的每次尝试的状态放在 _Ctx 里（按会话分开：停止超时后旧线程
-还卡在识别里时，不会写坏新会话的投票队列）。热键名整个会话不变，放 Session.payload（LivePayload）。
+还卡在识别里时，不会写坏新会话的投票队列）。收尾提示里的热键名不在这里存：循环在收尾那一刻锁外现读，放进 StopInfo.hotkey。
 """
 
 import collections
 import importlib
 import threading
 import time
-from dataclasses import dataclass
 from typing import Any
 
 from ...runtime.results import MINING_SCAN, MINING_SIGNALS, ResultStore
-from ...runtime.session import RunState, SessionLoop, StopInfo, Tick
+from ...runtime.session import RunState, SessionLoop, StopAttempt, StopInfo, Tick
 from ..output import BusOutput, setting_run_flag
 
 
@@ -66,13 +65,6 @@ def _foreground():
 def _hotkey_now():
     """采矿助手开关的热键名（提示文案里用）；只在锁外调用"""
     return _T("navigation").settings_key("live_key", "F5")
-
-
-@dataclass(frozen=True)
-class LivePayload:
-    """一次采矿会话开始时定下来、整个会话不变的东西"""
-
-    hotkey: str
 
 
 class _Ctx:
@@ -126,7 +118,7 @@ class _StopProxy:
         self._loop = loop
 
     def set(self):
-        self._loop.request_stop_current(StopInfo("shutdown"))
+        self._loop.request_shutdown()
 
     def is_set(self):
         return not self._loop.running()
@@ -193,15 +185,21 @@ class _Live:
 
     # ---------------------------------------------------------------- 兼容外壳（RT-B7 删）
     def start(self):  # RT-B7 删
-        """锁外读热键（每次开都重读）→ 开会话；返回会话号，被拒返回 None"""
-        return self.loop.start(LivePayload(_hotkey_now()))
+        """开会话；返回会话号，被拒返回 None"""
+        return self.loop.start(None)
 
     def stop(self):  # RT-B7 删
-        """按当前会话停止；返回停掉的会话号（本来就没在跑 → None）"""
-        sid = self.loop.request_stop_current(StopInfo("user"))
-        if sid is not None:
-            self.loop.join(session_id=sid)
-        return sid
+        """按当前会话停止；返回 StopAttempt（本来就没在跑 → session_id=None，不 join）"""
+        info = StopInfo("user", hotkey=self.hotkey())
+        sid = self.loop.request_stop_current(info)
+        if sid is None:
+            return StopAttempt(None, False, False)
+        joined = self.loop.join(session_id=sid)
+        return StopAttempt(sid, joined, not joined)
+
+    def hotkey(self):  # RT-B7 删
+        """收尾提示里的热键名：循环在工作线程里、锁外现读（Worker 实例上不留）"""
+        return _hotkey_now()
 
     def running(self):  # RT-B7 删
         return self.loop.running()
@@ -234,16 +232,27 @@ class _Live:
         ]
 
     def stop_ops(self, session, info):
-        """会话结束时要发的东西（循环在锁内按序套用；record 是锁后类）"""
+        """「已停止」确认的 ops（循环在锁内套用；纯函数，只读 info）。逐字照 dev 三处收尾
+
+        user：清三块 → 记「引擎已停止」→ scan_hint → live running=False（不发 note）
+        idle：清三块 → scan_hint → live auto_off → note（不写「引擎已停止」）
+        error：清三块 → scan_hint → live error → note（不写「引擎已停止」）
+        shutdown：什么都不发；replaced 不经这里
+        """
+        if info.reason not in ("user", "idle", "error"):
+            return []
+        hotkey = info.hotkey or "F5"
         ops: list[tuple] = [
             _del("信号", "扫描", "矿袋"),
             _pub("scan_hint", {"why": "", "text": ""}),
         ]
-        if session is None:
-            hotkey = _hotkey_now()  # 没有会话时按停止：锁外现读一次（v3 §2.2）
+        if info.reason == "user":
+            ops.append(_record("MINING", "采矿助手引擎已停止", "LIVE"))
+            ops.append(_pub("live", {"running": False}))
+        elif info.reason == "idle":
+            ops.append(_pub("live", {"running": False, "auto_off": True}))
+            ops.append(_note("采矿助手", f"采矿助手已关闭｜按 {hotkey} 开启"))
         else:
-            hotkey = getattr(session.payload, "hotkey", None) or "F5"
-        if info.reason == "error":
             ops.append(_pub("live", {"running": False, "error": info.error}))
             ops.append(
                 _note(
@@ -251,14 +260,6 @@ class _Live:
                     f"采矿助手出错已关闭｜按 {hotkey} 重开（详情见日志）",
                 )
             )
-        elif info.reason == "idle":
-            ops.append(_pub("live", {"running": False, "auto_off": True}))
-            ops.append(_note("采矿助手", f"采矿助手已关闭｜按 {hotkey} 开启"))
-        else:
-            ops.append(_pub("live", {"running": False}))
-        if info.reason in ("user", "shutdown", "replaced"):
-            # dev 上只有 stop() 记这一条（自动关闭 / 出错不记）
-            ops.append(_record("MINING", "采矿助手引擎已停止", "LIVE"))
         return ops
 
     def setup(self, session):
