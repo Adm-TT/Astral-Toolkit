@@ -14,6 +14,11 @@ class TestOcrModule(unittest.TestCase):
             read_line,
             raw_detector,
             raw_recognizer,
+            warmup,
+            set_ocr_device,
+            ocr_device,
+            gpu_available,
+            last_ocr_error,
         )
         from astral_toolkit.ocr.models import OcrToken as DirectOcrToken
 
@@ -23,6 +28,11 @@ class TestOcrModule(unittest.TestCase):
         self.assertTrue(callable(read_line))
         self.assertTrue(callable(raw_detector))
         self.assertTrue(callable(raw_recognizer))
+        self.assertTrue(callable(warmup))
+        self.assertTrue(callable(set_ocr_device))
+        self.assertTrue(callable(ocr_device))
+        self.assertTrue(callable(gpu_available))
+        self.assertTrue(callable(last_ocr_error))
 
         # 验证 trade.ocr 垫片已彻底下线
         import importlib
