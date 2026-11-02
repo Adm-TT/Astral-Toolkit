@@ -312,6 +312,7 @@ def test_8_start_and_request_stop_are_idempotent():
     loop, _, out = make_loop(worker)
     try:
         first = loop.start()
+        assert first is not None
         assert worker.started.wait(WAIT)
         assert loop.start() == first and loop.start() == first
         assert out.live_events() == [{"running": True}]

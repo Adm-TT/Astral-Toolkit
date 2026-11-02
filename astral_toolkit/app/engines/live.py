@@ -167,7 +167,7 @@ class _Live:
     def lock(self):  # RT-B7 删
         return self.loop._lock
 
-    def start(self):
+    def start(self):  # RT-B7 删
         if self.loop.running():
             return
         from ...core import run_records
@@ -175,14 +175,14 @@ class _Live:
         run_records.record("MINING", "采矿助手引擎已启动", ui_tag="LIVE")
         self.loop.start()
 
-    def stop(self):
+    def stop(self):  # RT-B7 删
         from ...core import run_records
 
         run_records.record("MINING", "采矿助手引擎已停止", ui_tag="LIVE")
         self.loop.request_stop("user")
         self.loop.join()
 
-    def config_changed(self):
+    def config_changed(self):  # RT-B7 删
         """配装变了：正在算的结果作废，正在显示的石头按新配装重算（采矿助手最多 5 秒后重新发布）"""
         self.gear_rev += 1
         self.loop.config_changed()

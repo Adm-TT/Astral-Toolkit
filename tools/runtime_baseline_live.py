@@ -93,7 +93,7 @@ def _settle(rec):
 
 
 def _drive(rec, frames, clock, front=None):
-    """跑完一轮：frames 用完后喂空白帧，等它自己过期、自动关闭（_auto_off）；到上限还没停就按开关"""
+    """跑完一轮：frames 用完后喂空白帧，等它自己过期、自动关闭；到上限还没停就按开关"""
     from PIL import Image
     from astral_toolkit.app.engines import live as live_mod
     from astral_toolkit.mining import screen
