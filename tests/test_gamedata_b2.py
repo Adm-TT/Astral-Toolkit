@@ -117,6 +117,39 @@ def test_starmap_update_runs_inside_updating(monkeypatch, tmp_path):
     assert log == ["fetch", "fetch", ("enter", False), ("exit", True)]
 
 
+def test_starmap_update_reports_rebuild_failure(monkeypatch, tmp_path):
+    """星图下载写好了、但出口重建库失败：不能再说「已更新」，要说还在用旧星图（整改第 1 批第 2 条）"""
+    import builtins
+
+    from sc_mining.gamedata import _build
+    from sc_mining.navigation import starmap
+
+    _setup(monkeypatch, tmp_path)
+    fake = dict(
+        source="starmap.space",
+        fetched="2026-11-02",
+        bodies={f"B{i}": {} for i in range(10)},
+        pois=[{"qt": 1}] * 300,
+        points=[],
+    )
+    monkeypatch.setattr(starmap, "_fetch", lambda path: [])
+    monkeypatch.setattr(starmap, "compact", lambda oc, pois: fake)
+
+    def boom():
+        raise RuntimeError("建库炸了")
+
+    monkeypatch.setattr(_build, "rebuild_if_needed", boom)
+    said = []
+    monkeypatch.setattr(
+        builtins, "print", lambda *a, **k: said.append(" ".join(map(str, a)))
+    )
+    starmap.update()
+    last = said[-1]
+    assert (
+        "已更新" not in last.split("：")[0] and "旧星图" in last and "建库炸了" in last
+    )
+
+
 def test_starmap_load_downloads_when_no_file(monkeypatch, tmp_path):
     """还没有 starmap.json：和以前一样先下载一次再读"""
     from sc_mining.navigation import starmap
@@ -455,6 +488,45 @@ def test_mining_spots_divides_by_1000_and_merges(monkeypatch, tmp_path):
             json.dumps(spots[:1]), encoding="utf-8"
         )
     assert [q["n"] for q in navigate.mining_spots()] == ["RMB-DARI"]
+
+
+def test_mining_spots_skips_row_without_name(monkeypatch, tmp_path):
+    """挖矿点英文名和 id 都空：跳过这一条，搜索不崩（以前 r["id"] 抛 KeyError 被吞，也是丢这一条）"""
+    from sc_mining.navigation import navigate
+
+    nameless = dict(
+        sys="Pyro", zh="", en="", kind="cluster", area="", x=1000.0, y=0.0, z=0.0
+    )
+    _setup(
+        monkeypatch,
+        tmp_path,
+        **{"mining_spots.json": _NAV_SOURCES["mining_spots.json"] + [nameless]},
+    )
+    assert [q["n"] for q in navigate.mining_spots()] == ["RMB-DARI"]
+    hits, total = navigate.search("远矿站")
+    assert [q["n"] for q in hits] == ["RMB-DARI"] and total == 1
+
+
+def test_search_without_db_still_searches(monkeypatch, tmp_path):
+    """调用方自己传星图、游戏数据库建不出来：照常搜（地名退化成空），不抛（整改第 1 批第 1 条）"""
+    import sc_mining.gamedata as G
+    from sc_mining.core import paths
+    from sc_mining.gamedata import _ready
+    from sc_mining.navigation import navigate
+
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    monkeypatch.setattr(paths, "DATA", empty)  # 没有任何源：建不出库
+    monkeypatch.setattr(_ready, "_state", {"done": None, "failed": None})
+    monkeypatch.setattr(G, "_state", {"last_error": None, "warm_thread": None})
+    monkeypatch.setattr(navigate, "waypoints", lambda: [])
+    data = {
+        "bodies": {"ArcCorp": {"r": 800000.0}},
+        "pois": [dict(b="ArcCorp", n="Area18", t="City", x=0.0, y=0.0, z=0.0, qt=1)],
+        "points": [],
+    }
+    hits, total = navigate.search("area18", data)
+    assert [q["n"] for q in hits] == ["Area18"] and total == 1
 
 
 def test_navigate_has_no_starmap_private_imports():
