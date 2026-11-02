@@ -77,11 +77,9 @@ class EngineManager:
         if settings.load().get("live_on"):
             self.live.start()
         try:
-            from ...core import perf
+            from ...ocr import warmup
 
-            threading.Thread(
-                target=perf.rapidocr, daemon=True, name="ocr-warmup"
-            ).start()
+            threading.Thread(target=warmup, daemon=True, name="ocr-warmup").start()
         except Exception:
             pass
         try:

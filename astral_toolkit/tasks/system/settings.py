@@ -124,7 +124,7 @@ def set_settings(**kw):
             target = "gpu" if kw["always_use_gpu"] else "cpu"
         if target:
             try:
-                from ...core.perf import set_ocr_device
+                from ...ocr import set_ocr_device
 
                 set_ocr_device(target)
             except Exception:
