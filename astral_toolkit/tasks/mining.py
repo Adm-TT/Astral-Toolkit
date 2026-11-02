@@ -106,7 +106,7 @@ def _marker_tick(target, data, state, shown, ref=None):
         return shown
     try:
         from ..navigation.displayinfo import last_fov
-        from ..core.perf import game_area
+        from ..core.capture import game_area
 
         a = game_area()
         fov = info.get("fov") or last_fov() or 70.0

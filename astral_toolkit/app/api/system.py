@@ -120,7 +120,7 @@ def quit(**kw):
 
 def runtime_capture_now():
     """手动立即截取一帧画面，更新实时监控"""
-    from ...core.perf import grab_screen
+    from ...core.capture import grab_screen
 
     img = grab_screen()
     bus.update_preview(img, source="manual", force=True)

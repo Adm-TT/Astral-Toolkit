@@ -108,7 +108,7 @@ class _Pos:
                 fg = True
             ready = False
             try:
-                from ...core.perf import game_area
+                from ...core.capture import game_area
 
                 ready = gridtext.ready(game_area()["height"])
             except Exception:
