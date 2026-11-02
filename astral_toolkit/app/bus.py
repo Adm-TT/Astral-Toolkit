@@ -13,6 +13,8 @@ import sys
 import threading
 import time
 
+from . import ui_stream
+
 _subs = []
 _lock = threading.Lock()
 _last = {}  # 每类消息最后一条（窗口刷新/新打开时补发）
@@ -238,6 +240,16 @@ def adopt_task(task_id):
 
 _running = {}
 _run_lock = threading.Lock()
+_run_seq = 0
+_run_seq_lock = threading.Lock()
+
+
+def _next_run_id():
+    """给一次真正启动的后台任务分配进程内单调的 run_id"""
+    global _run_seq
+    with _run_seq_lock:
+        _run_seq += 1
+        return _run_seq
 
 
 def task_running(task_id):
@@ -261,6 +273,51 @@ def run_task(task_id, fn, *args, title="", **kw):
         _task.id = task_id
         publish("task", {"id": task_id, "title": title, "state": "running"})
         runtime_log(f"任务开始: {title or task_id}", tag=task_id.upper(), level="INFO")
+        run_id = _next_run_id()
+        ui_active = task_id in ("update", "upgrade")
+        activity_id = f"{task_id}:{run_id}"
+        if ui_active:
+            try:
+                ui_stream.publish_ui(
+                    "ui.activity",
+                    {
+                        "activity": {
+                            "activity_id": activity_id,
+                            "kind": task_id,
+                            "state": "running",
+                            "title": title or task_id,
+                            "primary": {"value": 0, "unit": ""},
+                            "secondary": [],
+                            "progress": None,
+                            "quality": "partial",
+                            "action": None,
+                            "link": None,
+                            "stale_since": None,
+                            "error": None,
+                            "updated_wall": time.strftime("%Y-%m-%d %H:%M:%S"),
+                        }
+                    },
+                )
+            except Exception:
+                pass
+        ui_ended = False
+
+        def end_ui(reason, error=None):
+            nonlocal ui_ended
+            if not ui_active or ui_ended:
+                return
+            ui_ended = True
+            try:
+                data = {
+                    "activity_id": activity_id,
+                    "end_reason": reason,
+                }
+                if error is not None:
+                    data["error"] = str(error)
+                ui_stream.publish_ui("ui.activity_end", data)
+            except Exception:
+                pass
+
         try:
             result = fn(*args, **kw)
             publish(
@@ -270,6 +327,7 @@ def run_task(task_id, fn, *args, title="", **kw):
             runtime_log(
                 f"任务结束: {title or task_id}", tag=task_id.upper(), level="INFO"
             )
+            end_ui("done")
         except Exception as e:
             import traceback
 
@@ -283,6 +341,16 @@ def run_task(task_id, fn, *args, title="", **kw):
                 tag=task_id.upper(),
                 level="ERROR",
             )
+            end_ui("error", e)
+        except BaseException as e:
+            name = type(e).__name__.lower()
+            if "cancel" in name:
+                end_ui("user", e)
+            elif isinstance(e, (KeyboardInterrupt, SystemExit)):
+                end_ui("shutdown", e)
+            else:
+                end_ui("error", e)
+            raise
         finally:
             r = sys.stdout
             if isinstance(r, _Router):

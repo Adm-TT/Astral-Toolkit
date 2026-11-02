@@ -14,6 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from . import bus
+from . import ui_stream
 
 # 2026-10-30 阶段 4：services.py 删了。import tasks 这一层会把全部任务模块加载好（tasks/__init__.py），
 # tasks.goals / tasks.navigation 在 import 时登记数据包清缓存函数，和原来 import services 时顺带做的一样早
@@ -31,6 +32,8 @@ MAX_BODY = (
     16 << 20
 )  # 普通接口的请求体上限（都是小 JSON；安装包走 upgrade_upload_raw，另有上限）
 _last_client = {"t": time.time(), "ever": False}
+# 新展示流心跳间隔（秒）；测试可调小，不需要长 sleep
+UI_HEARTBEAT_INTERVAL = 5.0
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -70,6 +73,14 @@ class Handler(BaseHTTPRequestHandler):
             if not self._allowed():
                 return self._send(403, "{}")
             return self._events()
+        if path == "/api/ui/events":
+            if not self._allowed():
+                return self._send(403, "{}")
+            return self._ui_events()
+        if path == "/api/ui/snapshot":
+            if not self._allowed():
+                return self._send(403, "{}")
+            return self._ui_snapshot()
         if path == "/api/screenshot":
             if not self._allowed():
                 return self._send(403, "{}")
@@ -179,6 +190,8 @@ class Handler(BaseHTTPRequestHandler):
                 413, json.dumps({"ok": False, "error": "请求太大"}, ensure_ascii=False)
             )
         raw = self.rfile.read(n) if n else b""
+        if name == "ui/dismiss":
+            return self._ui_dismiss(raw)
         from .api import router  # 2026-10-30 阶段 0：接口统一走 router
 
         if name not in router.routes():
@@ -236,6 +249,104 @@ class Handler(BaseHTTPRequestHandler):
         finally:
             bus.unsubscribe(q)
             _last_client["t"] = time.time()
+
+    def _ui_events(self):
+        # SSE 没有 Content-Length：必须明确关闭连接，否则 HTTP/1.1 keep-alive
+        # 会让客户端永远等不到 EOF（满队列/bye 后服务端线程也会卡住）。
+        self.close_connection = True
+        hello, q = ui_stream.subscribe()
+        if q is None:
+            error = (
+                hello.get("error", "已关闭") if isinstance(hello, dict) else "已关闭"
+            )
+            return self._send(
+                503,
+                json.dumps({"ok": False, "error": error}, ensure_ascii=False),
+            )
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Connection", "close")
+        self.end_headers()
+        conn = hello["conn"]
+        interval = max(0.01, float(UI_HEARTBEAT_INTERVAL))
+        poll = min(1.0, interval)
+        try:
+            self.wfile.write(ui_stream.encode(hello).encode("utf-8"))
+            self.wfile.flush()
+            last_hb = time.time()
+            while True:
+                try:
+                    msg = q.get(timeout=poll)
+                except queue.Empty:
+                    if not ui_stream.is_connected(q):
+                        break
+                    now = time.time()
+                    if now - last_hb >= interval:
+                        hb = ui_stream.heartbeat(conn)
+                        self.wfile.write(ui_stream.encode(hb).encode("utf-8"))
+                        self.wfile.flush()
+                        last_hb = now
+                    continue
+                ui_stream.mark_dequeued(q)
+                if not ui_stream.is_connected(q):
+                    break
+                self.wfile.write(ui_stream.encode(msg).encode("utf-8"))
+                self.wfile.flush()
+                last_hb = time.time()
+                if msg.get("kind") == "ui.bye":
+                    break
+        except Exception:
+            pass
+        finally:
+            ui_stream.unsubscribe(q)
+
+    def _ui_snapshot(self):
+        from urllib.parse import parse_qs, urlparse
+
+        qs = parse_qs(urlparse(self.path).query)
+        conn = (qs.get("conn") or [""])[0]
+        try:
+            conn = int(conn)
+        except (TypeError, ValueError):
+            pass
+        # 全家福只读；开关刷新必须先走 set_switches，有变化会在展示流锁内分配 ui_seq 并广播 ui.tile
+        try:
+            ui_stream.set_switches(ui_stream.read_switches())
+        except Exception:
+            pass
+        snap = ui_stream.snapshot(conn)
+        self._send(
+            200,
+            json.dumps(snap, ensure_ascii=False, default=str),
+        )
+
+    def _ui_dismiss(self, raw):
+        try:
+            args = json.loads(raw or b"{}")
+        except Exception as e:
+            return self._send(
+                200,
+                json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False),
+            )
+        notice_id = args.get("notice_id") if isinstance(args, dict) else None
+        if not notice_id:
+            return self._send(
+                200,
+                json.dumps(
+                    {"ok": False, "error": "缺少 notice_id"},
+                    ensure_ascii=False,
+                ),
+            )
+        notice_id = str(notice_id)
+        ok = ui_stream.dismiss_notice(notice_id)
+        body = {
+            "ok": bool(ok),
+            "data": {"notice_id": notice_id, "dismissed": bool(ok)},
+        }
+        if not ok:
+            body["error"] = "没有这条通知"
+        return self._send(200, json.dumps(body, ensure_ascii=False))
 
 
 class Server(ThreadingHTTPServer):
