@@ -12,6 +12,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -172,7 +173,7 @@ def collect():
     from sc_mining.tasks import goals
 
     scans = {**_fixed_scans(), **_sample_scans()}
-    out = {"scan 清单": {k: repr(s) for k, s in scans.items()}}
+    out: dict[str, Any] = {"scan 清单": {k: repr(s) for k, s in scans.items()}}
     for name, scan in scans.items():
         for cut in (False, True):
             for bag_name, bag in (("矿袋", BAG), ("没读到矿袋", NO_BAG)):

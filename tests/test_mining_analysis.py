@@ -1,6 +1,7 @@
 """采矿结果计算（运行结构 RT-B1）：假输入下不碰任何数据、设置、文件，数值可以单独验"""
 
 from types import SimpleNamespace
+from typing import Any
 
 from sc_mining.mining.analysis import MiningInputs, analyze, lots, station_bonus
 from sc_mining.mining.parse import Scan
@@ -22,7 +23,7 @@ def _plan(gadget=None, breakable=True):
 
 
 def _inputs(**over):
-    kw = dict(
+    kw: dict[str, Any] = dict(
         at="12:00:00",
         mineral_zh=lambda m: ZH.get(m, m),
         method_zh=lambda m: f"方式{m}",
@@ -38,14 +39,14 @@ def _inputs(**over):
         quality_hints=lambda comp: ["提示"],
         mat_summary=lambda m, q=None: {"count": 1, "ok": q},
         goal_for=lambda *names: None,
-        goal_text=lambda g, q, mine: f"缺 {g['en']} {len(mine)} 份",
+        goal_text=lambda g, q, mine=(): f"缺 {g['en']} {len(mine)} 份",
     )
     kw.update(over)
     return MiningInputs(**kw)
 
 
 def _scan(**over):
-    kw = dict(
+    kw: dict[str, Any] = dict(
         rock="Tungsten",
         mass=1000,
         resistance=4,
@@ -91,7 +92,7 @@ def test_analyze_numbers_and_bag():
     assert r.refine[0].value == 1234.0 and r.refine[0].yields == (("钨", 6.0),)
     assert r.sell == (("钨", "城"),) and r.craft == ("提示",)
     assert r.plans[0].throttle == 0.5 and r.plans[0].gadget_label == ""
-    assert r.bag.used == 1.5 and r.bag.items == (("金", 1.5),)
+    assert r.bag is not None and r.bag.used == 1.5 and r.bag.items == (("金", 1.5),)
 
     def boom(*a, **k):
         raise AssertionError("没有矿不该查")
