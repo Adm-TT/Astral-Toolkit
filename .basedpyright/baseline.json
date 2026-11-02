@@ -288,7 +288,7 @@
                 }
             }
         ],
-        "./astral_toolkit/core/perf.py": [
+        "./astral_toolkit/ocr/runtime.py": [
             {
                 "code": "reportAttributeAccessIssue",
                 "range": {
