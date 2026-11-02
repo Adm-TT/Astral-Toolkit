@@ -8,12 +8,12 @@
 方位：0°=北（OM-1 方向），90°=东，应该和游戏头盔指南针一致（待游戏内确认）。
 """
 
-import json
 import math
 import re
 import sys
 import threading
 import time
+from contextlib import ExitStack
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -209,13 +209,16 @@ def mining_spots(data=None):
     except gamedata.GamedataError:
         raw = ()  # 库不可用：和以前没有文件一样，只剩拉格朗日点
     for r in raw:
+        n = r.get("en") or r.get("id")
+        if not n:  # 没名字的一条跳过（以前 r["id"] 抛 KeyError 被吞，也是丢这一条）
+            continue
         x, y, z = r["x"] / 1000, r["y"] / 1000, r["z"] / 1000
         out.append(
             dict(
                 b="@" + r["sys"],
                 sys=r["sys"],
                 space=True,
-                n=r.get("en") or r["id"],
+                n=n,
                 zh=r.get("zh") or "",
                 t="Mining Spot",
                 x=round(x, 3),
@@ -286,9 +289,11 @@ def space_points(data=None):
 def search(query, data=None, limit=15):
     """按中文名/英文名/星球名/类型搜地点；多个词都要命中。没信标的排前面"""
     data = data or load()
-    with (
-        gamedata.snapshot()
-    ):  # 一次搜索钉在一个版本上：几千次地名查询复用这个快照，不每次读清单
+    with ExitStack() as stack:
+        try:  # 一次搜索钉在一个版本上：几千次地名查询复用这个快照，不每次读清单
+            stack.enter_context(gamedata.snapshot())
+        except gamedata.GamedataError:
+            pass  # 库不可用（调用方自己传了星图）：不钉快照照常搜，地名退化成空
         return _search(query, data, limit)
 
 
