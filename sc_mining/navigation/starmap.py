@@ -155,9 +155,15 @@ def update() -> Dict[str, Any]:
         )
         tmp.replace(CACHE)
     n_no = sum(1 for p in data["pois"] if p.get("qt") != 1)
-    print(
-        f"星图数据已更新：{len(data['bodies'])} 个星球/卫星，{len(data['pois'])} 个地点（其中 {n_no} 个没有确认的量子信标）"
-    )
+    counts = f"{len(data['bodies'])} 个星球/卫星，{len(data['pois'])} 个地点（其中 {n_no} 个没有确认的量子信标）"
+    # updating() 出口重建失败不抛、只记在 last_error()；这时 load() 给的还是旧星图
+    err = gamedata.last_error()
+    if err:
+        print(
+            f"星图已下载（{counts}），但游戏数据库重建失败，仍在用旧星图。详情：{err}"
+        )
+    else:
+        print(f"星图数据已更新：{counts}")
     return data
 
 
