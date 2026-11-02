@@ -5,26 +5,11 @@
 
 import time
 
-from tests.runtime_fakes import FakeClock, FakeWorker, RecordingOutput
-from astral_toolkit.runtime.results import MINING_SCAN, MINING_SIGNALS, ResultStore
-from astral_toolkit.runtime.session import Freshness, RunState, SessionLoop
+from tests.runtime_fakes import FakeWorker, make_loop
+from astral_toolkit.runtime.results import MINING_SCAN, MINING_SIGNALS
+from astral_toolkit.runtime.session import Freshness, RunState
 
 WAIT = 10
-
-
-def _make(worker=None, clock=None, output=None, results=None, foreground=None, **kw):
-    worker = worker or FakeWorker()
-    output = output or RecordingOutput()
-    loop = SessionLoop(
-        worker,
-        results=results or ResultStore(),
-        output=output,
-        foreground=foreground or (lambda: None),
-        clock=clock or FakeClock(),
-        **kw,
-    )
-    output.bind(loop._lock)
-    return loop, worker, output
 
 
 def _started(loop, worker):
@@ -43,7 +28,7 @@ def _wait_until(predicate, timeout=WAIT):
 
 
 def test_start_creates_a_session_and_publishes_running_inside_the_lock():
-    loop, worker, out = _make()
+    loop, worker, out = make_loop()
     try:
         sid = _started(loop, worker)
         view = loop.state()
@@ -58,7 +43,7 @@ def test_start_creates_a_session_and_publishes_running_inside_the_lock():
 
 
 def test_start_while_running_is_idempotent():
-    loop, worker, out = _make()
+    loop, worker, out = make_loop()
     try:
         sid = _started(loop, worker)
         assert loop.start() == sid
@@ -76,7 +61,7 @@ def test_request_stop_applies_finish_ops_inside_the_lock():
         ("bus", "scan_hint", {"why": "", "text": ""}),
         ("bus", "live", {"running": False}),
     ]
-    loop, _, out = _make(worker)
+    loop, _, out = make_loop(worker)
     try:
         _started(loop, worker)
         out.clear()
@@ -96,7 +81,7 @@ def test_request_stop_applies_finish_ops_inside_the_lock():
 
 
 def test_request_stop_twice_finishes_once():
-    loop, worker, out = _make()
+    loop, worker, out = make_loop()
     try:
         _started(loop, worker)
         loop.request_stop("user")
@@ -111,7 +96,7 @@ def test_request_stop_twice_finishes_once():
 
 
 def test_commit_accepts_result_of_current_session_and_applies_ops_in_lock():
-    loop, worker, out = _make()
+    loop, worker, out = make_loop()
     try:
         _started(loop, worker)
         session = worker.session
@@ -135,7 +120,7 @@ def test_commit_accepts_result_of_current_session_and_applies_ops_in_lock():
 
 
 def test_commit_rejects_finished_session_and_old_epoch():
-    loop, worker, out = _make()
+    loop, worker, out = make_loop()
     try:
         _started(loop, worker)
         old = worker.session
@@ -174,7 +159,7 @@ def test_commit_rejects_finished_session_and_old_epoch():
 
 def test_stamp_is_refused_after_the_session_ended():
     """RT-B3 遗留④：旧线程停完才来取 stamp —— 第一层在循环这里挡住，不生成序号"""
-    loop, worker, out = _make()
+    loop, worker, out = make_loop()
     try:
         _started(loop, worker)
         session = worker.session
@@ -189,7 +174,7 @@ def test_stamp_is_refused_after_the_session_ended():
 
 
 def test_config_changed_bumps_epoch_for_later_stamps():
-    loop, worker, _ = _make()
+    loop, worker, _ = make_loop()
     try:
         _started(loop, worker)
         first = loop.state().epoch
@@ -202,7 +187,7 @@ def test_config_changed_bumps_epoch_for_later_stamps():
 
 
 def test_only_outputs_commit_needs_the_current_session():
-    loop, worker, out = _make()
+    loop, worker, out = make_loop()
     try:
         _started(loop, worker)
         session = worker.session
@@ -216,7 +201,7 @@ def test_only_outputs_commit_needs_the_current_session():
 
 
 def test_state_view_reports_worker_alive_and_stop_reason():
-    loop, worker, _ = _make()
+    loop, worker, _ = make_loop()
     try:
         _started(loop, worker)
         assert _wait_until(lambda: loop.state().worker_alive)
@@ -231,7 +216,7 @@ def test_state_view_reports_worker_alive_and_stop_reason():
 
 
 def test_freshness_starts_empty_and_tracks_slots():
-    loop, worker, _ = _make()
+    loop, worker, _ = make_loop()
     try:
         _started(loop, worker)
         assert loop.freshness(MINING_SCAN) is Freshness.EMPTY

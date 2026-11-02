@@ -96,7 +96,9 @@ class FakeWorker:
     session: Any = None
     started: threading.Event = field(default_factory=threading.Event)
     ticked: threading.Event = field(default_factory=threading.Event)
-    gate: Any = None  # 卡住 tick 的线程栅栏（tests.runtime_fakes.Gate）
+    gate: Any = None  # 卡住 tick 的线程栅栏（Gate / TickGate）
+    fail_times: int = 0  # 前几次 tick 直接抛错（试重试用）
+    failure: str = "坏了"
 
     def setup(self, session):
         self.session = session
@@ -111,6 +113,9 @@ class FakeWorker:
         self.ticks.append(now)
         if self.gate is not None:
             self.gate.hold()
+        if self.fail_times > 0:
+            self.fail_times -= 1
+            raise RuntimeError(self.failure)
         self.ticked.set()
         return Tick(self.wait, self.active, self.seen)
 
@@ -162,3 +167,43 @@ class Gate:
             assert self.release.wait(30)
             return True
         return False
+
+
+class TickGate:
+    """tick 每轮都停在闸上：测试放一步、走一步（卡时机不靠 sleep）"""
+
+    def __init__(self):
+        self.arrived = threading.Semaphore(0)
+        self.release = threading.Semaphore(0)
+
+    def hold(self):
+        self.arrived.release()
+        assert self.release.acquire(timeout=30), "测试没放行 tick"
+
+    def step(self):
+        self.release.release()
+
+    def wait(self, n=1):
+        for _ in range(n):
+            assert self.arrived.acquire(timeout=30), "tick 没到闸"
+
+
+def make_loop(
+    worker=None, *, results=None, output=None, foreground=None, clock=None, **kw
+):
+    """按测试默认值建一个会话循环：假 Worker、假时钟、记录输出，并把输出绑到循环的锁上"""
+    from astral_toolkit.runtime.results import ResultStore
+    from astral_toolkit.runtime.session import SessionLoop
+
+    worker = worker if worker is not None else FakeWorker()
+    out = output if output is not None else RecordingOutput()
+    loop = SessionLoop(
+        worker,
+        results=results if results is not None else ResultStore(),
+        output=out,
+        foreground=foreground if foreground is not None else (lambda: None),
+        clock=clock if clock is not None else FakeClock(),
+        **kw,
+    )
+    out.bind(loop._lock)
+    return loop, worker, out

@@ -228,34 +228,37 @@ class SessionLoop:
             return session.id
 
     def request_stop(self, reason: str = "user") -> None:
-        """结束当前会话：按开关、作废旧结果、套用工作者的收尾输出（锁内）、落设置开关（锁外）"""
-        with self._lock:
-            session = self._session
-            active = self._state in (
-                RunState.STARTING,
-                RunState.RUNNING,
-                RunState.PAUSED,
-            )
-        if active and session is not None:
+        """结束当前会话（用户 / 退出）：按开关、作废旧结果、套用工作者的收尾输出（锁内）、落设置开关（锁外）"""
+        session = self._session
+        if session is not None:
             self._worker.on_stop(session, reason)  # 锁外：写日志文件这类事
+        self._stop_session(session, reason)
+
+    def _stop_session(
+        self, session: Session | None, reason: str, error: str | None = None
+    ) -> bool:
+        """工作线程自己结束（idle / error）也走这里：拿自己的会话令牌来，绝不结束后来开的会话"""
         with self._lock:
-            session = self._session
-            if session is None or self._state not in (
-                RunState.STARTING,
-                RunState.RUNNING,
-                RunState.PAUSED,
+            if (
+                session is None
+                or session is not self._session
+                or self._state
+                not in (RunState.STARTING, RunState.RUNNING, RunState.PAUSED)
             ):
-                return
+                return False
             session.cancel.set()
             self._epoch += 1
             self._results.end(session.id)
             self._state = RunState.FAILED if reason == "error" else RunState.STOPPING
             self._stop_reason = reason
+            if error is not None:
+                self._last_error = error
             self._paused_since = None
             self._paused_at = None
             for op in self._worker.finish_ops(session, reason):
                 self._apply(op)
         self._write_settings_flag(reason)
+        return True
 
     def join(self, timeout: float | None = None) -> bool:
         """等工作线程退出。超时就把状态留在 STOPPING / FAILED(worker_alive)，交给看门狗收"""
@@ -354,11 +357,7 @@ class SessionLoop:
                         return
                     worker.on_error(attempt, exc)  # 锁外：写错误日志
                     if attempt + 1 >= attempts:
-                        with self._lock:
-                            if session is not self._session:
-                                return
-                            self._last_error = str(exc)
-                        self.request_stop("error")
+                        self._stop_session(session, "error", error=str(exc))
                         return
                     with self._lock:
                         if session is self._session and not session.cancel.is_set():
@@ -367,30 +366,38 @@ class SessionLoop:
                     session.cancel.wait(1.0)
         finally:
             with self._lock:
-                if session is self._session and self._state is RunState.STOPPING:
+                if session is self._session and self._state in (
+                    RunState.STARTING,
+                    RunState.RUNNING,
+                    RunState.PAUSED,
+                    RunState.STOPPING,
+                ):
+                    # 也包括「开关是外面直接按的」（manager.stop_all）：线程退出就是停了
                     self._state = RunState.STOPPED
 
     def _attempt(self, session: Session) -> None:
         worker = self._worker
         worker.setup(session)
-        with self._lock:
-            if session is not self._session or session.cancel.is_set():
-                return
-            if self._state is RunState.STARTING:
-                self._state = RunState.RUNNING
         try:
+            with self._lock:
+                if session is not self._session or session.cancel.is_set():
+                    return
+                if self._state is RunState.STARTING:
+                    self._state = RunState.RUNNING
             while True:
                 if session.cancel.is_set():
                     return
                 now = self._clock()
                 if worker.needs_foreground and self._foreground() is False:
-                    self._pause(session, now)
+                    # 进暂停的时刻在「读前台窗口」之后取：读窗口本身也花时间（假时钟里这一步还会走时间）
+                    self._pause(session, self._clock())
                     session.cancel.wait(min(self._wait, 0.25))
                     continue
                 if self._state is RunState.PAUSED:
                     self._resume(session, now)
                 if self._idle(now):
-                    self.request_stop("idle")
+                    self._worker.on_stop(session, "idle")  # 锁外：写自动关闭的日志
+                    self._stop_session(session, "idle")
                     return
                 self._poll_stale(session, now)
                 tick = worker.tick(session, now)
