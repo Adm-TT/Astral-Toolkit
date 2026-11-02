@@ -51,7 +51,7 @@ def status():
         "vpk": __import__("astral_toolkit.core.paths", fromlist=["VELOPACK"]).VELOPACK,
     }
     try:
-        from ...core.perf import gpu_available, last_ocr_error, ocr_device
+        from ...ocr import gpu_available, last_ocr_error, ocr_device
 
         cur_dev = ocr_device()
         out["ocr_device"] = cur_dev
@@ -195,7 +195,7 @@ def _system_info():
             "mss",
         )
         lines.append("组件：" + "，".join(x for x in map(ver, names) if x))
-        from ...core.perf import ocr_device
+        from ...ocr import ocr_device
 
         lines.append(f"文字识别用：{ocr_device()}")
     except Exception:
