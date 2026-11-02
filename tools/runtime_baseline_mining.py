@@ -5,9 +5,12 @@
   全程断网、时间写死；配装和目标在进程内换掉（settings.load / goals.goal_short）。
   在 worktree 里跑：主仓库目录跑时 settings.load 可能迁移写回开发目录的 userdata/settings.json，paths 导入时也会建 userdata 目录。
   JSON 不排序键：字段顺序变了也算差异。不合法的扫描只记异常类型。旧 scan_view 只在基线提交上有：比对时把本工具拷过去出 before。
+  RT-B2 加了 manual_scan 一组，和「语义变化:」开头的一组：输入取好之后价格 / 精炼站 / 配装被改，旧代码读计算那一刻的值，
+  新代码读 collect_inputs 那一刻的快照，这组前后不同是有意的，比对时单列。
 """
 
 import argparse
+import inspect
 import json
 import subprocess
 import sys
@@ -238,6 +241,83 @@ def _branch_cases(out, Scan, goals):
     goals.goal_short = no_goal
 
 
+def _manual_cases(out):
+    """手动输入：只算破碎方案；不合法的只记异常类型"""
+    from sc_mining.tasks import mining
+
+    for label, args in (
+        ("轻松", (1000, 10, 5)),
+        ("贴工具", (9000, 35, 60.5)),
+        ("难度高", (44336, 4, 170)),
+        ("字符串数字", ("5000", "20", "10")),
+        ("破不开", (900000, 95, 500)),
+        ("抗性 100", (9000, 100, 0)),
+    ):
+        out[f"手动:{label}"] = mining.manual_scan(*args)
+    for label, args in (
+        ("质量 0", (0, 10, 5)),
+        ("抗性超范围", (1000, 101, 5)),
+        ("不稳定性为负", (1000, 10, -1)),
+        ("质量非数字", ("abc", 10, 5)),
+    ):
+        try:
+            mining.manual_scan(*args)
+            out[f"手动:{label}"] = "没有异常"
+        except Exception as e:
+            out[f"手动:{label}"] = type(e).__name__
+
+
+def _timing_cases(out, Scan):
+    """语义变化（有意，RT-B2）：输入取好之后全局表 / 设置被改。collect_inputs 带不带参数都能跑，before 也用这份工具"""
+    from sc_mining.app.presenters import mining as present
+    from sc_mining.core import settings
+    from sc_mining.mining import analysis, data
+    from sc_mining.tasks import mining
+
+    scan = Scan(
+        rock="Gold",
+        mass=9000,
+        resistance=35,
+        instability=6,
+        total_scu=10.0,
+        composition=[("Gold", 100.0, 500)],
+    )
+
+    def run():
+        params = inspect.signature(mining.collect_inputs).parameters
+        return mining.collect_inputs(scan) if params else mining.collect_inputs()
+
+    def show(inputs):
+        v = present.to_view(analysis.analyze(scan, BAG, inputs))
+        return {"refine": v["refine"], "sell": v["sell"], "plans": v["plans"]}
+
+    inputs = run()
+    prices = data.CITY_PRICES
+    data.CITY_PRICES = {**prices, "Gold": {"Levski": 999999}}
+    try:
+        out["语义变化:取输入后矿价被改"] = show(inputs)
+    finally:
+        data.CITY_PRICES = prices
+
+    inputs = run()
+    saved = dict(data.REFINERIES)
+    try:
+        for k, (sys_, _) in saved.items():
+            data.REFINERIES[k] = (sys_, {"Gold": 50})
+        out["语义变化:取输入后精炼站被改"] = show(inputs)
+    finally:
+        data.REFINERIES.update(saved)
+
+    inputs = run()
+    load = settings.load
+    other = {"heads": [["klein_s2", []], ["klein_s2", []], ["klein_s2", []]], "crew": 1}
+    settings.load = lambda: {**load(), "mining_loadouts": {SHIP: other}}
+    try:
+        out["语义变化:取输入后配装被改"] = show(inputs)
+    finally:
+        settings.load = load
+
+
 def collect():
     _freeze_world()
     from sc_mining.mining.parse import Scan
@@ -262,6 +342,9 @@ def collect():
     out["目标查询出错"] = _view(first, BAG, False)
 
     _branch_cases(out, Scan, goals)
+    _manual_cases(out)
+    goals.goal_short = lambda force=False: {}
+    _timing_cases(out, Scan)
 
     # 不合法的扫描：只比异常类型（调用方都先判过 mass，这条路线上用户看不到异常文字）
     goals.goal_short = lambda force=False: {}
