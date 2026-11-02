@@ -27,10 +27,12 @@ class EngineManager:
         from .hover import _Hover
         from .count import _Count
         from .pos import _Pos, _LogWatch
+        from ...runtime.results import ResultStore
 
+        self.results = ResultStore()
         self.game_events = _GameEvents()
         self.nav = _Nav()
-        self.live = _Live()
+        self.live = _Live(self.results)
         self.pos = _Pos()
         self.count = _Count()
         self.hover = _Hover()

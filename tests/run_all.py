@@ -90,6 +90,8 @@ MODULES = [
     "tests.test_gamedata_mining",
     "tests.test_gamedata_arch",
     "tests.test_runtime_arch",
+    "tests.test_runtime_results",
+    "tests.test_live_commit",
     "tests.test_mining_inputs",
     "tests.test_mining_analysis",
     "tests.test_mining_presenter",

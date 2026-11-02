@@ -211,3 +211,66 @@ def test_tasks_mining_gets_engine_only_inside_functions():
     ):
         assert _toplevel_engine_calls(bad), bad
     assert _toplevel_engine_calls("def f():\n    return _engines().pos") == []
+
+
+_RUNTIME_FORBIDDEN = ("sc_mining.app", "sc_mining.tasks", "sc_mining.gamedata")
+
+
+def _runtime_violations(source, pkg="sc_mining.runtime"):
+    mods = list(_imports_in_source(source, pkg))
+    dynamic = [d for d in _dynamic_imports(source) if d != "open"]
+    return _forbidden(mods, _RUNTIME_FORBIDDEN) + dynamic
+
+
+def test_runtime_layer_stays_below_app():
+    """runtime/ 是新层：不依赖界面、业务和游戏数据（架构稿 §4.3、§11.3）"""
+    files = list((_ROOT / "runtime").rglob("*.py"))
+    assert files
+    for f in files:
+        assert _runtime_violations(f.read_text(encoding="utf-8")) == [], f.name
+    for bad in (
+        "from ..app import bus",
+        "from sc_mining.tasks import mining",
+        "from ..gamedata import snapshot",
+        "import importlib\nimportlib.import_module('sc_mining.app')",
+    ):
+        assert _runtime_violations(bad), bad
+
+
+_MUTABLE = (
+    ast.Dict,
+    ast.List,
+    ast.Set,
+    ast.DictComp,
+    ast.ListComp,
+    ast.SetComp,
+    ast.Call,
+)
+
+
+def _mutable_globals(source):
+    """模块顶层绑定的可变容器：字典、列表、集合，包在元组里的、调用构造的（dict()、defaultdict、类实例）也算"""
+    out = []
+    for node in ast.parse(source).body:
+        if (
+            isinstance(node, (ast.Assign, ast.AnnAssign))
+            and node.value is not None
+            and any(isinstance(n, _MUTABLE) for n in ast.walk(node.value))
+        ):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            out += [getattr(t, "id", "?") for t in targets]
+    return out
+
+
+def test_system_common_has_no_shared_state():
+    """跨模块共享的最近结果只在 ResultStore：common.py 不再放可变的模块级状态"""
+    source = (_ROOT / "tasks" / "system" / "common.py").read_text(encoding="utf-8")
+    assert _mutable_globals(source) == []
+    for bad in ("_L = {'a': None}", "_L = dict()", "_L = ({},)", "_L = Foo()"):
+        assert _mutable_globals(bad) == ["_L"], bad
+
+
+def test_old_result_globals_are_gone():
+    for f in _ROOT.rglob("*.py"):
+        text = f.read_text(encoding="utf-8")
+        assert "_FB_LAST" not in text and "_ORE_LAST" not in text, f.name

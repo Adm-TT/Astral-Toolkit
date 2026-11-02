@@ -1,16 +1,9 @@
-"""系统任务基础共享层：状态容器与句柄探针"""
+"""系统任务基础共享层：句柄探针"""
 
 import sys
 import threading
 
 WIN = sys.platform == "win32"
-
-# 跨任务/测试共享的最近状态快照
-_FB_LAST = {
-    "sig": None,
-    "scan": None,
-}  # 最近一次推送的信号 / 扫描结果（反馈时写进去对照）
-_ORE_LAST = {"view": None}  # 最近一次出的采矿助手结果（原矿记录记的就是它）
 
 
 def _engines():

@@ -3634,7 +3634,13 @@ def test_feedback_report_bundle(monkeypatch, tmp_path):
     for _m in (t_hover, t_sys):
         monkeypatch.setattr(_m, "WIN", _v)
     screen.LAST_RAW.update(t=1.0, scan=["扫描结果", "质量： 123"], bag=[])
-    t_sys._FB_LAST["sig"] = {"values": [44336]}
+    from sc_mining.runtime.results import MINING_SIGNALS, ResultStore
+
+    results = ResultStore()
+    monkeypatch.setattr(t_sys._engines(), "results", results)
+    assert results.accept(
+        MINING_SIGNALS, {"view": {}, "values": [44336]}, 1, 0, 1, 0.0, 0.0
+    )
     r = t_sys.feedback_report(
         kind="signal", note="屏幕是 33,000", img=Image.new("RGB", (64, 32))
     )
@@ -3993,11 +3999,12 @@ def test_ore_log_record_and_hotkeys(monkeypatch, tmp_path):
     _v = lambda *a, **k: None  # noqa: E731
     for _m in (t_nav, t_sys, hud_state):
         monkeypatch.setattr(_m, "_note_hud", _v)
-    _v = {"view": None}
-    for _m in (t_nav, t_sys):
-        monkeypatch.setattr(_m, "_ORE_LAST", _v)
+    from sc_mining.runtime.results import MINING_SCAN, ResultStore
+
+    results = ResultStore()
+    monkeypatch.setattr(t_nav._M, "results", results)
     assert "error" in t_nav.ore_record()
-    t_sys._ORE_LAST["view"] = {
+    _view = {
         "rock": "塔兰导电石",
         "mass": 38775,
         "resistance": 55,
@@ -4031,6 +4038,7 @@ def test_ore_log_record_and_hotkeys(monkeypatch, tmp_path):
             }
         ],
     }
+    assert results.accept(MINING_SCAN, _view, 1, 0, 1, 0.0, 0.0)
     rec = t_nav.ore_record()
     assert (
         rec["value"] == 344786

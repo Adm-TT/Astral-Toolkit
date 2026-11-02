@@ -583,9 +583,7 @@ def set_mining_gear(ship="mole", loadout=None, reset=False):
     elif loadout is not None:
         saved[ship] = clean_loadout(ship, loadout)
     settings.update(mining_ship=ship, mining_loadouts=saved)
-    _engines().live.gear_rev += (
-        1  # 正在显示的石头按新配置重算（采矿助手最多 5 秒后重新发布）
-    )
+    _engines().live.config_changed()
     return _gear()
 
 

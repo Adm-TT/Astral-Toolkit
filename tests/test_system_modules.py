@@ -35,14 +35,6 @@ def test_facade_all_exports():
         assert hasattr(t_sys, name), f"门面缺失公有符号: {name}"
 
 
-def test_shared_ore_last_identity():
-    """跨模块共享的 _ORE_LAST 字典对象引用一致"""
-    assert t_sys._ORE_LAST is m_common._ORE_LAST
-    from sc_mining.tasks.navigation import _ORE_LAST as nav_ore
-
-    assert nav_ore is m_common._ORE_LAST
-
-
 def test_dynamic_setattr_sync_to_submodules():
     """通过门面 monkeypatch 属性时，自动同态同步到对应子模块"""
     # 1. 测试同步到 upgrade._online
