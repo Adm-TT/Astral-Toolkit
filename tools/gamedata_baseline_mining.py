@@ -2,7 +2,7 @@
 
 用法（在项目根目录）：.venv\\Scripts\\python.exe -X utf8 tools\\gamedata_baseline_mining.py --out <输出.json>
   查询写死在 collect() 里：产矿区判断、挖矿点的石头、石头表、一团几块、石头里的矿、飞船信号、矿价和精炼站加成。
-  全程断网（UEX 和 core.net.read 换成抛 OSError）；只读 data/，不写 userdata。
+  全程断网（UEX 和 core.net.read 换成抛 OSError）；不写 userdata；库过时会在 data/gamedata 下重建一次。
 """
 
 import argparse
