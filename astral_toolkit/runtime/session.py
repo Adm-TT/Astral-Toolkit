@@ -135,10 +135,13 @@ class Worker(Protocol):
     name: str
     retries: int
     idle_close: float | None
-    stale_after: Mapping[str, float]
+    stale_after: dict[str, float]
     needs_foreground: bool
-    pause_wait: float
     restart_while_stopping: bool
+
+    @property
+    def pause_wait(self) -> float: ...
+
     loop: "SessionLoop"  # 由 SessionLoop 绑上：tick 里用 loop.stamp / loop.commit / loop.config_rev
 
     def start_ops(self, session: Session) -> list[Op]: ...
@@ -535,9 +538,10 @@ class SessionLoop:
             if not run.thread.is_alive():
                 return  # 已经退了：finally 收尾，别抢
             run.failed = True
-            if self._current is run:
-                self._current.state = RunState.FAILED
-                self._current.error = "stop_timeout"
+            cur = self._current
+            if cur is not None and cur is run:
+                cur.state = RunState.FAILED
+                cur.error = "stop_timeout"
             deferred.append(
                 ("record", "MINING", "采矿助手停止超时：旧线程仍未退出", "")
             )

@@ -38,9 +38,14 @@ def _started(loop, worker):
     return sid
 
 
+def _current_id(loop):
+    """收尾用：当前会话号（没有就是 0）"""
+    return loop.state().session_id
+
+
 def _stop(loop, sid, info=None):
     loop.request_stop_current(info or StopInfo("user"))
-    return loop.join(session_id=sid)
+    return loop.join(session_id=_current_id(loop))
 
 
 def test_start_creates_session_and_publishes_running_inside_the_lock():
@@ -54,7 +59,7 @@ def test_start_creates_session_and_publishes_running_inside_the_lock():
         assert out.live_events() == [{"running": True}]
         assert all(r.locked for r in out.ops), "start_ops 必须在锁里套用"
     finally:
-        _stop(loop, sid)
+        _stop(loop, _current_id(loop))
 
 
 def test_start_is_idempotent_for_same_payload_and_rejects_a_different_one():
@@ -66,7 +71,7 @@ def test_start_is_idempotent_for_same_payload_and_rejects_a_different_one():
         assert loop.start("乙") is None
         assert out.live_events() == [{"running": True}]
     finally:
-        _stop(loop, sid)
+        _stop(loop, _current_id(loop))
 
 
 def test_start_refused_while_closing():
@@ -77,7 +82,7 @@ def test_start_refused_while_closing():
         assert worker.started.wait(WAIT) and sid is not None
         closing["on"] = True
         assert loop.can_start() is False
-        _stop(loop, sid)
+        _stop(loop, _current_id(loop))
         assert loop.start() is None
     finally:
         closing["on"] = False
@@ -91,7 +96,7 @@ def test_request_stop_does_not_confirm_until_the_thread_exits():
     worker.gate = gate
     loop, _, out = make_loop(worker)
     try:
-        sid = _started(loop, worker)
+        _started(loop, worker)
         assert gate.entered.wait(WAIT)  # 卡在 tick 里
         loop.request_stop_current(StopInfo("user"))
         out.clear()
@@ -99,7 +104,7 @@ def test_request_stop_does_not_confirm_until_the_thread_exits():
         assert not loop.running()
         assert out.ops == [], "线程还没退，不该发「已停止」"
         gate.release.set()
-        assert loop.join(session_id=sid)
+        assert loop.join(session_id=_current_id(loop))
         assert out.live_events() == [{"running": False}]
         assert [op[2] for op in out.records()] == ["引擎已停止"]
         assert all(r.locked for r in out.ops if r.op[0] != "record"), (
@@ -109,17 +114,17 @@ def test_request_stop_does_not_confirm_until_the_thread_exits():
     finally:
         gate.release.set()
         loop.request_stop_current(StopInfo("user"))
-        loop.join(session_id=sid)
+        loop.join(session_id=_current_id(loop))
 
 
 def test_request_stop_is_idempotent_and_confirms_once():
     loop, worker, out = make_loop()
     try:
-        sid = _started(loop, worker)
+        _started(loop, worker)
         out.clear()
         loop.request_stop_current(StopInfo("user"))
         loop.request_stop_current(StopInfo("user"))
-        assert loop.join(session_id=sid)
+        assert loop.join(session_id=_current_id(loop))
         assert worker.last_stop_info.reason == "user"
         assert out.live_events() == [{"running": False}]
         assert len(out.records()) == 1
@@ -136,7 +141,7 @@ def test_late_request_stop_for_old_session_is_refused():
     loop, worker, out = make_loop(worker=FakeWorker(restart_while_stopping=True))
     try:
         first = loop.start()
-        assert worker.started.wait(WAIT)
+        assert first is not None and worker.started.wait(WAIT)
         session_id = first
         gate_session = loop._current.session  # type: ignore[union-attr]
         loop.request_stop(gate_session, StopInfo("user"))
@@ -159,7 +164,7 @@ def test_state_view_pending_and_worker_alive():
         sid = _started(loop, worker)
         assert gate.entered.wait(WAIT)
         loop.request_stop_current(StopInfo("user"))
-        assert not loop.join(session_id=sid), "线程卡着，join 应该超时"
+        assert not loop.join(session_id=_current_id(loop)), "线程卡着，join 应该超时"
         view = loop.state()
         assert view.state is RunState.STOPPING
         assert view.worker_alive and view.prev_stop_pending
@@ -171,7 +176,7 @@ def test_state_view_pending_and_worker_alive():
         assert not loop.state().worker_alive
     finally:
         gate.release.set()
-        loop.join(session_id=sid)
+        loop.join(session_id=_current_id(loop))
 
 
 def test_join_all_waits_for_pending_and_reports_the_stuck():
@@ -186,11 +191,11 @@ def test_join_all_waits_for_pending_and_reports_the_stuck():
         still = loop.join_all(0.02)
         assert [p.session_id for p in still] == [sid]
         gate.release.set()
-        assert loop.join(session_id=sid)
+        assert loop.join(session_id=_current_id(loop))
         assert loop.join_all(0.5) == []
     finally:
         gate.release.set()
-        loop.join(session_id=sid)
+        loop.join(session_id=_current_id(loop))
 
 
 def test_commit_accepts_current_session_and_requires_a_stamp_for_a_slot():
@@ -216,13 +221,13 @@ def test_commit_accepts_current_session_and_requires_a_stamp_for_a_slot():
         assert not loop.commit(session, slot=MINING_SCAN, value="没表")
         assert out.ops == []
     finally:
-        _stop(loop, sid)
+        _stop(loop, _current_id(loop))
 
 
 def test_commit_rejects_wrong_session_state_and_old_epoch():
     loop, worker, out = make_loop()
     try:
-        sid = _started(loop, worker)
+        _started(loop, worker)
         session = worker.session
         old = loop.stamp(session, 1.0)
         assert old is not None
@@ -247,17 +252,17 @@ def test_commit_rejects_wrong_session_state_and_old_epoch():
             stamp=new,
         )
     finally:
-        _stop(loop, sid)
+        _stop(loop, _current_id(loop))
 
 
 def test_stamp_refused_after_the_session_ended():
     """RT-B3 遗留④：旧线程停完才来取 stamp → None，不生成序号"""
     loop, worker, out = make_loop()
     try:
-        sid = _started(loop, worker)
+        _started(loop, worker)
         session = worker.session
         assert loop.stamp(session, 1.0) is not None
-        _stop(loop, sid)
+        _stop(loop, _current_id(loop))
         out.clear()
         assert loop.stamp(session, 2.0) is None
         assert out.ops == []
@@ -268,12 +273,12 @@ def test_stamp_refused_after_the_session_ended():
 def test_config_changed_bumps_epoch_and_config_rev():
     loop, worker, _ = make_loop()
     try:
-        sid = _started(loop, worker)
+        _started(loop, worker)
         epoch, rev = loop.state().epoch, loop.config_rev
         loop.config_changed()
         assert loop.state().epoch == epoch + 1 and loop.config_rev == rev + 1
     finally:
-        _stop(loop, sid)
+        _stop(loop, _current_id(loop))
 
 
 def test_freshness_tracks_each_channel():
@@ -281,12 +286,12 @@ def test_freshness_tracks_each_channel():
     worker = FakeWorker(stale_after={"panel": 20.0, "signals": 20.0})
     loop, _, _ = make_loop(worker, clock=clock)
     try:
-        sid = _started(loop, worker)
+        _started(loop, worker)
         assert loop.freshness("panel") is Freshness.FRESH  # 尝试开始就记「刚看到」
         assert loop.freshness("signals") is Freshness.FRESH
         assert loop.freshness("nope") is Freshness.EMPTY
     finally:
-        _stop(loop, sid)
+        _stop(loop, _current_id(loop))
 
 
 def test_run_flag_is_written_by_the_loop_and_never_backwards():
@@ -294,10 +299,10 @@ def test_run_flag_is_written_by_the_loop_and_never_backwards():
     flag = RunFlag("live_on", lambda key, value: saved.append((key, value)))
     loop, worker, _ = make_loop(run_flag=flag)
     try:
-        sid = _started(loop, worker)
+        _started(loop, worker)
         assert saved == [("live_on", True)]
         loop.request_stop_current(StopInfo("user"))
-        assert loop.join(session_id=sid)
+        assert loop.join(session_id=_current_id(loop))
         assert saved == [("live_on", True), ("live_on", False)]
         # 没有在跑的会话时按停止：期望值已经是 False，不重复写盘（也不会写回 True）
         saved.clear()
@@ -312,9 +317,9 @@ def test_shutdown_stop_does_not_touch_the_run_flag():
     flag = RunFlag("live_on", lambda key, value: saved.append((key, value)))
     loop, worker, _ = make_loop(run_flag=flag)
     try:
-        sid = _started(loop, worker)
+        _started(loop, worker)
         loop.request_stop_current(StopInfo("shutdown"))
-        assert loop.join(session_id=sid)
+        assert loop.join(session_id=_current_id(loop))
         assert saved == [("live_on", True)], "shutdown 不改 live_on"
     finally:
         loop.request_stop_current(StopInfo("user"))
@@ -338,7 +343,7 @@ def test_session_payload_is_immutable_and_used_for_idempotency():
         assert session.alive()
         assert loop.start({"hotkey": "F5"}) == sid
     finally:
-        _stop(loop, sid)
+        _stop(loop, _current_id(loop))
 
 
 def test_output_records_are_post_lock_and_hud_is_in_lock():
@@ -348,9 +353,9 @@ def test_output_records_are_post_lock_and_hud_is_in_lock():
     )
     loop, _, out = make_loop(worker)
     try:
-        sid = _started(loop, worker)
+        _started(loop, worker)
         loop.request_stop_current(StopInfo("user"))
-        assert loop.join(session_id=sid)
+        assert loop.join(session_id=_current_id(loop))
         kinds = [r.op[0] for r in out.ops]
         assert kinds.index("hud.clear") < kinds.index("record")
         assert out.ops[kinds.index("hud.clear")].locked is True

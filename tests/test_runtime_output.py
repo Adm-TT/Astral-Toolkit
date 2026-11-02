@@ -70,7 +70,12 @@ def test_bus_output_dispatches_post_lock_ops(monkeypatch):
     out.apply(("record", "MINING", "采矿助手引擎已停止", "LIVE"))
     assert logs == [("一行日志", "LIVE", "WARN")]
     assert records == [
-        ("MINING", "采矿助手已暂停", "游戏不在最前面", {"level": "WARN", "ui_tag": "LIVE"}),
+        (
+            "MINING",
+            "采矿助手已暂停",
+            "游戏不在最前面",
+            {"level": "WARN", "ui_tag": "LIVE"},
+        ),
         ("MINING", "采矿助手引擎已停止", "", {"level": "INFO", "ui_tag": "LIVE"}),
     ]
 

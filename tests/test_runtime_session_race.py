@@ -32,6 +32,11 @@ def _wait_state(loop, state, timeout=WAIT):
     return _wait_until(lambda: loop.state().state is state, timeout)
 
 
+def _value(results, slot):
+    e = results.get(slot)
+    return e.value if e is not None else None
+
+
 def _thread_alive(loop, session_id):
     with loop._lock:
         run = loop._find_locked(session_id)
@@ -455,7 +460,7 @@ def test_results_store_is_not_shared_between_sessions():
         assert _wait_until(
             lambda: (
                 results.get(MINING_SCAN) is not None
-                and results.get(MINING_SCAN).value == f"会话{sid_a}"
+                and _value(results, MINING_SCAN) == f"会话{sid_a}"
             ),
             5,
         )
@@ -466,7 +471,7 @@ def test_results_store_is_not_shared_between_sessions():
         assert _wait_until(
             lambda: (
                 results.get(MINING_SCAN) is not None
-                and results.get(MINING_SCAN).value == f"会话{sid_b}"
+                and _value(results, MINING_SCAN) == f"会话{sid_b}"
             ),
             5,
         )

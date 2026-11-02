@@ -154,8 +154,12 @@ class _Live:
     needs_foreground = True
     restart_while_stopping = True
 
-    RECHECK_SECONDS = 5  # 画面静止省电时，也每隔这么久复核一次（防止面板里的数变了但整屏几乎没变）
-    MISS_FRAMES = 4  # 看得到扫描面板、却连续这么多帧读不全 / 读不稳：自动留一张图（排查用）
+    RECHECK_SECONDS = (
+        5  # 画面静止省电时，也每隔这么久复核一次（防止面板里的数变了但整屏几乎没变）
+    )
+    MISS_FRAMES = (
+        4  # 看得到扫描面板、却连续这么多帧读不全 / 读不稳：自动留一张图（排查用）
+    )
     MISS_GAP = 30  # 两次留图至少隔这么多秒
     MISS_KEEP = 10  # 最多留这么多张（userdata\shots\miss，每张 5MB 左右）
 
@@ -231,7 +235,7 @@ class _Live:
 
     def stop_ops(self, session, info):
         """会话结束时要发的东西（循环在锁内按序套用；record 是锁后类）"""
-        ops = [
+        ops: list[tuple] = [
             _del("信号", "扫描", "矿袋"),
             _pub("scan_hint", {"why": "", "text": ""}),
         ]
@@ -290,7 +294,9 @@ class _Live:
         if ctx is None:
             return
         try:
-            ctx.log.write(f"{time.strftime('%F %T')} ERROR {msg}\n{traceback.format_exc()}")
+            ctx.log.write(
+                f"{time.strftime('%F %T')} ERROR {msg}\n{traceback.format_exc()}"
+            )
             ctx.log.flush()
         except (OSError, ValueError):
             pass
@@ -319,7 +325,9 @@ class _Live:
         # 暂停的这段不算「面板 / 信号消失了」：显示用的时间戳跟着推
         ctx.last_panel_t += gap
         ctx.last_sig_t += gap
-        ctx.prev_small = ctx.prev_panel = None  # 回来的第一帧一定重新认，不按「画面没变」跳过
+        ctx.prev_small = ctx.prev_panel = (
+            None  # 回来的第一帧一定重新认，不按「画面没变」跳过
+        )
         try:
             ctx.log.write(
                 f"{time.strftime('%F %T')} RESUME 回到游戏，继续识别（暂停了 {gap:.0f} 秒）\n"
@@ -338,7 +346,10 @@ class _Live:
             return []
         ops = []
         if channel == "signals" and ctx.sig_live:
-            ctx.sig_live, ctx.sig_shown = False, None  # 信号没了：悬浮窗清掉，窗口里标过期
+            ctx.sig_live, ctx.sig_shown = (
+                False,
+                None,
+            )  # 信号没了：悬浮窗清掉，窗口里标过期
             since = time.strftime("%H:%M:%S", time.localtime(ctx.last_sig_t))
             shown_sig = self.results.get(MINING_SIGNALS)
             ops.append(_del("信号"))
@@ -346,11 +357,7 @@ class _Live:
                 _pub(
                     "signals",
                     {
-                        **(
-                            shown_sig.value["view"]
-                            if shown_sig
-                            else {"lines": []}
-                        ),
+                        **(shown_sig.value["view"] if shown_sig else {"lines": []}),
                         "stale": since,
                     },
                 )
@@ -420,9 +427,7 @@ class _Live:
         # ---- 扫描面板（先看有没有面板：有面板时屏幕上的质量等数字会被当成信号，信号识别就暂停）
         scan, bag = screen.analyse(img)
         raw = (
-            screen.LAST_RAW.get("scan")
-            if screen.LAST_RAW.get("t", 0) >= wall
-            else None
+            screen.LAST_RAW.get("scan") if screen.LAST_RAW.get("t", 0) >= wall else None
         )
         # 真有面板才算（读全了，或认出面板上的字 / 带矿名的成分）。只读到几个零散数字不算：勘探者驾驶舱右边的
         # 高度表、气压会被拼成「质量 0.7、抗性 76」，以前因此一直当面板开着，信号识别整段暂停（2026-10-23 Calliope）
@@ -432,7 +437,9 @@ class _Live:
 
             yield_ocr()
         scan_off = bool(_H()._off("scan"))
-        if scan_off:  # 远程关了：面板在不在照样判断（雷达靠它避开面板上的数字），结果不用；
+        if (
+            scan_off
+        ):  # 远程关了：面板在不在照样判断（雷达靠它避开面板上的数字），结果不用；
             from ...mining.parse import parse_bag, parse_scan
 
             scan, bag = parse_scan([]), parse_bag([])
@@ -460,7 +467,9 @@ class _Live:
             ctx.part.clear()
         # 面板在却读不全：连续几帧这样就留一张图，并告诉玩家可能的原因（被屏幕挡住 / 字有色差重影）
         ctx.miss_n = (
-            0 if (scan_off or scan.valid or not panel_now or part_ok) else ctx.miss_n + 1
+            0
+            if (scan_off or scan.valid or not panel_now or part_ok)
+            else ctx.miss_n + 1
         )
         if ctx.miss_n >= self.MISS_FRAMES and now - ctx.miss_t > self.MISS_GAP:
             ctx.miss_t, ctx.miss_n = now, 0
@@ -469,7 +478,11 @@ class _Live:
             if why and why != ctx.hint["why"]:
                 self.loop.commit(session, *self._hint_ops(ctx, why))
         if panel_now and ctx.sig_live:
-            ctx.sig_live, ctx.sig_shown, ctx.sig_prev = False, None, None  # 对着石头看面板：悬浮窗收起信号
+            ctx.sig_live, ctx.sig_shown, ctx.sig_prev = (
+                False,
+                None,
+                None,
+            )  # 对着石头看面板：悬浮窗收起信号
             self.loop.commit(session, _del("信号"))
         # ---- 雷达信号（扫描面板开着时不认，2026-10-23 用户反馈把石头质量 13,586 当成了信号）
         try:
@@ -482,9 +495,7 @@ class _Live:
 
                 yield_ocr()
             area = (
-                _T("navigation")._area_now()
-                if sigs and sigs == ctx.sig_prev
-                else None
+                _T("navigation")._area_now() if sigs and sigs == ctx.sig_prev else None
             )
             # 产矿区变了（飞进矿带、跳跃）也要重新发：以前只看信号数值，同样的 7,200 会一直停在旧地点的说法
             from ...core.paths import file_stamp
@@ -530,7 +541,8 @@ class _Live:
                     _set(
                         "信号",
                         "\n".join(
-                            x.split("｜精炼后")[0].replace("信号 ", "") for x in lines[:4]
+                            x.split("｜精炼后")[0].replace("信号 ", "")
+                            for x in lines[:4]
                         ),
                     ),
                     _say(
@@ -586,7 +598,9 @@ class _Live:
                 and now - ctx.miss_t > self.MISS_GAP
             ):
                 ctx.miss_t, ctx.unstable_n = now, 0
-                self._save_miss(ctx, img, "读不稳", [str(x[0]) for x in list(ctx.recent)[-3:]])
+                self._save_miss(
+                    ctx, img, "读不稳", [str(x[0]) for x in list(ctx.recent)[-3:]]
+                )
             key = (round(best.mass or 0), best.resistance, best.instability)
             # 任何影响计算的字段变了（总 SCU、成分、评级、矿袋）都重新发布，修正后的数也要推出去
             shown = (
@@ -715,7 +729,7 @@ class _Live:
                 ctx.log.flush()
             except (OSError, ValueError):
                 pass
-        ops = [
+        ops: list[tuple] = [
             _pub(
                 "scan_hint",
                 {"why": why or "", "text": text, "at": time.strftime("%H:%M:%S")},

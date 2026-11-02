@@ -44,6 +44,11 @@ def _step_or_finish(worker, gate, clock, seconds=1.0):
     raise AssertionError("既没结束也没到下一轮")
 
 
+def _current_id(loop):
+    """收尾用：当前会话号（没有就是 0）"""
+    return loop.state().session_id
+
+
 def _start(loop, worker):
     sid = loop.start()
     assert sid is not None and worker.started.wait(WAIT)
@@ -88,7 +93,7 @@ def test_pause_freezes_idle_and_stale_timers():
     finally:
         loop.request_stop_current(StopInfo("user"))
         gate.step()
-        loop.join(session_id=sid)
+        loop.join(session_id=_current_id(loop))
 
 
 def test_idle_close_uses_the_latest_of_all_channels(monkeypatch):
@@ -106,7 +111,7 @@ def test_idle_close_uses_the_latest_of_all_channels(monkeypatch):
         run_flag=RunFlag("live_on", lambda k, v: saved.append((k, v))),
     )
     try:
-        sid = _start(loop, worker)
+        _start(loop, worker)
         gate.wait()
         worker.observed = {"signals": 0.0}
         for _ in range(20):  # 20 秒只有信号
@@ -126,7 +131,7 @@ def test_idle_close_uses_the_latest_of_all_channels(monkeypatch):
     finally:
         loop.request_stop_current(StopInfo("user"))
         gate.step()
-        loop.join(session_id=sid)
+        loop.join(session_id=_current_id(loop))
 
 
 def test_stale_fires_once_per_channel():
@@ -152,7 +157,7 @@ def test_stale_fires_once_per_channel():
     finally:
         loop.request_stop_current(StopInfo("user"))
         gate.step()
-        loop.join(session_id=sid)
+        loop.join(session_id=_current_id(loop))
         assert out is not None
 
 
@@ -183,7 +188,7 @@ def test_retry_restarts_the_idle_timer():
     finally:
         loop.request_stop_current(StopInfo("user"))
         gate.step()
-        loop.join(session_id=sid)
+        loop.join(session_id=_current_id(loop))
 
 
 def test_errors_clear_hud_in_lock_and_retry_then_finish(monkeypatch):
@@ -225,7 +230,7 @@ def test_setup_failure_counts_as_a_failed_attempt():
         assert loop.state().state is RunState.RUNNING
     finally:
         loop.request_stop_current(StopInfo("user"))
-        loop.join(session_id=sid)
+        loop.join(session_id=_current_id(loop))
 
 
 def test_finish_runs_before_teardown_and_writes_after_stop():
@@ -240,7 +245,7 @@ def test_finish_runs_before_teardown_and_writes_after_stop():
         assert worker.calls[-1][0] == "finish"
         assert ("teardown", sid) not in worker.calls
         gate.release.set()
-        assert loop.join(session_id=sid)
+        assert loop.join(session_id=_current_id(loop))
         calls = [c[0] for c in worker.calls]
         assert calls.index("finish") < calls.index("teardown")
     finally:
@@ -254,11 +259,13 @@ def test_join_timeout_leaves_stopping_then_worker_exit_marks_stopped():
     worker.gate = gate
     loop, _, out = make_loop(worker, join_timeout=0.02)
     try:
-        sid = _start(loop, worker)
+        _start(loop, worker)
         assert gate.entered.wait(WAIT)
         out.clear()
         loop.request_stop_current(StopInfo("user"))
-        assert not loop.join(session_id=sid), "线程卡在 tick 里，join 应该超时"
+        assert not loop.join(session_id=_current_id(loop)), (
+            "线程卡在 tick 里，join 应该超时"
+        )
         view = loop.state()
         assert view.state is RunState.STOPPING and view.worker_alive
         assert view.prev_stop_pending
@@ -266,10 +273,10 @@ def test_join_timeout_leaves_stopping_then_worker_exit_marks_stopped():
         gate.release.set()  # 旧线程这时才退出
         assert _wait_state(loop, RunState.STOPPED)
         assert out.live_events() == [{"running": False}], "退出时不再发第二次"
-        assert loop.join(session_id=sid)
+        assert loop.join(session_id=_current_id(loop))
     finally:
         gate.release.set()
-        loop.join(session_id=sid)
+        loop.join(session_id=_current_id(loop))
 
 
 def test_worker_that_never_exits_is_marked_failed_by_its_own_watchdog():
@@ -278,10 +285,10 @@ def test_worker_that_never_exits_is_marked_failed_by_its_own_watchdog():
     worker.gate = gate
     loop, _, out = make_loop(worker, join_timeout=0.02)
     try:
-        sid = _start(loop, worker)
+        _start(loop, worker)
         assert gate.entered.wait(WAIT)
         loop.request_stop_current(StopInfo("user"))
-        assert not loop.join(session_id=sid)
+        assert not loop.join(session_id=_current_id(loop))
         assert _wait_state(loop, RunState.FAILED)
         view = loop.state()
         assert view.last_error == "stop_timeout" and view.worker_alive
@@ -289,7 +296,7 @@ def test_worker_that_never_exits_is_marked_failed_by_its_own_watchdog():
         assert any("停止超时" in op[2] for op in out.records())
     finally:
         gate.release.set()
-        loop.join(session_id=sid)
+        loop.join(session_id=_current_id(loop))
 
 
 def test_old_worker_cannot_end_the_new_session():
@@ -331,10 +338,10 @@ def test_shutdown_keeps_the_run_flag_and_confirms_once():
         run_flag=RunFlag("live_on", lambda k, v: saved.append((k, v)))
     )
     try:
-        sid = _start(loop, worker)
+        _start(loop, worker)
         out.clear()
         loop.request_stop_current(StopInfo("shutdown"))
-        assert loop.join(session_id=sid)
+        assert loop.join(session_id=_current_id(loop))
         assert saved == [("live_on", True)], "退出不改 live_on"
         assert out.live_events() == [{"running": False}]
     finally:

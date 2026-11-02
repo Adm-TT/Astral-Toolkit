@@ -6,6 +6,7 @@ RT-B4：线程 / 停止 / 提交边界在 SessionLoop 里。这里全部走真�
 
 import threading
 import time
+from typing import Any
 
 from PIL import Image
 
@@ -582,8 +583,8 @@ def test_stop_waits_for_commit_in_progress(monkeypatch, tmp_path):
         inside, leave = threading.Event(), threading.Event()
         seq = []
         real = bus.publish
-        committer = {"thread": None}
-        stopper = {"thread": None}
+        committer: dict[str, Any] = {"thread": None}
+        stopper: dict[str, Any] = {"thread": None}
 
         def publish(kind, data):
             if threading.current_thread() in (
