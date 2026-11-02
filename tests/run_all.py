@@ -74,10 +74,14 @@ MODULES = [
     "tests.test_gamedata_nav",
     "tests.test_feedback_guard",
     "tests.test_gamedata_b1",
+    "tests.test_gamedata_b2",
     "tests.test_gd_k1",
     "tests.test_gamedata_craft",
     "tests.test_gamedata_b3",
     "tests.test_gamedata_mining",
+    "tests.test_gamedata_arch",
+    "tests.test_gamedata_b4",
+    "tests.test_gamedata_b6",
 ]
 
 if __name__ == "__main__":

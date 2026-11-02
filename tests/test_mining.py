@@ -1741,14 +1741,23 @@ def test_review_102_area_never_guesses(monkeypatch):
 def test_review_102_place_names_without_ini(monkeypatch, tmp_path):
     """新装还没下汉化包：派罗地名用随包的地点代号表，不显示 PYR3"""
     import json
+    import sc_mining.gamedata as G
+    from sc_mining.core import paths
+    from sc_mining.gamedata import _ready
     from sc_mining.navigation import position as P
     from sc_mining.update import localization as L
 
+    # 地点代号表在游戏数据库里：tmp_path 当 data/ 根（补一份建库必需的空商店表），不读真实 data/
+    (tmp_path / "shops.json").write_text(
+        json.dumps({"fmt": 2, "fetched": 0, "items": {}, "rows": []}), encoding="utf-8"
+    )
     (tmp_path / "place_codes_zh.json").write_text(
         json.dumps({"rr_p3": "轨道讣闻站 (Orbituary)"}, ensure_ascii=False),
         encoding="utf-8",
     )
-    monkeypatch.setattr(L, "DATA", tmp_path)
+    monkeypatch.setattr(paths, "DATA", tmp_path)
+    monkeypatch.setattr(_ready, "_state", {"done": None, "failed": None})
+    monkeypatch.setattr(G, "_state", {"last_error": None, "warm_thread": None})
     monkeypatch.setattr(
         L, "read_ini", lambda *a: (_ for _ in ()).throw(FileNotFoundError())
     )
@@ -1848,24 +1857,21 @@ def test_review_104_final(monkeypatch, tmp_path):
         and latest_live(fs[:1]) is None
     )
     assert live_version(fs[2]) == "4.10.2-live.5"
-    # 4. 改正文件结构不对：跳过坏条目，不崩
-    monkeypatch.setattr(n, "DATA", tmp_path)
+    # 4. 改正文件结构不对：跳过坏条目，不崩（建库时套改正；文件不是 JSON 时建库当作没有，传进来是 None）
+    from sc_mining.navigation.starmap import fix_points
+
     pts = {
         "points": [
             {"n": "A", "x": 1, "y": 2, "z": 3},
             {"n": "B", "x": 1, "y": 2, "z": 3},
         ]
     }
-    for bad in ("[]", '{"A": 123}', '{"A": ["bad", 0, 0], "B": [7, 8, 9]}', "{坏"):
-        (tmp_path / "starmap_fixes.json").write_text(bad, encoding="utf-8")
+    for bad in ([], {"A": 123}, {"A": ["bad", 0, 0], "B": [7, 8, 9]}, None):
         d = {"points": [dict(p) for p in pts["points"]]}
-        n._apply_fixes(d)
+        fix_points(d, bad)
         assert (d["points"][0]["x"], d["points"][0]["y"]) == (1, 2)
     assert d["points"][1]["x"] == 1  # 最后一个是坏 JSON，整份不用
-    (tmp_path / "starmap_fixes.json").write_text(
-        '{"A": ["bad", 0, 0], "B": [7, 8, 9]}', encoding="utf-8"
-    )
-    n._apply_fixes(d)
+    fix_points(d, {"A": ["bad", 0, 0], "B": [7, 8, 9]})
     assert (d["points"][1]["x"], d["points"][1]["z"]) == (7.0, 9.0)
 
 

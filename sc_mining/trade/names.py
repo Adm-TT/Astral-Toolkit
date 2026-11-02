@@ -3,40 +3,65 @@
 UEX 只认英文名；游戏是中文界面，截图识别和手动搜索得到的是中文名，这里负责换成英文再去查。
 """
 
-import json
 import re
-from functools import lru_cache
-from pathlib import Path  # noqa: F401
+from typing import Callable, Protocol, TypeVar, cast
 
 CJK = re.compile(r"[一-鿿]")
 _PAREN = re.compile(r"\s*[（(][^）)]*[）)]\s*")
 
 
-@lru_cache(maxsize=1)
-def table():
-    from ..core.paths import DATA
+# 按游戏数据内容版本缓存（公共工具 gamedata/_cache.VersionCache）：table 跟着 zh_pairs() 那份对象走（topic 已按版本缓存，
+# 同一版本同一个对象），_index 跟着 table() 那份 dict 走。本模块顶层不 import gamedata（建库时 gamedata/_import → 本模块，
+# 会循环），缓存对象第一次用时才建。
+_caches: dict = {}
+_R = TypeVar("_R", covariant=True)
 
-    path = DATA / "zh_names.json"
+
+class _Cached(Protocol[_R]):
+    """带 cache_clear 的无参函数（以前是 lru_cache）：localization / data_pack / 测试按名字调 cache_clear"""
+
+    def __call__(self) -> _R: ...
+
+    def cache_clear(self) -> None: ...
+
+
+def _cache(name):
+    c = _caches.get(name)
+    if c is None:
+        from ..gamedata._cache import VersionCache
+
+        c = _caches.setdefault(name, VersionCache(identity=True))
+    return c
+
+
+def _with_clear(fn: Callable[[], _R], name: str) -> _Cached[_R]:
+    """给 fn 挂上 cache_clear（清掉 name 那份缓存）。过渡：缓存按版本 + 对象身份失效以后，cache_clear 已是空操作，
+    留着只是因为 update/localization._write_name_files、update/data_pack.clear_caches、tests/test_trade、tests/test_goals
+    还按名字调它（不在批 6 文件清单里）。删除条件：这几处调用删掉后连同 _Cached / _with_clear 一起删；
+    归属：游戏数据层收口批次（GD-B6 PR「需要控制台改」第 2 条）"""
+    setattr(fn, "cache_clear", lambda: _cache(name).clear())
+    return cast(_Cached[_R], fn)
+
+
+def _table() -> dict[str, str]:
+    """{中文: 英文}，汉化包原文拼写；规则（去假英文名、zh_names 优先、zh_only_names 只补 ≥3 字的）在建库时算好
+    （gamedata/_import._names_table），顺序同以前。库不可用时返回 {}，不缓存（库好了下次立刻正常）"""
+    from .. import gamedata
+
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        pairs = gamedata.names.zh_pairs()
+    except gamedata.GamedataError:
         return {}
-    known = _known_names()
-    out = {zh: en for zh, en in raw.items() if not _junk(en, known)}
-    try:  # 汉化包只写了中文名的物品（勋章、计算板…）：从游戏数据补的英文名（2026-10-27）
-        for zh, en in json.loads(
-            (DATA / "zh_only_names.json").read_text(encoding="utf-8")
-        ).items():
-            if not _junk(en, known) and len(_norm_zh(zh)) >= 3:
-                out.setdefault(zh, en)
-    except (OSError, ValueError):
-        pass
-    return out
+    return _cache("table").get_for(pairs, lambda: {p.zh: p.en for p in pairs})
+
+
+table = _with_clear(_table, "table")
 
 
 # 汉化包里物品「简称」带出来的假英文名（1.6.41）：简称后面跟的是尺寸、型号代码，不是英文名，
 # 比如「视差步枪HD」拆成 视差步枪 → HD、「制空-3 Omnisky-3 S1」→ S1、导弹简称「[红外]灾星 XII-IR」、「刀轴Arbor S00」。
 # 以前的对照表里有两百多条这种，「视差步枪」搜出来是 HD。真有这个名字的物品（锡 Tin、墨水 INK）照留。
+# _CODE / _junk / _fold_en / _norm_zh 被 gamedata/_import.py 复用（库里存的是过滤后的结果）：改这里要升 gamedata/_schema.IMPORTER_VERSION
 _CODE = re.compile(r"(?:[GIVX]+-[A-Z]{1,3}|\d+\s?SCU|.+\sS\d{1,2})")
 
 
@@ -44,29 +69,6 @@ def _junk(en, known):
     if _fold_en(en) in known:
         return False
     return len(_fold_en(en)) <= 3 or bool(_CODE.fullmatch(en.strip()))
-
-
-def _known_names():
-    """商店和掉落数据里所有物品的英文名（折叠过的）；数据还没下载就是空的"""
-    out = set()
-    try:
-        from ..crafting import shops
-
-        out |= {
-            _fold_en(v[0])
-            for v in shops.load(auto_update=False).get("items", {}).values()
-        }
-    except Exception:
-        pass
-    try:
-        from ..crafting import loot
-
-        out |= {
-            _fold_en(r[1]) for r in (loot.load_index(False) or {}).get("rows") or []
-        }
-    except Exception:
-        pass
-    return out
 
 
 def has_chinese(text: str) -> bool:
@@ -101,11 +103,11 @@ def to_english(query: str, limit: int = 8) -> list[str]:
 # 名字以玩家游戏里的汉化包为准：先用英文名对（英文很少认错），对不上再找最接近的中文名。
 
 
-def _fold_en(text):
+def _fold_en(text):  # 改了要升 gamedata/_schema.IMPORTER_VERSION（见 _CODE 上面）
     return re.sub(r"[^a-z0-9]", "", (text or "").lower())
 
 
-def _norm_zh(text):
+def _norm_zh(text):  # 改了要升 gamedata/_schema.IMPORTER_VERSION（见 _CODE 上面）
     return (
         (text or "")
         .replace("(", "（")
@@ -116,11 +118,18 @@ def _norm_zh(text):
     )
 
 
-@lru_cache(maxsize=1)
-def _index():
-    """({规整的中文名: (中文, 英文)}, {折叠的英文名: (中文, 英文)})"""
+def _index_of_table() -> tuple[dict, dict]:
+    """({规整的中文名: (中文, 英文)}, {折叠的英文名: (中文, 英文)})；跟着 table() 那份对象缓存"""
+    t = table()
+    return _cache("index").get_for(t, lambda: _build_index(t))
+
+
+_index = _with_clear(_index_of_table, "index")
+
+
+def _build_index(t):
     zh_map, en_map = {}, {}
-    for zh, en in table().items():
+    for zh, en in t.items():
         zh_map.setdefault(_norm_zh(zh), (zh, en))
         en_map.setdefault(_fold_en(en), (zh, en))
     return zh_map, en_map
