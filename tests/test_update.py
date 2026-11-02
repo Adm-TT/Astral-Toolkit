@@ -77,7 +77,11 @@ def test_falls_back_to_github_and_ignores_older(monkeypatch, tmp_path):
     C, _ = _setup(
         monkeypatch,
         tmp_path,
-        {"https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(old).encode()},
+        {
+            "https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(
+                old
+            ).encode()
+        },
     )
     assert C.check(force=True) is None  # 比现在旧：不提示
 
@@ -239,7 +243,11 @@ def test_manifest_installer_only(monkeypatch, tmp_path):
     C, _ = _setup(
         monkeypatch,
         tmp_path,
-        {"https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(m).encode()},
+        {
+            "https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(
+                m
+            ).encode()
+        },
     )
     monkeypatch.setattr(C.paths, "FROZEN", False)
     assert (
@@ -248,7 +256,11 @@ def test_manifest_installer_only(monkeypatch, tmp_path):
     C, _ = _setup(
         monkeypatch,
         tmp_path,
-        {"https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(m).encode()},
+        {
+            "https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(
+                m
+            ).encode()
+        },
     )
     monkeypatch.setattr(C.paths, "FROZEN", True)
     assert C.check(force=True)["file"] == "AT_Setup_9.0.0.exe"  # 安装版照常提示
@@ -426,7 +438,9 @@ def test_own_server_stale_does_not_hide_newer(monkeypatch, tmp_path):
         tmp_path,
         {
             "https://dl.astral-trade.com/latest.json": json.dumps(old).encode(),
-            "https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(new).encode(),
+            "https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(
+                new
+            ).encode(),
         },
     )
     info = C.check(force=True)
@@ -662,7 +676,11 @@ def test_killswitch_old_mirror_cannot_undo(monkeypatch, tmp_path):
     C, _ = _setup(
         monkeypatch,
         tmp_path,
-        {"https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(old).encode()},
+        {
+            "https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(
+                old
+            ).encode()
+        },
     )
     C.check(force=True)
     assert C.disabled("radar")
@@ -670,7 +688,11 @@ def test_killswitch_old_mirror_cannot_undo(monkeypatch, tmp_path):
     C, _ = _setup(
         monkeypatch,
         tmp_path,
-        {"https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(newer).encode()},
+        {
+            "https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(
+                newer
+            ).encode()
+        },
     )
     C.check(force=True)
     assert not C.disabled("radar")

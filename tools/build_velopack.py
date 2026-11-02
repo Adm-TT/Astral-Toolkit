@@ -175,7 +175,9 @@ def bridge(v):
     exe = out_dir / f"AT_Setup_{v}.exe"
     print(f"桥接安装程序：{exe}（{exe.stat().st_size / 2**20:,.1f} MB）")
     if exe.stat().st_size >= 100 * 2**20:
-        raise SystemExit("❌ 桥接安装程序超过 100 MB（它本身不带 Velopack 安装包，应只有几 MB）")
+        raise SystemExit(
+            "❌ 桥接安装程序超过 100 MB（它本身不带 Velopack 安装包，应只有几 MB）"
+        )
     return exe
 
 

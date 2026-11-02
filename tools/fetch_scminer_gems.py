@@ -123,7 +123,8 @@ def main():
     for en in NAMES:
         try:
             req = urllib.request.Request(
-                URL.format(en.lower()), headers={"User-Agent": "Mozilla/5.0 AstralToolkit"}
+                URL.format(en.lower()),
+                headers={"User-Agent": "Mozilla/5.0 AstralToolkit"},
             )
             with urllib.request.urlopen(req, timeout=20) as r:
                 g = parse(page_text(r.read().decode("utf-8", "replace")))
