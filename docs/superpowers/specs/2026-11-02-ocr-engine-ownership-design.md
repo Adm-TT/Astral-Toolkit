@@ -12,12 +12,13 @@
 |---|---|---|
 | 2026-11-02 | 初稿：意图、目标/非目标、迁什么、兼容策略、验证与风险 | 对话确认「统一门面 + 引擎搬进 ocr」 |
 | 2026-11-02 | 批准，§8 三项定为：① 新文件 `ocr/runtime.py`；② `perf` 选 **B**，直接删 OCR 符号、不留转发（项目规矩不留兼容别名；仓库外私有工具已查，不引用这些符号）；③ 对外导出 `warmup()`（暖机，不返回引擎）及 `set_ocr_device / ocr_device / gpu_available / last_ocr_error`，不向业务导出引擎对象；测试和 `tools/bench_ocr.py` 可直接用 `ocr.runtime` 内部符号。验证在 §6 之外再跑一次 `tools/sample_sweep.py` | 控制台定，负责人批准 |
+| 2026-11-03 | 截图迁出说明：`grab_*` / `game_area` / 遮罩等改归 `core/capture.py`（见 `2026-11-03-core-capture-split.md`）；本期 OCR 方案本身仍不含截图重划，下列「留 perf」表述以该后续方案为准 | 截图从 perf 物理拆分已确认 |
 
 ---
 
 ## 0. 一句话
 
-把目前放在 `core/perf.py` 里的 RapidOCR 引擎宿主（单例、锁与插队、GPU/CPU 切换）迁到 `astral_toolkit/ocr/`，让「认字能力」的实现与对外入口同属一个包；`perf` 只保留进程优先级与截图等平台性能事务。业务模块继续只通过 `astral_toolkit.ocr` 公共 API 认字，为后续在门面内接入大模型辅助留出空间，但本期不实现 LLM。
+把目前放在 `core/perf.py` 里的 RapidOCR 引擎宿主（单例、锁与插队、GPU/CPU 切换）迁到 `astral_toolkit/ocr/`，让「认字能力」的实现与对外入口同属一个包；`perf` 只保留进程优先级等平台性能事务（截图另见 `core/capture`，`2026-11-03-core-capture-split.md`）。业务模块继续只通过 `astral_toolkit.ocr` 公共 API 认字，为后续在门面内接入大模型辅助留出空间，但本期不实现 LLM。
 
 ---
 
@@ -42,7 +43,7 @@
 | 非目标 | 说明 |
 |---|---|
 | 实现 LLM 辅助识别 | 只保证日后可在 `ocr/` 内插；本期不改识别算法 |
-| 统一或搬迁截图 | `grab_screen` / `grab_region` / `game_area` 等留在 `perf` |
+| 统一或搬迁截图 | 本期 OCR 方案不搬；后续已另案迁到 `core/capture`（`2026-11-03-core-capture-split.md`），不并 `mining.screen` |
 | 改造 `gridtext` | 字模快路径仍属导航域；本期不强制经 RapidOCR |
 | 合并 `raw_*` 与 `recognize` 为单一风格 | 两套 API 继续并存 |
 | 拆独立 OCR 进程 / 微服务 | 仍为本机同进程 |
@@ -103,7 +104,8 @@
 
 ```
 ocr/          认字门面 + 引擎宿主 + 设备切换
-perf/         lower_priority、boost、grab_*、game_area、遮罩窗口
+perf/         lower_priority、boost
+capture/      grab_*、game_area、遮罩窗口（见 2026-11-03-core-capture-split.md）
 ```
 
 `ocr` **可以**调用 `perf.boost()`（F8 插队抬进程优先级）；**不可以**把截图实现搬进 `ocr`。  
@@ -146,7 +148,7 @@ ocr/runtime ──记耗时──► core.perfmon.note_ocr（保持现行为）
 |---|---|
 | OCR 已有独立入口，重点调整资源归属 | 本设计的核心 |
 | `OcrGateway` / 受管理 OCR 资源 | 本期以 `ocr` 包 + `runtime` 单例为落地形态；不强制先引入新类名 `OcrGateway`。若后续 bootstrap 装配需要网关对象，再包一层，不阻塞本期 |
-| `core/perf`：OCR/抓屏留平台适配 | **修订为本期决策：** OCR 引擎改归 `ocr/`；抓屏仍留 `perf`。与架构稿「资源归属阶段」一致方向，归属更明确 |
+| `core/perf`：OCR/抓屏留平台适配 | **修订：** OCR 引擎改归 `ocr/`；抓屏另归 `core/capture`（2026-11-03）。与架构稿「资源归属阶段」一致方向，归属更明确 |
 | 导入功能不得加载 OCR | 保持：仅暖机线程 / 首次认字才加载；`import astral_toolkit.ocr` 不建引擎 |
 
 ---

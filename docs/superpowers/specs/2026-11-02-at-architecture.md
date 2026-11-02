@@ -215,7 +215,7 @@ flowchart TB
 | `trade/inventory`、`storage` | 先整体封装保持事务；后续再将规则与 SQL 分离 | 库存链，保守迁移 |
 | `trade/console.Trade` | 拆除聚合全部服务的隐式入口；CLI 改调相同应用服务 | 最后移除兼容门面 |
 | `app/bus` | UI 事件传输、任务执行、预览缓存、日志收集分开负责 | 随对应链迁移 |
-| `core/perf` | OCR/抓屏资源留平台适配；去掉向上操作 overlay 的依赖 | 资源归属阶段 |
+| `core/perf` / `core/capture` | OCR 归 `ocr/`；抓屏归 `capture`（见 `2026-11-03-core-capture-split.md`）；去掉向上操作 overlay 的依赖仍待做 | 资源归属阶段 |
 | `tasks/system._ORE_LAST/_FB_LAST` | 最近结果归 ResultStore；截图/诊断上下文归 FeedbackContext | 运行链试点 |
 | `run.py`、`app/server.py` | 保留启动方式，委托 bootstrap 创建和关闭应用 | 地基 |
 
