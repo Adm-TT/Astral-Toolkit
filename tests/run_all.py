@@ -80,6 +80,7 @@ MODULES = [
     "tests.test_gamedata_mining",
     "tests.test_gamedata_arch",
     "tests.test_gamedata_b4",
+    "tests.test_gamedata_b6",
 ]
 
 if __name__ == "__main__":
