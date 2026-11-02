@@ -193,14 +193,13 @@ def mining_spots(data=None):
     - mining_spots.json（数据构建脚本从游戏数据生成，从游戏数据层读）：派罗 15 个小行星群、86 个远矿站，冰川环带中转点、QV 碎岩站
     - 星图里有刷矿表的拉格朗日点（斯坦顿 20 个、派罗 25 个，data/mining_rocks.json 里有表的才算）
     每个点带 rocks：这里刷哪几种石头（搜「贝沙电气石」能搜到会刷它的点）"""
-    from ..mining.mining_area import rocks_stamp, area_for_spot
+    from ..mining.mining_area import area_for_spot
 
     data = data or load()
     stamp = (
         gamedata.version(),
-        rocks_stamp(),
         id(data),
-    )  # 游戏数据（挖矿点、星图）、石头表、传进来的星图任何一个换了都重算（审查 2026-10-27）
+    )  # 游戏数据版本（含挖矿点 / 石头表）或传入的星图对象换了都重算；rocks_stamp 曾与 version 重复，收口 2 去掉
     if _spots.get("stamp") == stamp and "list" in _spots:
         return _spots["list"]
     out = []

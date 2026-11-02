@@ -174,7 +174,9 @@ CACHE_HOOKS = []  # 别的模块（tasks.goals、tasks.navigation，import 时�
 
 
 def clear_caches():
-    """数据文件换了之后把各模块的内存缓存清掉（2026-10-28 审查：更新数据后制造 / 维科洛 / 库存地点 / 物品属性重启前都是旧的）"""
+    """数据文件换了之后把各模块的内存缓存清掉（2026-10-28 审查：更新数据后制造 / 维科洛 / 库存地点 / 物品属性重启前都是旧的）。
+    已迁游戏数据层的查询靠库版本 / VersionCache 换代，这里不再对它们调空操作的 cache_clear；
+    保留：JSON 旁路、仍带 lru_cache / 按名清理的模块、gamedata.refresh、CACHE_HOOKS（收口 2）。"""
 
     def _clear(mod, *names):
         try:
@@ -189,20 +191,14 @@ def clear_caches():
     from ..core import paths
 
     paths.clear_json_cache()
-    _clear("trade.names", "table", "_index")
     _clear(
-        "crafting.crafting", "data", "_keys"
-    )  # crafting 成了包，_keys 在 crafting.crafting 里，包上清不到（同名配方编号会乱）
-    _clear("crafting.wikelo", "load")
-    _clear("crafting.stockplaces", "places", "_index")
-    _clear("mining.laser", "head_blueprint", "craft_slots")
-    _clear("crafting.itemstats", "data")
-    _clear("mining.shipsig", "ships")
+        "crafting.stockplaces", "places", "_index"
+    )  # 仍挂 cache_clear：汉化换了要重算地点中文
+    _clear("mining.laser", "head_blueprint", "craft_slots")  # lru_cache
     try:
         from ..crafting import loot
 
-        loot._index = None  # 掉落索引
-        loot._folded.update(of=None, rows=[])
+        loot._index = None  # 掉落索引旁路（load_index / about 仍读 JSON）
     except Exception:
         pass
     try:
@@ -214,7 +210,7 @@ def clear_caches():
         )  # 矿价 / 精炼站加成（prices.json）→ 内置表（2026-10-28 整体审查：以前窗口从没读过它）
     except Exception:
         pass
-    _clear("crafting.goals", "where_to_get")
+    _clear("crafting.goals", "where_to_get")  # lru_cache
     try:
         from ..crafting import shops
 
@@ -253,10 +249,16 @@ def install(zip_path, info=None):
         from ..crafting.build_crafting import BUILD_LOCK
         from .. import gamedata
 
-        with gamedata.updating():  # 数据目录写锁；装完在最外层重建游戏数据库（数据层地基 2026-11-02）
+        with (
+            gamedata.updating()
+        ):  # 数据目录写锁；装完在最外层重建游戏数据库（数据层地基 2026-11-02）
             with BUILD_LOCK:  # 和汉化包重建制造表不同时写同一批文件（二审 2026-10-28）
                 table = {
-                    f: {"existed": (DATA / f).exists(), "backup": None, "replaced": False}
+                    f: {
+                        "existed": (DATA / f).exists(),
+                        "backup": None,
+                        "replaced": False,
+                    }
                     for f in got
                 }
                 try:

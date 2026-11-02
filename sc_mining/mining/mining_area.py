@@ -52,9 +52,6 @@ def _body_tables():
     return out
 
 
-_ROCKS = {}  # 已没人读，只剩 tests/test_mining.py 在清它；整合清理（收口 2）时和测试里的 clear 一起删
-
-
 def rocks_table():
     """雷达石头表（游戏数据层，按内容版本缓存，更新数据后自动换新的；调用方别改它）：
     {"tiers": 稀有度 → 一团几块, "ores": 矿 → 信号、稀有度, "areas": 地点 → {石头种类: 百分比}}；没有数据返回 {}"""
