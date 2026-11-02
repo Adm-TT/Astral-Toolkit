@@ -282,7 +282,7 @@ def _game_front():
     return showloc.game_front()
 
 
-# RT-B1 过渡，RT-B2 删：scan_view 拆开后留的同名转发（tests/test_stage3、test_stage4 查导出）
+# RT-B1 过渡，RT-B2 删：scan_view 拆开后留的同名转发（scu_text 还有 tests/test_tools.py 在用，其余三个已没有调用方）
 scu_text = _present.scu_text
 _lots_hud = _present.lots_hud
 
