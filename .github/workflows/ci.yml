@@ -1,0 +1,57 @@
+# 门禁：push / PR 时在 Windows 上自动跑 AGENTS.md「验证命令」里不需要游戏数据的那三条。
+#
+# 为什么是 Windows：项目只跑 Windows（DirectML、ctypes.windll、ATShell），换平台类型检查的结论会变。
+# 为什么只有三条：全量 tests.run_all 和 sample_sweep 要真实 data/ 和截图样本，云端没有，仍留本机跑。
+# 目的：把「本地忘了跑」这一类漏网挡住（2026-11-02 包名替换后 16 个文件格式变红，就是没人重跑 formatter）。
+name: 门禁
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+
+# 同一个分支连推多次时，取消上一次没跑完的
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gates:
+    name: lint / format / 类型
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.lock.txt
+            requirements-build.lock.txt
+            requirements-dev.lock.txt
+
+      # 装在仓库根目录的 .venv：pyproject.toml 里 basedpyright 的 venvPath="." venv=".venv"
+      # --no-deps 是故意的：否则 rapidocr 会顺带拉 CPU 版 onnxruntime，和 onnxruntime-directml 冲突
+      - name: 建 venv 并装开发依赖
+        run: |
+          python -m venv .venv
+          ./.venv/Scripts/python.exe -m pip install --upgrade pip
+          ./.venv/Scripts/python.exe -m pip install --no-deps -r requirements-dev.lock.txt
+
+      - name: ruff check
+        run: ./.venv/Scripts/ruff.exe check .
+
+      - name: ruff format --check
+        run: ./.venv/Scripts/ruff.exe format --check .
+
+      # 只跑全项目：AGENTS.md 说跑子集会自动改写 baseline.json
+      - name: basedpyright
+        run: ./.venv/Scripts/basedpyright.exe
+
+      # 万一哪次 basedpyright 改写了基线，在这里红，别让它悄悄进分支
+      - name: 确认基线没被改写
+        run: git diff --exit-code -- .basedpyright/baseline.json
