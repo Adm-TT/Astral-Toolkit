@@ -268,6 +268,15 @@ def _shops_db(monkeypatch, tmp_path, data, starmap=None, copy=()):
         )
     for f in copy:
         (src / f.name).write_bytes(f.read_bytes())
+    for name in (
+        "crafting.json",
+        "wikelo.json",
+        "item_stats.json",
+        "print_spots.json",
+        "ship_items.json",
+    ):  # 制造 / 维科洛 / 物品属性也走库了（批 3）：这几份照旧用真实 data/ 的（没有就缺着，和以前读不到文件一样）
+        if (paths.DATA / name).exists():
+            (src / name).write_bytes((paths.DATA / name).read_bytes())
     monkeypatch.setattr(_paths, "gamedata_dir", lambda: src / "gamedata")
     monkeypatch.setattr(
         _build, "gamedata_dir", lambda: src / "gamedata"
@@ -2046,7 +2055,6 @@ def test_wikelo_detail_sticky_and_names_clean():
     )
     from sc_mining.crafting import wikelo
 
-    wikelo.load.cache_clear()
     for c in wikelo.load():
         for r in c["req"]:
             assert not r["z"].endswith("\\"), r
@@ -2058,7 +2066,6 @@ def test_wikelo_materials_all_have_source(monkeypatch):
     from sc_mining.crafting import wikelo, loot
     from sc_mining.trade.console import material_source
 
-    wikelo.load.cache_clear()
     cs = wikelo.load()
     if not cs or not loot.load_index(False):
         pytest.skip("没有维科洛 / 掉落数据")

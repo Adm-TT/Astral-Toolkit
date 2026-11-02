@@ -133,7 +133,8 @@ BUILD_LOCK = __import__(
 ).RLock()  # build / update / localization.rebuild 不同时写 crafting.json（2026-10-28）
 
 
-def build(bp_path, merged_path, names_path, out_path):
+def make_data(bp_path, merged_path, names_path):
+    """读 scmdb 的蓝图 / merged-*.json + 汉化名，算出 crafting.json 的内容（只算不写，不拿锁）"""
     bp = json.loads(Path(bp_path).read_text(encoding="utf-8"))
     merged = json.loads(Path(merged_path).read_text(encoding="utf-8"))
     ini, items = _load_names(names_path)
@@ -258,23 +259,32 @@ def build(bp_path, merged_path, names_path, out_path):
         blueprints=out,
         names=_names_tag(names_path),
     )
-    import os
+    return data
 
-    tmp = Path(out_path).with_name(
-        f".{Path(out_path).stem}.{os.getpid()}.tmp"
-    )  # 先写临时文件再换，AT 开着时读到的不会是半个文件
-    try:
-        tmp.write_text(
-            json.dumps(data, ensure_ascii=False, separators=(",", ":")),
-            encoding="utf-8",
-        )
-        tmp.replace(out_path)
-    finally:
-        tmp.unlink(missing_ok=True)
-    print(
+
+def _summary(data):
+    out = data["blueprints"]
+    return (
         f"{len(out)} 份蓝图；{sum(1 for x in out if x['z'])} 份有中文名；"
         f"{sum(1 for x in out if x['src'])} 份有任务来源"
     )
+
+
+def build(bp_path, merged_path, names_path, out_path):
+    """算好 crafting.json 再写（写在更新边界里）"""
+    data = make_data(bp_path, merged_path, names_path)
+    _write(out_path, data)
+    print(_summary(data))
+
+
+def _write(out_path, data):
+    """写 crafting.json（游戏数据库的源）：write_json 先写临时文件再换名（换名撞上占用会重试）。
+    在游戏数据层的更新边界里写（updating 在外、BUILD_LOCK 在内，和 data_pack.install 一致），最外层出口重建一次库"""
+    from .. import gamedata
+    from ..core.paths import write_json
+
+    with gamedata.updating(), BUILD_LOCK:
+        write_json(out_path, data, separators=(",", ":"))
 
 
 def _fetch(name):
@@ -329,12 +339,44 @@ def source_rows():
 
 
 def update():
-    """重建 crafting.json：有本机构建输入就用它；没有才去 scmdb 看有没有新版本"""
+    """重建 crafting.json + wikelo.json：有本机构建输入就用它；没有才去 scmdb 看有没有新版本。
+    比版本、下载在 BUILD_LOCK 里，不进游戏数据层的写锁（联网别卡住别的数据更新）；要重建时两份文件套一层
+    gamedata.updating()（锁顺序 updating → BUILD_LOCK，和 data_pack.install 一致），出口只重建一次库"""
     with BUILD_LOCK:
-        return _update()
+        job = _update()
+    if job:
+        _rebuild(*job)
+
+
+def _rebuild(bp, merged, names, out, done):
+    """两份先在写锁外算好（解析几十 MB 的 merged 要几秒，别让别的数据更新干等），再进一层 updating() 写两份，
+    库只重建一次。维科洛那份算 / 写失败：crafting.json 照样写、库照样重建，出了边界再把错抛出去"""
+    from .. import gamedata
+    from . import wikelo
+
+    data = make_data(bp, merged, names)
+    err, wk = None, None
+    try:
+        wk = wikelo.make_data(merged, names)
+    except Exception as e:
+        err = e
+    with gamedata.updating():
+        _write(out, data)
+        print(_summary(data))
+        if wk is not None:
+            try:
+                wikelo._write(wikelo.OUT, wk)
+            except Exception as e:
+                err = e
+            else:
+                print(f"维科洛兑换：{len(wk['contracts'])} 个")
+    if err is not None:
+        raise err
+    print(done)
 
 
 def _update():
+    """比版本、需要时下载；要重建返回 (蓝图文件, 任务文件, 汉化源, 输出, 完成提示)，不用重建返回 None"""
     own = source_rows()
     if own:
         bp, merged, ver = own
@@ -349,12 +391,7 @@ def _update():
         ):
             print(f"制造数据已是最新（游戏数据 {ver}）")
             return
-        build(bp, merged, names_source(), out)
-        from .wikelo import build as build_wikelo
-
-        print(f"维科洛兑换：{build_wikelo(merged, names_source())} 个")
-        print(f"制造数据已更新（游戏数据 {ver}）")
-        return
+        return bp, merged, names_source(), out, f"制造数据已更新（游戏数据 {ver}）"
     ver = pick_live([v["version"] for v in json.loads(_fetch("versions.json"))])
     if not ver:
         print("scmdb 现在没有正式服（LIVE）的数据，制造数据先不动")
@@ -400,11 +437,7 @@ def _update():
         files.append(p)
     from ..update.localization import names_source
 
-    build(files[0], files[1], names_source(), out)
-    from .wikelo import build as build_wikelo
-
-    print(f"维科洛兑换：{build_wikelo(files[1], names_source())} 个")
-    print(f"制造数据已更新：{cur} → {ver}")
+    return files[0], files[1], names_source(), out, f"制造数据已更新：{cur} → {ver}"
 
 
 if __name__ == "__main__":

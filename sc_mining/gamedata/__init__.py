@@ -18,7 +18,21 @@ import threading
 from contextlib import contextmanager
 from typing import Iterator
 
-from . import _build, _db, items, loot, mining, names, places, prices, shops, starmap
+from . import (
+    _build,
+    _db,
+    crafting,
+    items,
+    itemstats,
+    loot,
+    mining,
+    names,
+    places,
+    prices,
+    shops,
+    starmap,
+    wikelo,
+)
 from ._db import current_version as version, snapshot
 from ._lock import write_lock
 from ._manifest import Manifest
@@ -47,9 +61,11 @@ __all__ = [
     "ShopDistance",
     "ShopRow",
     "Vec3",
+    "crafting",
     "ensure",
     "ensure_ready",
     "items",
+    "itemstats",
     "last_error",
     "loot",
     "mining",
@@ -64,6 +80,7 @@ __all__ = [
     "updating",
     "version",
     "warm_up",
+    "wikelo",
 ]
 
 _state: dict = {"last_error": None, "warm_thread": None}
