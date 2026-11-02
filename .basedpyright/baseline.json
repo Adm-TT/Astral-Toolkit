@@ -2350,16 +2350,6 @@
                 }
             }
         ],
-        "./sc_mining/tasks/trade.py": [
-            {
-                "code": "reportFunctionMemberAccess",
-                "range": {
-                    "startColumn": 25,
-                    "endColumn": 29,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./sc_mining/trade/console.py": [
             {
                 "code": "reportIndexIssue",
@@ -2448,24 +2438,6 @@
                 "range": {
                     "startColumn": 28,
                     "endColumn": 50,
-                    "lineCount": 1
-                }
-            }
-        ],
-        "./sc_mining/trade/gamekey.py": [
-            {
-                "code": "reportOptionalIterable",
-                "range": {
-                    "startColumn": 13,
-                    "endColumn": 17,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportGeneralTypeIssues",
-                "range": {
-                    "startColumn": 13,
-                    "endColumn": 17,
                     "lineCount": 1
                 }
             }
