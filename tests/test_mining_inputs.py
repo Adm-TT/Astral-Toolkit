@@ -90,12 +90,16 @@ def test_collect_inputs_queries_in_one_snapshot(monkeypatch):
 
         return f
 
+    monkeypatch.setattr(
+        gamedata, "ensure", lambda: calls.append(("ensure", state["in"]))
+    )
     monkeypatch.setattr(gamedata, "snapshot", snap)
     monkeypatch.setattr(mining, "_quality_hints", seen("hints", ["提示"]))
     monkeypatch.setattr(mining, "_mat_summary", seen("mats", {"count": 1}))
     monkeypatch.setattr(mining, "_goal_for", seen("goal", None))
     ins = mining.collect_inputs(_gold_scan())
-    assert state["opened"] == 1 and calls and all(depth == 1 for _, depth in calls)
+    assert calls[0] == ("ensure", 0)  # 先等库就绪，再钉版本
+    assert state["opened"] == 1 and all(depth == 1 for _, depth in calls[1:])
     assert ins.craft_hints == ("提示",) and ins.goals_complete
     assert [nm for nm, _ in ins.craft_mats] == ["Gold", "Tungsten"]
 
@@ -106,6 +110,10 @@ def test_collect_inputs_without_database_still_queries_goals(monkeypatch):
         raise gamedata.GamedataUnavailable("没库")
         yield
 
+    def no_db():
+        raise gamedata.GamedataUnavailable("没库")
+
+    monkeypatch.setattr(gamedata, "ensure", no_db)
     monkeypatch.setattr(gamedata, "snapshot", snap)
     monkeypatch.setattr(mining, "_quality_hints", lambda c: [])
     monkeypatch.setattr(mining, "_mat_summary", lambda *a: {"count": 0})
@@ -121,6 +129,7 @@ def test_collect_inputs_goal_error_keeps_earlier_ones(monkeypatch):
             raise RuntimeError("读不到")
         return _target(names[0])
 
+    monkeypatch.setattr(gamedata, "ensure", lambda: None)
     monkeypatch.setattr(mining, "_quality_hints", lambda c: ["提示"])
     monkeypatch.setattr(mining, "_mat_summary", lambda *a: {"count": 0})
     monkeypatch.setattr(mining, "_goal_for", goal_for)
@@ -140,6 +149,7 @@ def test_collect_inputs_no_minerals_queries_nothing(monkeypatch):
 
 
 def test_goal_targets_do_not_share_cache_objects(monkeypatch):
+    monkeypatch.setattr(gamedata, "ensure", lambda: None)
     target = _target("Gold")
     monkeypatch.setattr(goals, "goal_short", lambda force=False: {"gold": target})
     ins = mining.collect_inputs(_gold_scan())
@@ -151,6 +161,7 @@ def test_goal_targets_do_not_share_cache_objects(monkeypatch):
 
 def test_analyze_reads_snapshot_not_later_changes(monkeypatch):
     """取好输入之后全局表和设置变了，这一轮不受影响"""
+    monkeypatch.setattr(gamedata, "ensure", lambda: None)
     scan = _gold_scan()
     bag = ({}, None, None)
     monkeypatch.setattr(goals, "goal_short", lambda force=False: {})
@@ -168,3 +179,27 @@ def test_analyze_reads_snapshot_not_later_changes(monkeypatch):
         data.REFINERIES.update(saved)
     assert got.refine == want.refine and got.sell == want.sell
     assert got.plans == want.plans
+
+
+def test_best_price_table_and_default():
+    table = {"Gold": {"甲城": 5, "乙城": 9}, "Tin": {"甲城": 0}}
+    assert data.best_price("Gold", table) == (9, "乙城")
+    assert data.best_price("Tin", table) == (0, None)
+    assert data.best_price("Iron", table) == (0, None)
+    assert data.best_price("Gold") == data.best_price("Gold", data.CITY_PRICES)
+
+
+def test_prices_read_one_table_when_replaced_midway(monkeypatch):
+    """更新数据整表替换落在取矿价中途：还是旧表的值，不混进新表"""
+    monkeypatch.setattr(gamedata, "ensure", lambda: None)
+    old = {"Gold": {"甲城": 5}, "Tin": {"甲城": 7}}
+    monkeypatch.setattr(data, "CITY_PRICES", old)
+    real = data.best_price
+
+    def swap(mineral, table=None):
+        data.CITY_PRICES = {"Gold": {"乙城": 100}, "Tin": {"乙城": 100}}
+        return real(mineral, table)
+
+    monkeypatch.setattr(data, "best_price", swap)
+    prices = mining.collect_inputs(_gold_scan(total_scu=None)).prices
+    assert dict(prices) == {"Gold": (5, "甲城"), "Tin": (7, "甲城")}

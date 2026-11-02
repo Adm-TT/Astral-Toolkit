@@ -325,6 +325,10 @@ def _one_round_facts(scan, mineral_zh):
     """这块石头的制造和目标事实，在一个数据快照里查（架构稿 §6.2）。石头里没有算钱的矿就不查"""
     if not _analysis.minerals_of(scan):
         return (), (), (), False
+    try:  # 先等库就绪再钉版本：不然这一轮钉在旧那一代。建库失败只影响制造数据，和以前查询时出错一样不抛出去
+        gamedata.ensure()
+    except Exception:
+        pass
     try:
         with gamedata.snapshot():
             return _craft_and_goal_facts(scan, mineral_zh)
@@ -342,6 +346,7 @@ def collect_inputs(scan):
     from ..mining.refinery import refined_plan, refined_scu
 
     hints, mats, targets, complete = _one_round_facts(scan, mineral_zh)
+    cities = data.CITY_PRICES  # 只读一次：更新数据会整表替换，中途换了不能新旧混一份
     return _analysis.MiningInputs(
         at=time.strftime("%H:%M:%S"),
         mineral_zh=mineral_zh,
@@ -349,7 +354,7 @@ def collect_inputs(scan):
         station_zh=station_zh,
         gadget_label=gadget_label,
         goal_text=_goal_text,
-        prices=MappingProxyType({m: data.best_price(m) for m in data.CITY_PRICES}),
+        prices=MappingProxyType({m: data.best_price(m, cities) for m in cities}),
         refineries=MappingProxyType(
             {
                 k: (sys_, MappingProxyType(dict(bonus)))

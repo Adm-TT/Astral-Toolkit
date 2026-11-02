@@ -371,10 +371,6 @@ def loadout_facts():
     return LoadoutFacts(tuple(_setups(lo)), lo["crew"], model, k)
 
 
-def max_active_heads():
-    return ship_loadout()[1]["crew"]
-
-
 def evaluate(heads, gadget, mass, resistance_pct, instability, k=None, model=None):
     """resistance_pct：扫描显示的抗性百分比（如 35 表示 35%）；k 不给就用当前模型"""
     if k is None:

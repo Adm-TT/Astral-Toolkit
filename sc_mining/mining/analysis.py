@@ -281,7 +281,8 @@ def composition(lot_rows):
 
 
 def _craft_and_goals(scan, lot_rows, inputs: MiningInputs):
-    """可制造矿和目标缺口：(可制造矿, 目标, 悬浮窗目标行)。目标没查全或写文字出错就停在那里，已算出的留着"""
+    """可制造矿和目标缺口：(可制造矿, 目标, 悬浮窗目标行)。目标没查全或写文字出错就停在那里，已算出的留着。
+    inputs 只对应取它的那块 scan：craft_mats 里的矿要在这块石头里找得到品质"""
     mineral_zh = inputs.mineral_zh
     best = best_quality(scan.composition)
     mats = tuple(
@@ -333,7 +334,8 @@ def plan_facts(p, gadget_label):
 
 
 def analyze(scan, bag, inputs: MiningInputs, cut=False) -> MiningResult:
-    """一块石头的计算结果。cut=True：面板被屏幕右边挡住，品质和总 SCU 读不到，只有破碎方案和成分占比"""
+    """一块石头的计算结果。cut=True：面板被屏幕右边挡住，品质和总 SCU 读不到，只有破碎方案和成分占比。
+    inputs 只对应取它的那块 scan，不能拿去算别的石头"""
     mineral_zh = inputs.mineral_zh
     rock = mineral_zh(scan.main_mineral) if scan.main_mineral else "?"
     minerals = minerals_of(scan)

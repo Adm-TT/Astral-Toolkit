@@ -32,6 +32,7 @@ _ANALYSIS_FORBIDDEN = (
     "json",
     "subprocess",
     "socket",
+    "sys",
 )
 _BARE_FORBIDDEN = (
     "sc_mining",
@@ -48,7 +49,9 @@ def _dynamic_imports(source):
     """__import__(...)、importlib.import_module(...)、import_module(...) 这种字符串导入"""
     out = []
     for node in ast.walk(ast.parse(source)):
-        if isinstance(node, ast.Call):
+        if isinstance(node, ast.Name) and node.id == "__import__":  # f = __import__
+            out.append(node.id)
+        elif isinstance(node, ast.Call):
             f = node.func
             name = f.attr if isinstance(f, ast.Attribute) else getattr(f, "id", "")
             if name in _DYNAMIC_IMPORTS:
@@ -56,10 +59,40 @@ def _dynamic_imports(source):
     return out
 
 
+def _bound_modules(source, pkg):
+    """import 真正绑定到名字上的东西：import a.b 绑 a，import a.b as c 绑 a.b，from a import b 绑 a.b"""
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            for a in node.names:
+                yield a.name if a.asname else a.name.split(".")[0]
+        elif isinstance(node, ast.ImportFrom):
+            mod = node.module or ""
+            if node.level:
+                base = pkg.split(".")
+                base = base[: len(base) - node.level + 1]
+                mod = ".".join(base + ([mod] if mod else []))
+            for a in node.names:
+                yield f"{mod}.{a.name}"
+
+
 def _analysis_violations(source):
-    mods = list(_imports_in_source(source, "sc_mining.mining"))
-    bare = [m for m in mods if m in _BARE_FORBIDDEN]
+    pkg = "sc_mining.mining"
+    mods = list(_imports_in_source(source, pkg))
+    bare = [m for m in _bound_modules(source, pkg) if m in _BARE_FORBIDDEN]
     return _forbidden(mods, _ANALYSIS_FORBIDDEN) + bare + _dynamic_imports(source)
+
+
+def _toplevel_engine_calls(source):
+    """模块顶层（不算函数和类里面）调用 _engines / EngineManager 的地方"""
+    out = []
+    for node in ast.parse(source).body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        for call in ast.walk(node):
+            if isinstance(call, ast.Call):
+                names = {n.id for n in ast.walk(call.func) if isinstance(n, ast.Name)}
+                out += sorted(names & {"_engines", "EngineManager"})
+    return out
 
 
 def test_analysis_imports():
@@ -93,10 +126,15 @@ def test_analysis_check_catches_known_gaps():
         "import sc_mining",
         "open('x')",
         "exec('import os')",
+        "import sys",
+        "import sys\nsys.modules['sc_mining.mining.data']",
+        "f = __import__",
     ):
         assert _analysis_violations(src), src
     for src in (
         "from .quality import tier_of",
+        "from ..core import i18n",
+        "from ..core.i18n import mineral_zh",
         "from collections import defaultdict",
         "from dataclasses import dataclass",
         "from types import MappingProxyType",
@@ -164,9 +202,12 @@ def test_tasks_mining_import_creates_no_engine():
 
 
 def test_tasks_mining_gets_engine_only_inside_functions():
-    tree = ast.parse((_ROOT / "tasks" / "mining.py").read_text(encoding="utf-8"))
-    for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
-            continue
-        for sub in ast.walk(node):
-            assert not (isinstance(sub, ast.Attribute) and sub.attr == "get_instance")
+    source = (_ROOT / "tasks" / "mining.py").read_text(encoding="utf-8")
+    assert _toplevel_engine_calls(source) == []
+    for bad in (
+        "_pos = _engines().pos",
+        "_M = EngineManager.get_instance()",
+        "if True:\n    x = EngineManager.get_instance().live",
+    ):
+        assert _toplevel_engine_calls(bad), bad
+    assert _toplevel_engine_calls("def f():\n    return _engines().pos") == []

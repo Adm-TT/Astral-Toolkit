@@ -536,9 +536,9 @@ CITY_PRICES = {
 }
 
 
-def best_price(mineral):
-    """返回 (最高收购价, 城市)；5 个城市都不收或没数据时返回 (0, None)"""
-    cities = CITY_PRICES.get(mineral, {})
+def best_price(mineral, table=None):
+    """返回 (最高收购价, 城市)；5 个城市都不收或没数据时返回 (0, None)。table：一份城市价表，None 读当前全局表"""
+    cities = (CITY_PRICES if table is None else table).get(mineral, {})
     if not cities:
         return 0, None
     city = max(cities, key=cities.get)

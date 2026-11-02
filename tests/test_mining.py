@@ -749,11 +749,11 @@ def test_ship_loadouts(tmp_path, monkeypatch):
     assert laser.chosen_ship() is None
     assert [h.key for h in laser.loadout()] == [
         "arbor_mh2"
-    ] * 3 and laser.max_active_heads() == 1
+    ] * 3 and laser.loadout_facts().crew == 1
     # 作者自己的两人 MOLE
     settings.update(mining_ship="mole", mining_loadouts={"mole": data.AUTHOR_MOLE})
     assert [h.key for h in laser.loadout()] == ["helix_ii", "hofstede_s2", "arbor_mh2"]
-    assert laser.max_active_heads() == 2
+    assert laser.loadout_facts().crew == 2
     # 勘探者：只能装 S1，换成 Helix I + 两个 Rieger-C3
     settings.update(
         mining_ship="prospector",
@@ -765,7 +765,7 @@ def test_ship_loadouts(tmp_path, monkeypatch):
     assert [h.key for h in lo] == ["helix_i"] and lo[
         0
     ].max_power() == 3900 * 1.25 * 1.25
-    assert laser.max_active_heads() == 1
+    assert laser.loadout_facts().crew == 1
     plans = laser.recommend(5000, 20, 10)
     assert plans and all(len(p.heads) == 1 for p in plans)
     # 勘探者装 S2 矿头 → 纠正回默认的 Arbor MH1
