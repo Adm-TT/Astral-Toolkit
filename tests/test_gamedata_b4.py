@@ -393,7 +393,7 @@ def test_clear_caches_still_safe(monkeypatch, tmp_path):
     )  # 不碰真实 mining.data
     assert loot.find("Combat Knife")
     data_pack.clear_caches()
-    assert isinstance(loot._folded, dict)
+    assert not hasattr(loot, "_folded")  # 收口 2：空壳已删
     assert [h[0] for h in loot.find("Combat Knife")] == ["k2"]
 
 

@@ -1776,14 +1776,12 @@ def test_review_104_rocks_reload_and_order(monkeypatch, tmp_path):
     from tests.test_gamedata_b1 import _setup
 
     _setup(monkeypatch, tmp_path)
-    M._ROCKS.clear()
     assert M.rocks_table() == {}
     with G.updating():  # 「更新数据」的真实路径：写源、退出时重建
         (tmp_path / "mining_rocks.json").write_text(
             json.dumps({"areas": {"X": {"Iron": 100}}}), encoding="utf-8"
         )
     assert M.rocks_table()["areas"]["X"] == {"Iron": 100}
-    M._ROCKS.clear()
     keeger = {
         "name": "Keeger Belt",
         "zh": "基格",

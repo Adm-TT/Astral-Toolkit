@@ -86,11 +86,6 @@ def load_index(auto=True):
     return _index
 
 
-# 无人读取：只给 update/data_pack.clear_caches 写（它还在 `loot._folded.update(...)`）。
-# 删除条件：整合清理时随 clear_caches 里那两行一起删（控制台，批 6 合并后；掉落查询已改走游戏数据库，批 4）
-_folded = {"of": None, "rows": []}
-
-
 def _index_meta():
     """游戏数据库里掉落索引的版本信息 {"version": …}；没有掉落索引、或库不可用返回 None"""
     from .. import gamedata

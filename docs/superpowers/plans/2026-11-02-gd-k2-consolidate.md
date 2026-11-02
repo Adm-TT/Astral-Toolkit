@@ -55,7 +55,11 @@
 | `loot._index = None` | `load_index` / about 等仍读 `loot_index.json` |
 | `shops._data = None` | `shops.load` / acquire 等仍读 `shops.json` |
 | `uex.apply_live(data)` | 矿价 / 精炼站加成写回内置表 |
-| 仍带真实 `cache_clear` 的 `_clear`（如 `crafting.goals.where_to_get`、`mining.laser.*`、`stockplaces` 若仍挂清法） | 未迁或仍靠按名清理；收口时核对后写入本表定稿行 |
+| `_clear("crafting.stockplaces", "places", "_index")` | 仍挂真实 `cache_clear`：汉化换了要重算地点中文 |
+| `_clear("mining.laser", "head_blueprint", "craft_slots")` | 仍为 `lru_cache` |
+| `_clear("crafting.goals", "where_to_get")` | 仍为 `lru_cache` |
+
+收口时已确认并删除的空 `_clear`：`trade.names`（门面已拆）、`crafting.crafting data/_keys`、`crafting.wikelo.load`、`crafting.itemstats.data`（无此符号）、`mining.shipsig.ships`。
 
 已迁且仅靠 `VersionCache` 的路径：`rebuild` 后不调 `clear_caches` 也必须换新——用测试锁死（可复用 / 加强各批已有 `*_refreshes_after_rebuild_without_clear_caches`）。
 
@@ -69,24 +73,24 @@
 ## Tasks
 
 ### Task 1: 掉落空壳 + shipsig 空 `_clear` + `_ROCKS`
-- [ ] 删 `loot._folded` 与 `clear_caches` 中对应 `update`；保留 `loot._index = None`。
-- [ ] 删 `_clear("mining.shipsig", "ships")`；逐项核对其它空 `_clear`，能确认的删、不能确认的列入保留表。
-- [ ] 删 `mining_area._ROCKS`；改 `tests/test_mining.py`。
-- [ ] 测试：`test_clear_caches_still_safe` 类用例不再断言 `_folded`；`rebuild` 后不调 `clear_caches` 掉落 / 飞船信号仍换代（已有则保留，缺则补）。
+- [x] 删 `loot._folded` 与 `clear_caches` 中对应 `update`；保留 `loot._index = None`。
+- [x] 删 `_clear("mining.shipsig", "ships")`；逐项核对其它空 `_clear`，能确认的删、不能确认的列入保留表。
+- [x] 删 `mining_area._ROCKS`；改 `tests/test_mining.py`。
+- [x] 测试：`test_clear_caches_still_safe` 类用例不再断言 `_folded`；`rebuild` 后不调 `clear_caches` 掉落 / 飞船信号仍换代（已有则保留，缺则补）。
 
 ### Task 2: `names.cache_clear` 门面
-- [ ] 去掉 localization / data_pack / 相关测试对 `names.table.cache_clear` / `names._index.cache_clear` 的依赖（换代靠库版本即可处改为不调用或只测 `rebuild`）。
-- [ ] 删 `_Cached` / `_with_clear`（或等价空门面）。
-- [ ] 测试：`test_table_refreshes_after_rebuild_*` 仍绿；按名 `cache_clear` 不再作为合同。
+- [x] 去掉 localization / data_pack / 相关测试对 `names.table.cache_clear` / `names._index.cache_clear` 的依赖（换代靠库版本即可处改为不调用或只测 `rebuild`）。
+- [x] 删 `_Cached` / `_with_clear`（或等价空门面）。
+- [x] 测试：`test_table_refreshes_after_rebuild_*` 仍绿；按名 `cache_clear` 不再作为合同。
 
 ### Task 3: `mining_spots` 缓存键
-- [ ] `navigate.mining_spots()` 缓存键去掉与 `rocks_stamp()` 重复项；行为与失效时机与收口前一致（任一游戏数据更新仍使结果重算）。
-- [ ] 相关导航 / 采矿测试绿。
+- [x] `navigate.mining_spots()` 缓存键去掉与 `rocks_stamp()` 重复项；行为与失效时机与收口前一致（任一游戏数据更新仍使结果重算）。
+- [x] 相关导航 / 采矿测试绿。
 
 ### Task 4: 删除批专用基线工具
-- [ ] 删 `tools/gamedata_baseline_{nav,craft,loot,mining,names}.py`；清理对它们的引用（若有）。
-- [ ] 确认 `tests.run_all` / 文档无断链；总门禁不依赖这些分册。
+- [x] 删 `tools/gamedata_baseline_{nav,craft,loot,mining,names}.py`；清理对它们的引用（若有）。
+- [x] 确认 `tests.run_all` / 文档无断链；总门禁不依赖这些分册。
 
 ### Task 5: 收口测试与交付
-- [ ] 新增 `tests/test_gd_k2.py`（或分散加强）：覆盖「保留分支仍存在且可调用」「已迁路径 rebuild 无需 clear_caches」「`_folded` / `_ROCKS` 已不存在」。
+- [x] 新增 `tests/test_gd_k2.py`（或分散加强）：覆盖「保留分支仍存在且可调用」「已迁路径 rebuild 无需 clear_caches」「`_folded` / `_ROCKS` 已不存在」。
 - [ ] `run_all` 注册；全量 ruff / basedpyright / `tests.run_all`；新上下文审查；PR 说明含 Testing / Risk / How to revert，Risk 写明高风险与实机抽查项；停下等负责人验收，不推送。

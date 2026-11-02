@@ -304,13 +304,7 @@ def _write_name_files(zh_names, places_zh, codes_zh):
         position.reset_names()
     except Exception:
         pass
-    try:
-        from ..trade import names
-
-        names.table.cache_clear()
-        names._index.cache_clear()
-    except Exception:
-        pass
+    # 物品中英对照已走 gamedata VersionCache：写源后 updating() 出口重建库即换代，不必再调 names.cache_clear（收口 2）
 
 
 def _rebuild_crafting(src, progress):
