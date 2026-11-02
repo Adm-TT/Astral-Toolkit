@@ -16,9 +16,12 @@ _FORBIDDEN = ("sc_mining.tasks", "sc_mining.app")
 
 def _imports_in(path: Path):
     """模块里所有 import（含函数体内、try 块里的），还原成绝对模块名"""
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     pkg = ".".join(path.relative_to(_ROOT.parent).with_suffix("").parts[:-1])
-    for node in ast.walk(tree):
+    return _imports_in_source(path.read_text(encoding="utf-8"), pkg)
+
+
+def _imports_in_source(source: str, pkg: str):
+    for node in ast.walk(ast.parse(source)):
         if isinstance(node, ast.Import):
             for a in node.names:
                 yield a.name

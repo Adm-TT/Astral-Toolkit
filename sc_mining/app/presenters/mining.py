@@ -1,8 +1,31 @@
 """采矿结果的呈现（运行结构 RT-B1）：MiningResult → 窗口 JSON（to_view）、悬浮窗文字和结构化内容（to_hud）。只排版，不算数、不取数据"""
 
-import copy
+from collections.abc import Mapping
 
-from ...mining.analysis import MiningResult
+from ...mining.analysis import MiningResult, PlanFacts, Rank
+
+RANK_ZH = {Rank.HIGH: "高品质", Rank.MID: "中等品质", Rank.LOW: "低品质"}
+
+
+def _thaw(value):
+    """结果里的只读结构变回 JSON 用的 dict / list，每次新建"""
+    if isinstance(value, Mapping):
+        return {k: _thaw(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_thaw(v) for v in value]
+    return value
+
+
+def _tier_text(tier):
+    """第几档：tier = (档名, 第几档, 共几档)"""
+    if not tier:
+        return ""
+    name, pos, total = tier
+    if name == "完美":
+        return "完美"
+    return f"{name} 档" + (
+        "（最低）" if pos == 1 else "（最高）" if pos == total else ""
+    )
 
 
 def scu_text(v):
@@ -19,25 +42,43 @@ def lot_rows(lots, amounts):
         text = "无精炼产出，仅占用矿袋" if row["inert"] else ""
         if v is not None:
             text = scu_text(v)
-        rows.append({**row, "refined_text": text})
+        rows.append(
+            {
+                **row,
+                "zh": "惰性物质" if row["inert"] else row["zh"],
+                "tier": _tier_text(row["tier"]),
+                "rank": RANK_ZH.get(row["rank"], ""),
+                "refined_text": text,
+            }
+        )
     return rows
 
 
-def lots_hud(lots):
+def lots_hud(r: MiningResult):
     """悬浮窗一行：「惰性 31%｜钨 662 那份 3.07 SCU」（同一种矿有高低两种品质时写高品质那份）；没什么可说返回空"""
     parts = []
-    inert = sum(r["pct"] for r in lots if r["inert"])
-    if inert >= 0.5:
-        parts.append(f"惰性 {inert:.0f}%")
-    for r in lots:
-        if r["rank"] == "高品质":
-            low = [x["q"] for x in lots if x["en"] == r["en"] and x["rank"] == "低品质"]
-            parts.append(
-                f"{r['zh']} 品质 {r['q']}：{r['scu']:.2f} SCU"
-                if r["scu"] is not None
-                else f"{r['zh']} 品质 {r['q']}/{low[0] if low else '?'}"
-            )
+    if r.inert_pct is not None:
+        parts.append(f"惰性 {r.inert_pct:.0f}%")
+    for h in r.high_lots:
+        parts.append(
+            f"{h.zh} 品质 {h.q}：{h.scu:.2f} SCU"
+            if h.scu is not None
+            else f"{h.zh} 品质 {h.q}/{'?' if h.low_q is None else h.low_q}"
+        )
     return "｜".join(parts)
+
+
+def plan_view(p: PlanFacts) -> dict:
+    """窗口里一条破碎方案"""
+    return {
+        "heads": p.heads,
+        "short": p.short,
+        "summary": p.summary,
+        "ratio": p.ratio,
+        "breakable": p.breakable,
+        "comfortable": p.comfortable,
+        "throttle": p.throttle,
+    }
 
 
 def _refine_view(o):
@@ -88,21 +129,10 @@ def to_view(r: MiningResult) -> dict:
         "minerals": [{"name": zh, "en": en, "scu": v} for zh, en, v in r.minerals],
         "refine": refine,
         "sell": [{"name": zh, "where": where or "无收购"} for zh, where in r.sell],
-        "craft": list(r.craft),
-        "craft_mats": copy.deepcopy(list(r.craft_mats)),
-        "goal": copy.deepcopy(list(r.goals)),
-        "plans": [
-            {
-                "heads": p.heads,
-                "short": p.short,
-                "summary": p.summary,
-                "ratio": p.ratio,
-                "breakable": p.breakable,
-                "comfortable": p.comfortable,
-                "throttle": p.throttle,
-            }
-            for p in r.plans
-        ],
+        "craft": _thaw(r.craft),
+        "craft_mats": _thaw(r.craft_mats),
+        "goal": _thaw(r.goals),
+        "plans": [plan_view(p) for p in r.plans],
         "total_scu": r.total_scu,
         "lots": lots,
         "lots_plan": f"{r.refine[0].method_zh}，{r.refine[0].station_zh}"
@@ -119,34 +149,24 @@ def to_view(r: MiningResult) -> dict:
     }
 
 
-def _comp(lots):
-    """矿物组成：同一种矿合在一起，下面列各品质（高品质那份标蓝）；占比照游戏里的两位小数写"""
-    groups = {}
-    for row in lots:
-        key = "惰性物质" if row["inert"] else row["zh"]
-        g = groups.setdefault(
-            key, {"name": key, "inert": row["inert"], "pct_n": 0.0, "subs": []}
-        )
-        g["pct_n"] += row["pct"] or 0
-        if not row["inert"]:  # 品质没认出来写「未知」，单独一份，不混进别的品质
-            g["subs"].append(
+def _comp(groups):
+    """矿物组成：同一种矿一组，下面列各品质（高品质那份标蓝）；占比照游戏里的两位小数写（1.6.70 用户定）"""
+    return [
+        {
+            "name": "惰性物质" if g.inert else g.zh,
+            "inert": g.inert,
+            "subs": [
                 {
-                    "q": "未知" if row["q"] is None else str(row["q"]),
-                    "pct": f"{row['pct'] or 0:.2f}%",
-                    "hi": row["rank"] == "高品质",
-                    "n": row["pct"] or 0,
+                    "q": "未知" if s.q is None else str(s.q),  # 没认出来的单独一份
+                    "pct": f"{s.pct:.2f}%",
+                    "hi": s.high,
                 }
-            )
-    for g in groups.values():
-        g["subs"].sort(key=lambda x: -int(x["q"]) if x["q"].isdigit() else 1)
-        g["pct"] = (
-            f"{g.pop('pct_n'):.2f}%"  # 1.6.70（用户）：游戏里读到多少写多少，不四舍五入
-        )
-        for x in g["subs"]:
-            x.pop("n", None)
-    return sorted(
-        groups.values(), key=lambda g: (g["inert"], -float(g["pct"][:-1] or 0))
-    )
+                for s in g.subs
+            ],
+            "pct": f"{g.pct:.2f}%",
+        }
+        for g in groups
+    ]
 
 
 def to_hud(r: MiningResult):
@@ -163,7 +183,7 @@ def to_hud(r: MiningResult):
             ["抗性", f"{r.resistance:g}", "%"],
             ["不稳定性", f"{r.instability:g}", ""],
         ],
-        "comp": _comp(r.lots),
+        "comp": _comp(r.composition),
         "advice": None,
         "gain": [],
         "minor": [],
@@ -184,7 +204,7 @@ def to_hud(r: MiningResult):
         ]
         rich["minor"].append(f"{o.method_zh} · {o.station_zh}{bonus}")
         rich["foot"] = "精炼结果为估算"
-    line = lots_hud(r.lots)
+    line = lots_hud(r)
     if line:
         hud.append(line)
     hud += r.goal_lines

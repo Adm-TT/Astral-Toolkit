@@ -20,9 +20,16 @@ def method_yield(method: str | None) -> float:
     return (pct or 100) / 100
 
 
-def refined_scu(bag: dict, station: str, method: str | None = None) -> dict:
-    """精炼后每种矿得到多少 SCU"""
-    _, bonus = REFINERIES[station]
+def _price(mineral, prices):
+    """prices 是一份快照 {矿: (价, 城市)}，没有的矿算不收；None 读当前全局价"""
+    return best_price(mineral) if prices is None else prices.get(mineral, (0, None))
+
+
+def refined_scu(
+    bag: dict, station: str, method: str | None = None, refineries=None
+) -> dict:
+    """精炼后每种矿得到多少 SCU。refineries：一份站点快照，None 读当前全局表"""
+    _, bonus = (REFINERIES if refineries is None else refineries)[station]
     y = method_yield(method)
     return {
         m: scu * y * (1 + bonus.get(m, 0) / 100) for m, scu in bag.items() if m != INERT
@@ -46,27 +53,40 @@ def refine_hours(bag: dict, method: str) -> float:
     )
 
 
-def station_value(bag: dict, station: str, method: str | None = None) -> float:
+def station_value(
+    bag: dict,
+    station: str,
+    method: str | None = None,
+    prices=None,
+    refineries=None,
+) -> float:
     """精炼后卖出总价 − 精炼费"""
     gross = sum(
-        scu * best_price(m)[0] for m, scu in refined_scu(bag, station, method).items()
+        scu * _price(m, prices)[0]
+        for m, scu in refined_scu(bag, station, method, refineries).items()
     )
     return gross - refine_fee(bag, method)
 
 
 def best_stations(
-    bag: dict, system: str | None = None, top: int = 3, method: str | None = None
+    bag: dict,
+    system: str | None = None,
+    top: int = 3,
+    method: str | None = None,
+    prices=None,
+    refineries=None,
 ):
     """返回 [(站点, 星系, 精炼后估值, 加成明细)]，system 为 None 时全星系比较"""
     rows = []
-    for name, (sys_, bonus) in REFINERIES.items():
+    table = REFINERIES if refineries is None else refineries
+    for name, (sys_, bonus) in table.items():
         if system and sys_ != system:
             continue
         rows.append(
             (
                 name,
                 sys_,
-                station_value(bag, name, method),
+                station_value(bag, name, method, prices, refineries),
                 {m: bonus.get(m, 0) for m in bag if m != INERT},
             )
         )
@@ -74,17 +94,20 @@ def best_stations(
     return rows[:top]
 
 
-def refined_plan(bag: dict):
-    """按默认两种精炼方式，各自给出最佳精炼站：[(方式, 站点, 净值, 精炼后SCU, 精炼费, 用时小时)]"""
+def refined_plan(bag: dict, prices=None, refineries=None):
+    """按默认两种精炼方式，各自给出最佳精炼站：[(方式, 站点, 净值, 精炼后SCU, 精炼费, 用时小时)]。
+    prices / refineries：一份快照，None 读当前全局表"""
     out = []
     for m in DEFAULT_METHODS:
-        name, _, value, _ = best_stations(bag, top=1, method=m)[0]
+        name, _, value, _ = best_stations(
+            bag, top=1, method=m, prices=prices, refineries=refineries
+        )[0]
         out.append(
             (
                 m,
                 name,
                 value,
-                sum(refined_scu(bag, name, m).values()),
+                sum(refined_scu(bag, name, m, refineries).values()),
                 refine_fee(bag, m),
                 refine_hours(bag, m),
             )

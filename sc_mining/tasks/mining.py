@@ -12,16 +12,20 @@ import sys  # noqa: F401
 import threading  # noqa: F401
 import time
 from itertools import combinations
+from types import MappingProxyType
 
 # ---------------------------------------------------------------- 依赖（2026-10-30 重构阶段 3：不再经 services 转发）
 from ..app.engines.manager import EngineManager
 from ..app.hud_state import _hud, _off
+from .. import gamedata
 from ..app.presenters import mining as _present
 from ..mining import analysis as _analysis
 from . import goals as _t_goals
 
-_pos = EngineManager.get_instance().pos
-_live = EngineManager.get_instance().live
+
+def _engines():
+    """后台引擎用时才取：导入本模块不创建引擎（架构稿 §4.3 规则 8）"""
+    return EngineManager.get_instance()
 
 
 def settings_key(k, default=None):
@@ -75,7 +79,7 @@ def _marker_tick(target, data, state, shown, ref=None):
     from ..navigation import navigate as n
     from ..system.showloc import game_foreground
 
-    t, g, info = _pos.current
+    t, g, info = _engines().pos.current
     h = state.get("here")
     cam = (info or {}).get("camdir")
     try:
@@ -90,7 +94,7 @@ def _marker_tick(target, data, state, shown, ref=None):
         and not h.get("arrived")
         and not h.get("far")
         and fg
-        and not _live.running()
+        and not _engines().live.running()
         and _marker_on()
         and not _off("nav_marker")
     )
@@ -282,10 +286,6 @@ def _game_front():
     return showloc.game_front()
 
 
-# RT-B1 过渡，RT-B2 删：scan_view 拆开后留的同名转发（tests/test_tools.py 在用）
-scu_text = _present.scu_text
-
-
 def _quality_hints(composition):
     from ..crafting.crafting import (
         quality_hints,
@@ -300,34 +300,81 @@ def _mat_summary(*args):
     return mat_summary(*args)
 
 
-def collect_inputs():
-    """scan_view 这一次要用的外部东西（配装、矿价、精炼站、制造提示、目标、时间）。RT-B2 改成注入"""
+def _craft_and_goal_facts(scan, mineral_zh):
+    """(制造提示, 可制造矿, 目标缺口, 目标查全了没)。查询中途出错就停在那里，已查到的留着（只丢提示，不影响扫描结果）"""
+    hints, mats, targets, complete = (), (), [], False
+    try:
+        hints = tuple(_quality_hints(scan.composition))
+        best = _analysis.best_quality(scan.composition)
+        mats = tuple(
+            (nm, _mat_summary(nm, qq))
+            for nm, qq in best.items()
+            if _mat_summary(nm)["count"]
+        )
+        for nm in best:
+            g = _goal_for(nm, mineral_zh(nm))
+            if g:
+                targets.append((nm, _analysis.freeze(g)))  # 不和目标缓存共用对象
+        complete = True
+    except Exception:
+        pass
+    return hints, mats, tuple(targets), complete
+
+
+def _one_round_facts(scan, mineral_zh):
+    """这块石头的制造和目标事实，在一个数据快照里查（架构稿 §6.2）。石头里没有算钱的矿就不查"""
+    if not _analysis.minerals_of(scan):
+        return (), (), (), False
+    try:  # 先等库就绪再钉版本：不然这一轮钉在旧那一代。建库失败只影响制造数据，和以前查询时出错一样不抛出去
+        gamedata.ensure()
+    except Exception:
+        pass
+    try:
+        with gamedata.snapshot():
+            return _craft_and_goal_facts(scan, mineral_zh)
+    except (
+        Exception
+    ):  # 还没建库：制造数据当成没有，目标照查（里面的查询出错不会到这里）
+        return _craft_and_goal_facts(scan, mineral_zh)
+
+
+def collect_inputs(scan):
+    """这块石头一轮计算要的外部东西，一次取好（配装、矿价、精炼站、制造提示、目标、时间）"""
     from ..core.i18n import mineral_zh, method_zh, station_zh
-    from ..mining.data import REFINERIES, best_price
-    from ..mining.laser import gadget_label, recommend
+    from ..mining import data
+    from ..mining.laser import gadget_label, loadout_facts, recommend
     from ..mining.refinery import refined_plan, refined_scu
 
+    hints, mats, targets, complete = _one_round_facts(scan, mineral_zh)
+    cities = data.CITY_PRICES  # 只读一次：更新数据会整表替换，中途换了不能新旧混一份
     return _analysis.MiningInputs(
         at=time.strftime("%H:%M:%S"),
         mineral_zh=mineral_zh,
         method_zh=method_zh,
         station_zh=station_zh,
         gadget_label=gadget_label,
-        best_price=best_price,
-        station_bonus=lambda station: REFINERIES.get(station, ("", {}))[1],
+        goal_text=_goal_text,
+        prices=MappingProxyType({m: data.best_price(m, cities) for m in cities}),
+        refineries=MappingProxyType(
+            {
+                k: (sys_, MappingProxyType(dict(bonus)))
+                for k, (sys_, bonus) in data.REFINERIES.items()
+            }
+        ),
+        loadout=loadout_facts(),
         refined_plan=refined_plan,
         refined_scu=refined_scu,
         recommend=recommend,
-        quality_hints=_quality_hints,
-        mat_summary=_mat_summary,
-        goal_for=_goal_for,
-        goal_text=_goal_text,
+        craft_hints=hints,
+        craft_mats=mats,
+        goal_targets=targets,
+        goals_complete=complete,
     )
 
 
 def scan_view(scan, bag, cut=False):
     """一块石头的读屏结果（窗口用）。cut=True：面板被屏幕右边挡住，品质和总 SCU 读不到，只有破碎方案和成分占比"""
-    result = _analysis.analyze(scan, bag, collect_inputs(), cut=cut)
+    result = _analysis.analyze(scan, bag, collect_inputs(scan), cut=cut)
     out = _present.to_view(result)
     out["hud"], out["hud_rich"] = _present.to_hud(result)
     return out
@@ -336,7 +383,7 @@ def scan_view(scan, bag, cut=False):
 def live_start():
     from ..core import settings
 
-    _live.start()
+    _engines().live.start()
     settings.update(live_on=True)  # 记住：重启、升级后自动接着扫
     return {"running": True}
 
@@ -344,7 +391,7 @@ def live_start():
 def live_stop():
     from ..core import settings
 
-    _live.stop()
+    _engines().live.stop()
     settings.update(live_on=False)
     return {"running": False}
 
@@ -536,14 +583,16 @@ def set_mining_gear(ship="mole", loadout=None, reset=False):
     elif loadout is not None:
         saved[ship] = clean_loadout(ship, loadout)
     settings.update(mining_ship=ship, mining_loadouts=saved)
-    _live.gear_rev += 1  # 正在显示的石头按新配置重算（采矿助手最多 5 秒后重新发布）
+    _engines().live.gear_rev += (
+        1  # 正在显示的石头按新配置重算（采矿助手最多 5 秒后重新发布）
+    )
     return _gear()
 
 
 def manual_scan(mass=0, resistance=0, instability=0):
     """手动输入扫描数据：只算破碎方案"""
     import math
-    from ..mining.laser import recommend
+    from ..mining.laser import gadget_label, recommend
 
     mass, resistance, instability = float(mass), float(resistance), float(instability)
     # 质量为 0 时比值是 inf，json 写成 Infinity，前端解析失败只会说「连不上」（2026-10-31 审查）
@@ -553,18 +602,9 @@ def manual_scan(mass=0, resistance=0, instability=0):
         raise ValueError("抗性要填 0 到 100")
     if not (math.isfinite(instability) and instability >= 0):
         raise ValueError("不稳定性要填 0 或更大的数")
-    plans = recommend(mass, resistance, instability)
     return [
-        {
-            "heads": p.names,
-            "short": p.short(),
-            "summary": p.summary(),
-            "ratio": p.ratio,
-            "breakable": p.breakable,
-            "comfortable": p.comfortable,
-            "throttle": p.throttle if p.breakable else None,
-        }
-        for p in plans
+        _present.plan_view(_analysis.plan_facts(p, gadget_label))
+        for p in recommend(mass, resistance, instability)
     ]
 
 
@@ -584,7 +624,6 @@ __all__ = [
     "_nav_view",
     # 读屏与扫描
     "_game_front",
-    "scu_text",
     "scan_view",
     "live_start",
     "live_stop",
