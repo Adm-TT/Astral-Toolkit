@@ -488,7 +488,11 @@ class SessionLoop:
             run.error = info.error
         run.paused_at = None
         run.paused_since = None
+        run.join_timed_out = False  # 新的一次停止：之前的 join 超时记录不算数（3-5）
         self._flag_for(info)
+        if info.reason in ("idle", "error"):
+            # 自动关闭 / 出错用尽没人 join：自己起看门狗，否则线程卡住后 stop_timeout 永远不置（3-1）
+            self._ensure_watchdog_locked(run)
 
     def _flag_for(self, info: StopInfo) -> None:
         if info.reason in ("user", "idle", "error"):
@@ -530,12 +534,14 @@ class SessionLoop:
                 return True
             if not run.thread.is_alive():
                 return True  # 等在锁外这段时间里退出了（2-17）
-            run.join_timed_out = True
-            if run.stop_info is not None or run.state is RunState.STOPPING:
+            stopped = run.stop_info is not None or run.state is RunState.STOPPING
+            if stopped:
+                # 只有「已经按过停止」的会话才算 join 超时；还在跑的不置位、不起看门狗（3-5）
+                run.join_timed_out = True
                 self._confirm_stop_locked(run, self._info_of(run), deferred)
-            run.since = self._clock()
-            run.deadline = run.since + self._join_timeout
-            self._ensure_watchdog_locked(run)
+                run.since = self._clock()
+                run.deadline = run.since + self._join_timeout
+                self._ensure_watchdog_locked(run)
         self._run_ops(deferred)
         return False
 
@@ -599,6 +605,8 @@ class SessionLoop:
                 return
             if not run.thread.is_alive():
                 return  # 已经退了：finally 收尾，别抢
+            if run.stop_info is None and run.state is not RunState.STOPPING:
+                return  # 没被按过停止：不算停止超时（3-5）
             run.stop_timeout = True  # 线程没退就不进 FAILED，只标出来
             deferred.append(
                 ("record", "MINING", "采矿助手停止超时：旧线程仍未退出", "")
@@ -702,19 +710,15 @@ class SessionLoop:
             self._apply_locked(ops, deferred)
         self._run_ops(deferred)
 
-    def _ops_safe(self, fn: Callable[..., list[Op]], *args: Any) -> list[Op]:
-        """调 Worker 的纯函数钩子；抛异常记 HOOK_ERROR、当空列表（不破坏状态机）"""
+    def _ops_safe(self, fn: Callable[..., Any], *args: Any) -> list[Op]:
+        """调 Worker 的纯函数钩子：抛异常、返回 None / 不可迭代 / 非法 op 都记 HOOK_ERROR 当空列表（3-3）"""
+        name = getattr(fn, "__name__", "hook")
         try:
-            ops = fn(*args)
+            ops = list(fn(*args))  # 生成器也收下；None / 不可迭代在这里抛 TypeError
         except Exception as exc:  # noqa: BLE001 —— 钩子异常不能破坏状态机
-            self._hook_error(getattr(fn, "__name__", "hook"), exc)
+            self._hook_error(name, exc)
             return []
-        try:
-            validate_ops(ops)
-        except ValueError as exc:
-            self._hook_error(getattr(fn, "__name__", "hook"), exc)
-            return []
-        return list(ops)
+        return self._ops_checked(name, ops)
 
     def _ops_checked(self, name: str, ops: Any) -> list[Op]:
         """钩子返回值统一先校验（锁外）：不合格记 HOOK_ERROR、当空列表（2-4）"""
@@ -992,19 +996,29 @@ class SessionLoop:
                 self._confirm_stop_locked(cur, info, deferred)
                 cur.stop_timeout = False  # 线程这会儿已经退了
             else:
-                pending = self._pending.pop(session.id, None)
+                pending = self._pending.get(
+                    session.id
+                )  # 先留着：线程真退出前一步才移出（3-4）
                 if pending is not None:
                     # 已被新会话取代：只执行锁后类 log，不碰 HUD / 事件 / 状态 / 共享结果
                     for op in ops:
                         if op and op[0] == "log":
                             deferred.append(op)
                     self._confirm_stop_locked(pending, info, deferred)
-        # 锁外把收尾输出发完，最后才写最终状态：这期间线程还活着，start() 会按「仍在停止」处理（2-2）
+        # 锁外把收尾输出发完，最后才写最终状态 / 移出 pending：这期间线程还活着，
+        # 任何时刻都在 _current 或 _pending 里（3-4），start() 会按「仍在停止」处理（2-2）
         self._run_ops(deferred)
         with self._lock:
             cur = self._current
-            if cur is None or cur.session is not session:
-                return  # 已被新会话取代，状态由取代时定（它在 _pending 里）
-            cur.state = RunState.FAILED if info.reason == "error" else RunState.STOPPED
-            if info.reason == "error" and info.error:
-                cur.error = info.error
+            if cur is not None and cur.session is session:
+                cur.stop_timeout = False
+                cur.state = (
+                    RunState.FAILED if info.reason == "error" else RunState.STOPPED
+                )
+                if info.reason == "error" and info.error:
+                    cur.error = info.error
+            else:
+                # 收尾期间被取代（或本来就在 pending）：这一步线程才算真退出
+                pending = self._pending.pop(session.id, None)
+                if pending is not None:
+                    pending.stop_timeout = False

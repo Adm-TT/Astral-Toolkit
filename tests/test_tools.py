@@ -5173,3 +5173,31 @@ def test_rotation_phase_calibration(tmp_path, monkeypatch):
         math.dist(n.to_local(b, g2, when), p) < 0.01
     )  # 校准后推算的位置和游戏给的一致
     n._calib.update(stamp=None, data={}, pending={})
+
+
+def test_live_key_hint_says_stopping_when_refused(monkeypatch):
+    """3-2：F5 被拒（正在停止）时悬浮窗说「正在停止，请稍候」，不说「已开启」"""
+    from types import SimpleNamespace
+
+    from astral_toolkit.app.engines import hover as hover_mod
+
+    notes = []
+    hud = SimpleNamespace(_note_hud=lambda section, text: notes.append(text))
+    tasks = SimpleNamespace(
+        settings_key=lambda *a: "F5",
+        live_start=lambda: {"running": False, "error": "正在停止，请稍候"},
+        live_stop=lambda: {"running": False},
+    )
+    monkeypatch.setattr(hover_mod, "_H", lambda: hud)
+    monkeypatch.setattr(hover_mod, "_T", lambda name: tasks)
+    monkeypatch.setattr(
+        hover_mod,
+        "_E",
+        lambda: SimpleNamespace(live=SimpleNamespace(running=lambda: False)),
+    )
+    h = object.__new__(hover_mod._Hover)
+    h._toggle_live()
+    assert notes == ["正在停止，请稍候"], "被拒时不能说「已开启」"
+    tasks.live_start = lambda: {"running": True}  # 允许开的时候照旧
+    h._toggle_live()
+    assert notes[-1] == "采矿助手已开启｜按 F5 关闭"

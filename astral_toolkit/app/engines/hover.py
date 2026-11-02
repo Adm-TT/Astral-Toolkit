@@ -150,15 +150,19 @@ class _Hover:
                 time.sleep(0.03)
 
     def _toggle_live(self):
-        """采矿助手开关键：开着就关，关着就开；悬浮窗上提示一下"""
+        """采矿助手开关键：开着就关，关着就开；悬浮窗上按实际结果显示（正在停止时说清楚）"""
         try:
             k = _T("navigation").settings_key("live_key", "F5")
             if _E().live.running():
                 _T("mining").live_stop()
                 _H()._note_hud("采矿助手", f"采矿助手已关闭｜按 {k} 开启")
             else:
-                _T("mining").live_start()
-                _H()._note_hud("采矿助手", f"采矿助手已开启｜按 {k} 关闭")
+                res = _T("mining").live_start() or {}
+                if res.get("error"):
+                    # 正在停止 / 正在退出：别说「已开启」（3-2）
+                    _H()._note_hud("采矿助手", res["error"])
+                else:
+                    _H()._note_hud("采矿助手", f"采矿助手已开启｜按 {k} 关闭")
         except Exception as e:
             bus.publish("log", {"task": "live", "line": f"采矿助手开关失败：{e}"})
 
