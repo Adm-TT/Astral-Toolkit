@@ -133,7 +133,8 @@ BUILD_LOCK = __import__(
 ).RLock()  # build / update / localization.rebuild 不同时写 crafting.json（2026-10-28）
 
 
-def build(bp_path, merged_path, names_path, out_path):
+def make_data(bp_path, merged_path, names_path):
+    """读 scmdb 的蓝图 / merged-*.json + 汉化名，算出 crafting.json 的内容（只算不写，不拿锁）"""
     bp = json.loads(Path(bp_path).read_text(encoding="utf-8"))
     merged = json.loads(Path(merged_path).read_text(encoding="utf-8"))
     ini, items = _load_names(names_path)
@@ -258,11 +259,22 @@ def build(bp_path, merged_path, names_path, out_path):
         blueprints=out,
         names=_names_tag(names_path),
     )
-    _write(out_path, data)
-    print(
+    return data
+
+
+def _summary(data):
+    out = data["blueprints"]
+    return (
         f"{len(out)} 份蓝图；{sum(1 for x in out if x['z'])} 份有中文名；"
         f"{sum(1 for x in out if x['src'])} 份有任务来源"
     )
+
+
+def build(bp_path, merged_path, names_path, out_path):
+    """算好 crafting.json 再写（写在更新边界里）"""
+    data = make_data(bp_path, merged_path, names_path)
+    _write(out_path, data)
+    print(_summary(data))
 
 
 def _write(out_path, data):
@@ -337,20 +349,27 @@ def update():
 
 
 def _rebuild(bp, merged, names, out, done):
+    """两份先在写锁外算好（解析几十 MB 的 merged 要几秒，别让别的数据更新干等），再进一层 updating() 写两份，
+    库只重建一次。维科洛那份算 / 写失败：crafting.json 照样写、库照样重建，出了边界再把错抛出去"""
     from .. import gamedata
-    from .wikelo import build as build_wikelo
+    from . import wikelo
 
-    err = None
+    data = make_data(bp, merged, names)
+    err, wk = None, None
+    try:
+        wk = wikelo.make_data(merged, names)
+    except Exception as e:
+        err = e
     with gamedata.updating():
-        build(bp, merged, names, out)
-        try:
-            n = build_wikelo(merged, names)
-        except (
-            Exception
-        ) as e:  # crafting.json 已经写好：让边界正常退出、库照样重建，出来再把错抛出去
-            err = e
-        else:
-            print(f"维科洛兑换：{n} 个")
+        _write(out, data)
+        print(_summary(data))
+        if wk is not None:
+            try:
+                wikelo._write(wikelo.OUT, wk)
+            except Exception as e:
+                err = e
+            else:
+                print(f"维科洛兑换：{len(wk['contracts'])} 个")
     if err is not None:
         raise err
     print(done)

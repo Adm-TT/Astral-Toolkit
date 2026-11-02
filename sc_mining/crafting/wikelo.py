@@ -72,8 +72,8 @@ def note_for(name):
     return None
 
 
-def build(merged_path, names_path, out=OUT):
-    """merged-*.json + 汉化名 → wikelo.json"""
+def make_data(merged_path, names_path):
+    """merged-*.json + 汉化名 → wikelo.json 的内容（只算不写，不拿锁）"""
     from .build_crafting import _load_names, _item_names
 
     merged = json.loads(Path(merged_path).read_text(encoding="utf-8"))
@@ -149,8 +149,14 @@ def build(merged_path, names_path, out=OUT):
             }
         )
     out_rows.sort(key=lambda r: (r["type"], r["te"]))
-    _write(out, {"version": merged.get("version"), "contracts": out_rows})
-    return len(out_rows)
+    return {"version": merged.get("version"), "contracts": out_rows}
+
+
+def build(merged_path, names_path, out=OUT):
+    """merged-*.json + 汉化名 → wikelo.json（算好再在更新边界里写）；返回兑换个数"""
+    data = make_data(merged_path, names_path)
+    _write(out, data)
+    return len(data["contracts"])
 
 
 def _write(out, data):

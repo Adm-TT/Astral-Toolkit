@@ -327,8 +327,19 @@ def _keys():
     return c.keys, c.index, c.total
 
 
+def _owner(bp):
+    """bp 所在的那份蓝图表：先查已缓存的那份（不开快照，bp_key / variant_note 一页要调上百次），
+    不在里面再按当前版本取（开快照）"""
+    from .. import gamedata
+
+    c = gamedata.crafting.cached()
+    if c is not None and id(bp) in c.keys:
+        return c
+    return _catalog()
+
+
 def bp_key(bp) -> str:
-    return _keys()[0].get(id(bp), bp["n"])
+    return _owner(bp).keys.get(id(bp), bp["n"])
 
 
 def by_key(key):
@@ -339,10 +350,11 @@ def by_key(key):
 
 def variant_note(bp) -> str:
     """同名多份配方时的区分说明，比如「配方 2/2 · 42 分钟」"""
-    _, _, total = _keys()
+    c = _owner(bp)
+    total = c.total
     if total[bp["n"]] < 2:
         return ""
-    k = bp_key(bp).rsplit("#", 1)[-1]
+    k = c.keys.get(id(bp), bp["n"]).rsplit("#", 1)[-1]
     return f"配方 {k}/{total[bp['n']]} · {bp['sec'] // 60} 分钟"
 
 

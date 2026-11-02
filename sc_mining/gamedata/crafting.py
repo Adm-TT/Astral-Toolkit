@@ -92,6 +92,13 @@ def catalog(snap=None) -> Blueprints:
             return _cur[1]
 
 
+def cached() -> Blueprints | None:
+    """现在缓存着的那份（没有就 None），不开快照、不读清单：给 bp_key 这种热路径先查。
+    缓存持有那批对象的引用，地址不会被复用，所以 id(bp) 在它的 keys 里就一定是那份里的对象"""
+    cur = _cur
+    return cur[1] if cur is not None else None
+
+
 def _clear() -> None:
     """只给测试用：丢掉缓存的那份"""
     global _cur

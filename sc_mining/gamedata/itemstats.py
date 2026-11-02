@@ -43,15 +43,15 @@ _ships: VersionCache[dict] = VersionCache()
 
 
 def _load_ships(s) -> dict:
-    """部件名折叠键（crafting.acquire._ship_fold）→ 船名列表；折叠后撞名的后出现的赢（同原来的 dict 推导式）"""
-    from ..crafting.acquire import _ship_fold
+    """部件名折叠键（trade.names._fold_en）→ 船名列表；折叠后撞名的后出现的赢（同原来的 dict 推导式）"""
+    from ..trade.names import _fold_en
 
     raw: dict[str, list[str]] = {}
     for name, ship in s.execute(
         "select item_name, ship from ship_stock_items order by rowid"
     ):
         raw.setdefault(name, []).append(ship)
-    return {_ship_fold(k): v for k, v in raw.items()}
+    return {_fold_en(k): v for k, v in raw.items()}
 
 
 def ships_with(key: str, snap=None) -> list[str]:

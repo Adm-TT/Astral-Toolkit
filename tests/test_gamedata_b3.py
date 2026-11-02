@@ -19,6 +19,9 @@ def _setup(monkeypatch, tmp_path, **override):
     monkeypatch.setattr(paths, "DATA", tmp_path)
     monkeypatch.setattr(_ready, "_state", {"done": None, "failed": None})
     monkeypatch.setattr(G, "_state", {"last_error": None, "warm_thread": None})
+    monkeypatch.setattr(
+        G.crafting, "_cur", None
+    )  # 蓝图缓存按 crafting.json 哈希做键、不看库目录，别沿用上个测试的
     _write_min_sources(tmp_path, **{**copy.deepcopy(_CRAFT_SOURCES), **override})
     return tmp_path
 
@@ -138,6 +141,30 @@ def test_keys_rule_unchanged(monkeypatch, tmp_path):
     assert crafting.variant_note(bps[1]) == "配方 2/2 · 0 分钟"
     assert crafting.variant_note(bps[2]) == ""
     assert crafting.bp_key({"n": "别的"}) == "别的"  # 不是这一版的对象：退回名字
+
+
+def test_bp_key_hot_path_opens_no_snapshot(monkeypatch, tmp_path):
+    """bp_key / variant_note 对已缓存那份里的对象直接查，不开快照（一页要调上百次）；不在里面的才去取当前版本"""
+    from sc_mining.crafting import crafting
+    from sc_mining.gamedata import _db
+
+    _setup(monkeypatch, tmp_path)
+    bps = crafting.blueprints()
+    real, opened = _db.snapshot, []
+
+    def counted(*a, **k):
+        opened.append(1)
+        return real(*a, **k)
+
+    monkeypatch.setattr(_db, "snapshot", counted)
+    for _ in range(600):
+        for b in bps:
+            crafting.bp_key(b)
+            crafting.variant_note(b)
+    assert opened == []
+    assert [crafting.bp_key(b) for b in bps][1] == "Main Powerplant#2"
+    assert crafting.variant_note(bps[1]) == "配方 2/2 · 0 分钟"
+    assert crafting.bp_key({"n": "别的"}) == "别的" and len(opened) == 1
 
 
 def test_data_empty_when_no_blueprints(monkeypatch, tmp_path):
@@ -722,17 +749,19 @@ def test_update_rebuilds_once_and_checks_outside_write_lock(monkeypatch, tmp_pat
     new_bp = copy.deepcopy(_CRAFT_SOURCES["crafting.json"])
     new_bp["blueprints"][2]["n"] = "Medpen Mk2"
     monkeypatch.setattr(build_crafting, "_update", fake_update)
-    monkeypatch.setattr(
-        build_crafting,
-        "build",
-        lambda bp, m, n, out: build_crafting._write(out, new_bp),
-    )
+    made = []
 
-    def fake_wikelo_build(merged, names):
-        wikelo._write(tmp_path / "wikelo.json", copy.deepcopy(_WIKELO))
-        return 2
+    def fake_make(bp, m, n):
+        made.append(("bp", _lock._depth))  # 算的时候不在写锁里
+        return new_bp
 
-    monkeypatch.setattr(wikelo, "build", fake_wikelo_build)
+    def fake_wikelo_make(m, n):
+        made.append(("wk", _lock._depth))
+        return copy.deepcopy(_WIKELO)
+
+    monkeypatch.setattr(build_crafting, "make_data", fake_make)
+    monkeypatch.setattr(wikelo, "make_data", fake_wikelo_make)
+    monkeypatch.setattr(wikelo, "OUT", tmp_path / "wikelo.json")
     log = []
     _spy_updating(monkeypatch, log)
     n = _count_rebuilds(monkeypatch)
@@ -742,9 +771,10 @@ def test_update_rebuilds_once_and_checks_outside_write_lock(monkeypatch, tmp_pat
     )
     build_crafting.update()
     assert seen == {"write_lock_depth": 0, "build_lock": True}
+    assert made == [("bp", 0), ("wk", 0)]
     assert [x for x, _ in log] == ["updating"] * 3 and not any(held for _, held in log)
     assert n[0] == 1 and G.last_error() is None
-    assert out == ["维科洛兑换：2 个", "已更新"]
+    assert out[0].startswith("3 份蓝图；") and out[1:] == ["维科洛兑换：2 个", "已更新"]
     assert crafting.by_key("Medpen Mk2") is not None and wikelo.load()[1]["id"] == "C0"
 
 
@@ -756,16 +786,12 @@ def test_rebuild_still_rebuilds_db_when_wikelo_fails(monkeypatch, tmp_path):
     crafting.blueprints()
     new_bp = copy.deepcopy(_CRAFT_SOURCES["crafting.json"])
     new_bp["blueprints"][2]["n"] = "Medpen Mk2"
-    monkeypatch.setattr(
-        build_crafting,
-        "build",
-        lambda bp, m, n, out: build_crafting._write(out, new_bp),
-    )
+    monkeypatch.setattr(build_crafting, "make_data", lambda bp, m, n: new_bp)
 
     def bad(merged, names):
         raise PermissionError("占用")
 
-    monkeypatch.setattr(wikelo, "build", bad)
+    monkeypatch.setattr(wikelo, "make_data", bad)
     out = []
     monkeypatch.setattr(
         "builtins.print", lambda *a, **k: out.append(" ".join(map(str, a)))
@@ -779,7 +805,7 @@ def test_rebuild_still_rebuilds_db_when_wikelo_fails(monkeypatch, tmp_path):
         pass
     else:
         raise AssertionError("维科洛的错应该抛出来")
-    assert n[0] == 1 and out == []
+    assert n[0] == 1 and len(out) == 1 and out[0].startswith("3 份蓝图；")
     assert crafting.by_key("Medpen Mk2") is not None
 
 

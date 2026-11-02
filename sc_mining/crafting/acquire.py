@@ -155,19 +155,13 @@ def resolve(name_en="", name_zh="", item_id=None):
     return None
 
 
-def _ship_fold(x):
-    """出厂配件按部件名对：小写、只留字母数字（游戏数据层建对照表也用它）"""
-    import re
-
-    return re.sub(r"[^a-z0-9]", "", (x or "").lower())
-
-
 def ships_with(name):
     """自带这个部件出厂的船（ship_items.json，由数据构建脚本从游戏数据生成，2026-10-27；读库）→ [船中文名]"""
     from .. import gamedata
+    from ..trade.names import _fold_en
 
     try:
-        return gamedata.itemstats.ships_with(_ship_fold(name))
+        return gamedata.itemstats.ships_with(_fold_en(name))
     except gamedata.GamedataError:
         return []
 
