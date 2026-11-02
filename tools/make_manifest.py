@@ -127,9 +127,13 @@ def main(argv):
         if side.exists():
             shutil.copy2(side, zip_path.parent / side.name)
         installer = zip_path.parent / installer.name
-    m = update_check.make_manifest(
-        zip_path, notes=rest, installer=installer, keep=keep, version=version
-    )
+    try:
+        m = update_check.make_manifest(
+            zip_path, notes=rest, installer=installer, keep=keep, version=version
+        )
+    except ValueError as e:
+        print(f"❌ {e}")
+        return 1
     update_check.parse(
         json.dumps(m), velopack=True
     )  # 生成的文件自己先过一遍检查：Velopack 安装版那一项

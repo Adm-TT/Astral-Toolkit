@@ -332,6 +332,42 @@ def test_manifest_version_only(monkeypatch, tmp_path):
             assert info is None and C.last_error() == ""  # 没有新版本，不是「连不上」
 
 
+def test_make_manifest_version_must_match_package(monkeypatch, tmp_path):
+    """同时给压缩包和 --version：一致放行，不一致报错，不悄悄用其中一个（审查 2026-11-03）"""
+    C, _ = _setup(monkeypatch, tmp_path, {})
+    z = _pkg(tmp_path / "Dubhe_9.0.0.zip", "9.0.0", {})
+    assert C.make_manifest(z, version="9.0.0")["version"] == "9.0.0"
+    try:
+        C.make_manifest(z, version="9.0.1")
+        raise AssertionError("版本不一致应报错")
+    except ValueError as e:
+        assert "不一致" in str(e)
+
+
+def test_newest_manifest_without_package_blocks_older_package(monkeypatch, tmp_path):
+    """AT 服务器上是只写版本号的新清单（9.0.0），GitHub 上还留着带旧压缩包的清单（5.0.0）：
+    源码版当作没有新版本、不报错、不下载，不能退回去提示 5.0.0；Velopack 版照常提示 9.0.0（审查 2026-11-03）"""
+    z = _pkg(tmp_path / "Dubhe_5.0.0.zip", "5.0.0", {})
+    pages = {
+        "https://dl.astral-trade.com/latest.json": json.dumps(
+            {"version": "9.0.0", "notes": ["新功能"], "kill_rev": 7, "disabled": []}
+        ).encode(),
+        "https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(
+            _manifest(z, version="5.0.0")
+        ).encode(),
+    }
+    C, calls = _setup(monkeypatch, tmp_path, pages)
+    monkeypatch.setattr(C.paths, "FROZEN", False)
+    monkeypatch.setattr(C.paths, "VELOPACK", False)
+    assert C.check(force=True) is None and C.last_error() == ""
+    assert calls and all(u.endswith("/latest.json") for u in calls), calls
+    C, _ = _setup(monkeypatch, tmp_path, pages)
+    monkeypatch.setattr(C.paths, "FROZEN", True)
+    monkeypatch.setattr(C.paths, "VELOPACK", True)
+    info = C.check(force=True)
+    assert info and info["version"] == "9.0.0" and info["source"] == "AT 服务器"
+
+
 def test_make_manifest_tool_version_only(monkeypatch, tmp_path):
     """tools/make_manifest.py --version：不给安装包也能生成；--out 指定生成位置"""
     import sys
@@ -348,6 +384,10 @@ def test_make_manifest_tool_version_only(monkeypatch, tmp_path):
     assert m["version"] == "9.0.0" and m["notes"] == ["新功能"]
     assert not {"file", "installer", "urls"} & set(m)
     assert T.main(["--version"]) == 1
+    z = _pkg(tmp_path / "Dubhe_9.0.0.zip", "9.0.0", {})
+    assert (
+        T.main([str(z), "--version", "9.0.1", "--fresh", "新功能"]) == 1
+    )  # 版本对不上：停
 
 
 def _old_install(d, version="1.6.72", settings=None, waypoints=None):

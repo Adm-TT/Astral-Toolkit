@@ -294,11 +294,12 @@ def fetch(timeout=TIMEOUT):
     顺便更新远程关功能的列表：取 kill_rev 最大（同样大取版本新）的那份清单里的 disabled"""
     from .upgrade import ver
 
-    errs, best, kill, nopkg = [], None, None, False
+    errs, best, kill, nopkg = [], None, None, (0, 0, 0)
     for where, raw in _fetch_all(manifest_urls(), timeout):
         if isinstance(raw, Exception):
             errs.append(f"{where}：{raw}")
             continue
+        v = (0, 0, 0)
         try:  # 是像样的版本说明才算关功能列表；错误页面、格式不对就不用（审查 2026-10-27）
             d = json.loads(raw)
             v = ver(str(d.get("version") or "")) if isinstance(d, dict) else (0, 0, 0)
@@ -314,15 +315,21 @@ def fetch(timeout=TIMEOUT):
             if best is None or ver(info["version"]) > ver(best["version"]):
                 best = info
         except NoPackage:
-            nopkg = True
+            nopkg = max(nopkg, v)
         except Exception as e:
             errs.append(f"{where}：{e}")
     if kill is not None:
         _set_kill(kill[1], kill[0])
         _kill["at"] = time.time()
-    if best:
+    # 最新的那份清单对这种版本没有包（比如源码版、而新清单只写版本号）：就是没有新版本，
+    # 不能退回去用别处更旧清单里的旧包（审查 2026-11-03）
+    if best and ver(best["version"]) >= nopkg:
         return best, best["source"]
-    if nopkg:  # 读到了，只是没有这种版本的包：没有新版本，不是连不上
+    if best or nopkg != (
+        0,
+        0,
+        0,
+    ):  # 读到了，只是没有这种版本的包：没有新版本，不是连不上
         return None, ""
     return None, "；".join(errs) or "未设置更新地址"
 
@@ -478,6 +485,11 @@ def make_manifest(zip_path, notes=(), date="", installer=None, keep=None, versio
     keep：网上现在的 latest.json——远程关功能的 kill_rev 和 disabled 原样带上（审查 2026-10-27：发新版不能把旧版的禁用清掉）"""
     from .upgrade import check as check_pkg, ver
 
+    want = None
+    if version:
+        want = ver(str(version))
+        if want == (0, 0, 0):
+            raise ValueError("版本号格式错误，应为 x.y.z")
     if zip_path:
         p = Path(zip_path)
         _, v = check_pkg(p)
@@ -486,12 +498,16 @@ def make_manifest(zip_path, notes=(), date="", installer=None, keep=None, versio
         if not mt:
             raise ValueError("安装程序文件名应为 AT_Setup_x.y.z.exe")
         v = ver(mt.group(1))
-    elif version:
-        v = ver(str(version))
-        if v == (0, 0, 0):
-            raise ValueError("版本号格式错误，应为 x.y.z")
+    elif want:
+        v = want
     else:
         raise ValueError("压缩包、安装程序、版本号至少要给一个")
+    if (
+        want and want != v
+    ):  # 同时给了压缩包 / 安装程序和 --version：版本对不上就停，不悄悄用其中一个（审查 2026-11-03）
+        raise ValueError(
+            f"--version {'.'.join(map(str, want))} 和安装包的版本 {'.'.join(map(str, v))} 不一致"
+        )
     ver_s = ".".join(map(str, v))
     tag = f"v{ver_s}"
     m = {
