@@ -723,11 +723,13 @@ class SessionLoop:
     def _ops_checked(self, name: str, ops: Any) -> list[Op]:
         """钩子返回值统一先校验（锁外）：不合格记 HOOK_ERROR、当空列表（2-4）"""
         try:
+            # 先落成列表：生成器只读一遍，否则校验读空后 op 被吞
+            ops = list(ops)
             validate_ops(ops)
         except (TypeError, ValueError) as exc:
             self._hook_error(name, exc)
             return []
-        return list(ops)
+        return ops
 
     def _hook(self, name: str, fn: Callable[..., Any], *args: Any, default: Any) -> Any:
         try:
