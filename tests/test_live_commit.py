@@ -370,22 +370,29 @@ def test_live_false_after_published_scan(monkeypatch, tmp_path):
         live.stop()
         msgs = got + _drain(q)
         kinds = [m["kind"] for m in msgs if m["kind"] in ("scan", "live")]
-        # start 先起线程再发 running=True，所以开头的 live 可能排在 scan 后面；只看收尾
-        assert "scan" in kinds and kinds[-1] == "live"
-        assert msgs[-1]["data"] == {"running": False}
+        # running=True 在 start 的锁里发，工作线程的结果排不到它前面
+        assert kinds[0] == "live" and "scan" in kinds and kinds[-1] == "live"
+        live_msgs = [m["data"] for m in msgs if m["kind"] == "live"]
+        assert live_msgs[0] == {"running": True}
+        assert live_msgs[-1] == {"running": False}
     finally:
         _finish(live, started, q)
 
 
 def _with_results(live, monkeypatch, tmp_path):
     run = _manual_run(live, monkeypatch, tmp_path)
-    for slot, value in ((MINING_SCAN, "扫描"), (MINING_SIGNALS, {"view": {}})):
+    for slot, value in (
+        (MINING_SCAN, {"rock": "铜"}),
+        (MINING_SIGNALS, {"view": {"lines": []}, "values": [7]}),
+    ):
         assert live._commit(run, slot=slot, value=value, stamp=live._stamp(run, 1.0))
     return run
 
 
-def test_every_way_of_stopping_clears_results(monkeypatch, tmp_path):
+def test_every_way_of_stopping_keeps_results_and_rejects_late(monkeypatch, tmp_path):
+    """停止只封会话：最后一份结果留着（记录、反馈照常读，和基线一样），迟到的写不进来"""
     from sc_mining.core import settings
+    from sc_mining.tasks.system.feedback import FeedbackContext
 
     monkeypatch.setattr(settings, "update", lambda **kw: None)
     monkeypatch.setattr(hud_state, "_note_hud", lambda *a, **k: None)
@@ -393,28 +400,140 @@ def test_every_way_of_stopping_clears_results(monkeypatch, tmp_path):
 
     stops = {
         "stop": lambda live, run: live.stop(),
-        "auto_off": lambda live, run: live._auto_off(run.ev, log),
-        "fail_off": lambda live, run: live._fail_off(run.ev, "坏了"),
+        "auto_off": lambda live, run: live._auto_off(run, log),
+        "fail_off": lambda live, run: live._fail_off(run, "坏了"),
+        "退出": lambda live, run: live.stop_ev.set(),  # EngineManager.stop_all 只按开关
     }
     try:
         for name, stop in stops.items():
             live = live_mod._Live()
             run = _with_results(live, monkeypatch, tmp_path)
-            if name == "stop":
-                live.stop_ev = run.ev
-            epoch = live.epoch
+            live.stop_ev = run.ev
             stop(live, run)
-            assert live.results.get(MINING_SCAN) is None, name
-            assert live.results.get(MINING_SIGNALS) is None, name
-            assert live.epoch == epoch + 1, name
+            e = live.results.get(MINING_SCAN)
+            assert e is not None and e.value == {"rock": "铜"}, name
+            shown = FeedbackContext.from_results(live.results)
+            assert shown.shown_scan and shown.shown_scan["rock"] == "铜", name
+            assert shown.shown_signal and shown.shown_signal["values"] == [7], name
             assert not live._commit(
                 run,
                 slot=MINING_SCAN,
-                value="迟到",
+                value={"rock": "迟到"},
                 stamp=live._stamp(run, 2.0),
             ), name
+            e = live.results.get(MINING_SCAN)
+            assert e is not None and e.value == {"rock": "铜"}, name
     finally:
         log.close()
+
+
+def test_new_session_first_result_replaces_last_one(monkeypatch, tmp_path):
+    live = live_mod._Live()
+    run = _with_results(live, monkeypatch, tmp_path)
+    live.stop_ev = run.ev
+    live.stop()
+    new = live_mod._Run(threading.Event(), 2)
+    live.session_id = 2
+    assert live._commit(
+        new, slot=MINING_SCAN, value={"rock": "新"}, stamp=live._stamp(new, 3.0)
+    )
+    e = live.results.get(MINING_SCAN)
+    assert e is not None and e.value == {"rock": "新"} and e.session_id == 2
+
+
+def test_start_presses_old_switch(monkeypatch, tmp_path):
+    _world(monkeypatch, tmp_path)
+    live = live_mod._Live()
+    monkeypatch.setattr(live, "_run", lambda ev, session: None, raising=False)
+    started = _track(live)
+    old = live.stop_ev
+    live.start()
+    started[0].join(WAIT)
+    assert old.is_set() and not live.stop_ev.is_set()
+
+
+def test_zombie_worker_cannot_end_new_session(monkeypatch, tmp_path):
+    """旧线程到点自动关闭 / 连着出错：结束不了后来开的会话"""
+    from sc_mining.core import settings
+
+    saved = []
+    monkeypatch.setattr(settings, "update", lambda **kw: saved.append(kw))
+    log = open(tmp_path / "x.log", "w", encoding="utf-8")
+    try:
+        for off in (
+            lambda x, r: x._auto_off(r, log),
+            lambda x, r: x._fail_off(r, "坏"),
+        ):
+            live = live_mod._Live()
+            hud, _ = _world(monkeypatch, tmp_path)
+            zombie = live_mod._Run(threading.Event(), 1)
+            live.session_id = 2
+            new = live_mod._Run(live.stop_ev, 2)
+            epoch = live.epoch
+            q = _subscribe()
+            try:
+                off(live, zombie)
+                assert not [m for m in _drain(q) if m["kind"] == "live"]
+            finally:
+                bus.unsubscribe(q)
+            assert not zombie.ev.is_set() and not new.ev.is_set()
+            assert live.epoch == epoch and not saved and not hud.calls
+            assert live._commit(
+                new, slot=MINING_SCAN, value="新", stamp=live._stamp(new, 1.0)
+            )
+    finally:
+        log.close()
+
+
+def test_end_session_ends_the_named_session(monkeypatch, tmp_path):
+    live = live_mod._Live()
+    live.session_id = 2
+    live._end_session(1)
+    assert live.results.accept(MINING_SCAN, "新", 2, live.epoch, 1, 0.0, 0.0)
+    assert not live.results.accept(MINING_SIGNALS, "旧", 1, live.epoch, 1, 0.0, 0.0)
+
+
+def test_stop_leaves_session_started_during_join_alone(monkeypatch, tmp_path):
+    hud, _ = _world(monkeypatch, tmp_path)
+    live = live_mod._Live()
+    current = object()
+
+    class Old:
+        def join(self, timeout=None):  # join 的时候新会话开了
+            live.session_id += 1
+            live.thread = current
+
+    live.thread = Old()
+    q = _subscribe()
+    try:
+        live.stop()
+        assert not [m for m in _drain(q) if m["kind"] == "live"]
+    finally:
+        bus.unsubscribe(q)
+    assert live.thread is current and not hud.calls
+
+
+def test_retry_does_not_clear_new_sessions_hud(monkeypatch, tmp_path):
+    hud, _ = _world(monkeypatch, tmp_path)
+    live = live_mod._Live()
+    live.session_id = 1
+    ev = threading.Event()
+    monkeypatch.setattr(ev, "wait", lambda t=None: True, raising=False)
+
+    def boom(ev, session):
+        live.session_id = 2
+        raise RuntimeError("坏了")
+
+    monkeypatch.setattr(live, "_run", boom, raising=False)
+    live._run_gpu(ev, 1)
+    assert not hud.calls and not ev.is_set()
+
+
+def test_commit_without_hud_is_fine(monkeypatch, tmp_path):
+    live = live_mod._Live()
+    run = _manual_run(live, monkeypatch, tmp_path)
+    monkeypatch.setattr(hud_state, "_hud", lambda: None)
+    assert live._commit(run, live_mod._set("扫描", "x"), live_mod._del("矿袋"))
 
 
 def test_output_only_commit_needs_live_session(monkeypatch, tmp_path):
@@ -472,7 +591,7 @@ def test_feedback_context_reads_store():
 
 
 def test_stop_waits_for_commit_in_progress(monkeypatch, tmp_path):
-    """提交和停止同一把锁：发布到一半时 stop 进不来，发布完才作废、清空，running=False 排在后面"""
+    """提交和停止同一把锁：发布到一半时 stop 进不来，发布完才封会话，running=False 排在后面"""
     live = live_mod._Live()
     run = _manual_run(live, monkeypatch, tmp_path)
     live.stop_ev = run.ev
@@ -481,10 +600,11 @@ def test_stop_waits_for_commit_in_progress(monkeypatch, tmp_path):
     real = bus.publish
 
     def publish(kind, data):
-        seq.append(kind)
-        if kind == "scan":
-            inside.set()
-            assert leave.wait(WAIT)
+        if threading.current_thread() in (committer, stopper):  # 别的线程发的不算
+            seq.append(kind)
+            if kind == "scan":
+                inside.set()
+                assert leave.wait(WAIT)
         real(kind, data)
 
     monkeypatch.setattr(bus, "publish", publish)
@@ -511,7 +631,7 @@ def test_stop_waits_for_commit_in_progress(monkeypatch, tmp_path):
     assert not committer.is_alive()
     assert not stopper.is_alive()
     assert run.ev.is_set()
-    assert live.results.get(MINING_SCAN) is None
+    assert not live.results.accept(MINING_SCAN, "迟到", 1, live.epoch, 99, 0.0, 0.0)
     assert seq.index("live") > seq.index("scan")
 
 

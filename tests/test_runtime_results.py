@@ -35,29 +35,40 @@ def test_rejects_old_session_old_epoch_and_seq_not_increasing():
 def test_slots_are_independent():
     s = ResultStore()
     assert _put(s, "扫描", seq=5)
-    assert _put(s, "信号", seq=5, slot=MINING_SIGNALS)
-    s.clear(MINING_SCAN, 1)
-    assert s.get(MINING_SCAN) is None
+    assert not _put(s, "序号回退", seq=4)
+    assert _put(s, "信号", seq=4, slot=MINING_SIGNALS)
     e = s.get(MINING_SIGNALS)
     assert e is not None and e.value == "信号"
 
 
-def test_clear_blocks_that_session_but_not_newer():
+def test_end_keeps_results_but_blocks_that_session():
     s = ResultStore()
     assert _put(s, "a", session=1)
     assert _put(s, "b", session=1, slot=MINING_SIGNALS)
-    s.clear(None, 1)
-    assert s.get(MINING_SCAN) is None and s.get(MINING_SIGNALS) is None
+    s.end(1)
+    for slot, want in ((MINING_SCAN, "a"), (MINING_SIGNALS, "b")):
+        e = s.get(slot)
+        assert e is not None and e.value == want
     assert not _put(s, "迟到", session=1, seq=9)
-    assert _put(s, "新会话", session=2)
+    assert not _put(s, "更早的会话", session=0, seq=9)
+    e = s.get(MINING_SCAN)
+    assert e is not None and e.value == "a"
 
 
-def test_late_clear_of_old_session_keeps_newer_result():
+def test_new_session_first_result_ignores_old_seq():
     s = ResultStore()
-    assert _put(s, "新", session=2)
-    s.clear(None, 1)
+    assert _put(s, "旧", session=1, epoch=5, seq=50)
+    s.end(1)
+    assert _put(s, "新", session=2, epoch=1, seq=1)
     e = s.get(MINING_SCAN)
     assert e is not None and e.value == "新"
+
+
+def test_late_end_of_old_session_keeps_newer_session_writing():
+    s = ResultStore()
+    assert _put(s, "新", session=2)
+    s.end(1)
+    assert _put(s, "新 2", session=2, seq=2)
 
 
 def test_values_are_snapshots():

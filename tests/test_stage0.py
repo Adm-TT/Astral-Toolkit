@@ -408,7 +408,7 @@ def test_live_fail_off_without_hud(monkeypatch):
     monkeypatch.setattr(bus, "publish", lambda kind, data: pub.append((kind, data)))
     live = live_mod._Live()
     ev = threading.Event()
-    live._fail_off(ev, "坏了")
+    live._fail_off(live_mod._Run(ev, live.session_id), "坏了")
     assert ev.is_set() and {"live_on": False} in saved
     assert ("live", {"running": False, "error": "坏了"}) in pub
     live.stop()  # 停止收尾也不抛错

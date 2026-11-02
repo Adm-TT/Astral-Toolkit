@@ -29,11 +29,7 @@ class ResultStore:
     def __init__(self):
         self._lock = threading.Lock()
         self._entries: dict[str, Entry] = {}
-        self._cleared: dict[str, int] = {}  # 每个槽清到哪个会话：这个会话及更早的不再收
-        self._cleared_all = -1
-
-    def _floor(self, slot):
-        return max(self._cleared_all, self._cleared.get(slot, -1))
+        self._floor = -1  # 结束到哪个会话：这个会话及更早的不再收
 
     def accept(
         self,
@@ -56,7 +52,7 @@ class ResultStore:
             quality,
         )
         with self._lock:
-            if session <= self._floor(slot):
+            if session <= self._floor:
                 return False
             old = self._entries.get(slot)
             if old is not None and (
@@ -77,16 +73,7 @@ class ResultStore:
             return None
         return replace(entry, value=copy.deepcopy(entry.value))
 
-    def clear(self, slot, session):
-        """清掉 session 及更早会话的结果，之后它们也不能再写进来；slot=None 清全部。更新的会话不受影响"""
+    def end(self, session):
+        """会话结束：这个会话及更早的不再收新结果。已经收的留着，读方照常读最后一份（§7.1、§7.4：新鲜度和会话状态分开管）"""
         with self._lock:
-            if slot is None:
-                self._cleared_all = max(self._cleared_all, session)
-                slots = list(self._entries)
-            else:
-                self._cleared[slot] = max(self._cleared.get(slot, -1), session)
-                slots = [slot]
-            for s in slots:
-                entry = self._entries.get(s)
-                if entry is not None and entry.session_id <= session:
-                    del self._entries[s]
+            self._floor = max(self._floor, session)

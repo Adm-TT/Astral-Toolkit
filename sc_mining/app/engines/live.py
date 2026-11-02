@@ -97,10 +97,10 @@ class _Live:
             self.gear_rev += 1
             self.epoch += 1
 
-    def _end_session(self):
-        """会话结束：之前开始算的结果作废，存着的结果清掉。调用方持 self.lock，并已按下这个会话的停止开关"""
+    def _end_session(self, session):
+        """会话结束：之前开始算的结果作废，这个会话不能再写新结果；已经收的留着。调用方持 self.lock，并已按下这个会话的停止开关"""
         self.epoch += 1
-        self.results.clear(None, self.session_id)
+        self.results.end(session)
 
     def _stamp(self, run, wall):
         with self.lock:
@@ -115,14 +115,15 @@ class _Live:
             bus.runtime_log(args[0], tag=args[1], level="INFO")
         elif kind in ("hud.set", "hud.clear"):
             hud: Any = _H()._hud()
-            (hud.set if kind == "hud.set" else hud.clear)(*args)
+            if hud is not None:
+                (hud.set if kind == "hud.set" else hud.clear)(*args)
         elif kind == "paused":
             self.paused = args[0]
 
     def _commit(
         self, run, *ops, slot=None, value=None, stamp: Any = None, quality="complete"
     ):
-        """提交边界（架构稿 §7.5）：查会话 → 存结果 → 发布，和停止用同一把锁串行；任何一步不成就整个不做。
+        """提交边界（架构稿 §7.5）：查会话 → 存结果 → 发布，和停止用同一把锁串行；会话、epoch、收结果三项检查任何一项不过就整个不做。
         识别和计算很慢，算完时可能已经停了、重开了、改了配装。带 slot 的是结果，不带的只有输出。
         锁内只做小型状态操作：总线只入队，悬浮窗只写状态、唤醒绘制线程"""
         with self.lock:
@@ -252,17 +253,21 @@ class _Live:
         run_records.record("MINING", "采矿助手引擎已启动", ui_tag="LIVE")
         # 每次开始都是一个新的会话（自己的停止开关）：快速停了又开，旧线程哪怕还没退出也只认自己的开关，
         # 不会和新线程一起往悬浮窗写东西
+        # running=True 也在锁里发：工作线程的第一条结果要等这把锁，排不到它前面
         with self.lock:
+            if self.running():
+                return
+            self.stop_ev.set()
             self.session_id += 1
             session = self.session_id
             self.stop_ev = ev = threading.Event()
-        self.thread = threading.Thread(
-            target=self._run_gpu, args=(ev, session), daemon=True, name="live"
-        )
-        self.thread.start()
-        bus.publish("live", {"running": True})
+            self.thread = threading.Thread(
+                target=self._run_gpu, args=(ev, session), daemon=True, name="live"
+            )
+            self.thread.start()
+            bus.publish("live", {"running": True})
 
-    def _run_gpu(self, ev, session=None):
+    def _run_gpu(self, ev, session):
         """跑采矿助手（出错最多重试 3 次）。识别引擎在主进程里，按设置用显卡（DirectML）或 CPU，采矿助手关掉后引擎照样留着"""
         for attempt in range(3):
             try:
@@ -284,23 +289,24 @@ class _Live:
                 if ev.is_set():
                     break
                 if attempt == 2:
-                    self._fail_off(ev, str(e))
+                    self._fail_off(_Run(ev, session), str(e))
                     break
                 with (
                     self.lock
                 ):  # 重来前把上一轮的旧结果清掉（新一轮的过期清理不认旧的）
-                    _hud_clear("信号", "扫描", "矿袋")
+                    if not ev.is_set() and session == self.session_id:
+                        _hud_clear("信号", "扫描", "矿袋")
                 ev.wait(1)
 
-    def _fail_off(self, ev, why):
-        """连着出错：自己关掉并告诉玩家（和 _auto_off 一样收尾）"""
+    def _fail_off(self, run, why):
+        """连着出错：自己关掉并告诉玩家（和 _auto_off 一样收尾）。只结束自己的会话，不碰后来开的"""
         from ...core import settings
 
         with self.lock:
-            if ev.is_set():
+            if run.ev.is_set() or run.session_id != self.session_id:
                 return
-            ev.set()
-            self._end_session()
+            run.ev.set()
+            self._end_session(run.session_id)
             self.paused = False
             _hud_clear("信号", "扫描", "矿袋")
         try:
@@ -314,8 +320,8 @@ class _Live:
             f"采矿助手出错已关闭｜按 {_T('navigation').settings_key('live_key', 'F5')} 重开（详情见日志）",
         )
 
-    def _auto_off(self, ev, log):
-        """太久没看到扫描面板和信号：自己关掉（在识别线程里调用，不能 join 自己）"""
+    def _auto_off(self, run, log):
+        """太久没看到扫描面板和信号：自己关掉（在识别线程里调用，不能 join 自己）。只结束自己的会话，不碰后来开的"""
         from ...core import settings
 
         try:
@@ -326,10 +332,10 @@ class _Live:
         except (OSError, ValueError):
             pass
         with self.lock:
-            if ev.is_set():
+            if run.ev.is_set() or run.session_id != self.session_id:
                 return
-            ev.set()
-            self._end_session()
+            run.ev.set()
+            self._end_session(run.session_id)
             self.paused = False
             _hud_clear("信号", "扫描", "矿袋")
         settings.update(live_on=False)
@@ -342,12 +348,17 @@ class _Live:
 
     def stop(self):
         with self.lock:
+            session, th = self.session_id, self.thread
             self.stop_ev.set()
-            self._end_session()
-        if self.thread:
-            self.thread.join(3)
-        self.thread = None
+            self._end_session(session)
+        if th:
+            th.join(3)
         with self.lock:
+            if (
+                session != self.session_id
+            ):  # 等的时候新会话开了：它的东西不碰，也不说「已停止」
+                return
+            self.thread = None
             self.paused = False
             _hud_clear("信号", "扫描", "矿袋")
         from ...core import run_records
@@ -409,7 +420,7 @@ class _Live:
                     paused_at = None
                     self._set_paused(run, False, log, gap)
                 if time.time() - max(last_panel_t, last_sig_t) > self.IDLE_CLOSE:
-                    self._auto_off(ev, log)
+                    self._auto_off(run, log)
                     break
                 img = screen.grab()
                 now = time.time()
