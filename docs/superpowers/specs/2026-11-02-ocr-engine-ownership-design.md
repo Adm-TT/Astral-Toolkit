@@ -1,4 +1,4 @@
-# OCR 引擎归属迁入 `sc_mining/ocr/` 设计
+# OCR 引擎归属迁入 `astral_toolkit/ocr/` 设计
 
 状态：设计稿（待批准）；不表示代码已改造  
 日期：2026-11-02  
@@ -16,7 +16,7 @@
 
 ## 0. 一句话
 
-把目前放在 `core/perf.py` 里的 RapidOCR 引擎宿主（单例、锁与插队、GPU/CPU 切换）迁到 `sc_mining/ocr/`，让「认字能力」的实现与对外入口同属一个包；`perf` 只保留进程优先级与截图等平台性能事务。业务模块继续只通过 `sc_mining.ocr` 公共 API 认字，为后续在门面内接入大模型辅助留出空间，但本期不实现 LLM。
+把目前放在 `core/perf.py` 里的 RapidOCR 引擎宿主（单例、锁与插队、GPU/CPU 切换）迁到 `astral_toolkit/ocr/`，让「认字能力」的实现与对外入口同属一个包；`perf` 只保留进程优先级与截图等平台性能事务。业务模块继续只通过 `astral_toolkit.ocr` 公共 API 认字，为后续在门面内接入大模型辅助留出空间，但本期不实现 LLM。
 
 ---
 
@@ -30,8 +30,8 @@
 
 ### 1.2 成功标准（本期）
 
-1. 进程内唯一 RapidOCR 实例的创建、缓存、`swap`、GPU 失败回退，代码物理位置在 `sc_mining/ocr/`（建议新文件，见 §3）。
-2. 生产业务认字路径仍只经 `sc_mining.ocr` 的 `recognize` / `read_line` / `raw_detector` / `raw_recognizer`；行为与现网一致（含 `urgent`、`native`、插队语义）。
+1. 进程内唯一 RapidOCR 实例的创建、缓存、`swap`、GPU 失败回退，代码物理位置在 `astral_toolkit/ocr/`（建议新文件，见 §3）。
+2. 生产业务认字路径仍只经 `astral_toolkit.ocr` 的 `recognize` / `read_line` / `raw_detector` / `raw_recognizer`；行为与现网一致（含 `urgent`、`native`、插队语义）。
 3. 设置切 GPU/CPU、状态栏「显卡/CPU」、启动暖机、自检与 `tools/bench_ocr.py` 改为经 `ocr` 公共/兼容出口，不再以「业务应依赖 `perf.rapidocr`」为规范。
 4. `core/perf.py` 不再持有引擎实现；若保留符号，仅为有时限的薄转发（见 §4），并在变更记录/PR 标明废弃方向。
 5. 现有 OCR 相关单测（尤其 `tests/test_gpu_ocr.py`、`tests/test_ocr_module.py`）全绿；涉及读屏的模块不因迁引擎改变识别结果约定。
@@ -55,7 +55,7 @@
 
 ```
 领域 / 任务 / 引擎
-  → sc_mining.ocr.{recognize, read_line, raw_*}
+  → astral_toolkit.ocr.{recognize, read_line, raw_*}
     → ocr.engine._get_engine()
       → core.perf.rapidocr()          ← 真正的单例与 _Locked
         → RapidOCR (+ DirectML 选项)
@@ -63,8 +63,8 @@
 
 | 位置 | 职责 |
 |---|---|
-| `sc_mining/ocr/engine.py` | 门面：结果整形为 `OcrToken`；`urgent` 时调 `perf.boost()` |
-| `sc_mining/core/perf.py` | `_Locked`、`_new_engine`、`rapidocr`、`set_ocr_device`、`ocr_device`、`gpu_available`、`is_gpu_preferred`、`last_ocr_error`；另有优先级与截图 |
+| `astral_toolkit/ocr/engine.py` | 门面：结果整形为 `OcrToken`；`urgent` 时调 `perf.boost()` |
+| `astral_toolkit/core/perf.py` | `_Locked`、`_new_engine`、`rapidocr`、`set_ocr_device`、`ocr_device`、`gpu_available`、`is_gpu_preferred`、`last_ocr_error`；另有优先级与截图 |
 | 调用 `perf` OCR 符号的非门面点 | `app/engines/manager` 暖机；`tasks/system/settings`；`tasks/system/status`；`selftest`；`tools/bench_ocr`；`tests/test_gpu_ocr` |
 
 已知必须保留的语义：
@@ -87,7 +87,7 @@
 | `ocr/runtime.py`（新建，名称可由实现微调） | 从 `perf` 迁入：`_Locked`、`_new_engine`、单例、`set_ocr_device`、`ocr_device`、`gpu_available`、`is_gpu_preferred`、`last_ocr_error` 及 OCR 相关常量（`OCR_THREADS`、`GPU_PARTS` 等） |
 | `ocr/__init__.py` | 继续导出认字 API；**额外导出**设备/状态符号供设置、状态、暖机、自检使用（见下表） |
 
-### 3.2 建议对外（经 `sc_mining.ocr`）增加的管理 API
+### 3.2 建议对外（经 `astral_toolkit.ocr`）增加的管理 API
 
 | 符号 | 用途 |
 |---|---|
@@ -129,7 +129,7 @@ ocr/runtime ──记耗时──► core.perfmon.note_ocr（保持现行为）
 1. **新建** `ocr/runtime.py`，把引擎相关代码从 `perf` **剪切**过来（含 `_cpu_fallback` / `_last_error` 行为）。
 2. **改** `ocr/engine._get_engine`：改为本包 `runtime` 取单例，不再 `from ..core.perf import rapidocr`。
 3. **改** `ocr/__init__.py`：导出管理 API。
-4. **改调用方**：`manager` 暖机、`settings`、`status`、`selftest`、`bench_ocr`、相关测试 → `sc_mining.ocr`（或 `sc_mining.ocr.runtime` 仅限测试若文档允许；优先包出口）。
+4. **改调用方**：`manager` 暖机、`settings`、`status`、`selftest`、`bench_ocr`、相关测试 → `astral_toolkit.ocr`（或 `astral_toolkit.ocr.runtime` 仅限测试若文档允许；优先包出口）。
 5. **`perf` 处理（二选一，实现选定并在 PR 写明）：**
    - **A（推荐）：** 删除 OCR 实现；若担心外部脚本，保留 `rapidocr = ...` 等委托到 `ocr` 并在注释标废弃。
    - **B：** 无转发，直接删符号；同步改尽仓库内引用。
@@ -146,7 +146,7 @@ ocr/runtime ──记耗时──► core.perfmon.note_ocr（保持现行为）
 | OCR 已有独立入口，重点调整资源归属 | 本设计的核心 |
 | `OcrGateway` / 受管理 OCR 资源 | 本期以 `ocr` 包 + `runtime` 单例为落地形态；不强制先引入新类名 `OcrGateway`。若后续 bootstrap 装配需要网关对象，再包一层，不阻塞本期 |
 | `core/perf`：OCR/抓屏留平台适配 | **修订为本期决策：** OCR 引擎改归 `ocr/`；抓屏仍留 `perf`。与架构稿「资源归属阶段」一致方向，归属更明确 |
-| 导入功能不得加载 OCR | 保持：仅暖机线程 / 首次认字才加载；`import sc_mining.ocr` 不建引擎 |
+| 导入功能不得加载 OCR | 保持：仅暖机线程 / 首次认字才加载；`import astral_toolkit.ocr` 不建引擎 |
 
 ---
 
@@ -166,7 +166,7 @@ ocr/runtime ──记耗时──► core.perfmon.note_ocr（保持现行为）
 | 风险 | 缓解 |
 |---|---|
 | 双单例（perf 与 ocr 各建一份） | 剪切而非复制；测试断言 `ocr` 暖机与 `recognize` 同源 |
-| 测试大量 patch `sc_mining.core.perf.rapidocr` | 迁测试补丁目标；兼容转发期内可双路径但仍只测真源 |
+| 测试大量 patch `astral_toolkit.core.perf.rapidocr` | 迁测试补丁目标；兼容转发期内可双路径但仍只测真源 |
 | `perfmon.note_ocr` / `settings` 循环导入 | 保持函数内 import；禁止 `ocr` 顶层 import app |
 | 文档/架构稿仍写「引擎在 perf」 | 本文件 §5 + 架构稿后续变更记录补一句 |
 
