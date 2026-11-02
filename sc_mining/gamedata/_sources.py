@@ -34,6 +34,15 @@ SOURCES: tuple[Source, ...] = (
     Source("places_extra_zh.json", False),
     Source("place_codes_zh.json", False),
     Source("mining_spots.json", False),
+    # schema 4：制造 / 维科洛 / 物品属性 / 打印点 / 出厂配件（批 3 公共层）
+    Source("crafting.json", False),
+    Source("wikelo.json", False),
+    Source("item_stats.json", False),
+    Source("print_spots.json", False),
+    Source("ship_items.json", False),
+    # schema 6：采矿（批 5 公共层）
+    Source("mining_rocks.json", False),
+    Source("ship_signatures.json", False),
 )
 
 

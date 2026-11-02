@@ -8,7 +8,9 @@
 
 **Tech Stack:** Python 3.12 标准库；`tests/minipytest`。
 
-**Spec:** 设计文档 v3；矩阵 `docs/superpowers/specs/2026-11-02-gamedata-callsites-b3.md`；地基 API 和批 1 定下的 `_ready.use(snap)` 用法。
+**Spec:** 设计文档 v3；矩阵 `docs/superpowers/specs/2026-11-02-gamedata-callsites-b3.md`（开头有 schema 4 实现时的修正）；地基 API 和批 1 定下的 `_ready.use(snap)` 用法；按版本缓存一份用 `gamedata/_cache.VersionCache`。
+
+> schema 4 已合入基线：`blueprints` 用自增 `id`（`u` 不唯一）、`item_stats.stats_json` 整段 JSON（没有 `item_stat_values` 表）、`crafting.assign_keys / _fold_name / _search_norm` 已抽成模块级函数并被导入复用——Task 1 的 `_keys` 改动已经做了一半，照现状接着做。
 
 ## Global Constraints
 
