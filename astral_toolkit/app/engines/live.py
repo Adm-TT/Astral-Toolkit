@@ -111,7 +111,7 @@ class _Live:
         4  # 看得到扫描面板、却连续这么多帧读不全 / 读不稳：自动留一张图（排查用）
     )
     MISS_GAP = 30  # 两次留图至少隔这么多秒
-    MISS_KEEP = 10  # 最多留这么多张（userdata\\shots\\miss，每张 5MB 左右）
+    MISS_KEEP = 10  # 最多留这么多张（userdata\shots\miss，每张 5MB 左右）
 
     HINTS = {  # 读不全的原因 → (采矿助手页的提示, 悬浮窗的短提示)
         "cut": (
@@ -191,10 +191,11 @@ class _Live:
     def setup(self, session):
         from ...core import paths
 
+        if self._hotkey is None:
+            # 收尾提示要按热键名，提前取好：finish_ops 在锁里跑，不能再读设置文件
+            self._hotkey = _T("navigation").settings_key("live_key", "F5")
         log = open(paths.log("live_log.txt"), "a", encoding="utf-8")
         self._ctx[session.id] = _Ctx(log, paths.shots("live"), time.time())
-        if self._hotkey is None:
-            self._hotkey = _T("navigation").settings_key("live_key", "F5")
 
     def teardown(self, session):
         ctx = self._ctx.pop(session.id, None)

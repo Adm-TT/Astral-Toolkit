@@ -78,7 +78,9 @@ class StateView:
     last_error: str | None
     stop_reason: str | None
     worker_alive: bool
-    prev_stop_pending: bool
+    prev_stop_pending: (
+        bool  # 开这个会话时上一个线程还没退（采矿允许照常开）；下一个 start() 重新算
+    )
 
 
 @dataclass(frozen=True)
