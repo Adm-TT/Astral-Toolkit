@@ -340,18 +340,25 @@ def test_stock_suggest_and_named_add(monkeypatch, tmp_path):
         en="CryoPod (Vanduul)",
         zh="冷冻舱（剜度）",
         kind="物品",
-        qty="35",
+        qty="35",  # pyright: ignore[reportArgumentType]  # 网页传来的是字符串，测的就是这个
         unit="个",
         quality="0",
         location="新巴贝奇",
     )
     assert "added" in r and any(x["qty"] == 35 and x["unit"] == "个" for x in r["rows"])
     r = t_stock.stock_add_named(
-        name="冷冻舱（刻度）", qty="2", unit="", quality="", location="A"
+        name="冷冻舱（刻度）",
+        qty="2",  # pyright: ignore[reportArgumentType]
+        unit="",
+        quality="",
+        location="A",
     )  # 没点选、名字认错：按汉化包纠正
     assert "冷冻舱（剜度）" in r["added"]
     assert "error" in t_stock.stock_add_named(
-        name="钛", qty="1", unit="桶", location="A"
+        name="钛",
+        qty="1",  # pyright: ignore[reportArgumentType]
+        unit="桶",
+        location="A",
     )
 
 

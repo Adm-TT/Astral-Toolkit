@@ -2402,22 +2402,6 @@
                     "endColumn": 45,
                     "lineCount": 1
                 }
-            },
-            {
-                "code": "reportOptionalIterable",
-                "range": {
-                    "startColumn": 13,
-                    "endColumn": 25,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportGeneralTypeIssues",
-                "range": {
-                    "startColumn": 13,
-                    "endColumn": 25,
-                    "lineCount": 1
-                }
             }
         ],
         "./sc_mining/update/update_check.py": [
@@ -2596,30 +2580,6 @@
                 "range": {
                     "startColumn": 11,
                     "endColumn": 17,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 16,
-                    "endColumn": 20,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 32,
-                    "endColumn": 35,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 26,
-                    "endColumn": 29,
                     "lineCount": 1
                 }
             },
@@ -4200,14 +4160,6 @@
             {
                 "code": "reportArgumentType",
                 "range": {
-                    "startColumn": 15,
-                    "endColumn": 29,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportArgumentType",
-                "range": {
                     "startColumn": 4,
                     "endColumn": 27,
                     "lineCount": 1
@@ -4396,22 +4348,6 @@
                 "range": {
                     "startColumn": 20,
                     "endColumn": 23,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportOptionalSubscript",
-                "range": {
-                    "startColumn": 12,
-                    "endColumn": 64,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportOptionalSubscript",
-                "range": {
-                    "startColumn": 12,
-                    "endColumn": 48,
                     "lineCount": 1
                 }
             },

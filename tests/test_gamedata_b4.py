@@ -365,7 +365,9 @@ def test_find_does_not_read_json(monkeypatch, tmp_path):
 
     _find_setup(monkeypatch, tmp_path)
     monkeypatch.setattr(loot, "load_index", boom)
-    monkeypatch.setattr(itemsearch, "wiki_items", boom)
+    assert not hasattr(
+        itemsearch, "wiki_items"
+    )  # 读 JSON 的那份收口 2 删了；类名走 gamedata.names.wiki_classes
     assert [h[0] for h in loot.find("Citadel Core")] == [
         "c4",
         "c3",

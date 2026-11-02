@@ -811,14 +811,10 @@ def test_canonical_name_fixes_ocr_misreads(monkeypatch):
         "冷冻舱（剜度）",
         "CryoPod (Vanduul)",
     )
-    assert (
-        names.canonical("", "Irradiated ValakkarFang(Apex)")[0]
-        == "受辐射的瓦拉卡獠牙（巅峰期）"
-    )
-    assert (
-        names.canonical("受辐射的瓦拉卡獠牙（峰期）", "")[1]
-        == "Irradiated Valakkar Fang (Apex)"
-    )
+    got = names.canonical("", "Irradiated ValakkarFang(Apex)")
+    assert got is not None and got[0] == "受辐射的瓦拉卡獠牙（巅峰期）"
+    got = names.canonical("受辐射的瓦拉卡獠牙（峰期）", "")
+    assert got is not None and got[1] == "Irradiated Valakkar Fang (Apex)"
     assert names.canonical("塔兰导电石Taranite", "") == (
         "塔兰导电石",
         "Taranite",
