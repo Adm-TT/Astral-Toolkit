@@ -1,4 +1,4 @@
-# 打包「天枢」安装包 → dist\Dubhe_<版本>.zip（不含个人数据、Python 环境、测试、tools）。用法：.venv\Scripts\python.exe -X utf8 tools\pack.py
+# 打包 AT 压缩包版（2026-10-31 停发）→ dist\Dubhe_<版本>.zip（不含个人数据、Python 环境、测试、tools）。用法：.venv\Scripts\python.exe -X utf8 tools\pack.py
 import sys, io, traceback, contextlib, zipfile, time, os  # noqa: E401, F401
 from pathlib import Path
 
@@ -85,7 +85,7 @@ with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
                             and rel == Path("data")
                             and f in ("loot_details.zip",)
                         ):
-                            continue  # 掉落明细整包和数据包版本从 Gitee 数据包下载，安装包里不带
+                            continue  # 掉落明细整包和数据包版本从数据包下载，安装包里不带
                         p = Path(dirpath) / f
                         z.write(p, f"{name}/{p.relative_to(root).as_posix()}")
                         n += 1

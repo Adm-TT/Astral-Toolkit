@@ -1,7 +1,7 @@
 """掉落查询：这件东西在哪些地方的箱子里会开出来（数据来自 scl.miao.network，从游戏文件解析的掉落表）
 
 - 物品索引 search.json（约 1.5 MB，1.3 万项，中英文名都有）缓存在 loot_index.json，版本变了自动重下
-- 单件物品的掉落详情 q/<uuid>.json：先查 loot_details.zip（作者每个游戏版本全量抓一次、随 Gitee 数据包发布），没有再现取，缓存在 data/loot/ 下
+- 单件物品的掉落详情 q/<uuid>.json：先查 loot_details.zip（作者每个游戏版本全量抓一次、随数据包发布），没有再现取，缓存在 data/loot/ 下
 - 概率是该站算出的「单个箱子开出这件东西的最高概率」，只作参考
 """
 
@@ -167,7 +167,7 @@ _failed = {}  # 下载失败的物品 → 时间：10 分钟内不再重试（�
 
 
 # ---------------------------------------------------------------- 掉落明细整包（2026-10-26 用户定）
-# 作者每次游戏版本更新时把 1.3 万件物品的掉落明细全抓一遍，打成 loot_details.zip 随数据包放到 Gitee，
+# 作者每次游戏版本更新时把 1.3 万件物品的掉落明细全抓一遍，打成 loot_details.zip 随数据包发布，
 # 国内玩家查看掉落不用再连国外；整包里没有的（抓失败的）照旧现查。玩家这边不解压，直接从压缩包里读
 DETAILS = DATA / "loot_details.zip"
 _zip = {"z": None, "mtime": None, "version": None}
@@ -297,7 +297,7 @@ def detail(uuid, online=True):
         raise ValueError("物品编号格式不对")
     if not isinstance(version, str) or not _VER_RE.fullmatch(version):
         raise ValueError("掉落数据版本号格式不对")
-    hit = _from_zip(uuid, version)  # 先查整包（Gitee 数据包带来的）
+    hit = _from_zip(uuid, version)  # 先查整包（数据包带来的）
     if hit is not None:
         return hit
     CACHE_DIR.mkdir(parents=True, exist_ok=True)

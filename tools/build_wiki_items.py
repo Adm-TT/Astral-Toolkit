@@ -18,7 +18,7 @@ OUT = ROOT / "data" / "wiki_items.json"
 API = "https://api.star-citizen.wiki/api/v2/items"
 HEADERS = {
     "Accept": "application/json",
-    "User-Agent": "Dubhe/1.0 (+star citizen mining assistant)",
+    "User-Agent": "AstralToolkit/1.0 (+star citizen assistant)",
 }
 
 

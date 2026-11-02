@@ -1,6 +1,6 @@
 """地表导航：去没有量子信标的地点（洞穴、残骸、自定义路标……），思路同 starmap.space
 
-用法：游戏控制台输入 r_DisplayInfo 2，右上角会显示坐标；天枢读这几行（displayinfo.py）
+用法：游戏控制台输入 r_DisplayInfo 2，右上角会显示坐标；AT 读这几行（displayinfo.py）
 → 算出你在哪个星球、经纬度 → 告诉你朝哪个方位飞、还有多远。
 
 坐标换算照搬 starmap.space 的公式（星球自转相位从 2020-01-01 UTC 起算），

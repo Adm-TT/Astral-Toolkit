@@ -1145,7 +1145,7 @@ def test_status_keeps_displayinfo_place_when_reader_goes_stale():
 
 
 def test_single_instance_lock_file(monkeypatch, tmp_path):
-    """只开一个：第一个拿到锁，第二个拿不到；第一个放开后又能拿到（用临时文件夹，电脑上开着天枢也不影响）"""
+    """只开一个：第一个拿到锁，第二个拿不到；第一个放开后又能拿到（用临时文件夹，电脑上开着 AT 也不影响）"""
     import subprocess, sys  # noqa: E401
     from astral_toolkit.core import paths
     from astral_toolkit.app import server as S
@@ -1153,7 +1153,7 @@ def test_single_instance_lock_file(monkeypatch, tmp_path):
     monkeypatch.setattr(paths, "USER", tmp_path)
     first = S._try_lock()
     assert first is not None
-    try:  # 另一个进程（模拟第二个天枢）拿不到
+    try:  # 另一个进程（模拟第二个 AT）拿不到
         code = (
             "from pathlib import Path; from astral_toolkit.core import paths; paths.USER = Path(%r); "
             "from astral_toolkit.app import server as S; print(S._try_lock() is None)"
@@ -1517,14 +1517,14 @@ def test_perf_log_line_format():
     from astral_toolkit.core import perfmon
 
     m = perfmon.Monitor()
-    m.prev = {"天枢": (10.0, 200.0, 300.0), "窗口(Edge)": (5.0, 150.0, 120.0)}
+    m.prev = {"AT": (10.0, 200.0, 300.0), "窗口(Edge)": (5.0, 150.0, 120.0)}
     perfmon._take_ocr()
     perfmon.note_ocr(0.25)
     line = m.line(
-        0, {"天枢": (10.6, 210.0, 320.0), "窗口(Edge)": (5.06, 150.0, 120.0)}, 60.0
+        0, {"AT": (10.6, 210.0, 320.0), "窗口(Edge)": (5.06, 150.0, 120.0)}, 60.0
     )
     assert (
-        "天枢 CPU" in line
+        "AT CPU" in line
         and "内存 210MB（提交 320MB）" in line
         and "窗口(Edge)" in line
         and "识别" in line
@@ -1973,7 +1973,7 @@ def test_export_logs(monkeypatch, tmp_path):
 
 
 def test_live_scan_resumes_after_restart(monkeypatch, tmp_path):
-    """原矿扫描开着时天枢重启 / 升级：重启后自动接着扫（以前重启后就关了，信号识别也跟着没了）"""
+    """原矿扫描开着时 AT 重启 / 升级：重启后自动接着扫（以前重启后就关了，信号识别也跟着没了）"""
     from astral_toolkit.core import settings
     from astral_toolkit.tasks import mining as t_mining, system as t_sys
     from astral_toolkit.app.engines.manager import EngineManager
@@ -3508,7 +3508,7 @@ def test_hover_unsure_names_and_anchor_lines():
 
 
 def test_mask_own_window_too():
-    """盖在游戏上的天枢主窗口也涂黑（窗口里的实时栏有信号值 / 质量，会被当成游戏里的字）"""
+    """盖在游戏上的 AT 主窗口也涂黑（窗口里的实时栏有信号值 / 质量，会被当成游戏里的字）"""
     from PIL import Image
     from astral_toolkit.core.perf import mask_overlay, own_window_rects
 

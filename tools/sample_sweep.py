@@ -1,4 +1,4 @@
-"""稳定性测试：把电脑里所有截图样本过一遍天枢的每个读屏功能，看会不会出错、认出了什么、花了多久
+"""稳定性测试：把电脑里所有截图样本过一遍 AT 的每个读屏功能，看会不会出错、认出了什么、花了多久
 
 用法（在项目根目录）：.venv\\Scripts\\python.exe -X utf8 tools\\sample_sweep.py [输出.md]
   样本：tests\\samples、userdata\\shots\\{live,hover}（项目和「下载」里的天枢）、图片\\Screenshots、游戏 ScreenShots
@@ -146,7 +146,7 @@ def main():
         )
     errs = [r for r in rows if r["err"]]
     lines = [
-        f"# 天枢稳定性测试（截图样本全量）{time.strftime('%Y-%m-%d %H:%M')}",
+        f"# AT 稳定性测试（截图样本全量）{time.strftime('%Y-%m-%d %H:%M')}",
         "",
         f"- 图片 {len(rows)} 张，用时 {(time.time() - t0) / 60:.1f} 分钟",
         f"- 出错 {len(errs)} 张（程序报错，不是没认出）",

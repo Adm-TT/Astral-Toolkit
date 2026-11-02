@@ -35,7 +35,7 @@ DEFAULTS = {
     "nav_marker": True,  # 导航时在游戏画面上画目标记号（画面外贴边画箭头）和瞄准环（2026-10-27）
     "fov_axis": "v",  # 右上角 FOV 是上下（v）还是左右（h）的视角：记号位置不对时改这个
     "nav_mode": "auto",  # 导航方式：auto / ground = 实时读右上角；space = 手动定位（只用 /showlocation）
-    "live_on": False,  # 原矿扫描开着没有：天枢重启、一键升级后自动接着扫           # 游戏里按这个键：把当前位置记成路标（要开着右上角调试信息）
+    "live_on": False,  # 原矿扫描开着没有：AT 重启、一键升级后自动接着扫           # 游戏里按这个键：把当前位置记成路标（要开着右上角调试信息）
     "agreed": False,  # 第一次打开时确认过「本软件是免费软件」
     "mining_ship": None,  # 原矿扫描按哪条船的配置算：mole / prospector / golem；None = 还没选（窗口会先问）
     "mining_loadouts": {},  # 自己改过的配置 {船: {"heads": [[矿头, [模组…]], …], "crew": 几人}}；没改过的用默认

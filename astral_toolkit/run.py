@@ -291,8 +291,8 @@ def _is_game_source(fn):
 
 
 def update(direct=False, web_ok=()):
-    """更新数据（2026-10-26 起）：汉化包照旧从 SC汉化盒子（国内服务器）下载；其余数据先从 AT 服务器（不通再 Gitee、GitHub）下 AT 发布的数据包，
-    Gitee、GitHub 都连不上才改从各数据网站直接下载（矿价、商店 UEX，蓝图 scmdb，星图 starmap.space，掉落 scl.miao.network）。
+    """更新数据（2026-10-26 起）：汉化包照旧从 SC汉化盒子（国内服务器）下载；其余数据先从 AT 服务器（不通再国内镜像、GitHub）下 AT 发布的数据包，
+    这几处都连不上才改从各数据网站直接下载（矿价、商店 UEX，蓝图 scmdb，星图 starmap.space，掉落 scl.miao.network）。
     direct=True：跳过数据包、直接从各网站下载（作者发布数据包前用，tools/make_data_pack.py）。
     web_ok：本机是游戏数据版也照样从网站下的模块名（make_data_pack 下了 starmap.space 后会用数据构建脚本重新合并，只取自转相位和玩家补充的点）"""
     from .crafting import build_crafting, loot, shops
@@ -338,7 +338,7 @@ def update(direct=False, web_ok=()):
         sources if direct else (("数据包", from_pack),)
     )
 
-    try:  # 在天枢窗口里点「更新」时：几个下载线程的输出都要进窗口的更新记录
+    try:  # 在 AT 窗口里点「更新」时：几个下载线程的输出都要进窗口的更新记录
         from .app import bus
 
         task = bus.current_task()
@@ -412,7 +412,7 @@ def menu(console=False, restart=False):
     from .system import showloc
     from .app.server import _single_instance, release_instance
 
-    # 只允许开一个天枢：已经开着就把它的窗口叫出来，这次直接退出（不再弹管理员确认框、不再重复挂热键）
+    # 只允许开一个 AT：已经开着就把它的窗口叫出来，这次直接退出（不再弹管理员确认框、不再重复挂热键）
     if not _single_instance(restart):
         return
     if showloc.WIN and not showloc.is_admin() and settings.load()["admin"] is not False:
@@ -420,7 +420,7 @@ def menu(console=False, restart=False):
         # 否则 Windows 不让读游戏里的按键。默认直接用管理员身份重开。
         print("正在用管理员身份重新打开助手（Windows 会弹确认框，点「是」）…")
         print("（不想这样的话：在窗口「设置与更新」里关掉「以管理员身份运行」）")
-        release_instance()  # 让管理员身份的新天枢拿到「只开一个」的锁
+        release_instance()  # 让管理员身份的新 AT 拿到「只开一个」的锁
         if showloc.relaunch_as_admin("menu"):
             settings.update(admin=True)
             return

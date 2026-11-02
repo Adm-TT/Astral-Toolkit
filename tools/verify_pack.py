@@ -1,6 +1,6 @@
 """验证网上的数据包：每轮只走一个来源（data.json 和下载地址都只留这一处），下载到临时目录、核对、
 装进临时目录、读一件掉落明细（不碰开发目录的 data）。有任何一轮失败退出码 1。
-用法：python -X utf8 tools/verify_pack.py [AT服务器|国内镜像|Gitee|GitHub ...]（默认 AT 服务器、国内镜像；Gitee / GitHub 已不再更新）"""
+用法：python -X utf8 tools/verify_pack.py [AT服务器|国内镜像|GitHub ...]（默认 AT 服务器、国内镜像；GitHub 已不再更新）"""
 
 import json
 import sys
@@ -20,8 +20,6 @@ def rounds():
         out.append(("AT服务器", U.OWN, U.OWN))
     if U.COS:
         out.append(("国内镜像", U.COS, U.COS))
-    if U.GITEE:
-        out.append(("Gitee", "gitee.com", "gitee.com"))
     if U.GITHUB:
         out.append(("GitHub", "raw.githubusercontent.com", "github.com"))
     return out

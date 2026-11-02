@@ -1,6 +1,6 @@
-"""性能记录：每分钟往 userdata/logs/perf_log.txt 写一行，看天枢到底占了多少电脑资源
+"""性能记录：每分钟往 userdata/logs/perf_log.txt 写一行，看 AT 到底占了多少电脑资源
 
-  天枢（主程序）、窗口（Edge）各自的 CPU 占用和内存（辅助进程 1.1.2 起没有了），
+  AT（主程序）、窗口（Edge）各自的 CPU 占用和内存（辅助进程 1.1.2 起没有了），
   以及这一分钟里各种文字识别做了几次、一共花了多少秒。
 只在 Windows 上读进程信息（用系统自带接口，不装别的东西）；统计本身几乎不占资源。
 """
@@ -178,9 +178,9 @@ def _tree(root, kids):
 
 
 def _groups():
-    """{名字: [pid…]}：天枢自己、窗口（用天枢自己那个 Edge 配置文件夹的 Edge 进程）"""
+    """{名字: [pid…]}：AT 自己、窗口（用 AT 自己那个 Edge 配置文件夹的 Edge 进程）"""
     me = os.getpid()
-    out = {"天枢": [me]}
+    out = {"AT": [me]}
     if sys.platform != "win32":
         return out
     try:

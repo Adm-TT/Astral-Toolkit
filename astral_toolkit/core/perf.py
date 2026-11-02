@@ -1,6 +1,6 @@
 """少占电脑资源，别拖慢游戏
 
-- 天枢自己的进程（窗口和后台辅助）都降成「低于正常」优先级：游戏要用 CPU 时让着游戏
+- AT 自己的进程（窗口和后台辅助）都降成「低于正常」优先级：游戏要用 CPU 时让着游戏
 - 文字识别（RapidOCR）全程序只加载一份，并且只用 2 个线程（默认会占满所有 CPU 核心）；
   装了 onnxruntime-directml 就让找字、认字在显卡上算（DirectML），没装照旧用 CPU
 - 截图只截需要的那一块，不截整个屏幕
@@ -100,7 +100,7 @@ _boost = {"n": 0, "lock": threading.Lock()}
 @contextlib.contextmanager
 def boost():
     """你在等结果的那一下（F8）：临时恢复正常优先级，跑完马上降回去。
-    平时天枢是「低于正常」优先级，游戏占满 CPU 时识别会被挤得很慢"""
+    平时 AT 是「低于正常」优先级，游戏占满 CPU 时识别会被挤得很慢"""
     if sys.platform != "win32":
         yield
         return
@@ -308,7 +308,7 @@ def overlay_rect():
 
 
 def own_window_rects():
-    """天枢自己的主窗口盖在游戏上时的位置：只算「在最前面」或「置顶」的（在游戏后面的窗口看不见，涂黑反而挡住游戏）。
+    """AT 自己的主窗口盖在游戏上时的位置：只算「在最前面」或「置顶」的（在游戏后面的窗口看不见，涂黑反而挡住游戏）。
     2026-10-23 全量样本测试：窗口里的实时栏写着信号值 / 石头质量，盖在游戏上会被当成游戏里的字"""
     if sys.platform != "win32":
         return []
@@ -346,7 +346,7 @@ def own_window_rects():
 
 
 def mask_overlay(img, left, top, rect=None, scale=1.0, own=None):
-    """截图里悬浮窗（和盖在最前面的天枢主窗口）那块涂黑：img 是从屏幕 (left, top) 开始截的；scale = 截图像素 / 窗口坐标像素"""
+    """截图里悬浮窗（和盖在最前面的 AT 主窗口）那块涂黑：img 是从屏幕 (left, top) 开始截的；scale = 截图像素 / 窗口坐标像素"""
     rects = [rect or overlay_rect()] + (
         own_window_rects() if own is None else list(own)
     )
@@ -367,7 +367,7 @@ def mask_overlay(img, left, top, rect=None, scale=1.0, own=None):
 
 
 def _scale(mon):
-    """窗口坐标 → 截图像素的比例（天枢没开高 DPI 感知时，Windows 给的窗口坐标是缩放过的）"""
+    """窗口坐标 → 截图像素的比例（AT 没开高 DPI 感知时，Windows 给的窗口坐标是缩放过的）"""
     try:
         import ctypes
 

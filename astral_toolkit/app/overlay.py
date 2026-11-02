@@ -1032,7 +1032,7 @@ class Hud:
             self.root = tk.Tk()
             self.root.title(
                 "AT 悬浮窗"
-            )  # 和主窗口「天枢 Dubhe」区分开（找主窗口时按标题找）
+            )  # 和主窗口「AT 星际公民助手」区分开（找主窗口时按标题找）
             self.root.overrideredirect(True)
             self.root.attributes("-topmost", True)
             self.root.configure(bg="black")

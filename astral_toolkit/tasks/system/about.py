@@ -68,7 +68,7 @@ def _data_versions():
 
     out["pack"] = (
         local_version()
-    )  # 数据包版本（2026-10-26 起数据从 Gitee 的数据包更新）
+    )  # 数据包版本（2026-10-26 起数据从 AT 发布的数据包更新）
     return out
 
 

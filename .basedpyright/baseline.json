@@ -4366,16 +4366,6 @@
                 }
             }
         ],
-        "./tools/build_standalone.py": [
-            {
-                "code": "reportOptionalMemberAccess",
-                "range": {
-                    "startColumn": 6,
-                    "endColumn": 11,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./tools/build_velopack.py": [
             {
                 "code": "reportOptionalMemberAccess",

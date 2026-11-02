@@ -1,4 +1,4 @@
-"""发版前的接口巡检：把安装包解压到临时目录（全新的用户数据，不碰你自己的），启动天枢后台，
+"""发版前的接口巡检：把安装包解压到临时目录（全新的用户数据，不碰你自己的），启动 AT 后台，
 按真实使用顺序把每一个接口都调一遍，检查有没有报错、返回的东西对不对、耗时多少。
 
 用法（在 astral_toolkit 文件夹里）：
@@ -73,7 +73,7 @@ def main():
         if args
         else max((ROOT / "dist").glob("Dubhe_*.zip"), key=lambda p: p.stat().st_mtime)
     )
-    tmp = Path(tempfile.mkdtemp(prefix="dubhe_check_"))
+    tmp = Path(tempfile.mkdtemp(prefix="at_check_"))
     with zipfile.ZipFile(pkg) as z:
         z.extractall(tmp)
     app = next(tmp.iterdir())
@@ -109,7 +109,7 @@ def main():
     while line and not line.startswith("READY"):
         line = proc.stdout.readline()
     if not line:
-        print("❌ 天枢后台没启动起来")
+        print("❌ AT 后台没启动起来")
         return 1
     _, port, token = line.split()
     import threading
@@ -846,7 +846,7 @@ def main():
             )
             return {"state": last.get("state"), "result": last.get("result") or {}}
 
-        # 2026-10-26 起数据走 Gitee 数据包：汉化包 + 数据包 2 项；数据包连不上时退回各网站直接下（项数更多）。都要成功
+        # 2026-10-26 起数据走 AT 数据包：汉化包 + 数据包 2 项；数据包连不上时退回各网站直接下（项数更多）。都要成功
         step(
             "更新数据（联网，每项都要成功）",
             update,
@@ -868,7 +868,7 @@ def main():
     shutil.rmtree(tmp, ignore_errors=True)
     ok = sum(1 for r in rows if r[0])
     out = [
-        f"天枢 {(st or {}).get('version', '?')} 接口巡检：{ok}/{len(rows)} 通过（{pkg.name}）",
+        f"AT {(st or {}).get('version', '?')} 接口巡检：{ok}/{len(rows)} 通过（{pkg.name}）",
         "",
     ]
     out += [

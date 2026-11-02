@@ -122,7 +122,7 @@ def main(open_ui=True, port=0, restart=False):
                 and not launcher.STATE["told_tray"]
                 and time.time() - http_server._last_client["t"] > 3
             ):
-                _told_tray(tray)  # 第一次关窗口：告诉你天枢还在右下角
+                _told_tray(tray)  # 第一次关窗口：告诉你 AT 还在右下角
     except KeyboardInterrupt:
         pass
     finally:

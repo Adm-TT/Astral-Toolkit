@@ -1,14 +1,14 @@
-"""数据包（2026-10-26 用户定）：矿价、制造蓝图、维科洛兑换、星图、商店、掉落等数据由作者整理好放到 Gitee，玩家「更新数据」时从 Gitee 下载，
+"""数据包（2026-10-26 用户定）：矿价、制造蓝图、维科洛兑换、星图、商店、掉落等数据由作者整理好放到 AT 服务器、国内镜像（腾讯云 COS）和 GitHub，玩家「更新数据」时从这几处下载，
 国内也能稳定下载；数据和程序版本分开发布（更新数据不用发新版本）。
 
-- 先读自己服务器（dl.astral-trade.com，2026-10-27）上的 data.json，再试国内镜像（COS，2026-10-29）、Gitee、GitHub，版本比本地新就下载数据包、核对大小和 SHA-256，只解出下面列的文件
+- 先读自己服务器（dl.astral-trade.com，2026-10-27）上的 data.json，再试国内镜像（COS，2026-10-29）、GitHub，版本比本地新就下载数据包、核对大小和 SHA-256，只解出下面列的文件
 - 三处都连不上：返回 None，调用方改从各数据网站直接更新（和以前一样）
 - 汉化包不在数据包里：SC汉化盒子本来就是国内服务器，照旧直接下载
 - 作者用 tools/make_data_pack.py 生成数据包和 data.json
 
 data.json：{"version": "2026.10.26-1310", "date": "2026-10-26", "game": "4.10.2",
             "file": "AT_data_2026.10.26-1310.zip", "size": 123, "sha256": "…",
-            "urls": ["https://gitee.com/…/AT_data_….zip", "https://github.com/…/AT_data_….zip"],
+            "urls": ["https://dl.astral-trade.com/releases/data-…/AT_data_….zip", "https://github.com/…/AT_data_….zip"],
             "loot": {"version": "4.10.2LIVE", "file": "AT_loot_4.10.2LIVE.zip", "size": …, "sha256": "…", "urls": […]}}
 """
 
@@ -60,8 +60,6 @@ def manifest_urls():
         out.append((U.OWN_NAME, f"https://{U.OWN}/data.json"))
     if U.COS:
         out.append((U.COS_NAME, f"https://{U.COS}/data.json"))
-    if U.GITEE:
-        out.append(("Gitee", f"https://gitee.com/{U.GITEE}/raw/master/data.json"))
     if U.GITHUB:
         out.append(
             ("GitHub", f"https://raw.githubusercontent.com/{U.GITHUB}/main/data.json")
@@ -361,7 +359,7 @@ def _update_loot(info, progress):
 
 
 def update(progress=print):
-    """「更新数据」：从 AT 服务器 / Gitee / GitHub 下数据包。返回 True = 已是最新或已更新；None = 连不上数据包地址（调用方改从各网站更新）。
+    """「更新数据」：从 AT 服务器 / 国内镜像 / GitHub 下数据包。返回 True = 已是最新或已更新；None = 连不上数据包地址（调用方改从各网站更新）。
     数据包本身坏了（校验不符等）抛 ValueError"""
     info, err = fetch()
     if not info:

@@ -1,5 +1,5 @@
 "use strict";
-// 天枢窗口：所有功能都通过 /api/<名字> 调用 Python；实时结果从 /api/events 推过来
+// AT 窗口：所有功能都通过 /api/<名字> 调用 Python；实时结果从 /api/events 推过来
 
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -164,7 +164,7 @@ function menu(anchor, items) {
   b.onclick = () => set(!app.classList.contains("feed-on"), true);
 })();
 
-// 悬停小字：页面里的 title 统一换成天枢自己的提示（停 0.3 秒出现，不用浏览器那个慢半拍的）
+// 悬停小字：页面里的 title 统一换成 AT 自己的提示（停 0.3 秒出现，不用浏览器那个慢半拍的）
 (() => {
   let tip = null, timer = 0, cur = null;
   const hide = () => { clearTimeout(timer); cur = null; if (tip) tip.hidden = true; };
@@ -207,7 +207,7 @@ function connect() {
   es.onmessage = (e) => {
     const { kind, data, replay } = JSON.parse(e.data);       // replay：窗口刚打开时后台补发的旧消息，只恢复状态
     window.dispatchEvent(new CustomEvent("ata:backend", { detail: { kind, data, replay: !!replay } }));   // 阿塔（ata/at-adapter.js）也听这条
-    if (kind === "quit") {                       // 天枢退出或重新启动了：这个窗口没用了，关掉
+    if (kind === "quit") {                       // AT 退出或重新启动了：这个窗口没用了，关掉
       es.close();
       document.body.innerHTML = `<div class="gate"><div class="gate-card"><h2>AT 已退出或重新启动</h2><p>可以关闭此窗口</p></div></div>`;
       setTimeout(() => window.close(), 300);
@@ -239,9 +239,9 @@ function connect() {
       state.count = { ...(state.count || {}), ...data };
       if (page === "stock") countDraw();
     } else if (kind === "ore_log") {             // 原矿记录变了（游戏里按热键记的也走这里）
-      window.dispatchEvent(new Event("dubhe:ore"));
+      window.dispatchEvent(new Event("at:ore"));
     } else if (kind === "waypoints") {
-      window.dispatchEvent(new Event("dubhe:waypoints"));
+      window.dispatchEvent(new Event("at:waypoints"));
     } else if (kind === "nav") {
       state.nav = data;
       $("#pip-nav").className = "pip" + (data.active ? " on" : "");
@@ -868,7 +868,7 @@ async function oreDrawer() {
         <input class="input" id="or-q" placeholder="搜索矿物名" autocomplete="off" style="flex:1;max-width:280px">
         <span class="faint" id="or-n"></span></div>
       <div id="or-list"><p class="muted">加载中…</p></div>`,
-    onClose: () => removeEventListener("dubhe:ore", load) });
+    onClose: () => removeEventListener("at:ore", load) });
   md.el.classList.add("wide");
   const sh = (k, label) => `<button type="button" class="th-sort${f.sort === k ? " on" : ""}" data-sort="${k}">${label}${f.sort === k ? (f.desc ? " ↓" : " ↑") : ""}</button>`;
   const draw = () => {
@@ -895,7 +895,7 @@ async function oreDrawer() {
     try { rows = (await api("ore_list")).rows; } catch (e) { md.q("#or-list").innerHTML = `<p class="bad">${esc(e.message)}</p>`; return; }
     draw();
   }
-  addEventListener("dubhe:ore", load);
+  addEventListener("at:ore", load);
   md.q("#or-q").oninput = (e) => { f.q = e.target.value; draw(); };
   md.el.addEventListener("click", async (e) => {
     const so = e.target.closest("[data-sort]");
@@ -1574,7 +1574,7 @@ async function navWaypointView() {
   };
   if (!state.wpListen) {           // 游戏里按 F7 记了新路标：在这页的话马上刷新
     state.wpListen = true;
-    window.addEventListener("dubhe:waypoints", () => { if (page === "nav" && (state.navTab || "search") === "wp") navWaypointView(); });
+    window.addEventListener("at:waypoints", () => { if (page === "nav" && (state.navTab || "search") === "wp") navWaypointView(); });
   }
   let previewSeq = 0;
   const preview = async () => {                            // 粘贴后马上认星球、经纬度
@@ -2788,7 +2788,7 @@ PAGES.settings = () => {
           <button class="btn small primary" data-referral>打开注册页</button></div></div>
       <div><h3>版权</h3><p>© 2026 Adm_TT　按 AGPL-3.0 开源：可以使用、修改、转发；转发或发布修改版时须让对方能拿到完整源代码，通过网络让他人远程使用修改版时也一样，并保留版权和许可声明，详见免责声明和 LICENSE</p>
         <p class="muted" style="font-size:13px;margin-top:6px">AT 是玩家自制的非官方工具，与 Cloud Imperium 集团旗下公司无关联。星际公民的游戏内容归 Cloud Imperium Rights LLC 和 Cloud Imperium Rights Limited 所有</p></div>
-      <div><h3>数据来源</h3><p class="muted" style="font-size:13px">数据权利归原作者所有，部分数据经 AT 服务器、Gitee、GitHub 转发</p><ul class="src" id="about-src"></ul>
+      <div><h3>数据来源</h3><p class="muted" style="font-size:13px">数据权利归原作者所有，部分数据经 AT 服务器、国内镜像（腾讯云 COS）、GitHub 转发</p><ul class="src" id="about-src"></ul>
         <div class="row" style="margin-top:8px;gap:8px"><button class="btn small" id="show-disclaimer">免责声明</button><button class="btn small" id="show-licenses">开源组件许可</button></div></div>
     </div>`;
   bindSwitches();
