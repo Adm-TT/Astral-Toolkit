@@ -587,7 +587,7 @@ def set_mining_gear(ship="mole", loadout=None, reset=False):
 def manual_scan(mass=0, resistance=0, instability=0):
     """手动输入扫描数据：只算破碎方案"""
     import math
-    from ..mining.laser import recommend
+    from ..mining.laser import gadget_label, recommend
 
     mass, resistance, instability = float(mass), float(resistance), float(instability)
     # 质量为 0 时比值是 inf，json 写成 Infinity，前端解析失败只会说「连不上」（2026-10-31 审查）
@@ -597,18 +597,9 @@ def manual_scan(mass=0, resistance=0, instability=0):
         raise ValueError("抗性要填 0 到 100")
     if not (math.isfinite(instability) and instability >= 0):
         raise ValueError("不稳定性要填 0 或更大的数")
-    plans = recommend(mass, resistance, instability)
     return [
-        {
-            "heads": p.names,
-            "short": p.short(),
-            "summary": p.summary(),
-            "ratio": p.ratio,
-            "breakable": p.breakable,
-            "comfortable": p.comfortable,
-            "throttle": p.throttle if p.breakable else None,
-        }
-        for p in plans
+        _present.plan_view(_analysis.plan_facts(p, gadget_label))
+        for p in recommend(mass, resistance, instability)
     ]
 
 
