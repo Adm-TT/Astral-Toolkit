@@ -7,7 +7,6 @@
 4. 导航记号（Marker Tick）计算与投射、3D 空间站/太空指引与导览日志。
 """
 
-import copy
 import math
 import sys  # noqa: F401
 import threading  # noqa: F401
@@ -317,7 +316,7 @@ def _craft_and_goal_facts(scan, mineral_zh):
         for nm in best:
             g = _goal_for(nm, mineral_zh(nm))
             if g:
-                targets.append((nm, copy.deepcopy(g)))  # 不和目标缓存共用对象
+                targets.append((nm, _analysis.freeze(g)))  # 不和目标缓存共用对象
         complete = True
     except Exception:
         pass

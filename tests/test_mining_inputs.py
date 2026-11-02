@@ -143,7 +143,9 @@ def test_goal_targets_do_not_share_cache_objects(monkeypatch):
     monkeypatch.setattr(goals, "goal_short", lambda force=False: {"gold": target})
     ins = mining.collect_inputs(_gold_scan())
     got = dict(ins.goal_targets)["Gold"]
-    assert got == target and got is not target and got["goals"] is not target["goals"]
+    assert got["en"] == "Gold" and got["goals"] == ("蓝图",)
+    target["goals"].append("改")  # 目标缓存之后变了，这一轮不受影响
+    assert got["goals"] == ("蓝图",)
 
 
 def test_analyze_reads_snapshot_not_later_changes(monkeypatch):
@@ -156,8 +158,12 @@ def test_analyze_reads_snapshot_not_later_changes(monkeypatch):
     monkeypatch.setattr(data, "CITY_PRICES", {})
     monkeypatch.setattr(laser, "ship_loadout", lambda ship=None: 1 / 0)
     monkeypatch.setattr(laser, "active_model", lambda: 1 / 0)
-    for k in list(data.REFINERIES):
-        monkeypatch.setitem(data.REFINERIES, k, ("星系", {"Gold": 90}))
-    got = analyze(scan, bag, ins)
+    saved = dict(data.REFINERIES)
+    try:
+        for k in saved:
+            data.REFINERIES[k] = ("星系", {"Gold": 90})
+        got = analyze(scan, bag, ins)
+    finally:
+        data.REFINERIES.update(saved)
     assert got.refine == want.refine and got.sell == want.sell
     assert got.plans == want.plans
