@@ -17,7 +17,6 @@ class _Resp(io.BytesIO):
 def _setup(monkeypatch, tmp_path, pages):
     from astral_toolkit.update import update_check as C
 
-    monkeypatch.setattr(C, "GITEE", "at/at")
     monkeypatch.setattr(C, "GITHUB", "at/at")
     monkeypatch.setattr(C, "UPDATES", tmp_path / "updates")
     monkeypatch.setattr(
@@ -49,7 +48,7 @@ def _manifest(zip_path, version="9.0.0", sha=None):
         "notes": ["新功能"],
         "sha256": sha or hashlib.sha256(data).hexdigest(),
         "urls": [
-            "https://gitee.com/at/at/releases/download/v9.0.0/" + zip_path.name,
+            "https://dl.astral-trade.com/releases/v9.0.0/" + zip_path.name,
             "https://github.com/at/at/releases/download/v9.0.0/" + zip_path.name,
         ],
     }
@@ -72,14 +71,13 @@ def test_falls_back_to_github_and_ignores_older(monkeypatch, tmp_path):
     assert {c.split("/")[2] for c in calls} == {
         "dl.astral-trade.com",
         "at-dl-1323647399.cos.ap-guangzhou.myqcloud.com",
-        "gitee.com",
         "raw.githubusercontent.com",
-    }  # 四处一起问
+    }  # 三处一起问
     old = dict(m, version="0.0.1")
     C, _ = _setup(
         monkeypatch,
         tmp_path,
-        {"https://gitee.com/at/at/raw/master/latest.json": json.dumps(old).encode()},
+        {"https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(old).encode()},
     )
     assert C.check(force=True) is None  # 比现在旧：不提示
 
@@ -96,7 +94,7 @@ def test_parse_rejects_bad_manifest():
         "version": "1.7.1",
         "file": "Dubhe_1.7.1.zip",
         "sha256": "a" * 64,
-        "urls": ["https://gitee.com/x/y/z.zip"],
+        "urls": ["https://github.com/x/y/z.zip"],
     }
     assert C.parse(json.dumps(good))["version"] == "1.7.1"
     for bad in (
@@ -118,7 +116,7 @@ def test_download_checks_sha_and_uses_mirror(monkeypatch, tmp_path):
     m = _manifest(z)
     C, _ = _setup(
         monkeypatch, tmp_path, {m["urls"][0]: data[:-5] + b"xxxxx", m["urls"][1]: data}
-    )  # Gitee 的坏了
+    )  # AT 服务器的坏了，走 GitHub
     out = C.download(C.parse(json.dumps(m)), progress=lambda *_: None)
     assert out.read_bytes() == data and not list((tmp_path / "updates").glob("*.part"))
     bad = _manifest(z, sha="0" * 64)
@@ -135,7 +133,6 @@ def test_download_checks_sha_and_uses_mirror(monkeypatch, tmp_path):
 def test_disabled_without_repo(monkeypatch):
     from astral_toolkit.update import update_check as C
 
-    monkeypatch.setattr(C, "GITEE", "")
     monkeypatch.setattr(C, "GITHUB", "")
     monkeypatch.setattr(C, "OWN", "")
     monkeypatch.setattr(C, "COS", "")
@@ -150,7 +147,7 @@ def test_installer_entry_only_for_standalone(tmp_path):
         "version": "1.7.1",
         "file": "Dubhe_1.7.1.zip",
         "sha256": "a" * 64,
-        "urls": ["https://gitee.com/x/y/Dubhe_1.7.1.zip"],
+        "urls": ["https://github.com/x/y/Dubhe_1.7.1.zip"],
         "installer": {
             "file": "AT_Setup_1.7.1.exe",
             "sha256": "b" * 64,
@@ -187,7 +184,7 @@ def test_make_manifest_with_installer(monkeypatch, tmp_path):
     assert m["installer"]["urls"][:3] == [
         "https://dl.astral-trade.com/releases/v9.0.0/AT_Setup_9.0.0.exe",
         "https://at-dl-1323647399.cos.ap-guangzhou.myqcloud.com/releases/v9.0.0/AT_Setup_9.0.0.exe",
-        "https://gitee.com/at/at/releases/download/v9.0.0/AT_Setup_9.0.0.exe",
+        "https://github.com/at/at/releases/download/v9.0.0/AT_Setup_9.0.0.exe",
     ]
     assert (
         C.where(m["installer"]["urls"][0]) == "AT 服务器"
@@ -216,7 +213,7 @@ def test_manifest_installer_only(monkeypatch, tmp_path):
         "file": "Dubhe_1.1.1.zip",
         "sha256": "a" * 64,
         "size": 1,
-        "urls": ["https://gitee.com/at/at/releases/download/v1.1.1/Dubhe_1.1.1.zip"],
+        "urls": ["https://dl.astral-trade.com/releases/v1.1.1/Dubhe_1.1.1.zip"],
         "kill_rev": 5,
         "disabled": [],
     }
@@ -242,7 +239,7 @@ def test_manifest_installer_only(monkeypatch, tmp_path):
     C, _ = _setup(
         monkeypatch,
         tmp_path,
-        {"https://gitee.com/at/at/raw/master/latest.json": json.dumps(m).encode()},
+        {"https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(m).encode()},
     )
     monkeypatch.setattr(C.paths, "FROZEN", False)
     assert (
@@ -251,7 +248,7 @@ def test_manifest_installer_only(monkeypatch, tmp_path):
     C, _ = _setup(
         monkeypatch,
         tmp_path,
-        {"https://gitee.com/at/at/raw/master/latest.json": json.dumps(m).encode()},
+        {"https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(m).encode()},
     )
     monkeypatch.setattr(C.paths, "FROZEN", True)
     assert C.check(force=True)["file"] == "AT_Setup_9.0.0.exe"  # 安装版照常提示
@@ -406,7 +403,7 @@ def test_killswitch(monkeypatch, tmp_path):
 
     U._set_kill([{"feature": "radar", "versions": "*"}])
     monkeypatch.setattr(
-        U, "manifest_urls", lambda: [("Gitee", "https://gitee.com/x/latest.json")]
+        U, "manifest_urls", lambda: [("GitHub", "https://github.com/x/latest.json")]
     )
     monkeypatch.setattr(
         U, "_open", lambda url, timeout: io.BytesIO(b'{"message": "not found"}')
@@ -415,7 +412,7 @@ def test_killswitch(monkeypatch, tmp_path):
 
 
 def test_own_server_stale_does_not_hide_newer(monkeypatch, tmp_path):
-    """审查 2026-10-27：自己服务器上的清单旧了，Gitee 上有新版本，要用新的；关功能列表取 kill_rev 最大的那份"""
+    """审查 2026-10-27：自己服务器上的清单旧了，GitHub 上有新版本，要用新的；关功能列表取 kill_rev 最大的那份"""
     z = _pkg(tmp_path / "Dubhe_9.0.0.zip", "9.0.0", {})
     new = dict(_manifest(z), kill_rev=5, disabled=[{"feature": "radar", "why": "新"}])
     old = dict(
@@ -429,11 +426,11 @@ def test_own_server_stale_does_not_hide_newer(monkeypatch, tmp_path):
         tmp_path,
         {
             "https://dl.astral-trade.com/latest.json": json.dumps(old).encode(),
-            "https://gitee.com/at/at/raw/master/latest.json": json.dumps(new).encode(),
+            "https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(new).encode(),
         },
     )
     info = C.check(force=True)
-    assert info and info["version"] == "9.0.0" and info["source"] == "Gitee"
+    assert info and info["version"] == "9.0.0" and info["source"] == "GitHub"
     assert C.disabled("scan") and not C.disabled("radar")
 
 
@@ -446,7 +443,7 @@ def test_beta_sees_same_number_live(monkeypatch, tmp_path):
         monkeypatch,
         tmp_path,
         {
-            "https://gitee.com/at/at/raw/master/latest.json": json.dumps(
+            "https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(
                 _manifest(z)
             ).encode()
         },
@@ -466,18 +463,17 @@ def test_data_pack_takes_newest_source(monkeypatch, tmp_path):
     base = {
         "file": "AT_data_2026.10.27-0100.zip",
         "sha256": "a" * 64,
-        "urls": ["https://gitee.com/x/y/AT_data_2026.10.27-0100.zip"],
+        "urls": ["https://github.com/x/y/AT_data_2026.10.27-0100.zip"],
     }
     pages = {
         "https://dl.astral-trade.com/data.json": json.dumps(
             dict(base, version="2026.10.26-0100")
         ).encode(),
-        "https://gitee.com/at/at/raw/master/data.json": json.dumps(
+        "https://raw.githubusercontent.com/at/at/main/data.json": json.dumps(
             dict(base, version="2026.10.27-0100")
         ).encode(),
     }
-    monkeypatch.setattr(U, "GITEE", "at/at")
-    monkeypatch.setattr(U, "GITHUB", "")
+    monkeypatch.setattr(U, "GITHUB", "at/at")
 
     def fake(url, timeout):
         if url not in pages:
@@ -486,7 +482,7 @@ def test_data_pack_takes_newest_source(monkeypatch, tmp_path):
 
     monkeypatch.setattr(U, "_open", fake)
     info, err = P.fetch()
-    assert info["version"] == "2026.10.27-0100" and info["source"] == "Gitee"
+    assert info["version"] == "2026.10.27-0100" and info["source"] == "GitHub"
 
 
 def test_publish_hk_checks_manifest(tmp_path):
@@ -632,7 +628,7 @@ def test_vpk_check_fail_not_up_to_date(monkeypatch):
             "date": "",
             "notes": [],
             "size": 1,
-            "source": "Gitee",
+            "source": "GitHub",
         },
     )
     r = t_sys.upgrade_check(online=True)
@@ -666,7 +662,7 @@ def test_killswitch_old_mirror_cannot_undo(monkeypatch, tmp_path):
     C, _ = _setup(
         monkeypatch,
         tmp_path,
-        {"https://gitee.com/at/at/raw/master/latest.json": json.dumps(old).encode()},
+        {"https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(old).encode()},
     )
     C.check(force=True)
     assert C.disabled("radar")
@@ -674,7 +670,7 @@ def test_killswitch_old_mirror_cannot_undo(monkeypatch, tmp_path):
     C, _ = _setup(
         monkeypatch,
         tmp_path,
-        {"https://gitee.com/at/at/raw/master/latest.json": json.dumps(newer).encode()},
+        {"https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(newer).encode()},
     )
     C.check(force=True)
     assert not C.disabled("radar")

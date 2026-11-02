@@ -85,7 +85,7 @@ with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
                             and rel == Path("data")
                             and f in ("loot_details.zip",)
                         ):
-                            continue  # 掉落明细整包和数据包版本从 Gitee 数据包下载，安装包里不带
+                            continue  # 掉落明细整包和数据包版本从数据包下载，安装包里不带
                         p = Path(dirpath) / f
                         z.write(p, f"{name}/{p.relative_to(root).as_posix()}")
                         n += 1

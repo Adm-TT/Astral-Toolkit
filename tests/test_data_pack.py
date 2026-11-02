@@ -1,4 +1,4 @@
-"""数据包（2026-10-26）：从 Gitee 下载 AT 整理好的数据；连不上时改从各数据网站更新（不联网：换掉 _open）"""
+"""数据包（2026-10-26）：从 AT 服务器 / 国内镜像 / GitHub 下载 AT 整理好的数据；连不上时改从各数据网站更新（不联网：换掉 _open）"""
 
 import hashlib
 import io
@@ -14,7 +14,6 @@ class _Resp(io.BytesIO):
 def _setup(monkeypatch, tmp_path, pages):
     from astral_toolkit.update import data_pack as P, update_check as U
 
-    monkeypatch.setattr(U, "GITEE", "at/at")
     monkeypatch.setattr(U, "GITHUB", "at/at")
     monkeypatch.setattr(P, "DATA", tmp_path / "data")
     monkeypatch.setattr(P, "STAMP", tmp_path / "data" / "data_pack.json")
@@ -47,14 +46,14 @@ def _pack(tmp_path, files, version="2026.10.26-1200"):
         "size": len(data),
         "sha256": hashlib.sha256(data).hexdigest(),
         "urls": [
-            f"https://gitee.com/at/at/releases/download/data-{version}/{zp.name}",
+            f"https://dl.astral-trade.com/releases/data-{version}/{zp.name}",
             f"https://github.com/at/at/releases/download/data-{version}/{zp.name}",
         ],
     }
     return data, m
 
 
-def test_update_from_gitee_installs_listed_files_only(monkeypatch, tmp_path):
+def test_update_from_mirror_installs_listed_files_only(monkeypatch, tmp_path):
     data, m = _pack(
         tmp_path,
         {
@@ -68,7 +67,7 @@ def test_update_from_gitee_installs_listed_files_only(monkeypatch, tmp_path):
         monkeypatch,
         tmp_path,
         {
-            "https://gitee.com/at/at/raw/master/data.json": json.dumps(m).encode(),
+            "https://raw.githubusercontent.com/at/at/main/data.json": json.dumps(m).encode(),
             m["urls"][0]: data,
         },
     )
@@ -93,7 +92,7 @@ def test_bad_checksum_falls_back_to_github_mirror(monkeypatch, tmp_path):
         monkeypatch,
         tmp_path,
         {
-            "https://gitee.com/at/at/raw/master/data.json": json.dumps(m).encode(),
+            "https://raw.githubusercontent.com/at/at/main/data.json": json.dumps(m).encode(),
             m["urls"][0]: data[:-3] + b"xyz",
             m["urls"][1]: data,
         },
@@ -136,7 +135,7 @@ def test_pack_up_to_date_skips_sources(monkeypatch, tmp_path):
         monkeypatch,
         tmp_path,
         {
-            "https://gitee.com/at/at/raw/master/data.json": json.dumps(m).encode(),
+            "https://raw.githubusercontent.com/at/at/main/data.json": json.dumps(m).encode(),
             m["urls"][0]: data,
         },
     )  # noqa: F841
@@ -159,7 +158,7 @@ def test_parse_rejects_bad_manifest():
         "version": "2026.10.26-1200",
         "file": "AT_data_2026.10.26-1200.zip",
         "sha256": "a" * 64,
-        "urls": ["https://gitee.com/x/y/z.zip"],
+        "urls": ["https://github.com/x/y/z.zip"],
     }
     assert P.parse(json.dumps(good))["version"] == "2026.10.26-1200"
     for bad in (
@@ -222,12 +221,12 @@ def test_data_pack_downloads_loot_bundle_only_when_version_changes(
         "size": len(lz),
         "sha256": hashlib.sha256(lz).hexdigest(),
         "urls": [
-            "https://gitee.com/at/at/releases/download/data-x/AT_loot_4.10.2LIVE.zip"
+            "https://dl.astral-trade.com/releases/data-x/AT_loot_4.10.2LIVE.zip"
         ],
     }
     hits = []
     pages = {
-        "https://gitee.com/at/at/raw/master/data.json": json.dumps(m).encode(),
+        "https://raw.githubusercontent.com/at/at/main/data.json": json.dumps(m).encode(),
         m["urls"][0]: data,
         m["loot"]["urls"][0]: lz,
     }

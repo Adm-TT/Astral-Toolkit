@@ -291,8 +291,8 @@ def _is_game_source(fn):
 
 
 def update(direct=False, web_ok=()):
-    """更新数据（2026-10-26 起）：汉化包照旧从 SC汉化盒子（国内服务器）下载；其余数据先从 AT 服务器（不通再 Gitee、GitHub）下 AT 发布的数据包，
-    Gitee、GitHub 都连不上才改从各数据网站直接下载（矿价、商店 UEX，蓝图 scmdb，星图 starmap.space，掉落 scl.miao.network）。
+    """更新数据（2026-10-26 起）：汉化包照旧从 SC汉化盒子（国内服务器）下载；其余数据先从 AT 服务器（不通再国内镜像、GitHub）下 AT 发布的数据包，
+    这几处都连不上才改从各数据网站直接下载（矿价、商店 UEX，蓝图 scmdb，星图 starmap.space，掉落 scl.miao.network）。
     direct=True：跳过数据包、直接从各网站下载（作者发布数据包前用，tools/make_data_pack.py）。
     web_ok：本机是游戏数据版也照样从网站下的模块名（make_data_pack 下了 starmap.space 后会用数据构建脚本重新合并，只取自转相位和玩家补充的点）"""
     from .crafting import build_crafting, loot, shops

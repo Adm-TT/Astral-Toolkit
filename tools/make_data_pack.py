@@ -7,7 +7,7 @@
   环境变量（作者电脑上设）：AT_SRC_DIR = 数据构建脚本的工作目录（里面有 oc_x），AT_DATA_TOOLS = 数据构建脚本所在目录。
   两个都不设就只用网站数据；但本机星图已是游戏数据版、又要去网站更新时会直接停下（不然网站版会盖掉它再打进数据包）
 生成 dist\\data\\AT_data_<版本>.zip、AT_loot_<掉落版本>.zip（掉落明细整包）和 dist\\data\\data.json。
-发布步骤（对外发布要负责人点头才跑；Gitee / GitHub 上的 data.json 已不再更新）：
+发布步骤（对外发布要负责人点头才跑；GitHub 上的 data.json 已不再更新）：
   1. 生成数据包和 data.json（本脚本）
   2. tools\\publish_hk.py dist\\data\\data.json：先把数据包传到 AT 服务器和国内镜像、核对校验，最后才换 data.json
   先传数据包、再更新 data.json，顺序不能反（publish_hk.py 按这个顺序做）。玩家点「更新数据」时读到新的 data.json 就会下载

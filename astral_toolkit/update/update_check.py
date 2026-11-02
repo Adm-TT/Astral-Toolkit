@@ -1,6 +1,6 @@
 """在线更新（2026-10-25）：启动时到网上读一个很小的版本说明（latest.json），有新版本就提示；玩家点「下载并升级」才下载。
 
-- 先试自己的香港服务器 dl.astral-trade.com（2026-10-27），再试国内镜像（腾讯云 COS 广州，2026-10-29：国内连不上香港），再试 Gitee、GitHub；每个地址最多等 5 秒，都不通就当没有新版本，不报错（能离线就离线）
+- 先试自己的香港服务器 dl.astral-trade.com（2026-10-27），再试国内镜像（腾讯云 COS 广州，2026-10-29：国内连不上香港），再试 GitHub（Gitee 仓库 2026-11-02 已删）；每个地址最多等 5 秒，都不通就当没有新版本，不报错（能离线就离线）
 - 下载完核对文件大小和 SHA-256，对不上就删掉、不装；装的时候走 upgrade.apply（先备份，失败可回滚）
 - 下载的安装包放 userdata/updates（只留最新的一个），一键升级也能找到它
 - 版本说明由 tools/make_manifest.py 在发版本时生成
@@ -8,7 +8,7 @@
 latest.json 的格式：
 {"version": "1.7.1", "date": "2026-11-01", "notes": ["更新内容一", "…"],
  "file": "Dubhe_1.7.1.zip", "size": 12345678, "sha256": "…64 位…",
- "urls": ["https://gitee.com/…/Dubhe_1.7.1.zip", "https://github.com/…/Dubhe_1.7.1.zip"],
+ "urls": ["https://dl.astral-trade.com/releases/v1.7.1/Dubhe_1.7.1.zip", "https://github.com/…/Dubhe_1.7.1.zip"],
  "installer": {"file": "AT_Setup_1.7.1.exe", "size": …, "sha256": "…", "urls": […]}}
 Python 版用上面的 Dubhe_*.zip；独立安装版（AT.exe，1.7.0 起）只看 installer：下载安装程序，退出 AT 后静默安装，装完自动重新打开。
 旧的 Python 版不认识 installer 这一项，会直接忽略，所以两种版本共用一份 latest.json
@@ -25,9 +25,6 @@ from ..core import paths
 from ..core.paths import USER
 
 # 仓库地址（「用户名/仓库名」，2026-10-25 用户建的公开仓库）；空着就不检查在线更新
-GITEE = (
-    "Adm_TT/Astral-Toolkit"  # https://gitee.com/Adm_TT/Astral-Toolkit（master 分支）
-)
 GITHUB = (
     "Adm-TT/Astral-Toolkit"  # https://github.com/Adm-TT/Astral-Toolkit（main 分支）
 )
@@ -40,30 +37,26 @@ EVERY = 6 * 3600  # 一直开着时，每 6 小时再查一次
 HOSTS = (
     OWN,
     COS,
-    "gitee.com",
     "github.com",
     "raw.githubusercontent.com",
     "objects.githubusercontent.com",
     "release-assets.githubusercontent.com",
-    "foruda.gitee.com",
 )
 UPDATES = USER / "updates"
 NAME = re.compile(r"^Dubhe_\d+\.\d+\.\d+\.zip$", re.I)
 SETUP = re.compile(r"^AT_Setup_\d+\.\d+\.\d+\.exe$", re.I)
-SETUP_MAX = 300 * 2**20  # 安装程序（Gitee 单个附件上限 100 MB，这里放宽留余地）
+SETUP_MAX = 300 * 2**20  # 安装程序大小上限（防止下到异常大的文件）
 
 _state = {"at": 0.0, "info": None, "error": "", "lock": threading.Lock()}
 
 
 def release_urls(tag, name):
-    """发行版里一个文件的下载地址：自己的服务器、国内镜像、Gitee、GitHub（按这个顺序试）"""
+    """发行版里一个文件的下载地址：自己的服务器、国内镜像、GitHub（按这个顺序试）"""
     out = []
     if OWN:
         out.append(f"https://{OWN}/releases/{tag}/{name}")
     if COS:
         out.append(f"https://{COS}/releases/{tag}/{name}")
-    if GITEE:
-        out.append(f"https://gitee.com/{GITEE}/releases/download/{tag}/{name}")
     if GITHUB:
         out.append(f"https://github.com/{GITHUB}/releases/download/{tag}/{name}")
     return out
@@ -78,8 +71,6 @@ def where(url):
         if OWN and host == OWN
         else COS_NAME
         if COS and host == COS
-        else "Gitee"
-        if "gitee" in host
         else "GitHub"
         if "github" in host
         else "网上"
@@ -92,8 +83,6 @@ def manifest_urls():
         out.append((OWN_NAME, f"https://{OWN}/latest.json"))
     if COS:
         out.append((COS_NAME, f"https://{COS}/latest.json"))
-    if GITEE:
-        out.append(("Gitee", f"https://gitee.com/{GITEE}/raw/master/latest.json"))
     if GITHUB:
         out.append(
             ("GitHub", f"https://raw.githubusercontent.com/{GITHUB}/main/latest.json")
@@ -260,7 +249,7 @@ def disabled(feature):
 
 
 def _fetch_all(sources, timeout, limit=64 * 1024):
-    """几处同时读（2026-10-27：自己服务器、Gitee、GitHub 一起问，不用一个个等超时）。
+    """几处同时读（2026-10-27：自己服务器、国内镜像、GitHub 一起问，不用一个个等超时）。
     返回 [(哪里, 读到的字节 或 出错的异常)]，顺序和 sources 一样"""
     from concurrent.futures import ThreadPoolExecutor, wait
 

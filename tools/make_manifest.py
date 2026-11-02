@@ -5,7 +5,7 @@
   .venv\\Scripts\\python.exe -X utf8 tools\\make_manifest.py --installer 路径\\AT_Setup_1.7.1.exe "更新内容一"
   （压缩包版已停止维护：可以只给安装程序，清单顶层不写 file，源码版当作没有新版本；latest.json 生成在安装程序旁边）
 生成 dist\\latest.json（--installer：同一版本的独立安装程序，安装版在线升级用；1.7.0 起每次都带）。
-远程关功能的 disabled / kill_rev 从 AT 服务器或国内镜像上现在的 latest.json 带过来（Gitee / GitHub 上的清单已不再更新，不读）；
+远程关功能的 disabled / kill_rev 从 AT 服务器或国内镜像上现在的 latest.json 带过来（GitHub 上的清单已不再更新，不读）；
 两处都读不到、或两处 kill_rev 不一致就停下，不生成。发布步骤（对外发布要负责人点头才跑）：
   1. 生成 latest.json（本脚本）
   2. tools\\publish_hk.py --velopack：先传安装包（Velopack 更新包和桥接安装程序）
@@ -23,7 +23,7 @@ from astral_toolkit.update import update_check  # noqa: E402
 
 def current_online():
     """AT 服务器、国内镜像上 (kill_rev, 版本) 最大的那份 latest.json；两处都读不到返回 None。
-    只认这两处：Gitee / GitHub 的清单已不再更新，带它的旧 kill_rev / disabled 会盖掉服务器上新的远程关功能列表。
+    只认这两处：GitHub 的清单已不再更新，带它的旧 kill_rev / disabled 会盖掉服务器上新的远程关功能列表。
     两处都读到但 kill_rev 不一致（上次发布只传了一半）：停下，不猜用哪份"""
     from astral_toolkit.update.upgrade import ver
 
@@ -90,7 +90,7 @@ def main(argv):
     if keep is None and not fresh:
         print(
             "❌ AT 服务器和国内镜像上的 latest.json 都读不到（要把远程关功能的 disabled / kill_rev 带上，"
-            "Gitee / GitHub 上的旧清单不能代替）。确定网上没有再加 --fresh"
+            "GitHub 上的旧清单不能代替）。确定网上没有再加 --fresh"
         )
         return 1
     if keep and keep.get("disabled"):

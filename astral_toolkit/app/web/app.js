@@ -2788,7 +2788,7 @@ PAGES.settings = () => {
           <button class="btn small primary" data-referral>打开注册页</button></div></div>
       <div><h3>版权</h3><p>© 2026 Adm_TT　按 AGPL-3.0 开源：可以使用、修改、转发；转发或发布修改版时须让对方能拿到完整源代码，通过网络让他人远程使用修改版时也一样，并保留版权和许可声明，详见免责声明和 LICENSE</p>
         <p class="muted" style="font-size:13px;margin-top:6px">AT 是玩家自制的非官方工具，与 Cloud Imperium 集团旗下公司无关联。星际公民的游戏内容归 Cloud Imperium Rights LLC 和 Cloud Imperium Rights Limited 所有</p></div>
-      <div><h3>数据来源</h3><p class="muted" style="font-size:13px">数据权利归原作者所有，部分数据经 AT 服务器、Gitee、GitHub 转发</p><ul class="src" id="about-src"></ul>
+      <div><h3>数据来源</h3><p class="muted" style="font-size:13px">数据权利归原作者所有，部分数据经 AT 服务器、国内镜像（腾讯云 COS）、GitHub 转发</p><ul class="src" id="about-src"></ul>
         <div class="row" style="margin-top:8px;gap:8px"><button class="btn small" id="show-disclaimer">免责声明</button><button class="btn small" id="show-licenses">开源组件许可</button></div></div>
     </div>`;
   bindSwitches();

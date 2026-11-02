@@ -32,7 +32,7 @@ SKIP_DATA_DIRS = {
 }  # BUILD_DIR：构建输入目录（2026-10-28），只在作者电脑上用                         # 原始大文件，更新数据时会自动下载（和 tools/pack.py 一致）
 SKIP_DATA_FILES = {
     "loot_details.zip"
-}  # 掉落明细整包从 Gitee 下载；data_pack.json 要带上（不然「开始更新」会拿网上更旧的包盖掉，2026-10-28）
+}  # 掉落明细整包从数据包下载；data_pack.json 要带上（不然「开始更新」会拿网上更旧的包盖掉，2026-10-28）
 # 安装包必须自带的数据（自检 selftest.data_files 查的这些 + 数据包版本记录：没带记录「更新数据」会拿网上更旧的包盖掉）
 DATA_MUST = (
     "shops.json",
