@@ -6,8 +6,10 @@
 """
 
 import json
+import os
 import re
 import sys
+import threading
 from collections import defaultdict
 from pathlib import Path
 
@@ -431,7 +433,9 @@ def _update():
         print(f"下载 {name} …")
         body = _fetch(name)
         json.loads(body)  # 不是 JSON 就到此为止（抛错），不落盘
-        tmp = p.with_name(p.name + ".tmp")
+        tmp = p.with_name(
+            f"{p.name}.{os.getpid()}.{threading.get_ident()}.tmp"
+        )  # 下载不再拿锁（收口 2）：临时名别撞
         tmp.write_bytes(body)
         tmp.replace(p)  # 先写临时文件再换名，不留半个文件
         files.append(p)

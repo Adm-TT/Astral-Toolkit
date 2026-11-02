@@ -631,10 +631,15 @@ def test_mine_info_none_when_db_unavailable(monkeypatch, tmp_path):
     _detail_env(monkeypatch, tmp_path)
     monkeypatch.setattr(paths, "DATA", tmp_path / "empty")
     calls = []
-    monkeypatch.setattr(loot, "update", lambda *a, **kw: calls.append(1))
+    monkeypatch.setattr(loot, "update", lambda *a, **kw: calls.append("update"))
+    monkeypatch.setattr(
+        loot, "load_index", lambda *a, **kw: calls.append("load_index")
+    )  # 连读本地索引也不该走到（不然 _detail_env 指的那份文件在，这条会空过）
     assert loot.mine_info("carinite", online=False) is None
     assert loot.mine_info("carinite", online=True) is None
-    assert calls == []  # 库不可用 ≠ 没有索引：查询路径不联网（收口 2，待做 ⑮）
+    assert (
+        calls == []
+    )  # 库不可用 ≠ 没有索引：查询路径不联网、不读 JSON（收口 2，待做 ⑮）
 
 
 # ---------------------------------------------------------------- Task 4：输出不变与更新流程保持

@@ -177,6 +177,7 @@ def amenity_targets(
     星图先在快照外取：load() 第一次用时会下载并重建库，钉在快照里就只能看到重建前的旧库"""
     data = data or load()
     try:
+        gamedata.ensure()
         with gamedata.snapshot():
             rows = gamedata.places.amenities(kind)
             inside = {q.get("city") for q in city_targets(kind)}
