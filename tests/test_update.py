@@ -284,6 +284,72 @@ def test_make_manifest_tool_installer_only(monkeypatch, tmp_path):
     assert T.main(["--fresh", "只有说明"]) == 1
 
 
+def test_manifest_version_only(monkeypatch, tmp_path):
+    """2026-11-02 起只发 Velopack 版：清单只有版本号、说明和远程关功能，不带任何安装包。
+    Velopack 安装版照常提示新版本和说明；其他独立打包版、源码版当作没有新版本、不报错、不去下载；
+    三种版本都照常收远程关功能；生成时带上网上已有的 kill_rev / disabled"""
+    C, _ = _setup(monkeypatch, tmp_path, {})
+    online = {"version": "1.1.3", "kill_rev": 5, "disabled": [{"feature": "radar"}]}
+    m = C.make_manifest(None, ["新功能"], version="9.0.0", keep=online)
+    assert m == {
+        "version": "9.0.0",
+        "date": m["date"],
+        "notes": ["新功能"],
+        "kill_rev": 5,
+        "disabled": [{"feature": "radar"}],
+    }
+    vp = C.parse(json.dumps(m), velopack=True)
+    assert vp["version"] == "9.0.0" and vp["notes"] == ["新功能"] and vp["urls"] == []
+    for frozen in (True, False):
+        try:
+            C.parse(json.dumps(m), frozen=frozen, velopack=False)
+            raise AssertionError(frozen)
+        except C.NoPackage:
+            pass
+    for bad in ("", "x.y", "0.0.0"):
+        try:
+            C.make_manifest(None, version=bad)
+            raise AssertionError(bad)
+        except ValueError:
+            pass
+    page = {
+        "https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(
+            dict(m, kill_rev=300, disabled=[{"feature": "radar", "why": "坏了"}])
+        ).encode()
+    }
+    for frozen, velopack in ((True, True), (True, False), (False, False)):
+        C, calls = _setup(monkeypatch, tmp_path, page)
+        monkeypatch.setattr(C.paths, "FROZEN", frozen)
+        monkeypatch.setattr(C.paths, "VELOPACK", velopack)
+        info = C.check(force=True)
+        assert C.disabled("radar"), (frozen, velopack)  # 远程关功能照常生效
+        assert calls and all(u.endswith("/latest.json") for u in calls), (
+            calls
+        )  # 只读了清单，没去下载任何东西
+        if velopack:
+            assert info and info["version"] == "9.0.0" and info["notes"] == ["新功能"]
+        else:
+            assert info is None and C.last_error() == ""  # 没有新版本，不是「连不上」
+
+
+def test_make_manifest_tool_version_only(monkeypatch, tmp_path):
+    """tools/make_manifest.py --version：不给安装包也能生成；--out 指定生成位置"""
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
+    import make_manifest as T  # pyright: ignore[reportMissingImports]
+
+    C, _ = _setup(monkeypatch, tmp_path, {})
+    monkeypatch.setattr("builtins.print", lambda *a, **k: None)
+    out = tmp_path / "out"
+    assert T.main(["--version", "9.0.0", "--out", str(out), "--fresh", "新功能"]) == 0
+    m = json.loads((out / "latest.json").read_text(encoding="utf-8"))
+    assert m["version"] == "9.0.0" and m["notes"] == ["新功能"]
+    assert not {"file", "installer", "urls"} & set(m)
+    assert T.main(["--version"]) == 1
+
+
 def _old_install(d, version="1.6.72", settings=None, waypoints=None):
     (d / "sc_mining").mkdir(parents=True)
     (d / "userdata").mkdir()

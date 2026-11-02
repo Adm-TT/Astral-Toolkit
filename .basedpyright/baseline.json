@@ -4412,16 +4412,6 @@
                 }
             }
         ],
-        "./tools/make_manifest.py": [
-            {
-                "code": "reportOptionalMemberAccess",
-                "range": {
-                    "startColumn": 34,
-                    "endColumn": 40,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./tools/make_splash.py": [
             {
                 "code": "reportAttributeAccessIssue",

@@ -1,6 +1,8 @@
 """发版本时生成在线更新用的版本说明 latest.json（不打包进安装包）
 
 用法：
+  .venv\\Scripts\\python.exe -X utf8 tools\\make_manifest.py --version 1.7.1 [--out 文件夹] "更新内容一" "更新内容二"
+    （只发 Velopack 版：清单只有版本号、说明和远程关功能；默认生成在 dist\\latest.json）
   .venv\\Scripts\\python.exe -X utf8 tools\\make_manifest.py dist\\Dubhe_1.7.1.zip [--installer 路径\\AT_Setup_1.7.1.exe] "更新内容一" "更新内容二"
   .venv\\Scripts\\python.exe -X utf8 tools\\make_manifest.py --installer 路径\\AT_Setup_1.7.1.exe "更新内容一"
   （压缩包版已停止维护：可以只给安装程序，清单顶层不写 file，源码版当作没有新版本；latest.json 生成在安装程序旁边）
@@ -77,14 +79,26 @@ def main(argv):
             "❌ astral_toolkit/update/update_check.py 里的下载地址（OWN / COS）还没填"
         )
         return 1
-    rest, installer = list(argv), None
-    if "--installer" in rest:
-        i = rest.index("--installer")
-        installer = Path(rest[i + 1])
-        del rest[i : i + 2]
+    rest, installer, version, out_dir = list(argv), None, None, None
+    for flag in ("--installer", "--version", "--out"):
+        if flag in rest:
+            i = rest.index(flag)
+            if i + 1 >= len(rest):
+                print(f"❌ {flag} 后面要跟值")
+                return 1
+            val = rest[i + 1]
+            del rest[i : i + 2]
+            if flag == "--installer":
+                installer = Path(val)
+            elif flag == "--version":
+                version = val
+            else:
+                out_dir = Path(val)
     zip_path = Path(rest.pop(0)) if rest and rest[0].lower().endswith(".zip") else None
-    if zip_path is None and installer is None:
-        print("❌ 至少要给 Dubhe_x.y.z.zip 或 --installer AT_Setup_x.y.z.exe")
+    if zip_path is None and installer is None and not version:
+        print(
+            "❌ 至少要给 --version x.y.z、Dubhe_x.y.z.zip 或 --installer AT_Setup_x.y.z.exe"
+        )
         return 1
     fresh = "--fresh" in rest
     rest = [a for a in rest if a != "--fresh"]
@@ -113,12 +127,22 @@ def main(argv):
         if side.exists():
             shutil.copy2(side, zip_path.parent / side.name)
         installer = zip_path.parent / installer.name
-    m = update_check.make_manifest(zip_path, notes=rest, installer=installer, keep=keep)
-    if zip_path:  # 生成的文件自己先过一遍检查：源码版那一项
-        update_check.parse(json.dumps(m), frozen=False)
-    if installer:  # 安装版那一项
-        update_check.parse(json.dumps(m), frozen=True)
-    out = (zip_path or installer).parent / "latest.json"
+    m = update_check.make_manifest(
+        zip_path, notes=rest, installer=installer, keep=keep, version=version
+    )
+    update_check.parse(
+        json.dumps(m), velopack=True
+    )  # 生成的文件自己先过一遍检查：Velopack 安装版那一项
+    if zip_path:  # 源码版那一项
+        update_check.parse(json.dumps(m), frozen=False, velopack=False)
+    if installer:  # 老的独立安装版那一项
+        update_check.parse(json.dumps(m), frozen=True, velopack=False)
+    base = zip_path or installer
+    out = (
+        out_dir
+        or (base.parent if base else Path(__file__).resolve().parent.parent / "dist")
+    ) / "latest.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(
         json.dumps(m, ensure_ascii=False, indent=1) + "\n",
         encoding="utf-8",

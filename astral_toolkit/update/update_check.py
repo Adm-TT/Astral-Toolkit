@@ -113,21 +113,30 @@ class NoPackage(ValueError):
     """这份版本说明里没有这种版本能用的包（压缩包版停止维护后只发安装版）：当作没有新版本，不算出错"""
 
 
-def parse(raw, frozen=None):
-    """读版本说明；格式不对抛 ValueError。frozen：独立安装版（默认看现在是不是），只认 installer 那一项。
-    源码版读到只有安装程序、顶层没有 file 的版本说明：抛 NoPackage（没有新版本，不报错）"""
+def parse(raw, frozen=None, velopack=None):
+    """读版本说明；格式不对抛 ValueError。
+    velopack（默认看现在是不是 Velopack 安装版）：下载走 Velopack 更新源，这里只取版本号、日期、更新说明，
+    清单带不带安装包都行（2026-11-02 起清单可以只写版本号、说明和远程关功能）。
+    frozen（其他独立打包版）只认 installer 那一项；源码版只认顶层的 Dubhe_*.zip。
+    清单里没有这种版本能用的包：抛 NoPackage（当作没有新版本，不报错）"""
     from .upgrade import ver
 
     frozen = paths.FROZEN if frozen is None else frozen
+    velopack = paths.VELOPACK if velopack is None else velopack
     d = json.loads(raw)
     v = str(d.get("version") or "")
     if ver(v) == (0, 0, 0):
         raise ValueError("版本号格式错误")
-    if not frozen and "file" not in d and isinstance(d.get("installer"), dict):
-        raise NoPackage("这个版本只发安装版，源码版不再在线更新")
+    head = {
+        "version": ".".join(map(str, ver(v))),
+        "date": str(d.get("date") or ""),
+        "notes": [str(x) for x in (d.get("notes") or []) if str(x).strip()][:8],
+    }
+    if velopack:
+        return {**head, "file": "", "size": None, "sha256": "", "urls": []}
     pkg, pattern = (d.get("installer"), SETUP) if frozen else (d, NAME)
-    if not isinstance(pkg, dict):
-        raise ValueError("这个版本没有独立安装程序")
+    if not isinstance(pkg, dict) or "file" not in pkg:
+        raise NoPackage("这个版本没有这种版本能用的安装包，不在线更新")
     name, sha = str(pkg.get("file") or ""), str(pkg.get("sha256") or "").lower()
     if not pattern.match(name) or not re.fullmatch(r"[0-9a-f]{64}", sha):
         raise ValueError("安装包信息不完整")
@@ -135,11 +144,8 @@ def parse(raw, frozen=None):
     if not urls:
         raise ValueError("没有可用的下载地址")
     size = int(pkg.get("size") or 0)
-    notes = [str(x) for x in (d.get("notes") or []) if str(x).strip()][:8]
     return {
-        "version": ".".join(map(str, ver(v))),
-        "date": str(d.get("date") or ""),
-        "notes": notes,
+        **head,
         "file": name,
         "size": size,
         "sha256": sha,
@@ -462,11 +468,13 @@ def _entry(p, tag):
     }
 
 
-def make_manifest(zip_path, notes=(), date="", installer=None, keep=None):
-    """发版本时用：按安装包生成 latest.json 的内容（tools/make_manifest.py 调这个）。
-    zip_path：Dubhe_x.y.z.zip；压缩包版停止维护后可以给 None，只发安装程序：这时顶层不写 file / size / sha256 / urls，
-    版本号取安装程序文件名，源码版读到会当作没有新版本（不会出现版本是新号、file 却指向旧压缩包）。
-    installer：同一版本的独立安装程序 AT_Setup_x.y.z.exe（有压缩包时可选，没压缩包时必须给）。
+def make_manifest(zip_path, notes=(), date="", installer=None, keep=None, version=None):
+    """发版本时用：生成 latest.json 的内容（tools/make_manifest.py 调这个）。
+    zip_path：Dubhe_x.y.z.zip；压缩包版停止维护后可以给 None：这时顶层不写 file / size / sha256 / urls，
+    源码版读到会当作没有新版本（不会出现版本是新号、file 却指向旧压缩包）。
+    installer：同一版本的独立安装程序 AT_Setup_x.y.z.exe（可选）。
+    version：压缩包和安装程序都不给时用（2026-11-02 起只发 Velopack 版）：清单只有版本号、说明和远程关功能，
+    Velopack 安装版读它提示新版本，下载走 Velopack 更新源。
     keep：网上现在的 latest.json——远程关功能的 kill_rev 和 disabled 原样带上（审查 2026-10-27：发新版不能把旧版的禁用清掉）"""
     from .upgrade import check as check_pkg, ver
 
@@ -478,8 +486,12 @@ def make_manifest(zip_path, notes=(), date="", installer=None, keep=None):
         if not mt:
             raise ValueError("安装程序文件名应为 AT_Setup_x.y.z.exe")
         v = ver(mt.group(1))
+    elif version:
+        v = ver(str(version))
+        if v == (0, 0, 0):
+            raise ValueError("版本号格式错误，应为 x.y.z")
     else:
-        raise ValueError("压缩包和安装程序至少要给一个")
+        raise ValueError("压缩包、安装程序、版本号至少要给一个")
     ver_s = ".".join(map(str, v))
     tag = f"v{ver_s}"
     m = {
