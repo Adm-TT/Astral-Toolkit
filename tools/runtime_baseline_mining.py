@@ -10,7 +10,6 @@
 """
 
 import argparse
-import inspect
 import json
 import subprocess
 import sys
@@ -269,7 +268,7 @@ def _manual_cases(out):
 
 
 def _timing_cases(out, Scan):
-    """语义变化（有意，RT-B2）：输入取好之后全局表 / 设置被改。collect_inputs 带不带参数都能跑，before 也用这份工具"""
+    """语义变化（有意，RT-B2）：输入取好之后全局表 / 设置被改"""
     from sc_mining.app.presenters import mining as present
     from sc_mining.core import settings
     from sc_mining.mining import analysis, data
@@ -284,16 +283,11 @@ def _timing_cases(out, Scan):
         composition=[("Gold", 100.0, 500)],
     )
 
-    def run():
-        # 兼容 22fe8ce 的无参 collect_inputs，只为出 RT-B2 的 before；RT-B2 合并后删这个判断和 inspect
-        collect: Any = mining.collect_inputs
-        return collect(scan) if inspect.signature(collect).parameters else collect()
-
     def show(inputs):
         v = present.to_view(analysis.analyze(scan, BAG, inputs))
         return {"refine": v["refine"], "sell": v["sell"], "plans": v["plans"]}
 
-    inputs = run()
+    inputs = mining.collect_inputs(scan)
     prices = data.CITY_PRICES
     data.CITY_PRICES = {**prices, "Gold": {"Levski": 999999}}
     try:
@@ -301,7 +295,7 @@ def _timing_cases(out, Scan):
     finally:
         data.CITY_PRICES = prices
 
-    inputs = run()
+    inputs = mining.collect_inputs(scan)
     saved = dict(data.REFINERIES)
     try:
         for k, (sys_, _) in saved.items():
@@ -310,7 +304,7 @@ def _timing_cases(out, Scan):
     finally:
         data.REFINERIES.update(saved)
 
-    inputs = run()
+    inputs = mining.collect_inputs(scan)
     load = settings.load
     other = {"heads": [["klein_s2", []], ["klein_s2", []], ["klein_s2", []]], "crew": 1}
     settings.load = lambda: {**load(), "mining_loadouts": {SHIP: other}}
