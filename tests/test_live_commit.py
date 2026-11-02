@@ -495,7 +495,7 @@ def test_end_session_ends_the_named_session(monkeypatch, tmp_path):
 
 def test_stop_leaves_session_started_during_join_alone(monkeypatch, tmp_path):
     hud, _ = _world(monkeypatch, tmp_path)
-    live = live_mod._Live()
+    live: Any = live_mod._Live()
     current = object()
 
     class Old:
