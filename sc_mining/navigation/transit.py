@@ -12,7 +12,7 @@ import math
 import re
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from ..core.paths import DATA, cached_json
+from .. import gamedata
 from .celestial import (
     CITY_FLOOR_M,
     CITY_NEAR_M,
@@ -32,16 +32,18 @@ from .names import (
 from .starmap import load
 from .waypoints import is_space
 
-_city: Dict[str, Any] = {}
-
 
 def city_places() -> List[Dict[str, Any]]:
-    """data/city_places.json（数据构建脚本从游戏数据生成）→ 导航用的地点（星球坐标，千米）"""
-    return cached_json(DATA / "city_places.json", _city_rows, [])
+    """主城 / 空间站里的地点（data/city_places.json，数据构建脚本从游戏数据生成）→ 导航用的地点（星球坐标，千米）。
+    从游戏数据层读（建库时经 _city_rows 变换好）；库不可用返回空（以前没有文件也是空）"""
+    try:
+        return gamedata.places.city_places()
+    except gamedata.GamedataError:
+        return []
 
 
 def _city_rows(raw: Any) -> List[Dict[str, Any]]:
-    """city_places.json 原始条目 → 导航用的地点列表（只在文件变了时跑一次）"""
+    """city_places.json 原始条目 → 导航用的地点列表（游戏数据层建库时调）"""
 
     def txt(v: Any) -> str:
         return v.strip() if isinstance(v, str) else ""
@@ -164,17 +166,18 @@ SITE_KINDS = (
     "地铁",
 )
 SITE_NEAR_M = 6000
-_amen: Dict[str, Any] = {}
 
 
 def amenity_targets(
     kind: str, data: Optional[Dict[str, Any]] = None
 ) -> List[Dict[str, Any]]:
-    """城外有这类设施的地点（data/place_amenities.json）→ 导航目标"""
+    """城外有这类设施的地点（data/place_amenities.json，从游戏数据层读）→ 导航目标。
+    设施里的引用（poi / point / body）按传进来的星图回查；库不可用当作没有设施"""
     data = data or load()
-    rows = cached_json(
-        DATA / "place_amenities.json", lambda r: r if isinstance(r, list) else [], []
-    )
+    try:
+        rows = gamedata.places.amenities(kind)
+    except gamedata.GamedataError:
+        rows = []
     pois: Dict[str, Dict[str, Any]] = {}
     for q in data["pois"]:
         pois.setdefault(_norm(q["n"]), q)
@@ -183,15 +186,9 @@ def amenity_targets(
     inside = {q.get("city") for q in city_targets(kind)}
     out: List[Dict[str, Any]] = []
     for r in rows:
-        if not isinstance(r, dict) or kind not in (r.get("kinds") or []):
+        if r["rec"] in inside:
             continue
-        if str(r.get("rec") or "").lower() in inside:
-            continue
-        ref, zh, en = (
-            r.get("ref") or {},
-            (r.get("zh") or "").strip(),
-            (r.get("en") or "").strip(),
-        )
+        ref, zh, en = r["ref"], r["zh"], r["en"]
         if not en:
             continue
         if ref.get("poi"):
@@ -563,12 +560,15 @@ HANGAR_LIFT_M = 250
 
 
 def station_lifts() -> Dict[str, Any]:
-    """rr_* 站记录名 → 这个站的区域 / 电梯 / 机库数据"""
-    return cached_json(DATA / "station_lifts.json", _lift_rows, {})
+    """rr_* 站记录名 → 这个站的区域 / 电梯 / 机库数据（从游戏数据层读）；库不可用返回空"""
+    try:
+        return gamedata.places.station_lifts()
+    except gamedata.GamedataError:
+        return {}
 
 
 def _lift_rows(raw: Any) -> Dict[str, Any]:
-    """station_lifts.json → {站: 数据}"""
+    """station_lifts.json → {站: 数据}，整站校验不过的丢掉（游戏数据层建库时调）"""
 
     def xyz(v: Any) -> bool:
         return (

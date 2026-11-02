@@ -166,6 +166,10 @@ _TABLES = {
     "print_spots",
     "print_spot_places",
     "ship_stock_items",
+    # schema 6（采矿，见 test_gamedata_mining）
+    "mining_rock_entries",
+    "ship_signatures",
+    "refinery_yields",
 }
 
 
@@ -175,8 +179,8 @@ def test_ddl_creates_all_tables(tmp_path):
     from sc_mining.gamedata._schema import DDL, SCHEMA_VERSION
 
     assert (
-        SCHEMA_VERSION == 4
-    )  # 2 = 批 2 导航表（见 test_gamedata_nav）；3 = shop_items；4 = 制造 / 维科洛 / 物品属性（见 test_gamedata_craft）
+        SCHEMA_VERSION == 6
+    )  # 2 = 批 2 导航表（见 test_gamedata_nav）；3 = shop_items；4 = 制造 / 维科洛 / 物品属性（见 test_gamedata_craft）；5 = 可空列存 NULL、q 保留类型；6 = 采矿（见 test_gamedata_mining）
     c = sqlite3.connect(tmp_path / "x.db")
     for s in DDL:
         c.execute(s)

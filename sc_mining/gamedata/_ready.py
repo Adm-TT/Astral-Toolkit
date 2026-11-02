@@ -30,7 +30,7 @@ def ensure(timeout: float = 30.0) -> None:
     建库失败（缺源文件等）记下来，_RETRY_AFTER 秒内再来直接抛同一个错，不每次查询都拿锁、读源算哈希再失败一遍
     （控制台复审 2026-11-02 第 5、6 条）"""
     from ._paths import gamedata_dir
-    from ._types import GamedataError
+    from ._types import BuildError, GamedataError
 
     where = str(gamedata_dir())
     if _state["done"] == where:
@@ -51,11 +51,22 @@ def ensure(timeout: float = 30.0) -> None:
 
     try:
         rebuild_if_needed()
-    except Exception as e:
+    except GamedataError as e:
         _state["failed"] = (where, time.monotonic(), e)
+        pkg_state["last_error"] = (
+            f"游戏数据库首次就绪失败（查询退回空结果）：{e}"  # 同步路径也要能从 last_error() 查到（架构稿 v1.1 §13.2）
+        )
         raise
+    except Exception as e:  # noqa: BLE001 —— 写锁的 mkdir / open 等 OSError：包成 GamedataError，功能模块只接这一种（GD-B6 / B2 / B3 审查都点到）
+        err = BuildError(f"游戏数据库就绪失败：{e}")
+        _state["failed"] = (where, time.monotonic(), err)
+        pkg_state["last_error"] = f"游戏数据库首次就绪失败（查询退回空结果）：{err}"
+        raise err from e
     _state["done"] = where
     _state["failed"] = None
+    pkg_state["last_error"] = (
+        None  # 就绪成功：之前同步失败留下的诊断清掉（后台 warm_up / updating 成功时也会清）
+    )
 
 
 def forget_failure() -> None:
