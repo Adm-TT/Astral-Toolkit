@@ -1,6 +1,7 @@
 """采矿结果计算（运行结构 RT-B1，架构稿 §10.2 第 1 步）：一块石头的读数 + 输入 → 不可变结果。
 
-只做计算：不碰线程、时钟、文件、设置、数据库、界面。要查的东西都从 MiningInputs 进（由 tasks/mining.py 装配），
+只做计算：本模块不 import 线程 / 时钟 / 文件 / 设置 / 数据库 / UI。要查的东西都从 MiningInputs 进（由 tasks/mining.py 装配），
+其中的函数调用时仍会读设置和全局表（recommend → settings、refined_plan / best_price → 全局表），RT-B2 换成值。
 排版在 app/presenters/mining.py。"""
 
 from collections import defaultdict
@@ -26,7 +27,7 @@ class MiningInputs:
     gadget_label: Callable[[str], str]
     best_price: Callable[[str], tuple]  # 矿 → (最高收购价, 城市)
     station_bonus: Callable[[str], Mapping]  # 精炼站 → {矿: 加成 %}
-    refined_plan: Callable[[dict], list]  # 配装不同结果不同，由 tasks 那边决定
+    refined_plan: Callable[[dict], list]
     refined_scu: Callable[..., dict]
     recommend: Callable[
         [Any, Any, Any], list

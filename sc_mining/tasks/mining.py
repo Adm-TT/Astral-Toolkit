@@ -282,19 +282,8 @@ def _game_front():
     return showloc.game_front()
 
 
-# RT-B1 过渡，RT-B2 删：scan_view 拆开后留的同名转发（scu_text 还有 tests/test_tools.py 在用，其余三个已没有调用方）
+# RT-B1 过渡，RT-B2 删：scan_view 拆开后留的同名转发（tests/test_tools.py 在用）
 scu_text = _present.scu_text
-_lots_hud = _present.lots_hud
-
-
-def _station_bonus(station, minerals):
-    """RT-B1 过渡，RT-B2 删：转发到 mining.analysis.station_bonus"""
-    return _analysis.station_bonus(station, minerals, collect_inputs())
-
-
-def _lots(scan, plan=None):
-    """RT-B1 过渡，RT-B2 删：转发到 mining.analysis.lots + 呈现层的 refined_text"""
-    return _present.lot_rows(*_analysis.lots(scan, plan, collect_inputs()))
 
 
 def _quality_hints(composition):
@@ -596,9 +585,6 @@ __all__ = [
     # 读屏与扫描
     "_game_front",
     "scu_text",
-    "_station_bonus",
-    "_lots",
-    "_lots_hud",
     "scan_view",
     "live_start",
     "live_stop",
