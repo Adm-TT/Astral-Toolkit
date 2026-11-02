@@ -113,12 +113,9 @@ class _Live:
             bus.publish(*args)
         elif kind == "log":
             bus.runtime_log(args[0], tag=args[1], level="INFO")
-        elif kind == "hud.set":
+        elif kind in ("hud.set", "hud.clear"):
             hud: Any = _H()._hud()
-            hud.set(*args)
-        elif kind == "hud.clear":
-            hud: Any = _H()._hud()
-            hud.clear(*args)
+            (hud.set if kind == "hud.set" else hud.clear)(*args)
         elif kind == "paused":
             self.paused = args[0]
 

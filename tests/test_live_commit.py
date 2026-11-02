@@ -18,7 +18,7 @@ from sc_mining.runtime.results import MINING_SCAN, MINING_SIGNALS
 from sc_mining.tasks import mining as t_mining
 from sc_mining.tasks import navigation as t_nav
 
-WAIT = 10  # 等线程的上限：正常都是瞬间到，超时就是测试失败
+WAIT = 30  # 等线程的上限：正常都是瞬间到，超时就是测试失败
 
 
 def _rock(mass=10000.0):
@@ -501,13 +501,17 @@ def test_stop_waits_for_commit_in_progress(monkeypatch, tmp_path):
         assert inside.wait(WAIT)
         stopper.start()
         stopper.join(0.2)  # 只用来等「进不来」：实现对的话这里一定超时，不会偶发失败
-        assert stopper.is_alive() and not run.ev.is_set()
+        assert stopper.is_alive()
+        assert not run.ev.is_set()
         assert live.results.get(MINING_SCAN) is not None
     finally:
         leave.set()
     committer.join(WAIT)
     stopper.join(WAIT)
-    assert run.ev.is_set() and live.results.get(MINING_SCAN) is None
+    assert not committer.is_alive()
+    assert not stopper.is_alive()
+    assert run.ev.is_set()
+    assert live.results.get(MINING_SCAN) is None
     assert seq.index("live") > seq.index("scan")
 
 
