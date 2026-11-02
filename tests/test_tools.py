@@ -997,7 +997,7 @@ def test_first_run_agreement(monkeypatch, tmp_path):
 
 def test_live_scan_updates_when_read_gets_more_complete(monkeypatch, tmp_path):
     """画面不动时：第一次读到的成分不全，后面读全了也要更新（不能停在不完整的结果上）"""
-    import threading, time as _t  # noqa: E401
+    import time as _t  # noqa: E401
     from PIL import Image
     from astral_toolkit.mining import screen, signals
     from astral_toolkit.core import paths
@@ -1062,12 +1062,10 @@ def test_live_scan_updates_when_read_gets_more_complete(monkeypatch, tmp_path):
     q = bus.subscribe()
     live = live_mod._Live()
     try:
-        live.stop_ev = threading.Event()
-        th = threading.Thread(target=live._run, daemon=True)
-        th.start()
+        live.start()
         _t.sleep(1.0)
         live.stop_ev.set()
-        th.join(2)
+        live.loop.join(2)
         scans = []
         while not q.empty():
             m = q.get_nowait()
@@ -1079,6 +1077,7 @@ def test_live_scan_updates_when_read_gets_more_complete(monkeypatch, tmp_path):
         ]  # 最后显示的是读全的（钨 + 兰石）
         assert len(calls) < 40  # 画面不动、结果已完整：不再一直识别
     finally:
+        live.stop()
         bus.unsubscribe(q)
 
 
@@ -2197,22 +2196,28 @@ def _live_run(
     monkeypatch.setattr(t_mining, "_game_front", front or (lambda: None))
     live = live_mod._Live()
     if stale is not None:
-        monkeypatch.setattr(live, "STALE_SECONDS", stale)
+        monkeypatch.setattr(live, "stale_after", stale)
     q = bus.subscribe()
     while not q.empty():  # 总线会补发之前保存的最后一条结果：先丢掉，只看这次跑出来的
         q.get_nowait()
-    ev = ev or threading.Event()
+    if ev is not None:
+        # 外部开关接上这个会话的停止开关：模拟「算到一半用户点了停止」
+        def bridge():
+            ev.wait()
+            live.stop_ev.set()
+
+        threading.Thread(target=bridge, daemon=True, name="test-live-stop").start()
     try:
-        th = threading.Thread(target=live._run, args=(ev,), daemon=True)
-        th.start()
+        live.start()
         _t.sleep(seconds)
-        ev.set()
-        th.join(2)
+        live.stop_ev.set()
+        live.loop.join(2)
         msgs = []
         while not q.empty():
             msgs.append(q.get_nowait())
         return msgs, hud
     finally:
+        live.stop()
         bus.unsubscribe(q)
 
 
@@ -2294,23 +2299,27 @@ def test_live_session_isolation(monkeypatch, tmp_path):
     import threading
     from astral_toolkit.core import paths
     import astral_toolkit.app.engines.live as live_mod
+    from astral_toolkit.runtime.session import RunState, Session
 
     monkeypatch.setattr(paths, "log", lambda name: tmp_path / name)
     monkeypatch.setattr(paths, "shots", lambda name: tmp_path)
     live = live_mod._Live()
-    old = threading.Event()
-    old.set()
-    live.stop_ev = threading.Event()  # 新会话的开关（没按下）
+    old = Session(1, threading.Event())
+    old.cancel.set()  # 旧会话的开关已经按下
+    live.loop._session = old
+    live.loop._session_id = 1
+    live.loop._state = RunState.STOPPING
     errors = []
-    t = threading.Thread(target=live._run, args=(old,), daemon=True)
     hook = threading.excepthook
     threading.excepthook = lambda a: errors.append(a.exc_value)
     try:
+        t = threading.Thread(target=live.loop._run, args=(old,), daemon=True)
         t.start()
         t.join(2)
     finally:
         threading.excepthook = hook
     assert not t.is_alive() and not errors  # 旧会话看自己的开关，立刻正常退出
+    assert live.loop.state().state is RunState.STOPPED
 
 
 def test_live_stop_during_compute_publishes_nothing(monkeypatch, tmp_path):

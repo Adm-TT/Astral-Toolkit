@@ -194,9 +194,8 @@ def test_stop_all_sets_events(monkeypatch):
     from astral_toolkit.app.engines.manager import EngineManager
 
     m = EngineManager.get_instance()
-    monkeypatch.setattr(
-        m.live, "stop_ev", threading.Event()
-    )  # 用新的，测完换回原来的（别把真引擎停了）
+    # live 的 stop_ev 现在转发到会话循环（RT-B4），是只读属性：按类换成新开关；nav 还是实例属性
+    monkeypatch.setattr(type(m.live), "stop_ev", threading.Event())
     monkeypatch.setattr(m.nav, "stop_ev", threading.Event())
     m.stop_all()
     assert m.live.stop_ev.is_set() and m.nav.stop_ev.is_set()
@@ -404,6 +403,7 @@ def test_live_fail_off_without_hud(monkeypatch):
     from astral_toolkit.app import bus, hud_state
     from astral_toolkit.app.engines import live as live_mod
     from astral_toolkit.core import settings
+    from astral_toolkit.runtime.session import RunState, Session
 
     saved, pub = [], []
     monkeypatch.setattr(hud_state, "_hud", lambda: None)
@@ -411,9 +411,13 @@ def test_live_fail_off_without_hud(monkeypatch):
     monkeypatch.setattr(settings, "update", lambda **kw: saved.append(kw))
     monkeypatch.setattr(bus, "publish", lambda kind, data: pub.append((kind, data)))
     live = live_mod._Live()
-    ev = threading.Event()
-    live._fail_off(live_mod._Run(ev, live.session_id), "坏了")
-    assert ev.is_set() and {"live_on": False} in saved
+    session = Session(1, threading.Event())
+    live.loop._session = session
+    live.loop._session_id = 1
+    live.loop._state = RunState.RUNNING
+    live._error = "坏了"
+    assert live.loop._stop_session(session, "error", error="坏了")
+    assert session.cancel.is_set() and {"live_on": False} in saved
     assert ("live", {"running": False, "error": "坏了"}) in pub
     live.stop()  # 停止收尾也不抛错
 
