@@ -14,6 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from . import bus
+from . import ui_stream
 
 # 2026-10-30 阶段 4：services.py 删了。import tasks 这一层会把全部任务模块加载好（tasks/__init__.py），
 # tasks.goals / tasks.navigation 在 import 时登记数据包清缓存函数，和原来 import services 时顺带做的一样早
@@ -70,6 +71,14 @@ class Handler(BaseHTTPRequestHandler):
             if not self._allowed():
                 return self._send(403, "{}")
             return self._events()
+        if path == "/api/ui/events":
+            if not self._allowed():
+                return self._send(403, "{}")
+            return self._ui_events()
+        if path == "/api/ui/snapshot":
+            if not self._allowed():
+                return self._send(403, "{}")
+            return self._ui_snapshot()
         if path == "/api/screenshot":
             if not self._allowed():
                 return self._send(403, "{}")
@@ -179,6 +188,8 @@ class Handler(BaseHTTPRequestHandler):
                 413, json.dumps({"ok": False, "error": "请求太大"}, ensure_ascii=False)
             )
         raw = self.rfile.read(n) if n else b""
+        if name == "ui/dismiss":
+            return self._ui_dismiss(raw)
         from .api import router  # 2026-10-30 阶段 0：接口统一走 router
 
         if name not in router.routes():
@@ -236,6 +247,87 @@ class Handler(BaseHTTPRequestHandler):
         finally:
             bus.unsubscribe(q)
             _last_client["t"] = time.time()
+
+    def _ui_events(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Connection", "keep-alive")
+        self.end_headers()
+        hello, q = ui_stream.subscribe()
+        conn = hello["conn"]
+        try:
+            self.wfile.write(ui_stream.encode(hello).encode("utf-8"))
+            self.wfile.flush()
+            last_hb = time.time()
+            while True:
+                try:
+                    msg = q.get(timeout=1.0)
+                except queue.Empty:
+                    if not ui_stream.is_connected(q):
+                        break
+                    now = time.time()
+                    if now - last_hb >= 5:
+                        hb = ui_stream.heartbeat(conn)
+                        self.wfile.write(ui_stream.encode(hb).encode("utf-8"))
+                        self.wfile.flush()
+                        last_hb = now
+                    continue
+                ui_stream.mark_dequeued(q)
+                if not ui_stream.is_connected(q):
+                    break
+                self.wfile.write(ui_stream.encode(msg).encode("utf-8"))
+                self.wfile.flush()
+                last_hb = time.time()
+                if msg.get("kind") == "ui.bye":
+                    break
+        except Exception:
+            pass
+        finally:
+            ui_stream.unsubscribe(q)
+
+    def _ui_snapshot(self):
+        from urllib.parse import parse_qs, urlparse
+
+        qs = parse_qs(urlparse(self.path).query)
+        conn = (qs.get("conn") or [""])[0]
+        try:
+            conn = int(conn)
+        except (TypeError, ValueError):
+            pass
+        switches = ui_stream.read_switches()
+        snap = ui_stream.snapshot(conn, switches=switches)
+        self._send(
+            200,
+            json.dumps(snap, ensure_ascii=False, default=str),
+        )
+
+    def _ui_dismiss(self, raw):
+        try:
+            args = json.loads(raw or b"{}")
+        except Exception as e:
+            return self._send(
+                200,
+                json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False),
+            )
+        notice_id = args.get("notice_id") if isinstance(args, dict) else None
+        if not notice_id:
+            return self._send(
+                200,
+                json.dumps(
+                    {"ok": False, "error": "缺少 notice_id"},
+                    ensure_ascii=False,
+                ),
+            )
+        notice_id = str(notice_id)
+        ok = ui_stream.dismiss_notice(notice_id)
+        body = {
+            "ok": bool(ok),
+            "data": {"notice_id": notice_id, "dismissed": bool(ok)},
+        }
+        if not ok:
+            body["error"] = "没有这条通知"
+        return self._send(200, json.dumps(body, ensure_ascii=False))
 
 
 class Server(ThreadingHTTPServer):
