@@ -12,7 +12,7 @@ _engine = None
 def _get_engine():
     global _engine
     if _engine is None:
-        from ..core.perf import rapidocr
+        from .runtime import rapidocr
 
         _engine = rapidocr()
     return _engine

@@ -288,24 +288,6 @@
                 }
             }
         ],
-        "./astral_toolkit/core/perf.py": [
-            {
-                "code": "reportAttributeAccessIssue",
-                "range": {
-                    "startColumn": 30,
-                    "endColumn": 37,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportMissingImports",
-                "range": {
-                    "startColumn": 13,
-                    "endColumn": 21,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./astral_toolkit/crafting/acquire.py": [
             {
                 "code": "reportOperatorIssue",
@@ -1632,6 +1614,24 @@
                 "range": {
                     "startColumn": 35,
                     "endColumn": 36,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./astral_toolkit/ocr/runtime.py": [
+            {
+                "code": "reportAttributeAccessIssue",
+                "range": {
+                    "startColumn": 30,
+                    "endColumn": 37,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportMissingImports",
+                "range": {
+                    "startColumn": 13,
+                    "endColumn": 21,
                     "lineCount": 1
                 }
             }

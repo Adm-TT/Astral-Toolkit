@@ -140,12 +140,15 @@ def main():
     ocr = {}
 
     def ocr_engine():
-        from .core import perf
+        from .ocr import gpu_available, ocr_device, warmup
 
         t = time.perf_counter()
-        perf.rapidocr()
+        warmup()
         ocr["load"] = (time.perf_counter() - t) * 1000
-        return f"识别在 {perf.ocr_device()} 上算（可用显卡：{'是' if perf.gpu_available() else '否'}）"
+        return (
+            f"识别在 {ocr_device()} 上算"
+            f"（可用显卡：{'是' if gpu_available() else '否'}）"
+        )
 
     def scan_panel():
         from PIL import Image
