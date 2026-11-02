@@ -550,3 +550,28 @@ def test_nav_sources_optional(monkeypatch, tmp_path):
     with snapshot() as s:
         assert s.execute("select count(*) from points") == [(0,)]
         assert s.execute("select count(*) from station_lifts") == [(0,)]
+
+
+def test_bad_poi_or_point_only_drops_that_row(monkeypatch, tmp_path):
+    """starmap.space 来的一条坏数据（NaN 坐标、不是 dict、缺 n）只丢那一条，别的 poi / point 照进库（GD-B2 审查第 1 条）"""
+    import json
+    import math
+
+    sm = json.loads(json.dumps(_NAV_SOURCES["starmap.json"]))
+    good_pois, good_points = len(sm["pois"]), len(sm["points"])
+    sm["pois"] += [
+        {"b": "Hurston", "n": "NaN Poi", "x": float("nan"), "y": 0, "z": 0},
+        "junk",
+        {"b": None, "n": "No Body", "x": 1, "y": 1, "z": 1},
+        {"b": "Hurston", "n": "Null Z", "x": 1, "y": 1, "z": None},
+    ]
+    sm["points"] += [
+        {"n": "Inf Point", "i": "X", "sys": "Stanton", "x": math.inf, "y": 0, "z": 0},
+        {"i": "no-name"},
+        5,
+    ]
+    snapshot = _built(monkeypatch, tmp_path, **{"starmap.json": sm})
+    with snapshot() as s:
+        assert s.execute("select count(*) from pois")[0][0] == good_pois
+        assert s.execute("select count(*) from points")[0][0] == good_points
+        assert s.execute("select count(*) from items")[0][0] > 0

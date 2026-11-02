@@ -404,6 +404,12 @@ def import_starmap(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) ->
     if not isinstance(raw, dict):
         return
     data = copy.deepcopy(raw)
+    for key in (
+        "pois",
+        "points",
+    ):  # 不是 dict 的条目换成 {}（占位保住源下标），fix_points 和下面的行函数都能过；行函数再把它丢掉
+        if isinstance(data.get(key), list):
+            data[key] = [x if isinstance(x, dict) else {} for x in data[key]]
     fix_points(data, _d(sources, "starmap_fixes.json", None))
     bodies = []
     for i, (name, b) in enumerate((data.get("bodies") or {}).items()):
@@ -432,38 +438,41 @@ def import_starmap(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) ->
             int(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
         )
 
+    # 坐标 / 字段检查全在 _rows 的 try 里：starmap.space 来的一条坏数据（NaN、null、不是 dict）只丢那一条，
+    # 不能让整库建不出来——批 2 起导航全靠这个库（GD-B2 控制台审查 2026-11-02 第 1 条）
+    def poi_row(q):
+        if not (isinstance(q.get("b"), str) and isinstance(q.get("n"), str)):
+            raise ValueError("poi 缺 b / n")
+        return (
+            q["b"],
+            q["n"],
+            q.get("t") if isinstance(q.get("t"), str) else "",
+            *_xyz(q),
+            qt(q.get("qt")),
+            _norm(q["n"]),
+        )
+
+    def point_row(p):
+        if not isinstance(p.get("n"), str):
+            raise ValueError("point 缺 n")
+        ident = p.get("i") if isinstance(p.get("i"), str) else ""
+        return (
+            p["n"],
+            ident,
+            p.get("sys") if isinstance(p.get("sys"), str) else "",
+            p.get("t") if isinstance(p.get("t"), str) else "",
+            *_xyz(p),
+            _norm(p["n"]),
+            ident.lower(),
+        )
+
     conn.executemany(
         "insert into pois (b, n, t, x, y, z, qt, norm_n, source_order) values (?,?,?,?,?,?,?,?,?)",
-        [
-            (
-                q["b"],
-                q["n"],
-                q.get("t") or "",
-                *_xyz(q),
-                qt(q.get("qt")),
-                _norm(q["n"]),
-                i,
-            )
-            for i, q in _rows(data.get("pois"), lambda q: q)
-            if isinstance(q.get("b"), str) and isinstance(q.get("n"), str)
-        ],
+        [(*row, i) for i, row in _rows(data.get("pois"), poi_row)],
     )
     conn.executemany(
         "insert into points (n, i, sys, t, x, y, z, norm_n, i_lower, source_order) values (?,?,?,?,?,?,?,?,?,?)",
-        [
-            (
-                p["n"],
-                p.get("i") or "",
-                p.get("sys") or "",
-                p.get("t") or "",
-                *_xyz(p),
-                _norm(p["n"]),
-                (p.get("i") or "").lower(),
-                i,
-            )
-            for i, p in _rows(data.get("points"), lambda p: p)
-            if isinstance(p.get("n"), str)
-        ],
+        [(*row, i) for i, row in _rows(data.get("points"), point_row)],
     )
     if data.get("fetched"):
         conn.execute(
