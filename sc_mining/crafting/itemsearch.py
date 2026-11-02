@@ -132,13 +132,6 @@ def _index_from(snap):
     return {"rows": rows, "by_char": by_char, "by_tri": by_tri, "by_en": by_en}
 
 
-def wiki_items():
-    """data/wiki_items.json：star-citizen.wiki 的物品清单 [{n, t, s, mfr}]；没有这份数据就是空的"""
-    from ..core.paths import DATA, cached_json
-
-    return cached_json(DATA / "wiki_items.json", lambda d: d.get("items") or [], [])
-
-
 def _wiki_noise(e):
     """只在 wiki 清单里、玩家不会去搜的：涂装（物品查询不卖、不掉）、飞船内部件（遥控炮塔、对接舱这种没名字的通用件）"""
     t = (e.get("wtype") or "").lower()

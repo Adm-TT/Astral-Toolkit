@@ -107,16 +107,19 @@ def read_ini(path=INI):
 
 
 def wiki_class_names():
-    """wiki 物品清单里 {游戏内部类名(小写): wiki 英文名}（1.6.49，按类名把汉化包的英文名对到 wiki 正名）"""
+    """wiki 物品清单里 {游戏内部类名: wiki 英文名}（1.6.49，按类名把汉化包的英文名对到 wiki 正名）。
+    从游戏数据层读（wiki_items 表，批 6 起 trade/gamekey 也从它读；收口 2 删掉了 itemsearch.wiki_items 读 JSON）；库不可用当作没有"""
+    from .. import gamedata
+
     try:
-        from ..crafting.itemsearch import wiki_items
-    except Exception:
+        rows = gamedata.names.wiki_classes()
+    except gamedata.GamedataError:
         return {}
     out = {}
-    for w in wiki_items():
-        for c in [w.get("cls") or ""] + list(w.get("alt") or []):
+    for w in rows:
+        for c in [w.cls] + list(w.alt):
             if c:
-                out.setdefault(c, w["n"])
+                out.setdefault(c, w.n)
     return out
 
 

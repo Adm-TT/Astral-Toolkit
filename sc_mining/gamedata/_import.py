@@ -808,14 +808,15 @@ def import_wikelo(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> 
 def import_item_stats(
     conn: sqlite3.Connection, sources: dict[str, SourceBytes]
 ) -> None:
-    """每件一行；size / mass 不是数字存 NULL（行保留——itemstats.item 照样会返回这条）；s 整段 JSON，存不下的当 {}"""
+    """每件一行；size / mass 不是数字存 NULL（行保留——itemstats.item 照样会返回这条）；s 整段 JSON，存不下的当 {}。
+    值不是 dict 或是空 dict 的条目不入库（迁移前 `.get(uuid) or None` 对 {} 也是 None；收口 2，importer 7）"""
     import json
 
     raw = _d(sources, "item_stats.json", {}) or {}
     items = raw.get("items") if isinstance(raw, dict) else None
     rows = []
     for i, (uuid, v) in enumerate(items.items() if isinstance(items, dict) else ()):
-        if not isinstance(v, dict):
+        if not isinstance(v, dict) or not v:
             continue
         try:
             stats_json = json.dumps(

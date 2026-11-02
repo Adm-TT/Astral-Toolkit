@@ -3,7 +3,7 @@
 各列对应的源字段见 docs/superpowers/specs/ 下各批矩阵：2026-11-02-gamedata-callsites.md（批 1）、-b2（导航）、-b3（制造 / 维科洛 / 物品属性）、gd-b4（掉落）、gd-b6（名字对照）。"""
 
 SCHEMA_VERSION = 6  # 2：导航表；3：shop_items；4：制造 / 维科洛 / 物品属性等；5：可空文本列存 NULL、q 保留类型；6：采矿石头表 / 舰船截面 / 精炼站加成（批 5 公共层，2026-11-02）
-IMPORTER_VERSION = 6
+IMPORTER_VERSION = 7  # 7：item_stats 空 dict 条目不入库（收口 2，2026-11-02）
 
 DDL: list[str] = [
     # 清单和版本：schema_version / importer_version / data_version / generation_id / build_time / src:<文件名>=sha256

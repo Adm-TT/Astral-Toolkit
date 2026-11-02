@@ -47,6 +47,7 @@ def _git_head():
 
 def _offline():
     from sc_mining.core import net
+    from sc_mining.navigation import starmap
     from sc_mining.update import uex
 
     def no_net(*a, **k):
@@ -54,6 +55,7 @@ def _offline():
 
     uex._get = no_net
     net.read = no_net
+    starmap.read = no_net  # starmap 是 from ..core.net import read 按名字引的，只改 net.read 拦不住（收口 2）
 
 
 def _json(path):

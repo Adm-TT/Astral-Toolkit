@@ -970,3 +970,32 @@ def test_read_manifest_gives_up_after_retries(monkeypatch, tmp_path):
     monkeypatch.setattr(_manifest, "_RETRY_SLEEP", 0.0)
     with raises(GamedataUnavailable):
         read_manifest()
+
+
+def test_read_manifest_cached_until_file_changes(monkeypatch, tmp_path):
+    """清单文件没变（mtime / 大小 / inode 一样）就不重读：导航每帧读清单好几次（收口 2）；换文件、就地改坏都能察觉"""
+    from pathlib import Path
+
+    from sc_mining.gamedata import GamedataUnavailable
+    from sc_mining.gamedata._manifest import Manifest, read_manifest, write_manifest
+    from sc_mining.gamedata._paths import manifest_path
+    from tests.minipytest import raises
+
+    _data_root(monkeypatch, tmp_path)
+    write_manifest(Manifest("g1", "v1", 1, "gamedata-g1.db"))
+    first = read_manifest()
+    real = Path.read_text
+    reads = []
+    monkeypatch.setattr(
+        Path,
+        "read_text",
+        lambda self, *a, **kw: (reads.append(1), real(self, *a, **kw))[1],
+    )
+    assert read_manifest() is first and read_manifest() is first and reads == []
+    write_manifest(Manifest("g2", "v2", 1, "gamedata-g2.db"))  # os.replace 换文件
+    assert read_manifest() == Manifest("g2", "v2", 1, "gamedata-g2.db") and reads == [1]
+    manifest_path().write_text("{", encoding="utf-8")  # 就地改坏（大小变了）
+    with raises(GamedataUnavailable):
+        read_manifest()
+    manifest_path().unlink()
+    assert read_manifest() is None

@@ -15,6 +15,9 @@ _RETRY_TIMES = (
     10  # 读清单撞上换名瞬间的重试：10 × 20 ms（批 1 实测边搜边发布会撞到，2026-11-02）
 )
 _RETRY_SLEEP = 0.02
+_last: tuple | None = (
+    None  # (路径, mtime_ns, size, ino, Manifest)：文件没变就不重读（收口 2：导航每帧读清单好几次）
+)
 
 
 @dataclass(frozen=True)
@@ -26,8 +29,20 @@ class Manifest:
 
 
 def read_manifest() -> Manifest | None:
-    """没有清单返回 None；清单坏了（不是 JSON、缺字段、类型不对）抛 GamedataUnavailable"""
+    """没有清单返回 None；清单坏了（不是 JSON、缺字段、类型不对）抛 GamedataUnavailable。
+    文件的 (mtime, 大小, inode) 和上次一样就直接给上次解析的结果——发布端是 os.replace 换文件，三样必有一样变"""
+    global _last
     p = manifest_path()
+    try:
+        st = os.stat(p)
+        key = (str(p), st.st_mtime_ns, st.st_size, st.st_ino)
+    except FileNotFoundError:
+        return None
+    except OSError:
+        key = None  # 读不到属性就老老实实读文件，让下面的错误处理说话
+    last = _last
+    if key is not None and last is not None and last[:4] == key:
+        return last[4]
     raw = None
     for i in range(_RETRY_TIMES):
         try:
@@ -54,6 +69,8 @@ def read_manifest() -> Manifest | None:
         )
     except (ValueError, TypeError) as e:
         raise GamedataUnavailable(f"游戏数据清单 {p} 坏了：{e}") from e
+    if key is not None:
+        _last = key + (m,)
     return m
 
 

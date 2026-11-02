@@ -552,3 +552,20 @@ def test_navigate_has_no_starmap_private_imports():
     ):
         for name in gone:
             assert not hasattr(mod, name), f"{mod.__name__}.{name}"
+
+
+def test_amenity_targets_pins_one_snapshot(monkeypatch, tmp_path):
+    """设施表和城里的点钉在同一个快照里：星图取好之后整个过程只读一次清单（收口 2，待做 ⑰）"""
+    from sc_mining.gamedata import _db
+    from sc_mining.navigation import transit
+    from sc_mining.navigation import starmap as sm
+
+    _setup(monkeypatch, tmp_path)
+    data = sm.load()
+    real = _db.read_manifest
+    n = []
+    monkeypatch.setattr(
+        _db, "read_manifest", lambda: (n.append(1), real())[1]
+    )  # 快照 / version() 都经 _db 读清单
+    transit.amenity_targets("医疗", data)
+    assert n == [1]

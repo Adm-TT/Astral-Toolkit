@@ -340,10 +340,10 @@ def source_rows():
 
 def update():
     """重建 crafting.json + wikelo.json：有本机构建输入就用它；没有才去 scmdb 看有没有新版本。
-    比版本、下载在 BUILD_LOCK 里，不进游戏数据层的写锁（联网别卡住别的数据更新）；要重建时两份文件套一层
-    gamedata.updating()（锁顺序 updating → BUILD_LOCK，和 data_pack.install 一致），出口只重建一次库"""
-    with BUILD_LOCK:
-        job = _update()
+    比版本、下载不拿任何锁（下载最多 2×60 s；以前在 BUILD_LOCK 里，汉化重建并行时会拿着写锁等它——收口 2，待做 ⑱）：
+    原始文件先写临时文件再换名，读的一方拿到的要么旧要么新；要重建时两份文件由 _write 各自套 updating() → BUILD_LOCK
+    （锁顺序和 data_pack.install 一致），最外层出口只重建一次库"""
+    job = _update()
     if job:
         _rebuild(*job)
 

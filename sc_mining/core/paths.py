@@ -234,17 +234,3 @@ def migrate():
     from .migration import migrate as _migrate
 
     return _migrate()
-
-
-def __getattr__(name):
-    if name in (
-        "_DELETE",
-        "_INNO_SKIP_DIRS",
-        "_INNO_SKIP_FILES",
-        "_MOVES",
-        "_SAMPLES",
-    ):
-        from . import migration
-
-        return getattr(migration, name)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
