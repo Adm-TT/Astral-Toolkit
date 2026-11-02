@@ -682,3 +682,18 @@ def test_mining_modules_do_not_read_data_dir():
             assert not (isinstance(n, ast.alias) and n.name == "DATA"), mod.__name__
             if isinstance(n, ast.Constant) and id(n) not in docs:
                 assert not any(f in str(n.value) for f in files), mod.__name__
+
+
+def test_area_when_manifest_corrupt_enter_fails(monkeypatch, tmp_path):
+    """线上 snapshot() 是生成器，清单坏了要到 __enter__ 才抛：接住、不残留快照，当作没有数据"""
+    import sc_mining.gamedata as G
+    from sc_mining.gamedata import _db
+    from sc_mining.gamedata._paths import gamedata_dir
+    from sc_mining.mining import mining_area as M
+
+    _area_setup(monkeypatch, tmp_path)
+    G.ensure()
+    (gamedata_dir() / "current.json").write_text("{坏", encoding="utf-8")
+    assert M.area((2e10, 0.0, 0.0), "Pyro") is None
+    assert M.area((48.0e9, 0.0, 0.0), "Nyx")["name"] == "Keeger Belt"
+    assert getattr(_db._tls, "snap", None) is None
