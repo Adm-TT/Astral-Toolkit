@@ -7,10 +7,9 @@
 4. 地点与天体友好显示名称生成（label、body_label、point_zh）。
 """
 
-import json
 import re
 
-from ..core.paths import DATA
+from .. import gamedata
 
 # POI 接口里的星球名 → 星体接口里的名字
 _POI_BODY = {"microTech": "Microtech", "Pyro V": "Pyro5"}
@@ -112,43 +111,21 @@ SYS_ZH = {"Stanton": "斯坦顿", "Pyro": "派罗", "Nyx": "尼克斯"}
 
 _RR = {"1": "HUR", "2": "CRU", "3": "ARC", "4": "MIC"}  # 斯坦顿几号星 → 空间站代码
 
-_places_zh = None
-
 
 def _norm(s: str) -> str:
     return re.sub(r"[^a-z0-9]", "", s.lower())
 
 
 def poi_zh(name: str) -> str:
-    """地点英文名 → 汉化包里的中文名（没有就返回空字符串）"""
-    global _places_zh
-    files = (
-        "places_zh.json",
-        "places_extra_zh.json",
-    )  # 后读的优先：从游戏数据对出的汉化名（extra）盖过旧表（二审 2026-10-27）
-    stamp = []
-    for f in files:
-        try:
-            stamp.append((DATA / f).stat().st_mtime_ns)
-        except OSError:
-            stamp.append(0)
-    if _places_zh is None or _places_zh[0] != stamp:  # 更新数据后不用重启
-        table = {}
-        # places_extra_zh.json（数据构建脚本生成，2026-10-27）：汉化包里中文不带英文的地名（采矿基地 #IGB-FXW…）
-        for f in files:
-            try:
-                d = json.loads((DATA / f).read_text(encoding="utf-8"))
-                if isinstance(d, dict):
-                    table.update(
-                        {k: v for k, v in d.items() if isinstance(v, str) and v}
-                    )
-            except Exception:
-                pass
-        _places_zh = (stamp, table)  # 填好了再挂上：别的线程不会拿到半张表
+    """地点英文名 → 汉化包里的中文名（没有就返回空字符串）。查游戏数据库的地名表：places_extra_zh（从游戏数据对出的
+    汉化名，汉化包里中文不带英文的地名，如采矿基地 #IGB-FXW）盖过 places_zh（二审 2026-10-27）；库不可用当作没有"""
     base = re.sub(
         r"\s*[\[(].*?[\])]\s*", " ", name
     ).strip()  # 去掉 "[F]" "(missing)" 之类的备注
-    table = _places_zh[1]
+    try:
+        table = gamedata.places.poi_names()
+    except gamedata.GamedataError:
+        return ""
     return table.get(_norm(name)) or table.get(_norm(base)) or ""
 
 
