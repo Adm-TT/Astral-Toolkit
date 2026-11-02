@@ -245,6 +245,7 @@ def _manual_cases(out):
     """手动输入：只算破碎方案；不合法的只记异常类型"""
     from sc_mining.tasks import mining
 
+    manual: Any = mining.manual_scan  # 故意也传字符串，和接口层一样
     for label, args in (
         ("轻松", (1000, 10, 5)),
         ("贴工具", (9000, 35, 60.5)),
@@ -253,7 +254,7 @@ def _manual_cases(out):
         ("破不开", (900000, 95, 500)),
         ("抗性 100", (9000, 100, 0)),
     ):
-        out[f"手动:{label}"] = mining.manual_scan(*args)
+        out[f"手动:{label}"] = manual(*args)
     for label, args in (
         ("质量 0", (0, 10, 5)),
         ("抗性超范围", (1000, 101, 5)),
@@ -261,7 +262,7 @@ def _manual_cases(out):
         ("质量非数字", ("abc", 10, 5)),
     ):
         try:
-            mining.manual_scan(*args)
+            manual(*args)
             out[f"手动:{label}"] = "没有异常"
         except Exception as e:
             out[f"手动:{label}"] = type(e).__name__
@@ -284,8 +285,9 @@ def _timing_cases(out, Scan):
     )
 
     def run():
-        params = inspect.signature(mining.collect_inputs).parameters
-        return mining.collect_inputs(scan) if params else mining.collect_inputs()
+        # 兼容 22fe8ce 的无参 collect_inputs，只为出 RT-B2 的 before；RT-B2 合并后删这个判断和 inspect
+        collect: Any = mining.collect_inputs
+        return collect(scan) if inspect.signature(collect).parameters else collect()
 
     def show(inputs):
         v = present.to_view(analysis.analyze(scan, BAG, inputs))

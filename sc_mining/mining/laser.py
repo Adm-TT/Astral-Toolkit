@@ -357,7 +357,7 @@ def loadout():
 
 @dataclass(frozen=True)
 class LoadoutFacts:
-    """算破碎方案要的全部配装事实，一次取好：矿头、同时操作几个、破碎模型"""
+    """一次取好的配装事实：矿头、同时操作几个、破碎模型。自造矿头的功率曲线不在这里，算的时候读 craft_slots 缓存"""
 
     setups: tuple
     crew: int

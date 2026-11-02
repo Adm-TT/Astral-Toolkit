@@ -168,6 +168,6 @@ def test_result_cannot_be_changed():
 
 def test_freeze_detaches_from_source():
     src = {"a": [1, {"b": 2}]}
-    got = freeze(src)
+    got: Any = freeze(src)
     src["a"][1]["b"] = 9
     assert got["a"][1]["b"] == 2 and isinstance(got["a"], tuple)

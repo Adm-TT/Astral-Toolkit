@@ -1,6 +1,7 @@
 """算法函数吃值（运行结构 RT-B2）：给了快照就不读全局表和设置，不给和以前一样"""
 
 from contextlib import contextmanager
+from typing import Any
 
 from sc_mining import gamedata
 from sc_mining.mining import data, laser, refinery
@@ -54,7 +55,7 @@ def test_recommend_crew_limits_heads():
 
 
 def _gold_scan(**over):
-    kw = dict(
+    kw: dict[str, Any] = dict(
         rock="Gold",
         mass=9000,
         resistance=35,

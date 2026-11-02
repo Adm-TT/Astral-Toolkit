@@ -40,7 +40,8 @@ class MiningInputs:
     纯函数（mineral_zh / method_zh / station_zh / gadget_label / goal_text）：同输入同输出，不读设置、用户文件、数据库、
       可变全局。翻译函数第一次调用时读程序自带的只读对照表 sc_glossary.json（lru_cache，运行期不变）。
     算法（refined_plan / refined_scu / recommend）：analyze 调用时显式传 prices / refineries / loadout，
-      之后只再读 data.py 的常量表（精炼方式、矿头、模组、工具）。"""
+      之后只再读 data.py 的常量表（精炼方式、矿头、模组、工具）和自造矿头功率曲线的缓存
+      （laser.craft_slots，来自蓝图，更新数据时清；曲线放进配装事实归后续批次，见 RT-B2 PR）。"""
 
     at: str  # 显示用的时间
     mineral_zh: Callable[[str], str]

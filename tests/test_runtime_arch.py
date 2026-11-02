@@ -27,8 +27,17 @@ _ANALYSIS_FORBIDDEN = (
     "os",
     "sqlite3",
     "importlib",
+    "pathlib",
+    "io",
+    "json",
+    "subprocess",
+    "socket",
 )
-_DYNAMIC_IMPORTS = ("__import__", "import_module")
+_BARE_FORBIDDEN = (
+    "sc_mining",
+    "sc_mining.core",
+)  # 裸导入后走属性访问，等于绕开上面的清单
+_DYNAMIC_IMPORTS = ("__import__", "import_module", "open", "exec", "eval")
 
 
 def _forbidden(mods, forbidden):
@@ -48,8 +57,9 @@ def _dynamic_imports(source):
 
 
 def _analysis_violations(source):
-    mods = _imports_in_source(source, "sc_mining.mining")
-    return _forbidden(mods, _ANALYSIS_FORBIDDEN) + _dynamic_imports(source)
+    mods = list(_imports_in_source(source, "sc_mining.mining"))
+    bare = [m for m in mods if m in _BARE_FORBIDDEN]
+    return _forbidden(mods, _ANALYSIS_FORBIDDEN) + bare + _dynamic_imports(source)
 
 
 def test_analysis_imports():
@@ -77,6 +87,12 @@ def test_analysis_check_catches_known_gaps():
         "import importlib\nimportlib.import_module('sc_mining.mining.laser')",
         "from importlib import import_module\nimport_module('x')",
         "__import__('sc_mining.mining.data')",
+        "import pathlib",
+        "import json",
+        "from .. import core",
+        "import sc_mining",
+        "open('x')",
+        "exec('import os')",
     ):
         assert _analysis_violations(src), src
     for src in (
@@ -133,7 +149,7 @@ def test_analysis_import_is_clean_transitively():
 
 def test_tasks_mining_import_creates_no_engine():
     """导入 tasks.mining 本身不创建引擎。tasks/__init__.py 还会连带导入 count、navigation（它们导入时还在取引擎，
-    归后面的批次），这里换掉包入口只测这个模块；那两处改完后去掉假包，直接 import sc_mining.tasks.mining"""
+    已写进 RT-B2 PR「需要别人改」），这里换掉包入口只测这个模块；那两处改完后去掉假包，直接 import sc_mining.tasks.mining"""
     code = (
         "import sys, types, pathlib, sc_mining;"
         "pkg = types.ModuleType('sc_mining.tasks');"
