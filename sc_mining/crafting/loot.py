@@ -32,6 +32,7 @@ def _get(url, timeout=60):
 
 
 def _fold(s):
+    """名字折叠键。gamedata/_import.import_loot 导入时用它算 norm_en / norm_zh：改了规则要升 _build.IMPORTER_VERSION"""
     return re.sub(r"[^a-z0-9一-鿿]", "", (s or "").lower().replace("l", "i"))
 
 
@@ -86,18 +87,13 @@ def load_index(auto=True):
     return _index
 
 
-# 无人读取：只给 update/data_pack.clear_caches 写（它还在 `loot._folded.update(...)`）。
-# 删除条件：整合清理时随 clear_caches 里那两行一起删（控制台，批 6 合并后；掉落查询已改走游戏数据库，批 4）
-_folded = {"of": None, "rows": []}
-
-
-def _index_meta():
+def _index_meta(snap=None):
     """游戏数据库里掉落索引的版本信息 {"version": …}；没有掉落索引、或库不可用返回 None"""
     from .. import gamedata
     from ..gamedata import loot as gd_loot
 
     try:
-        return gd_loot.index_meta()
+        return gd_loot.index_meta(snap)
     except gamedata.GamedataError:
         return None
 
@@ -403,21 +399,31 @@ def mine_info(key, top=5, online=True):
     from .. import gamedata
     from ..gamedata import loot as gd_loot
 
-    if _index_meta() is None:  # 没有掉落索引（有索引、只是没有行不算）
-        if not online:
-            return None
-        load_index(True)  # 联网下一份：update() 在更新边界里，写完重建库
-        if _index_meta() is None:
-            return None
     want, skip = INSTANCE_ORES[key]
     try:
-        rocks = [
-            r
-            for r in gd_loot.by_cls_prefix(want)
-            if not (skip and r.cls_lower.startswith(skip))
-        ]
-    except gamedata.GamedataError:
+        gamedata.ensure()
+        with gamedata.snapshot() as s:  # 索引版本和石头行钉同一个版本
+            has = (
+                gd_loot.index_meta(s) is not None
+            )  # 库在、只是没有掉落索引（有索引、只是没有行不算）
+            rocks = gd_loot.by_cls_prefix(want, s) if has else ()
+        if not has:
+            if not online:
+                return None
+            load_index(
+                True
+            )  # 联网下一份（在快照外）：update() 在更新边界里，写完重建库
+            with (
+                gamedata.snapshot() as s
+            ):  # 重建后的新版本；若外面还钉着旧快照就还是旧的，下次再查
+                if gd_loot.index_meta(s) is None:
+                    return None
+                rocks = gd_loot.by_cls_prefix(want, s)
+    except (
+        gamedata.GamedataError
+    ):  # 库不可用：不在查询路径里读 JSON / 联网（收口 2，待做 ⑮）
         return None
+    rocks = [r for r in rocks if not (skip and r.cls_lower.startswith(skip))]
     best = {}  # 地区 → (概率, 位置说明)
     for r in rocks:
         try:
