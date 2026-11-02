@@ -9,7 +9,9 @@ _T("mining").xxx = tasks/mining.py，_H().xxx = app/hud_state.py，_E().live / .
 import importlib
 import threading
 import time
+from dataclasses import dataclass
 
+from ...runtime.results import MINING_SCAN, MINING_SIGNALS, ResultStore
 from .. import bus
 
 
@@ -32,10 +34,49 @@ def _hud_clear(*keys):
             hud.clear(k)
 
 
+@dataclass(frozen=True)
+class _Run:
+    """一个工作线程属于哪个会话"""
+
+    ev: threading.Event
+    session_id: int
+
+
+@dataclass(frozen=True)
+class _Stamp:
+    """一帧开始时的控制状态：算完提交时用它判断结果是不是还算数"""
+
+    session_id: int
+    epoch: int
+    seq: int
+    mono: float
+    wall: float
+
+
+def _pub(kind, data):
+    return ("bus", kind, data)
+
+
+def _say(line, tag):
+    return ("log", line, tag)
+
+
+def _set(*args):
+    return ("hud.set", *args)
+
+
+def _del(section):
+    return ("hud.clear", section)
+
+
 class _Live:
     """实时读屏：和命令行版同样的投票逻辑，结果推给窗口和悬浮窗"""
 
-    def __init__(self):
+    def __init__(self, results=None):
+        self.results = results if results is not None else ResultStore()
+        self.session_id = 0  # 每次 start 新号
+        self.epoch = 0  # 停止、配装变化时 +1：之前开始算的结果作废
+        self.seq = 0  # 帧序号
         self.stop_ev = threading.Event()
         self.thread = None
         self.lock = (
@@ -49,12 +90,58 @@ class _Live:
     def running(self):
         return bool(self.thread and self.thread.is_alive())
 
-    def _emit(self, ev, fn):
-        """只有本会话还没停时才把结果推给窗口/悬浮窗（识别和计算很慢，算完时可能已经停了）"""
+    def config_changed(self):
+        """配装变了：正在算的结果作废，正在显示的石头按新配装重算（采矿助手最多 5 秒后重新发布）"""
         with self.lock:
-            if ev.is_set():
+            self.gear_rev += 1
+            self.epoch += 1
+
+    def _end_session(self):
+        """会话结束：之前开始算的结果作废，存着的结果清掉。调用方持 self.lock，并已按下这个会话的停止开关"""
+        self.epoch += 1
+        self.results.clear(None, self.session_id)
+
+    def _stamp(self, run, wall):
+        with self.lock:
+            self.seq += 1
+            return _Stamp(run.session_id, self.epoch, self.seq, time.monotonic(), wall)
+
+    def _apply(self, op):
+        kind, *args = op
+        if kind == "bus":
+            bus.publish(*args)
+        elif kind == "log":
+            bus.runtime_log(args[0], tag=args[1], level="INFO")
+        elif kind == "hud.set":
+            _H()._hud().set(*args)
+        elif kind == "hud.clear":
+            _H()._hud().clear(*args)
+        elif kind == "paused":
+            self.paused = args[0]
+        elif kind == "legacy":  # 读方还没改到 ResultStore 时的旧全局，下一个提交删
+            args[0]()
+
+    def _commit(self, run, *ops, slot=None, value=None, stamp=None, quality="complete"):
+        """提交边界（架构稿 §7.5）：查会话 → 存结果 → 发布，和停止用同一把锁串行；任何一步不成就整个不做。
+        识别和计算很慢，算完时可能已经停了、重开了、改了配装。带 slot 的是结果，不带的只有输出。
+        锁内只做小型状态操作：总线只入队，悬浮窗只写状态、唤醒绘制线程"""
+        with self.lock:
+            if run.ev.is_set() or run.session_id != self.session_id:
                 return False
-            fn()
+            if slot is not None:
+                if stamp.epoch != self.epoch or not self.results.accept(
+                    slot,
+                    value,
+                    stamp.session_id,
+                    stamp.epoch,
+                    stamp.seq,
+                    stamp.mono,
+                    stamp.wall,
+                    quality,
+                ):
+                    return False
+            for op in ops:
+                self._apply(op)
             return True
 
     STALE_SECONDS = (
@@ -105,7 +192,7 @@ class _Live:
         ),
     }
 
-    def _hint(self, ev, hint, why, log, clear_hud=False):
+    def _hint(self, run, hint, why, log, clear_hud=False):
         """采矿助手读不全时告诉玩家原因（采矿助手页 + 悬浮窗）；why=None 收起（clear_hud：悬浮窗上的提示也擦掉；
         刚发了新结果时不擦，悬浮窗上已经是新结果了）"""
         hint["why"] = why
@@ -117,19 +204,19 @@ class _Live:
             except (OSError, ValueError):
                 pass
 
-        def tell():
-            bus.publish(
+        ops = [
+            _pub(
                 "scan_hint",
                 {"why": why or "", "text": text, "at": time.strftime("%H:%M:%S")},
             )
-            if why:
-                _H()._hud().set("扫描", short)
-            elif clear_hud:
-                _H()._hud().clear("扫描")
+        ]
+        if why:
+            ops.append(_set("扫描", short))
+        elif clear_hud:
+            ops.append(_del("扫描"))
+        self._commit(run, *ops)
 
-        self._emit(ev, tell)
-
-    def _set_paused(self, ev, on, log, gap=0.0):
+    def _set_paused(self, run, on, log, gap=0.0):
         """暂停 / 继续：记一行日志，告诉窗口（采矿助手页和左边的小灯）"""
         from ...core import run_records
 
@@ -154,11 +241,7 @@ class _Live:
         except (OSError, ValueError):
             pass
 
-        def tell():
-            self.paused = on
-            bus.publish("live", {"running": True, "paused": on})
-
-        self._emit(ev, tell)
+        self._commit(run, ("paused", on), _pub("live", {"running": True, "paused": on}))
 
     def start(self):
         if self.running():
@@ -169,7 +252,9 @@ class _Live:
         run_records.record("MINING", "采矿助手引擎已启动", ui_tag="LIVE")
         # 每次开始都是一个新的会话（自己的停止开关）：快速停了又开，旧线程哪怕还没退出也只认自己的开关，
         # 不会和新线程一起往悬浮窗写东西
-        self.stop_ev = ev = threading.Event()
+        with self.lock:
+            self.session_id += 1
+            self.stop_ev = ev = threading.Event()
         self.thread = threading.Thread(
             target=self._run_gpu, args=(ev,), daemon=True, name="live"
         )
@@ -214,6 +299,7 @@ class _Live:
             if ev.is_set():
                 return
             ev.set()
+            self._end_session()
             self.paused = False
             _hud_clear("信号", "扫描", "矿袋")
         try:
@@ -242,6 +328,7 @@ class _Live:
             if ev.is_set():
                 return
             ev.set()
+            self._end_session()
             self.paused = False
             _hud_clear("信号", "扫描", "矿袋")
         settings.update(live_on=False)
@@ -255,6 +342,7 @@ class _Live:
     def stop(self):
         with self.lock:
             self.stop_ev.set()
+            self._end_session()
         if self.thread:
             self.thread.join(3)
         self.thread = None
@@ -275,6 +363,7 @@ class _Live:
         from ...mining.signals import find_signatures, describe_all, match_signature
 
         ev = ev or self.stop_ev
+        run = _Run(ev, self.session_id)
         alive = lambda: not ev.is_set()  # 只看本会话的开关  # noqa: E731
         shots = paths.shots("live")
         log = open(paths.log("live_log.txt"), "a", encoding="utf-8")
@@ -287,7 +376,7 @@ class _Live:
         l, t, r, b = screen.SEARCH  # noqa: E741
         try:
             prev_small, prev_panel, same, settled, done_here = None, None, 0, False, 0
-            last_shown, last_full, last_view, last_sig_msg = None, 0.0, {}, None
+            last_shown, last_full = None, 0.0
             miss_n, unstable_n, miss_t = 0, 0, 0.0
             now = time.time()
             last_panel_t, last_sig_t, scan_live, sig_live, missing = (
@@ -306,7 +395,7 @@ class _Live:
                     if paused_at is None:
                         paused_at = time.time()
                         miss_n = unstable_n = 0
-                        self._set_paused(ev, True, log)
+                        self._set_paused(run, True, log)
                     ev.wait(min(screen.INTERVAL, 0.25))
                     continue
                 if paused_at is not None:
@@ -317,7 +406,7 @@ class _Live:
                         None  # 回来的第一帧一定重新认，不按「画面没变」跳过
                     )
                     paused_at = None
-                    self._set_paused(ev, False, log, gap)
+                    self._set_paused(run, False, log, gap)
                 if time.time() - max(last_panel_t, last_sig_t) > self.IDLE_CLOSE:
                     self._auto_off(ev, log)
                     break
@@ -355,19 +444,25 @@ class _Live:
                         None,
                     )  # 信号没了：悬浮窗清掉，窗口里标过期
                     since = time.strftime("%H:%M:%S", time.localtime(last_sig_t))
-                    self._emit(
-                        ev,
-                        lambda: (
-                            _H()._hud().clear("信号"),
-                            bus.publish(
-                                "signals",
-                                {**(last_sig_msg or {"lines": []}), "stale": since},
-                            ),
+                    shown_sig = self.results.get(MINING_SIGNALS)
+                    self._commit(
+                        run,
+                        _del("信号"),
+                        _pub(
+                            "signals",
+                            {
+                                **(
+                                    shown_sig.value["view"]
+                                    if shown_sig
+                                    else {"lines": []}
+                                ),
+                                "stale": since,
+                            },
                         ),
                     )
                 if hint["why"] and now - last_panel_t > self.STALE_SECONDS:
                     self._hint(
-                        ev, hint, None, log, clear_hud=True
+                        run, hint, None, log, clear_hud=True
                     )  # 面板不在了：「读不全」提示也收起
                 if scan_live and now - last_panel_t > self.STALE_SECONDS:
                     scan_live, last_shown, last_key = (
@@ -378,18 +473,24 @@ class _Live:
                     recent.clear()
                     part.clear()
                     since = time.strftime("%H:%M:%S", time.localtime(last_panel_t))
-                    self._emit(
-                        ev,
-                        lambda: (
-                            _H()._hud().clear("扫描"),
-                            _H()._hud().clear("矿袋"),
-                            bus.publish("scan", {**last_view, "stale": since}),
+                    shown_scan = self.results.get(MINING_SCAN)
+                    self._commit(
+                        run,
+                        _del("扫描"),
+                        _del("矿袋"),
+                        _pub(
+                            "scan",
+                            {
+                                **(shown_scan.value if shown_scan else {}),
+                                "stale": since,
+                            },
                         ),
                     )
                 if same >= 2 and settled and now - last_full < self.RECHECK_SECONDS:
                     ev.wait(screen.INTERVAL)
                     continue
                 last_full = now
+                stamp = self._stamp(run, now)
                 # ---- 扫描面板（先看有没有面板：有面板时屏幕上的质量等数字会被当成信号，信号识别就暂停）
                 scan, bag = screen.analyse(img)
                 raw = (
@@ -418,13 +519,7 @@ class _Live:
                     part.clear()
                     if not getattr(self, "_scan_off_cleared", False):
                         self._scan_off_cleared = True
-                        self._emit(
-                            ev,
-                            lambda: (
-                                _H()._hud().clear("扫描"),
-                                _H()._hud().clear("矿袋"),
-                            ),
-                        )
+                        self._commit(run, _del("扫描"), _del("矿袋"))
                 else:
                     self._scan_off_cleared = False
                 # 面板顶着屏幕右边、被挡住一截（16:10 屏幕上鼹鼠炮塔的面板，2026-10-23 用户反馈）：品质和总 SCU 在屏幕外面，
@@ -452,14 +547,14 @@ class _Live:
                     self._save_miss(img, "读不全", raw, log)
                     why = screen.miss_reason(img)
                     if why and why != hint["why"]:
-                        self._hint(ev, hint, why, log)
+                        self._hint(run, hint, why, log)
                 if panel_now and sig_live:
                     sig_live, sig_shown, sig_prev = (
                         False,
                         None,
                         None,
                     )  # 对着石头看面板：悬浮窗收起信号
-                    self._emit(ev, lambda: _H()._hud().clear("信号"))
+                    self._commit(run, _del("信号"))
                 # ---- 雷达信号（扫描面板开着时不认，2026-10-23 用户反馈把石头质量 13,586 当成了信号）
                 try:
                     found = (
@@ -511,26 +606,27 @@ class _Live:
                             "area": (area or {}).get("zh", ""),
                             "unknown": unknown,
                         }  # 没认准的：窗口里可以起名记下（2026-10-27）
-                        if self._emit(
-                            ev,
-                            lambda: (
-                                bus.publish("signals", msg),
-                                _H()
-                                ._hud()
-                                .set(
-                                    "信号",
-                                    "\n".join(
-                                        x.split("｜精炼后")[0].replace("信号 ", "")
-                                        for x in lines[:4]
-                                    ),
+                        if self._commit(
+                            run,
+                            _pub("signals", msg),
+                            _set(
+                                "信号",
+                                "\n".join(
+                                    x.split("｜精炼后")[0].replace("信号 ", "")
+                                    for x in lines[:4]
                                 ),
                             ),
+                            (
+                                "legacy",
+                                lambda: _T("system")._FB_LAST.__setitem__(
+                                    "sig", {**msg, "values": sorted(sigs)}
+                                ),
+                            ),
+                            slot=MINING_SIGNALS,
+                            value={"view": msg, "values": sorted(sigs)},
+                            stamp=stamp,
                         ):
-                            sig_shown, sig_live, last_sig_msg = shown_key, True, msg
-                            _T("system")._FB_LAST["sig"] = {
-                                **msg,
-                                "values": sorted(sigs),
-                            }
+                            sig_shown, sig_live = shown_key, True
                             bus.runtime_log(
                                 f"雷达信号: {sorted(sigs)} 产区: {(area or {}).get('zh') or '未知'}",
                                 tag="SIGNAL",
@@ -590,38 +686,44 @@ class _Live:
                                 best, recent[-1][1]
                             )  # 慢：算完再看一次有没有停
 
-                            def publish():
-                                bus.publish("scan", view)
-                                bus.runtime_log(
-                                    f"扫描岩石: {best.rock or '岩石'} (质量 {round(best.mass)} | 矿量 {best.total_scu:.1f} SCU)",
-                                    tag="SCAN",
-                                    level="INFO",
-                                )
-                                _H()._hud().set(
-                                    "扫描", view["hud"], view.get("hud_rich")
-                                )
-                                if view["bag_text"]:
-                                    _H()._hud().set("矿袋", view["bag_text"])
+                            def legacy(view=view):
+                                _T("system")._ORE_LAST["view"] = view
+                                _T("system")._FB_LAST["scan"] = {
+                                    "rock": view.get("rock"),
+                                    "mass": view.get("mass"),
+                                    "resistance": view.get("resistance"),
+                                    "instability": view.get("instability"),
+                                    "minerals": view.get("minerals"),
+                                    "at": view.get("at"),
+                                }
 
-                            if not self._emit(ev, publish):
-                                break
+                            ops = [
+                                _pub("scan", view),
+                                _say(
+                                    f"扫描岩石: {best.rock or '岩石'} (质量 {round(best.mass)} | 矿量 {best.total_scu:.1f} SCU)",
+                                    "SCAN",
+                                ),
+                                _set("扫描", view["hud"], view.get("hud_rich")),
+                                ("legacy", legacy),
+                            ]
+                            if view["bag_text"]:
+                                ops.append(_set("矿袋", view["bag_text"]))
+                            if not self._commit(
+                                run,
+                                *ops,
+                                slot=MINING_SCAN,
+                                value=view,
+                                stamp=stamp,
+                            ):
+                                if ev.is_set():
+                                    break
+                                # 算的时候配装变了：这份作废，下一帧按新配装重算
+                                settled = False
+                                ev.wait(screen.INTERVAL)
+                                continue
                             if hint["why"]:
-                                self._hint(ev, hint, None, log)
-                            last_key, last_shown, scan_live, last_view = (
-                                key,
-                                shown,
-                                True,
-                                view,
-                            )
-                            _T("system")._ORE_LAST["view"] = view
-                            _T("system")._FB_LAST["scan"] = {
-                                "rock": view.get("rock"),
-                                "mass": view.get("mass"),
-                                "resistance": view.get("resistance"),
-                                "instability": view.get("instability"),
-                                "minerals": view.get("minerals"),
-                                "at": view.get("at"),
-                            }
+                                self._hint(run, hint, None, log)
+                            last_key, last_shown, scan_live = key, shown, True
                             log.write(
                                 f"{time.strftime('%F %T')} {best} {recent[-1][1]}\n"
                             )
@@ -660,33 +762,40 @@ class _Live:
                     )
                     if stable and shown != last_shown and alive():
                         view = _T("mining").scan_view(best, bag, cut=True)
-                        if not self._emit(
-                            ev,
-                            lambda: (
-                                bus.publish("scan", view),
-                                _H()
-                                ._hud()
-                                .set("扫描", view["hud"], view.get("hud_rich")),
-                            ),
+
+                        def legacy(view=view):
+                            _T("system")._ORE_LAST["view"] = view
+                            _T("system")._FB_LAST["scan"] = {
+                                "rock": view.get("rock"),
+                                "mass": view.get("mass"),
+                                "resistance": view.get("resistance"),
+                                "instability": view.get("instability"),
+                                "cut": True,
+                                "at": view.get("at"),
+                            }
+
+                        if not self._commit(
+                            run,
+                            _pub("scan", view),
+                            _set("扫描", view["hud"], view.get("hud_rich")),
+                            ("legacy", legacy),
+                            slot=MINING_SCAN,
+                            value=view,
+                            stamp=stamp,
+                            quality="partial",
                         ):
-                            break
+                            if ev.is_set():
+                                break
+                            settled = False
+                            ev.wait(screen.INTERVAL)
+                            continue
                         if hint["why"]:
-                            self._hint(ev, hint, None, log)
-                        last_key, last_shown, scan_live, last_view = (  # noqa: F841
+                            self._hint(run, hint, None, log)
+                        last_key, last_shown, scan_live = (  # noqa: F841
                             None,
                             shown,
                             True,
-                            view,
-                        )  # noqa: F841
-                        _T("system")._ORE_LAST["view"] = view
-                        _T("system")._FB_LAST["scan"] = {
-                            "rock": view.get("rock"),
-                            "mass": view.get("mass"),
-                            "resistance": view.get("resistance"),
-                            "instability": view.get("instability"),
-                            "cut": True,
-                            "at": view.get("at"),
-                        }
+                        )
                         log.write(
                             f"{time.strftime('%F %T')} PART 面板被屏幕挡住，只算破碎 {best}\n"
                         )
