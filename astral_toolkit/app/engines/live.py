@@ -242,12 +242,12 @@ class _Live:
         if info.reason not in ("user", "idle", "error"):
             return []
         hotkey = info.hotkey or "F5"
-        ops: list[tuple] = [
-            _del("信号", "扫描", "矿袋"),
-            _pub("scan_hint", {"why": "", "text": ""}),
-        ]
+        ops: list[tuple] = [_del("信号", "扫描", "矿袋")]
         if info.reason == "user":
+            # 列表顺序照设计表：清三块 → record → scan_hint → live（执行顺序里 record 是锁后类）
             ops.append(_record("MINING", "采矿助手引擎已停止", "LIVE"))
+        ops.append(_pub("scan_hint", {"why": "", "text": ""}))
+        if info.reason == "user":
             ops.append(_pub("live", {"running": False}))
         elif info.reason == "idle":
             ops.append(_pub("live", {"running": False, "auto_off": True}))

@@ -66,7 +66,7 @@ def test_pause_freezes_idle_and_stale_timers():
         needs_foreground=True,
         idle_close=10.0,
         stale_after={"panel": 5.0},
-        observed={"panel": 0.0},
+        observed_now={"panel"},
         wait=0.01,
     )
     gate = TickGate()
@@ -113,11 +113,11 @@ def test_idle_close_uses_the_latest_of_all_channels(monkeypatch):
     try:
         _start(loop, worker)
         gate.wait()
-        worker.observed = {"signals": 0.0}
+        worker.observed_now = {"signals"}
         for _ in range(20):  # 20 秒只有信号
             assert not _step_or_finish(worker, gate, clock, 1.0)
         assert worker.finished == [], "只有信号不应该自动关闭"
-        worker.observed = {}
+        worker.observed_now = set()
         finished = False
         for _ in range(20):
             if _step_or_finish(worker, gate, clock, 1.0):
@@ -136,7 +136,7 @@ def test_idle_close_uses_the_latest_of_all_channels(monkeypatch):
 
 def test_stale_fires_once_per_channel():
     clock = FakeClock()
-    worker = FakeWorker(stale_after={"panel": 5.0}, observed={"panel": 0.0}, wait=0.01)
+    worker = FakeWorker(stale_after={"panel": 5.0}, observed_now={"panel"}, wait=0.01)
     gate = TickGate()
     worker.gate = gate
     loop, _, out = make_loop(worker, clock=clock)
@@ -145,13 +145,13 @@ def test_stale_fires_once_per_channel():
         gate.wait()
         _step(gate, clock, 1.0)
         assert loop.freshness("panel") is Freshness.FRESH
-        worker.observed = {}  # 面板没了
+        worker.observed_now = set()  # 面板没了
         _step(gate, clock, 6.0)
         assert ("on_stale", sid, "panel") in worker.calls
         assert loop.freshness("panel") is Freshness.STALE
         _step(gate, clock, 1.0)  # 还是没看到：不再触发
         assert len([c for c in worker.calls if c[0] == "on_stale"]) == 1
-        worker.observed = {"panel": 0.0}  # 又看到了
+        worker.observed_now = {"panel"}  # 又看到了
         _step(gate, clock, 0.1)
         assert loop.freshness("panel") is Freshness.FRESH
     finally:
@@ -350,3 +350,41 @@ def test_shutdown_keeps_the_run_flag_and_confirms_once():
         assert out.ops == [], "shutdown 收尾什么都不发（stop_ops 空）"
     finally:
         loop.request_stop_current(StopInfo("user"))
+
+
+def test_slow_tick_uses_the_observation_time():
+    """tick 在 t=0 观测、卡到 t=130 才返回：返回后立刻判自动关闭 / 过期（2-3）"""
+    # 自动关闭：观测时刻是 0，返回时活动时钟 130 → 立刻关
+    clock = FakeClock()
+    worker = FakeWorker(idle_close=120.0, wait=0.01, observed={"panel": 0.0})
+    gate = Gate()
+    worker.gate = gate
+    loop, _, _ = make_loop(worker, clock=clock)
+    try:
+        _start(loop, worker)
+        assert gate.entered.wait(WAIT)
+        clock.advance(130.0)  # tick 还卡着，很久以后才返回
+        gate.release.set()
+        assert _wait_until(lambda: worker.finished == ["idle"], 5), worker.finished
+    finally:
+        gate.release.set()
+        loop.request_stop_current(StopInfo("user"))
+        loop.join(session_id=_current_id(loop))
+
+    # 过期：同样卡到 130 秒，返回后立刻标 stale（不是从返回时刻重新算）
+    clock = FakeClock()
+    worker = FakeWorker(stale_after={"panel": 5.0}, wait=0.01, observed={"panel": 0.0})
+    gate = Gate()
+    worker.gate = gate
+    loop, _, _ = make_loop(worker, clock=clock)
+    try:
+        sid = _start(loop, worker)
+        assert gate.entered.wait(WAIT)
+        clock.advance(130.0)
+        gate.release.set()
+        assert _wait_until(lambda: ("on_stale", sid, "panel") in worker.calls, 5)
+        assert loop.freshness("panel") is Freshness.STALE
+    finally:
+        gate.release.set()
+        loop.request_stop_current(StopInfo("user"))
+        loop.join(session_id=_current_id(loop))

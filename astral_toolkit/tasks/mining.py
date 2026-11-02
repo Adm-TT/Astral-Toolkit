@@ -382,9 +382,12 @@ def scan_view(scan, bag, cut=False):
 
 def live_start():
     live = _engines().live
-    if live.start() is None:  # 正在结束 / 正在退出：如实回话
+    if live.start() is None:
+        view = live.loop.state()
+        if view.prev_stop_pending:  # 停止还没收尾：如实回「正在停止」
+            return {"running": live.running(), "error": "正在停止，请稍候"}
         return {"running": live.running(), "error": "正在结束 / 正在退出，稍后再开"}
-    return {"running": True}
+    return {"running": live.running()}
 
 
 def live_stop():

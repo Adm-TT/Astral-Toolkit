@@ -121,7 +121,10 @@ class FakeWorker:
     pause_wait: float = 0.02
     restart_while_stopping: bool = False
     wait: float = 0.02
-    observed: dict = field(default_factory=dict)
+    observed: dict = field(default_factory=dict)  # 通道 → 观测时刻（钟读数）
+    observed_now: set = field(
+        default_factory=set
+    )  # 每轮都报「这一轮看到了」（值填 now）
     start_ops_list: list = field(default_factory=list)
     stop_ops_list: list = field(default_factory=list)
     pause_ops: list = field(default_factory=list)
@@ -186,6 +189,9 @@ class FakeWorker:
         self.session = session
         self.calls.append(("tick", session.id, now))
         self.ticks.append(now)
+        observed = dict(
+            self.observed
+        )  # 这一轮看到的（栅栏前就定下，卡住期间改 worker.observed 不影响）
         if self.gate is not None:
             self.gate.hold()
         if self.fail_times > 0:
@@ -194,7 +200,9 @@ class FakeWorker:
         if self.fail_at and len(self.ticks) == self.fail_at:
             raise RuntimeError(self.failure)
         self.ticked.set()
-        return Tick(self.wait, dict(self.observed))
+        for channel in self.observed_now:
+            observed[channel] = now  # 「看到」记在本轮开始时刻（v4.2 2-3 的语义）
+        return Tick(self.wait, observed)
 
     def on_pause(self, session, ctx):
         self.calls.append(("on_pause", session.id))

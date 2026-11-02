@@ -2313,7 +2313,9 @@ def test_live_republishes_corrected_total_scu(monkeypatch, tmp_path):
 
 
 def test_live_session_isolation(monkeypatch, tmp_path):
-    """快速停了又开：旧会话的取消已经按下，新会话是全新的（会话号、payload）；旧会话的结果写不进来"""
+    """快速停了又开（旧线程还卡在识别里、join 已超时）：新会话是全新的；旧会话的结果写不进来"""
+    import threading
+
     from astral_toolkit.core import paths
     from astral_toolkit.mining import screen
     from astral_toolkit.tasks import mining as t_mining
@@ -2328,22 +2330,41 @@ def test_live_session_isolation(monkeypatch, tmp_path):
     from astral_toolkit.mining.parse import Scan
 
     monkeypatch.setattr(screen, "analyse", lambda img: (Scan(), ({}, None, None)))
+    real = screen.analyse
+    gate = threading.Event()
+    entered = threading.Event()
+    calls = {"n": 0}
+
+    def analyse(img):
+        calls["n"] += 1
+        entered.set()
+        if calls["n"] == 1:
+            gate.wait(30)  # A 卡在识别里
+        return real(img)
+
+    monkeypatch.setattr(screen, "analyse", analyse)
     monkeypatch.setattr(screen, "INTERVAL", 0.01)
     monkeypatch.setattr(screen, "LAST_RAW", {})
     monkeypatch.setattr(screen, "LAST_PANEL", {})
     monkeypatch.setattr(t_mining, "_game_front", lambda: None)
     live = live_mod._Live()
+    live.loop._join_timeout = 0.05
     try:
         assert live.start() is not None
         first = live.session_id
         old = live.loop._current.session  # type: ignore[union-attr]
-        live.stop()
-        assert not old.alive()  # 旧会话的开关已经按下了
+        assert entered.wait(30)
+        attempt = live.stop()
+        assert attempt.timed_out and not old.alive(), "旧会话的开关已经按下、线程还卡着"
         assert live.start() is not None and live.session_id > first
         new = live.loop._current.session  # type: ignore[union-attr]
         assert new is not old and new.alive() and live.running()
+        gate.set()  # 放行旧线程
+        assert live.loop.join(session_id=first, timeout=30)
+        assert live.running() and live.session_id > first, "旧会话退出不影响新会话"
         assert live.loop.stamp(old, 1.0) is None  # 旧会话再来取表被拒
     finally:
+        gate.set()
         live.stop()
 
 

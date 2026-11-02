@@ -94,7 +94,11 @@ class StopAttempt:
 
 @dataclass(frozen=True)
 class Tick:
-    """一轮的回报：下一轮前等多久、这轮**看到了**哪些通道（与有没有提交无关）"""
+    """一轮的回报：下一轮前等多久、这轮**看到了**哪些通道（与有没有提交无关）
+
+    `observed` 的值是**观测时刻**（与循环同一个时钟，一般填这一轮开始的 `now`），不是持续时长；
+    循环把它换算到活动时钟再记 `last_seen`——慢 tick 不会把「看到」往后推（v4.2 2-3）。
+    """
 
     wait: float
     observed: Mapping[str, float] = field(default_factory=dict)
@@ -209,6 +213,9 @@ class _Run:
     confirm_sent: bool = False  # 「已停止」确认发过没
     superseded: bool = False  # 已被新会话取代（在 _pending 里）
     stop_timeout: bool = False  # 看门狗判过停止超时（状态仍留 STOPPING）
+    join_timed_out: bool = (
+        False  # join 已超时过一次（只有超时后，采矿才允许被新会话取代）
+    )
     error: str = ""
     stop_reason: str | None = None
     stop_info: StopInfo | None = None
@@ -253,6 +260,8 @@ class SessionLoop:
         self._current: _Run | None = None
         self._pending: dict[int, _Run] = {}
         self._shared: dict[str, Any] = {}
+        self._hook_logs: list[Op] = []
+        self._hook_logs_lock = threading.Lock()
         self._session_id = 0
         self._epoch = 0
         self._config_rev = 0
@@ -325,11 +334,22 @@ class SessionLoop:
             return False
         with self._lock:
             cur = self._current
-            if cur is None or not cur.thread.is_alive():
+            if cur is None:
                 return True
             if cur.state in (RunState.STARTING, RunState.RUNNING, RunState.PAUSED):
                 return False
-            return bool(self._worker.restart_while_stopping)
+            if not cur.thread.is_alive():
+                return True
+            return self._may_replace_locked(cur)
+
+    def _may_replace_locked(self, run: _Run) -> bool:
+        """停产中的会话能不能被新会话取代（v4.1/4.2 §2.3）：要允许重开、join 已超时（或看门狗已判超时）、
+        且同时没有别的活着的旧线程在收尾"""
+        if not run.join_timed_out and not run.stop_timeout:
+            return False
+        if not self._worker.restart_while_stopping:
+            return False
+        return not any(p.thread.is_alive() for p in self._pending.values())
 
     # ---------------------------------------------------------------- 起停
     def start(self, payload: Any = None) -> int | None:
@@ -346,9 +366,15 @@ class SessionLoop:
                 RunState.PAUSED,
             ):
                 return cur.session.id if cur.session.payload == payload else None
-            if cur is not None and cur.state is RunState.STOPPING:
+            if cur is not None and (
+                cur.state is RunState.STOPPING
+                or (
+                    cur.state in (RunState.STOPPED, RunState.FAILED)
+                    and cur.thread.is_alive()
+                )
+            ):
                 if cur.thread.is_alive():
-                    if not worker.restart_while_stopping:
+                    if not self._may_replace_locked(cur):
                         return None
                     # 旧线程还在停：已被新会话取代，交给它自己的看门狗，以后不再发「已停止」
                     cur.superseded = True
@@ -410,9 +436,11 @@ class SessionLoop:
     def request_stop_current(self, info: StopInfo | None = None) -> int | None:
         """按「当前会话」停止；没有在跑的会话时也发一次「已停止」确认（和 dev 一致）"""
         info = info if info is not None else StopInfo("user")
+        # 没有会话时的确认先锁外算好（热键已经在 info 里）；第一次持锁若判定无会话就当场套用，
+        # 不再二次拿锁复核——并发的 start() 只能在它之前或之后（2-6）
+        none_ops = self._ops_safe(self._worker.stop_ops, None, info)
         deferred: list[Op] = []
         sid: int | None = None
-        need_none_ops = False
         with self._lock:
             cur = self._current
             if cur is not None and cur.state in (
@@ -426,20 +454,7 @@ class SessionLoop:
                 sid = cur.session.id
             else:
                 self._flag_for(info)
-                need_none_ops = True
-        if need_none_ops:
-            ops = self._ops_safe(
-                self._worker.stop_ops, None, info
-            )  # 锁外：可能现读设置
-            with self._lock:
-                cur = self._current
-                if cur is None or cur.state not in (
-                    RunState.STARTING,
-                    RunState.RUNNING,
-                    RunState.PAUSED,
-                    RunState.STOPPING,
-                ):
-                    self._apply_locked(ops, deferred)
+                self._apply_locked(none_ops, deferred)
         self._run_ops(deferred)
         self._write_flag()
         return sid
@@ -513,11 +528,14 @@ class SessionLoop:
             run = self._find_locked(session_id)
             if run is None:
                 return True
-            if run.thread.is_alive():
+            if not run.thread.is_alive():
+                return True  # 等在锁外这段时间里退出了（2-17）
+            run.join_timed_out = True
+            if run.stop_info is not None or run.state is RunState.STOPPING:
                 self._confirm_stop_locked(run, self._info_of(run), deferred)
-                run.since = self._clock()
-                run.deadline = run.since + self._join_timeout
-                self._ensure_watchdog_locked(run)
+            run.since = self._clock()
+            run.deadline = run.since + self._join_timeout
+            self._ensure_watchdog_locked(run)
         self._run_ops(deferred)
         return False
 
@@ -629,21 +647,20 @@ class SessionLoop:
                 or cur.state not in (RunState.RUNNING, RunState.PAUSED)
             ):
                 return False
+            if stamp is not None and (
+                stamp.session_id != session.id or stamp.epoch != self._epoch
+            ):
+                return False
             if slot is not None:
-                if (
-                    stamp is None
-                    or stamp.session_id != session.id
-                    or stamp.epoch != self._epoch
-                    or not self._results.accept(
-                        slot,
-                        value,
-                        stamp.session_id,
-                        stamp.epoch,
-                        stamp.seq,
-                        stamp.mono,
-                        stamp.wall,
-                        quality,
-                    )
+                if stamp is None or not self._results.accept(
+                    slot,
+                    value,
+                    stamp.session_id,
+                    stamp.epoch,
+                    stamp.seq,
+                    stamp.mono,
+                    stamp.wall,
+                    quality,
                 ):
                     return False
             self._apply_locked(ops, deferred)
@@ -664,6 +681,7 @@ class SessionLoop:
     def _run_ops(self, deferred: Iterable[Op]) -> None:
         for op in deferred:
             self._output.apply(op)
+        self._flush_hook_logs()
 
     def _apply_checked(self, session: Session, ops: list[Op]) -> None:
         """回调返回的 op：锁内三查通过才套用，否则整批丢弃"""
@@ -698,6 +716,15 @@ class SessionLoop:
             return []
         return list(ops)
 
+    def _ops_checked(self, name: str, ops: Any) -> list[Op]:
+        """钩子返回值统一先校验（锁外）：不合格记 HOOK_ERROR、当空列表（2-4）"""
+        try:
+            validate_ops(ops)
+        except (TypeError, ValueError) as exc:
+            self._hook_error(name, exc)
+            return []
+        return list(ops)
+
     def _hook(self, name: str, fn: Callable[..., Any], *args: Any, default: Any) -> Any:
         try:
             return fn(*args)
@@ -706,7 +733,15 @@ class SessionLoop:
             return default
 
     def _hook_error(self, name: str, exc: BaseException) -> None:
-        self._run_ops([("log", f"HOOK_ERROR {name}: {exc!r}", "MINING")])
+        """钩子自身出错：只排队一条锁后 log，绝不在锁内写文件（2-5）"""
+        with self._hook_logs_lock:
+            self._hook_logs.append(("log", f"HOOK_ERROR {name}: {exc!r}", "MINING"))
+
+    def _flush_hook_logs(self) -> None:
+        with self._hook_logs_lock:
+            ops, self._hook_logs = self._hook_logs, []
+        if ops:
+            self._run_ops(ops)
 
     def _write_flag(self) -> None:
         """锁外、_flag_lock 里按**最新**期望值写盘；锁序：_flag_lock → loop 锁"""
@@ -773,9 +808,14 @@ class SessionLoop:
                     self._hook("teardown", worker.teardown, session, ctx, default=None)
                     ctx = None
                     session.cancel.wait(1.0)
+                    if session.cancel.is_set():
+                        break  # 等在重试间隔里被停：别再开下一次尝试（2-19）
         finally:
             info = self._info_of_session(session)
-            ops = self._hook("finish", worker.finish, session, ctx, info, default=[])
+            ops = self._ops_checked(
+                "finish",
+                self._hook("finish", worker.finish, session, ctx, info, default=[]),
+            )
             self._hook("teardown", worker.teardown, session, ctx, default=None)
             self._finish_thread(session, info, ops if isinstance(ops, list) else [])
 
@@ -861,9 +901,13 @@ class SessionLoop:
 
     def _active(self, run: _Run, now: float) -> float:
         """扣掉暂停段的活动时钟"""
-        total = now - run.active_origin - run.paused_accum
-        if run.paused_at is not None:
-            total -= now - run.paused_at
+        return self._active_at(run, now)
+
+    def _active_at(self, run: _Run, stamp: float) -> float:
+        """某个时刻（与循环同一个时钟）对应的活动时钟"""
+        total = stamp - run.active_origin - run.paused_accum
+        if run.paused_at is not None and stamp > run.paused_at:
+            total -= stamp - run.paused_at
         return total
 
     def _idle_expired(self, session: Session) -> bool:
@@ -892,8 +936,9 @@ class SessionLoop:
             ):
                 return False
             active = self._active(cur, self._clock())
-            for channel in tick.observed:
-                cur.last_seen[channel] = active
+            for channel, stamp in tick.observed.items():
+                # observed 的值是**观测时刻**（和循环同一个时钟），换算到活动时钟再记（2-3）
+                cur.last_seen[channel] = min(active, self._active_at(cur, float(stamp)))
                 cur.freshness[channel] = Freshness.FRESH
             for channel, limit in (self._worker.stale_after or {}).items():
                 if cur.freshness.get(channel) is not Freshness.FRESH:
@@ -946,11 +991,6 @@ class SessionLoop:
                 self._apply_locked(ops, deferred)  # finish 的锁内类 op（含 shared）
                 self._confirm_stop_locked(cur, info, deferred)
                 cur.stop_timeout = False  # 线程这会儿已经退了
-                cur.state = (
-                    RunState.FAILED if info.reason == "error" else RunState.STOPPED
-                )
-                if info.reason == "error" and info.error:
-                    cur.error = info.error
             else:
                 pending = self._pending.pop(session.id, None)
                 if pending is not None:
@@ -959,4 +999,12 @@ class SessionLoop:
                         if op and op[0] == "log":
                             deferred.append(op)
                     self._confirm_stop_locked(pending, info, deferred)
+        # 锁外把收尾输出发完，最后才写最终状态：这期间线程还活着，start() 会按「仍在停止」处理（2-2）
         self._run_ops(deferred)
+        with self._lock:
+            cur = self._current
+            if cur is None or cur.session is not session:
+                return  # 已被新会话取代，状态由取代时定（它在 _pending 里）
+            cur.state = RunState.FAILED if info.reason == "error" else RunState.STOPPED
+            if info.reason == "error" and info.error:
+                cur.error = info.error

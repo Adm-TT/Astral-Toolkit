@@ -838,7 +838,8 @@ def test_error_note_uses_the_hotkey_from_stop_time(monkeypatch, tmp_path):
 
 
 def test_scan_off_flag_is_per_session(monkeypatch, tmp_path):
-    """scan_off 标记进 Ctx：A 在关扫描时被停，开 B 后 B 第一次 scan_off 照常清扫描区"""
+    """scan_off 标记在 Ctx 里：A 卡在识别里被停（join 超时），B 开了以后照常清一次扫描区；
+    A 迟到的 tick 改不到 B 的标记"""
     hud, _ = _world(monkeypatch, tmp_path, lambda img: (_rock(), ({}, None, None)))
     off = {"scan": True}
     monkeypatch.setattr(
@@ -846,21 +847,37 @@ def test_scan_off_flag_is_per_session(monkeypatch, tmp_path):
         "_off",
         lambda feature: "远程关了" if feature == "scan" and off["scan"] else None,
     )
+    gate = threading.Event()
+    entered = threading.Event()
+    real = screen.analyse
+    calls = {"n": 0}
+
+    def analyse(img):
+        calls["n"] += 1
+        entered.set()
+        if calls["n"] == 1:
+            gate.wait(WAIT)  # A 卡在识别里
+        return real(img)
+
+    monkeypatch.setattr(screen, "analyse", analyse)
     live = live_mod._Live()
+    live.loop._join_timeout = 0.05
     q = _subscribe()
     try:
         assert live.start() is not None
-        assert _wait_until(lambda: ("clear", "扫描") in hud.calls, 5), (
-            "A 会话没有清扫描区"
-        )
-        first = hud.calls.count(("clear", "扫描"))
-        live.stop()
-        assert live.start() is not None
-        assert _wait_until(lambda: hud.calls.count(("clear", "扫描")) > first, 5), (
-            "B 会话应该重新清一次扫描区（标记按会话）"
-        )
+        assert entered.wait(WAIT)
+        first_attempt = live.stop()
+        assert first_attempt.timed_out, "A 卡在识别里，join 应该超时"
+        after_stop = hud.calls.count(("clear", "扫描"))  # 停止自己的 clear 也算进来
+        assert live.start() is not None  # join 已超时：可以开 B
+        gate.set()  # 放行 A
+        assert _wait_until(
+            lambda: hud.calls.count(("clear", "扫描")) > after_stop, 5
+        ), "B 会话应该重新清一次扫描区（标记按会话，A 的迟到 tick 改不到它）"
+        assert live.running()
     finally:
         off["scan"] = False
+        gate.set()
         _finish(live, q)
 
 
