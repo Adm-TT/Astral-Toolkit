@@ -125,7 +125,7 @@ def test_ensure_wraps_non_gamedata_errors(monkeypatch, tmp_path):
     monkeypatch.setattr(_build, "rebuild_if_needed", boom)
     with raises(G.GamedataError) as got:
         G.ensure()
-    assert isinstance(got.value.__cause__, PermissionError)
+    assert got.value is not None and isinstance(got.value.__cause__, PermissionError)
     with raises(G.GamedataError):
         G.ensure()  # 退避期内再来：还是 GamedataError
 
