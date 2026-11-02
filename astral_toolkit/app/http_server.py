@@ -32,6 +32,8 @@ MAX_BODY = (
     16 << 20
 )  # 普通接口的请求体上限（都是小 JSON；安装包走 upgrade_upload_raw，另有上限）
 _last_client = {"t": time.time(), "ever": False}
+# 新展示流心跳间隔（秒）；测试可调小，不需要长 sleep
+UI_HEARTBEAT_INTERVAL = 5.0
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -249,25 +251,38 @@ class Handler(BaseHTTPRequestHandler):
             _last_client["t"] = time.time()
 
     def _ui_events(self):
+        # SSE 没有 Content-Length：必须明确关闭连接，否则 HTTP/1.1 keep-alive
+        # 会让客户端永远等不到 EOF（满队列/bye 后服务端线程也会卡住）。
+        self.close_connection = True
+        hello, q = ui_stream.subscribe()
+        if q is None:
+            error = (
+                hello.get("error", "已关闭") if isinstance(hello, dict) else "已关闭"
+            )
+            return self._send(
+                503,
+                json.dumps({"ok": False, "error": error}, ensure_ascii=False),
+            )
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
-        self.send_header("Connection", "keep-alive")
+        self.send_header("Connection", "close")
         self.end_headers()
-        hello, q = ui_stream.subscribe()
         conn = hello["conn"]
+        interval = max(0.01, float(UI_HEARTBEAT_INTERVAL))
+        poll = min(1.0, interval)
         try:
             self.wfile.write(ui_stream.encode(hello).encode("utf-8"))
             self.wfile.flush()
             last_hb = time.time()
             while True:
                 try:
-                    msg = q.get(timeout=1.0)
+                    msg = q.get(timeout=poll)
                 except queue.Empty:
                     if not ui_stream.is_connected(q):
                         break
                     now = time.time()
-                    if now - last_hb >= 5:
+                    if now - last_hb >= interval:
                         hb = ui_stream.heartbeat(conn)
                         self.wfile.write(ui_stream.encode(hb).encode("utf-8"))
                         self.wfile.flush()
@@ -295,8 +310,12 @@ class Handler(BaseHTTPRequestHandler):
             conn = int(conn)
         except (TypeError, ValueError):
             pass
-        switches = ui_stream.read_switches()
-        snap = ui_stream.snapshot(conn, switches=switches)
+        # 全家福只读；开关刷新必须先走 set_switches，有变化会在展示流锁内分配 ui_seq 并广播 ui.tile
+        try:
+            ui_stream.set_switches(ui_stream.read_switches())
+        except Exception:
+            pass
+        snap = ui_stream.snapshot(conn)
         self._send(
             200,
             json.dumps(snap, ensure_ascii=False, default=str),

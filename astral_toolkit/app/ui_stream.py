@@ -1,8 +1,10 @@
 """新展示流 ui/1（UI-K0a）：独立于旧 bus 的发布、订阅与全家福缓存。
 
 - publish_ui()：同一把锁里分配 ui_seq、更新缓存、入每个订阅者自己的有界队列
-- subscribe()：锁内原子地生成 conn、取当前 ui_seq 作为 hello，返回独立队列
+- subscribe()：锁内原子地生成 conn、取当前 ui_seq 作为 hello，返回独立队列；关闭后返回「已关闭」
 - 队列满：标记该订阅断开，交给 SSE 处理函数结束响应，不静默丢
+- snapshot()：只读全家福，不修改开关/磁贴；开关刷新走 set_switches()
+- drain_and_bye()：先结束剩余活动（摘要通知先于终态），再 bye，并等待队列排空
 - 旧通道 /api/events 与 bus.publish / bus.subscribe 完全不动
 """
 
@@ -17,6 +19,7 @@ PROTOCOL = "ui/1"
 instance_id = secrets.token_urlsafe(18)  # 进程启动一次，重启就换
 INSTANCE_ID = instance_id
 _QUEUE_MAX = 2000
+ENDED_MAX = 256
 
 _lock = threading.Lock()
 _idle = threading.Condition(_lock)  # 等队列排空时复用同一把锁
@@ -153,7 +156,21 @@ def _derive_tiles_locked(publish):
             _send_locked("ui.tile", {"tile": _copy(tile)})
 
 
+def _remember_ended_locked(activity_id, end):
+    _ended[activity_id] = _copy(end)
+    try:
+        limit = int(ENDED_MAX)
+    except Exception:
+        limit = 256
+    if limit < 0:
+        limit = 0
+    while len(_ended) > limit:
+        _ended.pop(next(iter(_ended)), None)
+
+
 def _publish_activity_locked(data):
+    if _shutting_down:
+        return _seq
     activity = data.get("activity", data)
     if not isinstance(activity, dict):
         return _seq
@@ -169,6 +186,8 @@ def _publish_activity_locked(data):
 
 def _publish_activity_end_locked(data):
     global _notice_seq
+    if _shutting_down:
+        return _seq
     activity_id = data.get("activity_id")
     if not activity_id:
         return _send_locked("ui.activity_end", data)
@@ -210,13 +229,15 @@ def _publish_activity_end_locked(data):
     }
     if error is not None:
         end["error"] = str(error)
-    _ended[activity_id] = _copy(end)
+    _remember_ended_locked(activity_id, end)
     seq = _send_locked("ui.activity_end", end)
     _derive_tiles_locked(True)
     return seq
 
 
 def _publish_tile_locked(data):
+    if _shutting_down:
+        return _seq
     tile = data.get("tile", data)
     if not isinstance(tile, dict):
         return _seq
@@ -230,6 +251,8 @@ def _publish_tile_locked(data):
 
 
 def _publish_notice_locked(data):
+    if _shutting_down:
+        return _seq
     notice = data.get("notice", data)
     if not isinstance(notice, dict):
         return _seq
@@ -240,6 +263,8 @@ def _publish_notice_locked(data):
 
 
 def _publish_notice_dismiss_locked(data):
+    if _shutting_down:
+        return _seq
     notice_id = data.get("notice_id")
     if notice_id is None:
         return _seq
@@ -258,6 +283,8 @@ def publish_ui(kind, data):
     kind = _kind(kind)
     payload = _copy(data if isinstance(data, dict) else {"value": data})
     with _lock:
+        if _shutting_down:
+            return _seq
         if kind == "ui.activity":
             return _publish_activity_locked(payload)
         if kind == "ui.activity_end":
@@ -271,13 +298,37 @@ def publish_ui(kind, data):
         return _send_locked(kind, payload)
 
 
+def _closed_locked():
+    return {
+        "kind": "ui.closed",
+        "protocol": PROTOCOL,
+        "instance_id": INSTANCE_ID,
+        "conn": None,
+        "ui_seq": _seq,
+        "error": "已关闭",
+    }
+
+
 def subscribe(maxsize=None):
-    """锁内生成 conn、取当前 ui_seq 作 hello，返回 (hello, 独立有界队列)"""
+    """锁内生成 conn、取当前 ui_seq 作 hello，返回 (hello, 独立有界队列)。
+
+    已关闭时返回 (明确的 ui.closed hello, None)。订阅前先刷新一次开关；
+    有变化会走 set_switches() 分配 ui_seq 并广播 ui.tile。
+    """
     global _conn_seq
     if maxsize is None:
         maxsize = _QUEUE_MAX
+    with _lock:
+        if _shutting_down:
+            return _closed_locked(), None
+    try:
+        refresh_switches()
+    except Exception:
+        pass
     q = queue.Queue(maxsize=maxsize)
     with _lock:
+        if _shutting_down:
+            return _closed_locked(), None
         _conn_seq += 1
         conn = _conn_seq
         sub = _Sub(conn, q)
@@ -327,30 +378,31 @@ def heartbeat(conn):
         }
 
 
-def snapshot(conn, switches=None):
-    """返回与同一把锁下状态一致的全家福；conn 由调用方传入并回显"""
+def snapshot(conn):
+    """返回与同一把锁下状态一致的全家福；只读，不修改开关或磁贴。"""
     with _lock:
-        if switches:
-            _switches.update(_clean_switches(switches))
-            _derive_tiles_locked(False)
         seq = _seq
-        activities = list(_activities.values())
-        tiles = list(_tiles.values())
-        notices = list(_notices.values())
+        activities = _copy(list(_activities.values()))
+        tiles = _copy(list(_tiles.values()))
+        notices = _copy(
+            [notice for notice in _notices.values() if not notice.get("dismissed")]
+        )
         ended = list(_ended.keys())
     return {
         "protocol": PROTOCOL,
         "instance_id": INSTANCE_ID,
         "conn": conn,
         "ui_seq": seq,
-        "activities": _copy(activities),
-        "tiles": _copy(tiles),
-        "notices": _copy(notices),
+        "activities": activities,
+        "tiles": tiles,
+        "notices": notices,
         "ended": ended,
     }
 
 
 def _clean_switches(switches):
+    if not isinstance(switches, dict):
+        return {}
     allowed = (
         "live_on",
         "live_running",
@@ -362,10 +414,13 @@ def _clean_switches(switches):
     return {key: bool(switches[key]) for key in allowed if key in switches}
 
 
-def set_switches(switches, publish=True):
+def set_switches(switches):
+    """开关变化唯一入口：锁内派生磁贴，有变化就分配 ui_seq 并广播 ui.tile。"""
     with _lock:
+        if _shutting_down:
+            return _seq
         _switches.update(_clean_switches(switches))
-        _derive_tiles_locked(publish)
+        _derive_tiles_locked(True)
         return _seq
 
 
@@ -408,9 +463,16 @@ def read_switches():
     return out
 
 
+def refresh_switches():
+    """刷新一次运行层开关；有变化走 set_switches()，因而会广播 ui.tile。"""
+    return set_switches(read_switches())
+
+
 def dismiss_notice(notice_id):
-    """后台权威地划掉一条通知；找不到返回 False"""
+    """后台权威地划掉一条通知；找不到或已关闭返回 False"""
     with _lock:
+        if _shutting_down:
+            return False
         notice = _notices.get(notice_id)
         if notice is None:
             return False
@@ -424,7 +486,7 @@ def dismiss_notice(notice_id):
 
 def _has_pending_locked():
     for sub in _subs:
-        if not sub.alive or sub.bye_sent:
+        if not sub.alive:
             continue
         if not sub.q.empty():
             return True
@@ -463,15 +525,23 @@ def bye_all():
 
 
 def drain_and_bye(timeout=1.0):
-    """退出时最多等 timeout 秒让队列排空，然后给每条订阅发带水位的 bye"""
+    """退出：结束剩余活动 -> 发 bye -> 最多等 timeout 秒让队列被取空。"""
     deadline = time.monotonic() + float(timeout)
     with _idle:
+        for activity_id in list(_activities):
+            _publish_activity_end_locked(
+                {
+                    "activity_id": activity_id,
+                    "end_reason": "shutdown",
+                }
+            )
+        sent = _bye_all_locked()
         while _has_pending_locked():
             remain = deadline - time.monotonic()
             if remain <= 0:
                 break
             _idle.wait(remain)
-        return _bye_all_locked()
+        return sent
 
 
 def encode(msg):
