@@ -4,11 +4,10 @@
   E:\\Game3\\AT_build\\venv\\Scripts\\python.exe -X utf8 tools\\build_standalone.py
 输出 E:\\Game3\\AT_build\\dist\\AT\\（AT.exe + _internal + data + 免责声明等），并打印体积统计。
 暂不做单文件封装、不做增量更新（用户 2026-10-26 定）
-加 --installer：再用 Inno Setup 编出安装程序 AT_Setup_<版本>.exe（放在 dist\\，tools\\AT_setup.iss）
+安装程序由 tools/build_velopack.py 出（老的 Inno 安装版 2026-10-31 停发，--installer 已删）
 """
 
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -52,7 +51,7 @@ SHELL_OUT = BUILD / "shell_out"
 NUGET = BUILD / "nuget"  # NuGet 缓存放 E 盘，不放 C 盘
 ISCC = (
     BUILD / "tools" / "InnoSetup6" / "ISCC.exe"
-)  # Inno Setup 6.7.3（2026-10-26 装在构建目录里）
+)  # Inno Setup 6.7.3（2026-10-26 装在构建目录里）；只剩 build_velopack 编桥接安装程序用
 # 用不上的大文件：OpenCV 的视频解码（29 MB，AT 不读视频）、Pillow 的 AVIF 图片支持（7 MB）。删掉后自检、样本识别照常
 UNUSED = ("_internal/cv2/opencv_videoio_ffmpeg*.dll", "_internal/PIL/_avif*.pyd")
 BUILD_ONLY = {
@@ -204,8 +203,6 @@ def main():
             for k, v in sorted(big.items(), key=lambda x: -x[1])[:10]
         )
     )
-    if "--installer" in sys.argv:
-        installer()
 
 
 def build_shell():
@@ -251,37 +248,6 @@ def build_shell():
     if lic.exists():
         lic.write_text(lic.read_text(encoding="utf-8") + note, encoding="utf-8")
     print(f"外壳：{_size(dest) / 2**20:,.1f} MB")
-
-
-def installer():
-    """Inno Setup 编安装程序。Gitee 发行版单个附件上限 100 MB，超了直接报错"""
-    version = re.search(
-        r'VERSION = "([^"]+)"',
-        (ROOT / "astral_toolkit" / "core" / "version.py").read_text(encoding="utf-8"),
-    ).group(1)
-    out_dir = ROOT / "dist"
-    out_dir.mkdir(exist_ok=True)
-    if not ISCC.exists():
-        raise SystemExit(f"❌ 没找到 Inno Setup：{ISCC}")
-    t0 = time.time()
-    subprocess.run(
-        [
-            str(ISCC),
-            "/Q",
-            f"/DMyVersion={version}",
-            f"/DSrcDir={OUT}",
-            f"/DOutDir={out_dir}",
-            str(ROOT / "tools" / "AT_setup.iss"),
-        ],
-        check=True,
-    )
-    exe = out_dir / f"AT_Setup_{version}.exe"
-    size = exe.stat().st_size
-    print(
-        f"✅ 安装程序：{exe}（{size / 2**20:,.1f} MB，用时 {time.time() - t0:,.0f} 秒）"
-    )
-    if size >= 100 * 2**20:
-        raise SystemExit("❌ 超过 Gitee 单个附件上限 100 MB，传不上去")
 
 
 if __name__ == "__main__":
