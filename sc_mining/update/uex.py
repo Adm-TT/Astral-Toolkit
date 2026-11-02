@@ -1,6 +1,6 @@
 """在你电脑上联网刷新：5 个城市的精炼矿收购价 + 精炼站加成（UEX 公共接口）
 
-用法：python -m sc_mining.uex      → 生成 data/prices.json，demo 会自动优先读它
+用法：python -m sc_mining.uex      → 生成 data/prices.json（游戏数据层由它建矿价和加成表，apply_live 再覆盖内置数据）
 """
 
 import json
@@ -73,20 +73,19 @@ def refresh():
 
 
 def apply_live(data_module):
-    """如果有 data/prices.json，用它覆盖内置数据。
-    矿价从游戏数据层读（mineral_prices 表，由 prices.json 建）；精炼站加成 yields 地基还没建表，
-    等 mining 批次（批 5）建表后迁，这里先照旧读 prices.json"""
-    if not OUT.exists():
-        return False
+    """用游戏数据层里的 UEX 矿价和精炼站加成（源都是 data/prices.json）覆盖内置数据。
+    没有这份文件、文件坏了或里面什么都没有、库读不到 → 不覆盖，返回 False"""
     from .. import gamedata
 
-    live = json.loads(OUT.read_text(encoding="utf-8"))
     try:
-        live_prices = gamedata.prices.city_prices()
+        gamedata.ensure()
+        with gamedata.snapshot() as s:  # 矿价和加成同一版本
+            live_prices = gamedata.prices.city_prices(s)
+            live_yields = gamedata.prices.refinery_yields(s)
     except gamedata.GamedataError:
-        # 库建不出来（如 shops.json 缺了）：矿价退回直接读 prices.json，和迁移前一样（审查 2026-11-02 第 3 条、复审第 1 条）
-        # 过渡：下面 yields 迁库（批 5 / GD-B5）时，这条退路和读 prices.json 的 live 一起删，改成库读不到就不覆盖内置表
-        live_prices = live.get("prices") or {}
+        return False
+    if not live_prices and not live_yields:
+        return False
     prices = {
         m: dict(c) for m, c in data_module.CITY_PRICES.items()
     }  # 先组好新表再整体换：采矿线程可能正在遍历旧表
@@ -103,7 +102,7 @@ def apply_live(data_module):
     refs = (
         data_module.REFINERIES
     )  # refinery.py 在 import 时绑定了这个 dict：只换已有键的值，不增删键，遍历中也安全
-    for station, bonus in (live.get("yields") or {}).items():
+    for station, bonus in live_yields.items():
         if (
             station not in refs
         ):  # 不认识的站名（UEX 改名）不加，免得推荐出没中文、没星系的站

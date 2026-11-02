@@ -1678,9 +1678,10 @@ def test_blas_threads_limited():
 
 def test_ship_signature_match():
     """截面对得上：短剑正对时的截面应该把短剑排第一；离谱的数对不上任何船"""
+    from sc_mining.core.paths import DATA
     from sc_mining.mining import shipsig
 
-    if not (shipsig.DATA / "ship_signatures.json").exists():
+    if not (DATA / "ship_signatures.json").exists():
         pytest.skip("没有舰船截面数据")
     rows = shipsig.match(1956)
     assert rows and "Gladius" in rows[0]["name"]
