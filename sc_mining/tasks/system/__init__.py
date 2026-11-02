@@ -17,7 +17,7 @@ from .about import (
     open_source_site,
     third_party_licenses,
 )
-from .common import WIN, _FB_LAST, _ORE_LAST, _engines, _hud, _note_hud
+from .common import WIN, _engines, _hud, _note_hud
 from .feedback import (
     _fb_dir,
     _scrub,

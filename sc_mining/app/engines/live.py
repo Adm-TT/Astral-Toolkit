@@ -3,7 +3,7 @@
 2026-10-28 从 app/services.py 原样剪出来（逻辑没改）。2026-10-30 重构阶段 4 删了 services.py，
 用到的函数 / 变量直接到它们所在的模块取，运行时才取，避免互相 import：
 _T("mining").xxx = tasks/mining.py，_H().xxx = app/hud_state.py，_E().live / .nav / .pos / .cam_filter = 引擎实例。
-用到：_FB_LAST, _ORE_LAST, _area_now, _game_front, _hud, _mark_goal_lines, _note_hud, _off, _where_now, scan_view, settings_key
+用到：_area_now, _game_front, _hud, _mark_goal_lines, _note_hud, _off, _where_now, scan_view, settings_key
 """
 
 import importlib
@@ -118,8 +118,6 @@ class _Live:
             _H()._hud().clear(*args)
         elif kind == "paused":
             self.paused = args[0]
-        elif kind == "legacy":  # 读方还没改到 ResultStore 时的旧全局，下一个提交删
-            args[0]()
 
     def _commit(self, run, *ops, slot=None, value=None, stamp=None, quality="complete"):
         """提交边界（架构稿 §7.5）：查会话 → 存结果 → 发布，和停止用同一把锁串行；任何一步不成就整个不做。
@@ -616,12 +614,6 @@ class _Live:
                                     for x in lines[:4]
                                 ),
                             ),
-                            (
-                                "legacy",
-                                lambda: _T("system")._FB_LAST.__setitem__(
-                                    "sig", {**msg, "values": sorted(sigs)}
-                                ),
-                            ),
                             slot=MINING_SIGNALS,
                             value={"view": msg, "values": sorted(sigs)},
                             stamp=stamp,
@@ -686,17 +678,6 @@ class _Live:
                                 best, recent[-1][1]
                             )  # 慢：算完再看一次有没有停
 
-                            def legacy(view=view):
-                                _T("system")._ORE_LAST["view"] = view
-                                _T("system")._FB_LAST["scan"] = {
-                                    "rock": view.get("rock"),
-                                    "mass": view.get("mass"),
-                                    "resistance": view.get("resistance"),
-                                    "instability": view.get("instability"),
-                                    "minerals": view.get("minerals"),
-                                    "at": view.get("at"),
-                                }
-
                             ops = [
                                 _pub("scan", view),
                                 _say(
@@ -704,7 +685,6 @@ class _Live:
                                     "SCAN",
                                 ),
                                 _set("扫描", view["hud"], view.get("hud_rich")),
-                                ("legacy", legacy),
                             ]
                             if view["bag_text"]:
                                 ops.append(_set("矿袋", view["bag_text"]))
@@ -763,22 +743,10 @@ class _Live:
                     if stable and shown != last_shown and alive():
                         view = _T("mining").scan_view(best, bag, cut=True)
 
-                        def legacy(view=view):
-                            _T("system")._ORE_LAST["view"] = view
-                            _T("system")._FB_LAST["scan"] = {
-                                "rock": view.get("rock"),
-                                "mass": view.get("mass"),
-                                "resistance": view.get("resistance"),
-                                "instability": view.get("instability"),
-                                "cut": True,
-                                "at": view.get("at"),
-                            }
-
                         if not self._commit(
                             run,
                             _pub("scan", view),
                             _set("扫描", view["hud"], view.get("hud_rich")),
-                            ("legacy", legacy),
                             slot=MINING_SCAN,
                             value=view,
                             stamp=stamp,
