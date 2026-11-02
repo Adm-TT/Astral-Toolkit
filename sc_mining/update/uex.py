@@ -1,6 +1,6 @@
 """在你电脑上联网刷新：5 个城市的精炼矿收购价 + 精炼站加成（UEX 公共接口）
 
-用法：python -m sc_mining.uex      → 生成 data/prices.json，demo 会自动优先读它
+用法：python -m sc_mining.uex      → 生成 data/prices.json（游戏数据层由它建矿价和加成表，apply_live 再覆盖内置数据）
 """
 
 import json

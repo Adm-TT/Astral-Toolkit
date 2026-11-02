@@ -1771,15 +1771,17 @@ def test_review_102_place_names_without_ini(monkeypatch, tmp_path):
 def test_review_104_rocks_reload_and_order(monkeypatch, tmp_path):
     """二审：①更新数据换了石头表不用重启就生效；②同一个信号的几种可能保持「当地概率 × 一团几块」的顺序，不被矿价打乱"""
     import json
+    import sc_mining.gamedata as G
     from sc_mining.mining import mining_area as M, signals as S
-    from sc_mining.core import paths
+    from tests.test_gamedata_b1 import _setup
 
-    monkeypatch.setattr(paths, "DATA", tmp_path)
+    _setup(monkeypatch, tmp_path)
     M._ROCKS.clear()
     assert M.rocks_table() == {}
-    (tmp_path / "mining_rocks.json").write_text(
-        json.dumps({"areas": {"X": {"Iron": 100}}}), encoding="utf-8"
-    )
+    with G.updating():  # 「更新数据」的真实路径：写源、退出时重建
+        (tmp_path / "mining_rocks.json").write_text(
+            json.dumps({"areas": {"X": {"Iron": 100}}}), encoding="utf-8"
+        )
     assert M.rocks_table()["areas"]["X"] == {"Iron": 100}
     M._ROCKS.clear()
     keeger = {

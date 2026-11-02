@@ -4,7 +4,8 @@
 
 import json
 
-from tests.test_gamedata_b1 import _fake_data_module, _setup
+from tests.test_gamedata_b1 import _count_updating, _fake_data_module, _setup
+from tests.test_gamedata_mining import _MINING_SOURCES
 
 _ROCKS = {
     "tiers": {"common": {"p_cluster": 100.0, "sizes": [[0.1, 6, 6]]}},
@@ -619,3 +620,65 @@ def test_apply_live_false_when_prices_json_bad_or_empty(monkeypatch, tmp_path):
         assert uex.apply_live(m) is False
         assert m.CITY_PRICES["Aluminum"] == {"Area18": 1, "Lorville": 2}
         assert m.REFINERIES["ARC-L1"] == ("弧 L1", {})
+
+
+# ---------------------------------------------------------------- Task 5：回归
+
+
+def test_signals_and_parse_unchanged_via_rocks_table(monkeypatch, tmp_path):
+    from sc_mining.mining import mining_area as M
+    from sc_mining.mining import parse, signals
+
+    _setup(monkeypatch, tmp_path, **_MINING_SOURCES)
+    ores = ["Aluminum", "Quantainium", "NoSuchOre"]
+    rocks = ["Agricium", "NoSuchRock"]
+
+    def sample():
+        return (
+            [signals.cluster_weight(m, n) for m in ores for n in range(1, 8)],
+            [parse._rock_contains(r) for r in rocks],
+        )
+
+    new = sample()
+    assert parse._rock_contains("Agricium")
+    monkeypatch.setattr(M, "rocks_table", lambda: _legacy_rocks_table(tmp_path))
+    assert new == sample()
+
+
+def test_refresh_still_inside_updating(monkeypatch, tmp_path):
+    from sc_mining.update import uex
+
+    _setup(monkeypatch, tmp_path)
+    state = _count_updating(monkeypatch)
+    monkeypatch.setattr(uex, "_get", lambda endpoint: [])
+    monkeypatch.setattr(uex, "OUT", tmp_path / "prices.json")
+    uex.refresh()
+    assert state["n"] == 1 and state["writes"][0][1]
+
+
+def test_mining_modules_do_not_read_data_dir():
+    """代码里没有 DATA，也没有这几份文件名的字符串（注释和文档字符串里提到不算）"""
+    import ast
+    import inspect
+
+    from sc_mining.mining import laser, locations, mining_area, parse, refinery
+    from sc_mining.mining import shipsig, signals
+
+    files = (
+        "mining_rocks.json",
+        "mining_spots.json",
+        "ship_signatures.json",
+        "prices.json",
+    )
+    for mod in (mining_area, shipsig, signals, parse, refinery, laser, locations):
+        tree = ast.parse(inspect.getsource(mod))
+        docs = {
+            id(n.value)
+            for n in ast.walk(tree)
+            if isinstance(n, ast.Expr) and isinstance(n.value, ast.Constant)
+        }
+        for n in ast.walk(tree):
+            assert not (isinstance(n, ast.Name) and n.id == "DATA"), mod.__name__
+            assert not (isinstance(n, ast.alias) and n.name == "DATA"), mod.__name__
+            if isinstance(n, ast.Constant) and id(n) not in docs:
+                assert not any(f in str(n.value) for f in files), mod.__name__
