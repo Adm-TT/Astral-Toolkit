@@ -2,7 +2,7 @@
 
 从 app/services.py 中解耦提取，专职处理：
 1. 采矿助手主循环启停控制与配置同步；
-2. 实时扫描面板解析、成分分档计算（_lots）、HUD 结构化排版与破碎方案推荐；
+2. 实时扫描面板：装配输入，计算在 mining/analysis.py，排版在 app/presenters/mining.py；
 3. 采矿激光头与模组配置、自造加成计算与预设管理；
 4. 导航记号（Marker Tick）计算与投射、3D 空间站/太空指引与导览日志。
 """
@@ -11,12 +11,13 @@ import math
 import sys  # noqa: F401
 import threading  # noqa: F401
 import time
-from collections import defaultdict
 from itertools import combinations
 
 # ---------------------------------------------------------------- 依赖（2026-10-30 重构阶段 3：不再经 services 转发）
 from ..app.engines.manager import EngineManager
 from ..app.hud_state import _hud, _off
+from ..app.presenters import mining as _present
+from ..mining import analysis as _analysis
 from . import goals as _t_goals
 
 _pos = EngineManager.get_instance().pos
@@ -281,337 +282,54 @@ def _game_front():
     return showloc.game_front()
 
 
-def scu_text(v):
-    """精炼后的量：1 SCU 以上写 SCU，不到 1 SCU 写 uSCU（1 SCU = 1,000,000 uSCU）；两种都给"""
-    if v >= 1:
-        return f"{v:,.2f} SCU（{v * 1e6:,.0f} uSCU）"
-    return f"{v * 1e6:,.0f} uSCU（{v:.3f} SCU）"
+# RT-B1 过渡，RT-B2 删：scan_view 拆开后留的同名转发（tests/test_tools.py 在用）
+scu_text = _present.scu_text
 
 
-def _station_bonus(station, minerals):
-    """精炼站对这块石头里的矿的加成：只有一种值钱的矿写「+3%」，几种不一样就写「铁 +3%、金 -2%」，都是 0 返回空"""
+def _quality_hints(composition):
+    from ..crafting.crafting import (
+        quality_hints,
+    )  # 读不到制造数据只丢提示，不影响扫描结果
+
+    return quality_hints(composition)
+
+
+def _mat_summary(*args):
+    from ..crafting.crafting import mat_summary
+
+    return mat_summary(*args)
+
+
+def collect_inputs():
+    """scan_view 这一次要用的外部东西（配装、矿价、精炼站、制造提示、目标、时间）。RT-B2 改成注入"""
+    from ..core.i18n import mineral_zh, method_zh, station_zh
     from ..mining.data import REFINERIES, best_price
-    from ..core.i18n import mineral_zh
+    from ..mining.laser import gadget_label, recommend
+    from ..mining.refinery import refined_plan, refined_scu
 
-    bonus = REFINERIES.get(station, ("", {}))[1]
-    worth = sorted(minerals, key=lambda m: -(minerals[m] * (best_price(m)[0] or 0)))
-    worth = [m for m in worth if (best_price(m)[0] or 0) > 0] or worth
-    vals = {m: bonus.get(m, 0) for m in worth}
-    if not any(vals.values()):
-        return ""
-    if len(set(vals.values())) == 1:
-        return f"{next(iter(vals.values())):+g}%"  # :+g：UEX 给小数加成时 :+d 会抛错、连崩 3 次关掉采矿助手
-    return "、".join(f"{mineral_zh(m)} {v:+g}%" for m, v in vals.items() if v)
-
-
-def _lots(scan, plan=None):
-    """成分表（1.6.42）：石头里的每一份（矿 × 品质、惰性物质）一行。同一种矿有几种品质时标「高品质 / 低品质」；
-    品质写上这种矿的第几档（quality.py，4.8 起每种矿只有 7 档）。plan = (精炼方式, 站点)：按它算这一份精炼后多少。
-    精炼保留品质、不同品质精炼完还是分开的两份（expcarry、scopique、The Impound），所以按份算"""
-    total = scan.total_scu
-    from ..core.i18n import mineral_zh
-    from ..mining.quality import tier_of
-    from ..mining.refinery import refined_scu, INERT
-
-    groups = defaultdict(list)
-    for i, (n, p, q) in enumerate(scan.composition):
-        if n and n != INERT:
-            groups[n].append(i)
-    rank = {}
-    for n, idx in groups.items():
-        qs = [scan.composition[i][2] for i in idx]
-        if len(idx) < 2 or None in qs or len(set(qs)) < 2:
-            continue
-        order = sorted(idx, key=lambda i: scan.composition[i][2])
-        for k, i in enumerate(order):
-            rank[i] = (
-                "低品质" if k == 0 else "高品质" if k == len(order) - 1 else "中等品质"
-            )
-    rows = []
-    for i, (n, p, q) in enumerate(scan.composition):
-        inert = n == INERT
-        scu = total * p / 100 if total else None
-        row = {
-            "en": n or "",
-            "zh": "惰性物质" if inert else (mineral_zh(n) if n else "?"),
-            "pct": p,
-            "scu": round(scu, 4) if scu is not None else None,
-            "q": None if inert else q,
-            "tier": "",
-            "rank": rank.get(i, ""),
-            "inert": inert,
-            "refined": None,
-            "refined_text": "",
-        }
-        t = tier_of(n, q) if (n and not inert and q is not None) else None
-        if t:
-            row["tier"] = (
-                "完美"
-                if t[0] == "完美"
-                else f"{t[0]} 档"
-                + ("（最低）" if t[1] == 1 else "（最高）" if t[1] == t[2] else "")
-            )
-        if inert:
-            row["refined_text"] = "无精炼产出，仅占用矿袋"
-        elif plan and scu is not None and n:
-            v = refined_scu({n: scu}, plan[1], plan[0]).get(n, 0.0)
-            row["refined"] = round(v, 6)
-            row["refined_text"] = scu_text(v)
-        rows.append(row)
-    return rows
-
-
-def _lots_hud(lots):
-    """悬浮窗一行：「惰性 31%｜钨 662 那份 3.07 SCU」（同一种矿有高低两种品质时写高品质那份）；没什么可说返回空"""
-    parts = []
-    inert = sum(r["pct"] for r in lots if r["inert"])
-    if inert >= 0.5:
-        parts.append(f"惰性 {inert:.0f}%")
-    for r in lots:
-        if r["rank"] == "高品质":
-            low = [x["q"] for x in lots if x["en"] == r["en"] and x["rank"] == "低品质"]
-            parts.append(
-                f"{r['zh']} 品质 {r['q']}：{r['scu']:.2f} SCU"
-                if r["scu"] is not None
-                else f"{r['zh']} 品质 {r['q']}/{low[0] if low else '?'}"
-            )
-    return "｜".join(parts)
+    return _analysis.MiningInputs(
+        at=time.strftime("%H:%M:%S"),
+        mineral_zh=mineral_zh,
+        method_zh=method_zh,
+        station_zh=station_zh,
+        gadget_label=gadget_label,
+        best_price=best_price,
+        station_bonus=lambda station: REFINERIES.get(station, ("", {}))[1],
+        refined_plan=refined_plan,
+        refined_scu=refined_scu,
+        recommend=recommend,
+        quality_hints=_quality_hints,
+        mat_summary=_mat_summary,
+        goal_for=_goal_for,
+        goal_text=_goal_text,
+    )
 
 
 def scan_view(scan, bag, cut=False):
     """一块石头的读屏结果（窗口用）。cut=True：面板被屏幕右边挡住，品质和总 SCU 读不到，只有破碎方案和成分占比"""
-    from ..core.i18n import mineral_zh, method_zh, station_zh
-    from ..mining.laser import recommend
-    from ..mining.data import best_price, GADGETS  # noqa: F401
-    from ..mining.refinery import refined_plan
-
-    rock = mineral_zh(scan.main_mineral) if scan.main_mineral else "?"
-    out = {
-        "rock": rock,
-        "mass": scan.mass,
-        "resistance": scan.resistance,
-        "instability": scan.instability,
-        "difficulty": scan.difficulty or "",
-        "minerals": [],
-        "refine": [],
-        "sell": [],
-        "craft": [],
-        "craft_mats": [],
-        "goal": [],
-        "plans": [],
-        "total_scu": scan.total_scu,
-        "lots": [],
-        "lots_plan": "",
-        "cut": bool(cut),
-        "note": "",
-        "at": time.strftime("%H:%M:%S"),
-    }
-    hud = [
-        f"{rock}｜{scan.mass:,.0f} kg｜抗性 {scan.resistance:g}%｜不稳定 {scan.instability:g}"
-    ]
-    # 1.6.64：悬浮窗按层次排（审查意见）：矿名 → 关键读数 → 怎么碎 → 收益 → 次要详情；文字版 hud 还给窗口右侧用
-    # 1.6.65 照用户给的样图：矿名、三格读数、矿物组成（每种矿下面列各品质、占整石）、开采建议、精炼产量和净值、次要
-    rich = {
-        "title": rock,
-        "stats": [
-            ["质量", f"{scan.mass:,.0f}", "kg"],
-            ["抗性", f"{scan.resistance:g}", "%"],
-            ["不稳定性", f"{scan.instability:g}", ""],
-        ],
-        "comp": [],
-        "advice": None,
-        "gain": [],
-        "minor": [],
-        "foot": "",
-    }
-    if cut:
-        out["note"] = (
-            "扫描面板右侧被屏幕边缘遮挡，无法识别品质和总 SCU：仅计算破碎方案和成分占比。"
-            "在游戏设置中调大「FOV视野」使面板完整显示后，可计算精炼收益和价格。"
-        )
-        hud.append("面板被遮挡：仅计算破碎方案")
-        rich["minor"].append("面板被遮挡：仅计算破碎方案")
-    minerals = {
-        k: v
-        for k, v in scan.minerals_scu().items()
-        if k not in ("Inert Materials", "?")
-    }
-    out["minerals"] = [
-        {"name": mineral_zh(k), "en": k, "scu": v} for k, v in minerals.items()
-    ]
-    first = None
-    if minerals:
-        for i, (method, station, value, rscu, fee, hours) in enumerate(
-            refined_plan(minerals)
-        ):
-            bonus = _station_bonus(station, minerals)
-            from ..mining.refinery import refined_scu
-
-            per = refined_scu(minerals, station, method)
-            out["refine"].append(
-                {
-                    "method": method_zh(method),
-                    "station": station_zh(station),
-                    "value": value,
-                    "scu": rscu,
-                    "fee": fee,
-                    "hours": hours,
-                    "bonus": bonus,
-                    "amount": scu_text(rscu),
-                    "yield": [
-                        {"zh": mineral_zh(k), "amount": scu_text(v)}
-                        for k, v in per.items()
-                        if v > 0
-                    ],
-                }
-            )
-            if i == 0:
-                first = (method, station)
-                out["lots_plan"] = f"{method_zh(method)}，{station_zh(station)}"
-                hud.append(
-                    f"精炼后 {scu_text(rscu)}，价值 {value:,.0f} aUEC（建议：{method_zh(method)}，{station_zh(station)}精炼"
-                    + (f" {bonus}" if bonus else "")
-                    + "）"
-                )
-                rich["gain"] = [
-                    ["预计精炼产量", f"{rscu:,.2f}", "SCU"],
-                    ["价格", f"{value:,.0f}", "aUEC"],
-                ]
-                rich["minor"].append(
-                    f"{method_zh(method)} · {station_zh(station)}"
-                    + (f" {bonus}" if bonus else "")
-                )
-                rich["foot"] = "精炼结果为估算"
-        out["sell"] = [
-            {"name": mineral_zh(k), "where": best_price(k)[1] or "无收购"}
-            for k in minerals
-        ]
-    out["lots"] = _lots(scan, first)
-    if out["refine"]:  # 精炼后按品质分开写：「钨 662 有 1.50 SCU、钨 363 有 5.74 SCU」
-        out["refine"][0]["lots"] = [
-            {"zh": r["zh"], "q": r["q"], "amount": r["refined_text"]}
-            for r in out["lots"]
-            if not r["inert"] and r["refined"]
-        ]
-    line = _lots_hud(out["lots"])
-    if line:
-        hud.append(line)
-    groups = {}  # 矿物组成：同一种矿合在一起，下面列各品质（高品质那份标蓝）
-    for row in out["lots"]:  # 占比照游戏里的两位小数写
-        key = "惰性物质" if row["inert"] else row["zh"]
-        g = groups.setdefault(
-            key, {"name": key, "inert": row["inert"], "pct_n": 0.0, "subs": []}
-        )
-        g["pct_n"] += row["pct"] or 0
-        if not row["inert"]:  # 品质没认出来写「未知」，单独一份，不混进别的品质
-            g["subs"].append(
-                {
-                    "q": "未知" if row["q"] is None else str(row["q"]),
-                    "pct": f"{row['pct'] or 0:.2f}%",
-                    "hi": row["rank"] == "高品质",
-                    "n": row["pct"] or 0,
-                }
-            )
-    for g in groups.values():
-        g["subs"].sort(key=lambda x: -int(x["q"]) if x["q"].isdigit() else 1)
-        g["pct"] = (
-            f"{g.pop('pct_n'):.2f}%"  # 1.6.70（用户）：游戏里读到多少写多少，不四舍五入
-        )
-        for x in g["subs"]:
-            x.pop("n", None)
-    rich["comp"] = sorted(
-        groups.values(), key=lambda g: (g["inert"], -float(g["pct"][:-1] or 0))
-    )
-    if minerals:
-        try:
-            from ..crafting.crafting import quality_hints
-
-            out["craft"] = list(quality_hints(scan.composition))
-            from ..crafting.crafting import mat_summary
-
-            best = {}
-            for nm, pct, qq in scan.composition:
-                if nm and nm not in ("Inert Materials", "?"):
-                    best[nm] = (
-                        max(best.get(nm) or 0, qq or 0)
-                        if qq is not None
-                        else best.get(nm)
-                    )
-            out["craft_mats"] = [
-                {"en": nm, "zh": mineral_zh(nm), "q": qq, **mat_summary(nm, qq)}
-                for nm, qq in best.items()
-                if mat_summary(nm)["count"]
-            ]
-            for (
-                nm,
-                qq,
-            ) in (
-                best.items()
-            ):  # 目标还缺这种矿：窗口和悬浮窗都标出来（有品质门槛的按每一份判断）
-                g = _goal_for(nm, mineral_zh(nm))
-                if g:
-                    lots = [r for r in out["lots"] if r["en"] == nm]
-                    ok = (
-                        any((r["q"] or 0) >= g["minq"] for r in lots)
-                        if g["minq"] > 1
-                        else True
-                    )
-                    out["goal"].append(
-                        {
-                            "en": nm,
-                            "zh": g["zh"] or mineral_zh(nm),
-                            "short": g["short"],
-                            "unit": g["unit"],
-                            "minq": g["minq"],
-                            "q": qq,
-                            "ok": ok,
-                            "goals": g["goals"],
-                            "text": _goal_text(g, qq, lots),
-                        }
-                    )
-            hud += [x["text"] for x in out["goal"][:2]]
-            rich["minor"] += [x["text"] for x in out["goal"][:2]]
-        except Exception:
-            pass
-    plans = recommend(scan.mass, scan.resistance, scan.instability)
-    for p in plans:
-        out["plans"].append(
-            {
-                "heads": p.names,
-                "short": p.short(),
-                "summary": p.summary(),
-                "ratio": p.ratio,
-                "breakable": p.breakable,
-                "comfortable": p.comfortable,
-                "throttle": p.throttle if p.breakable else None,
-            }
-        )
-    if plans:
-        hud.insert(1, plans[0].short())
-        p0 = plans[0]
-        from ..mining.laser import gadget_label
-
-        heads = p0.names + (f" + {gadget_label(p0.gadget)}" if p0.gadget else "")
-        rich["advice"] = {
-            "heads": heads,
-            "power": f"建议功率 {p0.throttle * 100:.0f}%"
-            if p0.breakable
-            else "满功率也无法破碎",
-        }
-    contents, used, cap = bag
-    out["bag"] = None
-    out["bag_text"] = ""
-    if used is not None:
-        out["bag"] = {
-            "used": used,
-            "cap": cap,
-            "items": [{"name": mineral_zh(k), "scu": v} for k, v in contents.items()],
-        }
-        out["bag_text"] = f"{used:g}/{cap:g} SCU\n" + "，".join(
-            f"{mineral_zh(k)} {v:g}" for k, v in contents.items()
-        )
-    out["hud"] = "\n".join(hud)
-    out["hud_rich"] = rich
+    result = _analysis.analyze(scan, bag, collect_inputs(), cut=cut)
+    out = _present.to_view(result)
+    out["hud"], out["hud_rich"] = _present.to_hud(result)
     return out
 
 
@@ -867,9 +585,6 @@ __all__ = [
     # 读屏与扫描
     "_game_front",
     "scu_text",
-    "_station_bonus",
-    "_lots",
-    "_lots_hud",
     "scan_view",
     "live_start",
     "live_stop",
