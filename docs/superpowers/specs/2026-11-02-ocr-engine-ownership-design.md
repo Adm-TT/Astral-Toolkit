@@ -1,6 +1,6 @@
 # OCR 引擎归属迁入 `astral_toolkit/ocr/` 设计
 
-状态：**已批准**（2026-11-02，负责人 Adm_TT 批准；作者 NGU 已授权由本项目按自己的思路定实现细节）；代码尚未改造，排在 RT-B4 之后  
+状态：**已批准并实现**（2026-11-02）；行为等价迁移，未改识别算法  
 日期：2026-11-02  
 项目：Astral Toolkit（AT）  
 范围：仅「RapidOCR 引擎单例与排队/设备切换」的归属迁移。不含 LLM 辅助识别实现、不含截图模块重划、不含导航 `gridtext` 旁路改写。  
@@ -12,6 +12,7 @@
 |---|---|---|
 | 2026-11-02 | 初稿：意图、目标/非目标、迁什么、兼容策略、验证与风险 | 对话确认「统一门面 + 引擎搬进 ocr」 |
 | 2026-11-02 | 批准，§8 三项定为：① 新文件 `ocr/runtime.py`；② `perf` 选 **B**，直接删 OCR 符号、不留转发（项目规矩不留兼容别名；仓库外私有工具已查，不引用这些符号）；③ 对外导出 `warmup()`（暖机，不返回引擎）及 `set_ocr_device / ocr_device / gpu_available / last_ocr_error`，不向业务导出引擎对象；测试和 `tools/bench_ocr.py` 可直接用 `ocr.runtime` 内部符号。验证在 §6 之外再跑一次 `tools/sample_sweep.py` | 控制台定，负责人批准 |
+| 2026-11-02 | 落地：`ocr/runtime.py`；`perf` 删除 OCR；调用方与测试改走 `ocr`；`.basedpyright/baseline.json` 两条从 `core/perf.py` 迁到 `ocr/runtime.py` | 按批准项实现 |
 
 ---
 
@@ -34,7 +35,7 @@
 1. 进程内唯一 RapidOCR 实例的创建、缓存、`swap`、GPU 失败回退，代码物理位置在 `astral_toolkit/ocr/`（建议新文件，见 §3）。
 2. 生产业务认字路径仍只经 `astral_toolkit.ocr` 的 `recognize` / `read_line` / `raw_detector` / `raw_recognizer`；行为与现网一致（含 `urgent`、`native`、插队语义）。
 3. 设置切 GPU/CPU、状态栏「显卡/CPU」、启动暖机、自检与 `tools/bench_ocr.py` 改为经 `ocr` 公共/兼容出口，不再以「业务应依赖 `perf.rapidocr`」为规范。
-4. `core/perf.py` 不再持有引擎实现；若保留符号，仅为有时限的薄转发（见 §4），并在变更记录/PR 标明废弃方向。
+4. `core/perf.py` 不再持有引擎实现；按批准项 **不留转发**（方案 B）。
 5. 现有 OCR 相关单测（尤其 `tests/test_gpu_ocr.py`、`tests/test_ocr_module.py`）全绿；涉及读屏的模块不因迁引擎改变识别结果约定。
 
 ### 1.3 非目标 / 反目标
