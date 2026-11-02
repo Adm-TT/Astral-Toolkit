@@ -10,6 +10,7 @@ import importlib
 import threading
 import time
 from dataclasses import dataclass
+from typing import Any
 
 from ...runtime.results import MINING_SCAN, MINING_SIGNALS, ResultStore
 from .. import bus
@@ -113,13 +114,17 @@ class _Live:
         elif kind == "log":
             bus.runtime_log(args[0], tag=args[1], level="INFO")
         elif kind == "hud.set":
-            _H()._hud().set(*args)
+            hud: Any = _H()._hud()
+            hud.set(*args)
         elif kind == "hud.clear":
-            _H()._hud().clear(*args)
+            hud: Any = _H()._hud()
+            hud.clear(*args)
         elif kind == "paused":
             self.paused = args[0]
 
-    def _commit(self, run, *ops, slot=None, value=None, stamp=None, quality="complete"):
+    def _commit(
+        self, run, *ops, slot=None, value=None, stamp: Any = None, quality="complete"
+    ):
         """提交边界（架构稿 §7.5）：查会话 → 存结果 → 发布，和停止用同一把锁串行；任何一步不成就整个不做。
         识别和计算很慢，算完时可能已经停了、重开了、改了配装。带 slot 的是结果，不带的只有输出。
         锁内只做小型状态操作：总线只入队，悬浮窗只写状态、唤醒绘制线程"""
@@ -202,7 +207,7 @@ class _Live:
             except (OSError, ValueError):
                 pass
 
-        ops = [
+        ops: list[tuple] = [
             _pub(
                 "scan_hint",
                 {"why": why or "", "text": text, "at": time.strftime("%H:%M:%S")},
@@ -252,18 +257,19 @@ class _Live:
         # 不会和新线程一起往悬浮窗写东西
         with self.lock:
             self.session_id += 1
+            session = self.session_id
             self.stop_ev = ev = threading.Event()
         self.thread = threading.Thread(
-            target=self._run_gpu, args=(ev,), daemon=True, name="live"
+            target=self._run_gpu, args=(ev, session), daemon=True, name="live"
         )
         self.thread.start()
         bus.publish("live", {"running": True})
 
-    def _run_gpu(self, ev):
+    def _run_gpu(self, ev, session=None):
         """跑采矿助手（出错最多重试 3 次）。识别引擎在主进程里，按设置用显卡（DirectML）或 CPU，采矿助手关掉后引擎照样留着"""
         for attempt in range(3):
             try:
-                self._run(ev)
+                self._run(ev, session)
                 break
             except Exception as e:
                 import traceback
@@ -353,7 +359,7 @@ class _Live:
         bus.publish("scan_hint", {"why": "", "text": ""})
         bus.publish("live", {"running": False})
 
-    def _run(self, ev=None):
+    def _run(self, ev=None, session=None):
         import collections
         import numpy as np
         from ...core import paths
@@ -361,7 +367,7 @@ class _Live:
         from ...mining.signals import find_signatures, describe_all, match_signature
 
         ev = ev or self.stop_ev
-        run = _Run(ev, self.session_id)
+        run = _Run(ev, self.session_id if session is None else session)
         alive = lambda: not ev.is_set()  # 只看本会话的开关  # noqa: E731
         shots = paths.shots("live")
         log = open(paths.log("live_log.txt"), "a", encoding="utf-8")
@@ -614,16 +620,15 @@ class _Live:
                                     for x in lines[:4]
                                 ),
                             ),
+                            _say(
+                                f"雷达信号: {sorted(sigs)} 产区: {(area or {}).get('zh') or '未知'}",
+                                "SIGNAL",
+                            ),
                             slot=MINING_SIGNALS,
                             value={"view": msg, "values": sorted(sigs)},
                             stamp=stamp,
                         ):
                             sig_shown, sig_live = shown_key, True
-                            bus.runtime_log(
-                                f"雷达信号: {sorted(sigs)} 产区: {(area or {}).get('zh') or '未知'}",
-                                tag="SIGNAL",
-                                level="INFO",
-                            )
                             log.write(
                                 f"{time.strftime('%F %T')} SIG {sorted(sigs)} 产矿区={(area or {}).get('zh') or '未知'}\n"
                             )

@@ -237,13 +237,25 @@ def test_runtime_layer_stays_below_app():
         assert _runtime_violations(bad), bad
 
 
+_MUTABLE = (
+    ast.Dict,
+    ast.List,
+    ast.Set,
+    ast.DictComp,
+    ast.ListComp,
+    ast.SetComp,
+    ast.Call,
+)
+
+
 def _mutable_globals(source):
-    """模块顶层绑定的可变容器：字典、列表、集合"""
+    """模块顶层绑定的可变容器：字典、列表、集合，包在元组里的、调用构造的（dict()、defaultdict、类实例）也算"""
     out = []
     for node in ast.parse(source).body:
-        if isinstance(node, (ast.Assign, ast.AnnAssign)) and isinstance(
-            node.value,
-            (ast.Dict, ast.List, ast.Set, ast.DictComp, ast.ListComp, ast.SetComp),
+        if (
+            isinstance(node, (ast.Assign, ast.AnnAssign))
+            and node.value is not None
+            and any(isinstance(n, _MUTABLE) for n in ast.walk(node.value))
         ):
             targets = node.targets if isinstance(node, ast.Assign) else [node.target]
             out += [getattr(t, "id", "?") for t in targets]
@@ -254,7 +266,8 @@ def test_system_common_has_no_shared_state():
     """跨模块共享的最近结果只在 ResultStore：common.py 不再放可变的模块级状态"""
     source = (_ROOT / "tasks" / "system" / "common.py").read_text(encoding="utf-8")
     assert _mutable_globals(source) == []
-    assert _mutable_globals("_LAST = {'a': None}") == ["_LAST"]
+    for bad in ("_L = {'a': None}", "_L = dict()", "_L = ({},)", "_L = Foo()"):
+        assert _mutable_globals(bad) == ["_L"], bad
 
 
 def test_old_result_globals_are_gone():

@@ -58,9 +58,16 @@ class Recorder:
 
 
 def _patch(rec, tmp):
-    from sc_mining.app import bus, hud_state
-    from sc_mining.core import paths, settings
-    from sc_mining.tasks import goals, navigation, system
+    import importlib
+
+    # 全用 Any：这里就是要换模块属性
+    bus: Any = importlib.import_module("sc_mining.app.bus")
+    hud_state: Any = importlib.import_module("sc_mining.app.hud_state")
+    paths: Any = importlib.import_module("sc_mining.core.paths")
+    settings: Any = importlib.import_module("sc_mining.core.settings")
+    goals: Any = importlib.import_module("sc_mining.tasks.goals")
+    navigation: Any = importlib.import_module("sc_mining.tasks.navigation")
+    system: Any = importlib.import_module("sc_mining.tasks.system")
 
     bus.publish = rec.publish
     for m in (hud_state, navigation, system):
