@@ -1,7 +1,9 @@
-"""RapidOCR 引擎宿主：单例、排队与设备切换。
+"""OCR 引擎宿主：进程内唯一 RapidOCR、排队插队、GPU/CPU 切换。
 
-从 :mod:`astral_toolkit.core.perf` 迁入，识别行为保持不变。
+业务认字走 astral_toolkit.ocr 门面；本模块供门面与测试/测速工具使用。
 """
+
+from __future__ import annotations
 
 import os
 import threading
@@ -18,6 +20,11 @@ GPU_PARTS = [
     p for p in os.environ.get("DUBHE_OCR_DML", "det").split(",") if p in ("det", "rec")
 ]
 _engine = None
+_lock = threading.RLock()
+_last_error = ""
+_cpu_fallback = (
+    False  # 显卡版认字出过错、已换成 CPU 版：之后一直用 CPU，直到玩家在设置里再切一次
+)
 
 
 def gpu_available():
@@ -28,9 +35,6 @@ def gpu_available():
         return "DmlExecutionProvider" in onnxruntime.get_available_providers()
     except Exception:
         return False
-
-
-_last_error = ""
 
 
 def last_ocr_error():
@@ -52,11 +56,6 @@ def is_gpu_preferred():
         return True
 
 
-_cpu_fallback = (
-    False  # 显卡版认字出过错、已换成 CPU 版：之后一直用 CPU，直到玩家在设置里再切一次
-)
-
-
 def ocr_device():
     """识别现在实际在哪算：「显卡」/「CPU」"""
     try:
@@ -69,9 +68,6 @@ def ocr_device():
         return "显卡" if "DmlExecutionProvider" in sess.get_providers() else "CPU"
     except Exception:
         return "CPU"
-
-
-_lock = threading.RLock()
 
 
 class _Locked:
@@ -194,7 +190,10 @@ def _new_engine(gpu):
 
 def rapidocr():
     """全程序共用的一个 RapidOCR 实例（按用户设置在主进程直接加载 DirectML 或 CPU）。
-    切显卡 / CPU 只换它里面的引擎，这个对象本身不换：各处缓存的引用一直有效"""
+    切显卡 / CPU 只换它里面的引擎，这个对象本身不换：各处缓存的引用一直有效。
+
+    仅供本包门面与测试/测速使用；业务代码请用 warmup / recognize 等公共 API。
+    """
     global _engine, _last_error
     if (
         _engine is not None
@@ -209,6 +208,11 @@ def rapidocr():
                 _last_error = err
             _engine = _Locked(eng, gpu)
     return _engine
+
+
+def warmup() -> None:
+    """启动时预加载识别引擎。不返回引擎对象。"""
+    rapidocr()
 
 
 def set_ocr_device(target):
@@ -233,8 +237,3 @@ def set_ocr_device(target):
             _engine.swap(eng, gpu)
             _cpu_fallback = False  # 玩家自己切过：以前显卡出错改用 CPU 的那次不算了
         return ocr_device()
-
-
-def warmup():
-    """启动暖机：确保识别引擎已加载；不返回引擎对象。"""
-    rapidocr()

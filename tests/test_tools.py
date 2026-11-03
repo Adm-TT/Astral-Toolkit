@@ -1198,7 +1198,7 @@ def test_log_location_found_far_back_and_updates(monkeypatch, tmp_path):
 
 def test_mask_overlay_blacks_out_hud():
     from PIL import Image
-    from astral_toolkit.core.perf import mask_overlay
+    from astral_toolkit.core.capture import mask_overlay
 
     img = Image.new("RGB", (100, 100), (255, 255, 255))
     mask_overlay(img, 50, 50, rect=(60, 60, 80, 70))  # 截图从屏幕 (50,50) 开始
@@ -2008,12 +2008,11 @@ def test_live_scan_resumes_after_restart(monkeypatch, tmp_path):
         monkeypatch.setattr(getattr(em, name), "start", lambda: None)
     monkeypatch.setattr(t_sys, "_online_loop", lambda: None)  # 测试里不联网检查更新
     monkeypatch.setattr(em.game_events, "start", lambda: None)  # 不读真实 Game.log
+    from astral_toolkit import ocr as OCR
     from astral_toolkit.core.perfmon import monitor
     from astral_toolkit.crafting import itemsearch
 
-    import astral_toolkit.ocr as ocr_pkg
-
-    monkeypatch.setattr(ocr_pkg, "warmup", lambda: None)  # 不预热 OCR
+    monkeypatch.setattr(OCR, "warmup", lambda: None)  # 不预热 OCR
     monkeypatch.setattr(monitor, "start", lambda: None)  # 不起 perfmon 常驻线程
     monkeypatch.setattr(itemsearch, "warm_up", lambda: None)
     monkeypatch.setattr(
@@ -3594,7 +3593,7 @@ def test_hover_unsure_names_and_anchor_lines():
 def test_mask_own_window_too():
     """盖在游戏上的 AT 主窗口也涂黑（窗口里的实时栏有信号值 / 质量，会被当成游戏里的字）"""
     from PIL import Image
-    from astral_toolkit.core.perf import mask_overlay, own_window_rects
+    from astral_toolkit.core.capture import mask_overlay, own_window_rects
 
     img = Image.new("RGB", (200, 100), (255, 255, 255))
     mask_overlay(img, 0, 0, rect=(10, 10, 20, 20), own=[(100, 50, 150, 90)])
@@ -4691,11 +4690,11 @@ def test_displayinfo_yields_to_mining(monkeypatch):
         "_full_read",
         lambda piece, h: calls.append(1) or {**D.parse([]), "global": (1e7, 1e7, 1e7)},
     )
-    import astral_toolkit.core.perf as P
+    import astral_toolkit.core.capture as Cap
     from PIL import Image
 
-    monkeypatch.setattr(P, "grab_region", lambda r: Image.new("RGB", (400, 300)))
-    monkeypatch.setattr(P, "game_area", lambda: {"height": 1440})
+    monkeypatch.setattr(Cap, "grab_region", lambda r: Image.new("RGB", (400, 300)))
+    monkeypatch.setattr(Cap, "game_area", lambda: {"height": 1440})
     monkeypatch.setattr(D, "_YIELD", {"until": 0.0})
     D.yield_ocr(6)
     info = D.read()

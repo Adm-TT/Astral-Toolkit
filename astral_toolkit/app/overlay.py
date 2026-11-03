@@ -1258,7 +1258,7 @@ class Hud:
             from ..navigation.displayinfo import REGION
 
             try:
-                from ..core.perf import game_area
+                from ..core.capture import game_area
 
                 a = game_area()
                 left, top, w, h = a["left"], a["top"], a["width"], a["height"]
@@ -1386,7 +1386,7 @@ class Hud:
             pass
 
     def _remember_hwnd(self):
-        """记下悬浮窗的窗口句柄：AT 自己截图读屏时把悬浮窗那块涂黑（perf.mask_overlay），就不会读到悬浮窗上的字。
+        """记下悬浮窗的窗口句柄：AT 自己截图读屏时把悬浮窗那块涂黑（capture.mask_overlay），就不会读到悬浮窗上的字。
         以前用的是「截屏时隐藏这个窗口」，但英伟达录屏会把它当成受保护内容、直接停止录制，所以不用了"""
         global HWND
         try:

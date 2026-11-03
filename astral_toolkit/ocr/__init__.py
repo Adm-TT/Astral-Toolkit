@@ -3,11 +3,11 @@
 from .models import OcrToken
 from .engine import recognize, read_line, raw_detector, raw_recognizer
 from .runtime import (
+    warmup,
+    set_ocr_device,
+    ocr_device,
     gpu_available,
     last_ocr_error,
-    ocr_device,
-    set_ocr_device,
-    warmup,
 )
 
 __all__ = [
