@@ -601,7 +601,7 @@ def read(img=None, allow_yield=True):
     fast = 这次是字模认的（几毫秒）还是识别引擎认的、yielded = 给采矿助手让路，这次没用识别引擎（没读到）"""
     shot_at = time.time()
     if img is None:  # 只截右上角这一块
-        from ..core.perf import grab_region, game_area
+        from ..core.capture import grab_region, game_area
 
         screen_h = game_area()["height"]
         piece = grab_region(REGION)

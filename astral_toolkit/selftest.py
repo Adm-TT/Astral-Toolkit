@@ -25,6 +25,7 @@ MODULES = (
     "app.overlay",
     "core.perf",
     "core.perfmon",
+    "core.capture",
     "crafting.itemsearch",
     "crafting.shops",
     "crafting.loot",

@@ -62,7 +62,7 @@ def status():
         out["ocr_mode"] = "cpu"
         out["ocr_error"] = ""
     if WIN:
-        from ...core.perf import game_size
+        from ...core.capture import game_size
 
         out["game_size"] = (
             game_size()
