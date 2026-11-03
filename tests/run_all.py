@@ -104,6 +104,7 @@ MODULES = [
     "tests.test_gamedata_b5",
     "tests.test_ui_stream",
     "tests.test_ui_k0b",
+    "tests.test_ui_client",
 ]
 
 if __name__ == "__main__":
