@@ -13,6 +13,7 @@ import threading  # noqa: F401
 import time
 from itertools import combinations
 from types import MappingProxyType
+from typing import Any
 
 # ---------------------------------------------------------------- 依赖（2026-10-30 重构阶段 3：不再经 services 转发）
 from ..app.engines.manager import EngineManager
@@ -70,6 +71,9 @@ def _marker_on():
 
 
 MARKER_STALE = 4.0  # 右上角多少秒没读到就收起导航记号（城里偶尔几次读不到，1.5 秒就收会一直闪，2026-10-27 实测）
+CAM_HOLD = 1.0  # 这一帧坐标有、镜头方向没读出：这么久以内读到的镜头方向接着用（按它自己的读取时间算，不当成新的）
+_CAM_LAST: dict[str, Any] = {"t": 0.0, "cam": None}
+_MK_WHY: dict[str, Any] = {"why": None}
 
 
 def _marker_tick(target, data, state, shown, ref=None):
@@ -82,22 +86,39 @@ def _marker_tick(target, data, state, shown, ref=None):
     t, g, info = _engines().pos.current
     h = state.get("here")
     cam = (info or {}).get("camdir")
+    if cam:
+        _CAM_LAST.update(t=t, cam=cam)
+    elif _CAM_LAST["cam"] and 0 <= t - _CAM_LAST["t"] < CAM_HOLD:
+        # 偶尔一帧镜头方向没读出（坐标照样有）：以前记号当场收起、下一帧再出来，一直闪（老大 11-03 实测）。
+        # 1 秒内读到的接着用；记号按坐标那一帧重画，镜头方向不会因此当成新读的
+        cam = _CAM_LAST["cam"]
     try:
         fg = game_foreground()
     except Exception:
         fg = True
-    show = (
-        h is not None
-        and g
-        and cam
-        and time.time() - t < MARKER_STALE
-        and not h.get("arrived")
-        and not h.get("far")
-        and fg
-        and not _engines().live.running()
-        and _marker_on()
+    why = (
+        "还没算出位置"
+        if h is None or not g
+        else "没有镜头方向"
+        if not cam
+        else "读数过期"
+        if time.time() - t >= MARKER_STALE
+        else "已到达"
+        if h.get("arrived")
+        else "跨星系"
+        if h.get("far")
+        else "游戏不在前台"
+        if not fg
+        else "采矿助手开着"
+        if _engines().live.running()
+        else "设置里关了"
+        if not _marker_on()
+        else None
     )
-    if not show:
+    if why != _MK_WHY["why"]:
+        _MK_WHY["why"] = why
+        _mark_diag(why)
+    if why:
         if shown is not None:
             _mark_hud(None)
         return None
@@ -130,6 +151,20 @@ def _marker_tick(target, data, state, shown, ref=None):
     except Exception:
         _mark_hud(None)
         return None
+
+
+def _mark_diag(why):
+    """导航记号收起 / 重新出来时记一行进 logs/di_log.txt（和读右上角的诊断放一起对时间，老大 11-03 实测「记号还会消失」）"""
+    try:
+        from ..core import paths
+
+        with paths.log("di_log.txt").open("a", encoding="utf-8") as f:
+            f.write(
+                f"{time.strftime('%H:%M:%S')}.{int(time.time() * 1000) % 1000:03d} "
+                f"记号 {'收起：' + why if why else '显示'}\n"
+            )
+    except Exception:
+        pass
 
 
 def _nav_log(here, info, view):

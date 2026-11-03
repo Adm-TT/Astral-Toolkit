@@ -113,3 +113,38 @@ def test_grid_miss_still_yields_to_mining(monkeypatch):
     info = D.read()
     assert info.get("yielded") and not info.get("grid_miss")
     D._GRID_OK["at"] = 0.0
+
+
+def test_marker_keeps_last_camdir_for_one_frame(monkeypatch):
+    """坐标有、这一帧镜头方向没读出：1 秒内读到的接着用，记号不闪；超过 1 秒才收起，并记下收起原因（老大 11-03 实测）"""
+    from astral_toolkit.tasks import mining as M
+
+    hud, diag = [], []
+    pos = SimpleNamespace(current=(0.0, None, None))
+    eng = SimpleNamespace(pos=pos, live=SimpleNamespace(running=lambda: False))
+    monkeypatch.setattr(M, "_engines", lambda: eng)
+    monkeypatch.setattr(M, "_marker_on", lambda: True)
+    monkeypatch.setattr(M, "_mark_hud", lambda d: hud.append(d))
+    monkeypatch.setattr(M, "_mark_diag", lambda why: diag.append(why))
+    monkeypatch.setattr("astral_toolkit.system.showloc.game_foreground", lambda: True)
+    monkeypatch.setattr(
+        "astral_toolkit.core.capture.game_area",
+        lambda: {"left": 0, "top": 0, "width": 2560, "height": 1440},
+    )
+    M._CAM_LAST.update(t=0.0, cam=None)
+    M._MK_WHY["why"] = None
+    tgt = {"space": True, "n": "1", "x": 1.0, "y": 0.0, "z": 0.0}
+    state = {"here": {}}
+    now = time.time()
+    g = (0.0, 0.0, 0.0)
+    pos.current = (now, g, {"camdir": (0.0, 0.0, -90.0), "fov": 70.0, "t": now})
+    shown = M._marker_tick(tgt, {}, state, None)
+    assert shown == now and hud[-1] is not None
+    pos.current = (now + 0.3, g, {"t": now + 0.3})  # 这帧镜头方向没读出
+    shown = M._marker_tick(tgt, {}, state, shown)
+    assert shown == now + 0.3 and hud[-1] is not None and not diag
+    pos.current = (now + 1.5, g, {"t": now + 1.5})  # 超过 1 秒还是没有
+    assert M._marker_tick(tgt, {}, state, shown) is None
+    assert hud[-1] is None and diag == ["没有镜头方向"]
+    M._CAM_LAST.update(t=0.0, cam=None)
+    M._MK_WHY["why"] = None

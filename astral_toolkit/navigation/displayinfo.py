@@ -408,6 +408,10 @@ def _grid_read(piece, screen_h):
         info = parse([grid_text(t) for _, t, _, _ in rows], need_both=True)
     if not info["global"]:
         return None
+    if not info.get("camdir"):  # 诊断用：镜头方向没读出来时，那一行字模认成了什么
+        info["cam_raw"] = next(
+            (grid_text(str(r[1])) for r in rows if CAMDIR.search(str(r[1]))), None
+        )
     if not only:
         need = [
             top for top, t, _, _ in rows if NEED_ROW.search(t) or LOC_LOOSE.search(t)
@@ -729,7 +733,13 @@ def _diag(piece, screen_h, was_ready, info):
         line = (
             f"{time.strftime('%H:%M:%S')}.{int(time.time() * 1000) % 1000:03d} "
             f"h={screen_h} 字模={'好' if was_ready else '没好'} 路={'字模没读出' if info.get('grid_miss') else '字模' if fast else '识别引擎'} "
-            f"坐标={'有' if info.get('global') else '无'} 镜头={info.get('camdir')}\n"
+            f"坐标={'有' if info.get('global') else '无'} 镜头={info.get('camdir')}"
+            + (
+                f" 原文={info.get('cam_raw')!r}"
+                if info.get("global") and not info.get("camdir")
+                else ""
+            )
+            + "\n"
         )
         with paths.log("di_log.txt").open("a", encoding="utf-8") as f:
             f.write(line)
