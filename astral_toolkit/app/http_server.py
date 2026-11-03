@@ -288,11 +288,13 @@ class Handler(BaseHTTPRequestHandler):
                         self.wfile.flush()
                         last_hb = now
                     continue
-                ui_stream.mark_dequeued(q)
                 if not ui_stream.is_connected(q):
                     break
-                self.wfile.write(ui_stream.encode(msg).encode("utf-8"))
-                self.wfile.flush()
+                try:
+                    self.wfile.write(ui_stream.encode(msg).encode("utf-8"))
+                    self.wfile.flush()
+                finally:
+                    ui_stream.mark_dequeued(q)
                 last_hb = time.time()
                 if msg.get("kind") == "ui.bye":
                     break
@@ -311,8 +313,9 @@ class Handler(BaseHTTPRequestHandler):
         except (TypeError, ValueError):
             pass
         # 全家福只读；开关刷新必须先走 set_switches，有变化会在展示流锁内分配 ui_seq 并广播 ui.tile
+        read_mono = time.monotonic()
         try:
-            ui_stream.set_switches(ui_stream.read_switches())
+            ui_stream.set_switches(ui_stream.read_switches(), read_mono=read_mono)
         except Exception:
             pass
         snap = ui_stream.snapshot(conn)
