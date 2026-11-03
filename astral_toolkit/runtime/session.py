@@ -347,6 +347,9 @@ class SessionLoop:
                 return True
             if cur.state in (RunState.STARTING, RunState.RUNNING, RunState.PAUSED):
                 return False
+            # 和 start() 同一判断：STOPPED / FAILED 表示已收尾，线程还没退完也能直接开
+            if cur.state in (RunState.STOPPED, RunState.FAILED):
+                return True
             if not cur.thread.is_alive():
                 return True
             return self._may_replace_locked(cur)
