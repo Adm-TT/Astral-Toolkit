@@ -175,6 +175,7 @@ class _NavCtx:
     last_view: dict[str, Any] | None
     steady: _Steady
     seen: float
+    seen_cur: float
     prev_goal: Any
     plan: dict[str, Any]
     mk_seen: Any
@@ -195,6 +196,7 @@ class _NavCtx:
         self.last_view = None
         self.steady = _Steady()
         self.seen = 0.0
+        self.seen_cur = 0.0  # 坐标没变的读数（原地转机头）处理到哪一帧：转向提示要跟着镜头重算
         self.last_ok = 0.0
         self.prev_goal = None
         self.plan = {}
@@ -431,6 +433,7 @@ class _NavWorker:
             return False
         snap = self._pos.snapshot()
         ctx.seen = float(snap.latest[0] or 0.0)
+        ctx.seen_cur = float(snap.current[0] or 0.0)
         ctx.steady = _Steady()
         self._pos.request_read_now()
         ctx.clip_seen = n.read_clipboard()
@@ -568,6 +571,7 @@ class _NavWorker:
         fresh = False
         by_clip = False
         got: tuple[Any, dict[str, Any], bool] | None = None
+        still = False
         cur = snap.current
         if (
             ctx.state.get("here") is None
@@ -578,6 +582,11 @@ class _NavWorker:
         elif snap.latest[0] != ctx.seen and snap.latest[1]:
             ctx.seen, g_di, info = snap.latest
             got = (g_di, info or {}, False)
+        elif snap.current[1] and (snap.current[0] or 0.0) > max(ctx.seen, ctx.seen_cur):
+            # 坐标没变（停着转机头）但读到了新一帧：镜头方向变了，转向提示要重算，不能冻在上一帧（负责人 2026-11-03 截图）
+            ctx.seen_cur, g_di, info = snap.current
+            got = (g_di, info or {}, False)
+            still = True
         elif ctx.tick_count % 3 == 0:
             clip = n.read_clipboard()
             g_clip = n.parse_clip(clip)
@@ -670,7 +679,8 @@ class _NavWorker:
                 ) + (f"\n{near}" if near else "")
                 if steps:
                     ctx.shown += "\n" + "\n".join(str(s) for s in steps)
-                _T("mining")._nav_log(here, info, ctx.state["here"])
+                if not still:  # 停着不动每帧都来，日志只记坐标变了的
+                    _T("mining")._nav_log(here, info, ctx.state["here"])
             cam = self._cam_filter.check(
                 info.get("camdir"), fast=bool(info.get("fast"))
             )

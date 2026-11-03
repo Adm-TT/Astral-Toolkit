@@ -325,3 +325,49 @@ def test_fix_request_cancelled_is_not_applied():
     worker._process_fix_requests(session, ctx)
     assert called and req2.result == {"ok": True}
     assert not worker.cancel_fix(req2)  # 已处理过的不能再撤回
+
+
+def test_space_steer_follows_camera_while_hovering(monkeypatch):
+    """停着不动（坐标没变）转机头：转向提示要跟着新一帧的镜头方向重算，不能冻在上一帧（负责人 2026-11-03 截图：右转 43° 实际该左转 14°）"""
+    from astral_toolkit.navigation import navigate as n
+    from astral_toolkit.tasks import mining as t_mining
+
+    monkeypatch.setattr(n, "load", lambda: {"bodies": {}, "pois": [], "points": []})
+    monkeypatch.setattr(n, "locate", lambda *a, **k: {"inside": False, "body": None})
+    monkeypatch.setattr(n, "read_clipboard", lambda: "")
+    monkeypatch.setattr(
+        t_mining, "_space_view", lambda g, t, d: {"space": True, "arrived": False}
+    )
+    monkeypatch.setattr(n, "space_text", lambda g, t, d: "直线 13.8 km")
+    monkeypatch.setattr(t_mining, "_marker_tick", lambda *a, **k: None)
+    huds = []
+
+    class Loop:
+        def commit(self, session, *ops):
+            huds.extend(op[2] for op in ops if op[0] == "hud.set")
+            return True
+
+    tgt = {"space": True, "n": "1", "zh": "1", "x": 8163217.9574, "y": 18591209.2105, "z": -4278.6308}
+    g = (8163210720.5, 18591214824.5, -4288975.1)
+    now = time.time()
+    pos = _FakePos()
+    pos.latest = (now, g, {"t": now, "camdir": (76.0, -26.0, 161.0)})
+    pos.current = pos.latest
+    pos.reader_active = True
+    worker = navmod._NavWorker(pos, _FakeCam(), threading.Lock())
+    worker.loop = Loop()
+    session = Session(1, threading.Event(), navmod.NavPayload(tgt, tgt, False))
+    ctx = navmod._NavCtx(1, session.payload)
+    ctx.data = n.load()
+    ctx.first = False
+    ctx.state["here"] = {}  # 不走「刚开始用 current」那条
+    worker.tick(session, ctx, now)
+    assert "左转 14°" in huds[-1], huds[-1]
+
+    later = now + 1.0
+    pos.current = (later, g, {"t": later, "camdir": (75.0, -41.0, 165.0)})  # 坐标没变、镜头转了
+    worker.tick(session, ctx, later)
+    assert "直飞" in huds[-1], huds[-1]
+    n_before = len(huds)
+    worker.tick(session, ctx, later + 0.1)  # 同一帧不重复处理
+    assert len(huds) == n_before + 1 and huds[-1] == huds[-2]
