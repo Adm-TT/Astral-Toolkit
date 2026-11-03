@@ -100,3 +100,16 @@ def test_location_ocr_runs_in_background(monkeypatch):
         D._loc.update(hash=None, text="", at=0.0, top=None, cand=None)
         D._LOC_JOB.clear()
         D._LOC_JOB["busy"] = False
+
+
+def test_grid_miss_still_yields_to_mining(monkeypatch):
+    """采矿助手要让路时：字模读不出照旧返回「让路」（Reader 记让路时间、隔一会再试），不当成快速读失败狂试（独立审查 11-03）"""
+    from astral_toolkit.navigation import displayinfo as D
+
+    _live(monkeypatch, D)
+    monkeypatch.setattr(D, "yielding", lambda: True)
+    monkeypatch.setattr(D, "_grid_read", lambda piece, h: None)
+    D._GRID_OK["at"] = time.time()
+    info = D.read()
+    assert info.get("yielded") and not info.get("grid_miss")
+    D._GRID_OK["at"] = 0.0

@@ -676,6 +676,7 @@ def read(img=None, allow_yield=True):
     if (
         info is None
         and img is None
+        and not skip  # 给采矿助手让路：照旧走下面的「让路」（Reader 记让路时间、隔一会再试）
         and was_ready
         and time.time() - _GRID_OK["at"] < GRID_GRACE
     ):
