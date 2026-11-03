@@ -222,14 +222,16 @@ def test_miss_queue_drops_new_and_single_thread(monkeypatch, tmp_path):
     first = _FakeImage(entered=entered, release=release)
     assert service.submit(tmp_path, "first", first, 10)
     assert entered.wait(1.0)
+    worker = service.thread
 
     for index in range(4):
         assert service.submit(tmp_path, f"q{index}", _FakeImage(), 10)
     assert not service.submit(tmp_path, "drop", _FakeImage(), 10)
     assert any("队列已满" in msg and kw.get("level") == "WARN" for msg, kw in warns)
 
-    names = [t.name for t in threading.enumerate() if t.name == "miss-shots"]
-    assert len(names) == 1
+    assert (
+        service.thread is worker and worker is not None and worker.is_alive()
+    )  # 一直是同一个线程
 
     release.set()
     service.request_stop()

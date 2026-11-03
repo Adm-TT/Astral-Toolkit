@@ -304,9 +304,10 @@ def _thread_starts_in_source(source):
 
 
 def test_live_engine_does_not_start_its_own_scan_loop():
-    """RT-B4：采矿助手的工作线程由会话循环起（runtime/session.py），live.py 里只剩存截图的小线程"""
+    """RT-B4：采矿助手的工作线程由会话循环起（runtime/session.py）；RT-B6 起存截图也交给 app/miss_shots.py 的队列，
+    live.py 里不再起任何线程"""
     source = (_ROOT / "app" / "engines" / "live.py").read_text(encoding="utf-8")
-    assert _thread_starts_in_source(source) == ["_save_miss"]
+    assert _thread_starts_in_source(source) == []
     for bad in (
         "threading.Thread(target=self._run)",
         "def f():\n    threading.Thread(target=g)",
