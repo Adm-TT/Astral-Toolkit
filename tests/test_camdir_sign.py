@@ -170,3 +170,19 @@ def test_faint_signs_cell_geometry():
     assert run(5, 4, SIGN_FAINT - 1) == " "  # 阈值以下：干净空白
     assert run(5, 8) == " " and run(5, 7) == " "  # 右边 2 列：后面数字漏进来的
     assert run(0, 4) == " " and run(12, 4) == " "  # 字高最上 / 最下：不是负号的位置
+
+
+def test_lone_zero_read_as_letter_o():
+    """角度正好是 0：字模把单独的 0 认成字母 O（老大 11-03 诊断原文），CamDir 里当 0；别处的 O 不动"""
+    from astral_toolkit.navigation.displayinfo import grid_text, parse
+
+    raw = "CamDir: -125   O   39 FOV: 78 Focal: 3.00 FStop: 64.0"
+    assert parse([grid_text(raw)])["camdir"] == (-125.0, 0.0, 39.0)
+    assert parse([grid_text("CamDir:  o -12  140 FOV: 78")])["camdir"] == (
+        0.0,
+        -12.0,
+        140.0,
+    )
+    assert (
+        grid_text("Zone: OOC_Stanton_2 Pos: 1.0km") == "Zone: OOC_Stanton_2 Pos: 1.0km"
+    )

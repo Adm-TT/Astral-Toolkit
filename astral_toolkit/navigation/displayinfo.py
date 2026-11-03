@@ -373,6 +373,7 @@ NEED_ROW = re.compile(r"Zone|CamDir|player|locat|Planet", re.I)
 _NUM_Q = re.compile(r"\?(?=[\d.,])|(?<=[\d.,\-])\?")
 
 
+_CAM_ZERO = re.compile(r"(?<= )[Oo](?= )")
 _LOST_SIGN = re.compile(
     r"(?<=[:m]) {2,}(?=\d)"
 )  # 坐标固定一个空格隔开：Pos: / km / m 后面两个以上空格才接数字 = 中间那格是没认出的负号
@@ -385,6 +386,13 @@ def grid_text(t):
     CamDir 不按空格判：游戏把三个角度右对齐，正数前面本来就是两个空格（以前当成丢了负号，正数整行作废，导航记号跟着消失，
     Astra 二轮研究 2026-11-03）；负号没认出来的那一格由 gridtext._faint_signs 按像素写成 ?，这里照常变 # 作废"""
     t = _NUM_Q.sub("#", t).replace("?", " ")
+    c = t.find("CamDir:")
+    if c >= 0:
+        # 角度正好是 0：单独一个 0 前后都是空格，字模按字母认成 O，整行作废（老大 11-03 诊断：「-125   O   39」）。
+        # CamDir: 到 FOV 之间单独的 O / o 就是 0
+        f = t.find("FOV", c)
+        f = len(t) if f < 0 else f
+        t = t[:c] + _CAM_ZERO.sub("0", t[c:f]) + t[f:]
     i = t.find("Pos:")
     return t if i < 0 else t[:i] + _LOST_SIGN.sub(" #", t[i:])
 
