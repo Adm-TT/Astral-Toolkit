@@ -642,6 +642,35 @@ def test_ui_events_http_hello_increment_and_snapshot_conn(monkeypatch):
         srv.server_close()
 
 
+def test_ui_events_refreshes_switches_without_business_events(monkeypatch):
+    """没有新的识别或终态事件时，真实 SSE 也会自动刷新后台状态。"""
+    ui = _reset(monkeypatch)
+    switches = {"live_on": False}
+    monkeypatch.setattr(ui, "read_switches", lambda: dict(switches))
+    srv = _start_server()
+    sock = None
+    try:
+        sock, reader = _open_ui_stream(srv.server_address[1])
+        hello = _next_event(reader)
+        assert hello["kind"] == "ui.hello"
+        switches["live_on"] = True
+        event = _next_event(reader, timeout=2.5)
+        assert event["kind"] == "ui.tile"
+        assert event["tile"]["on"]
+        assert event["ui_seq"] > hello["ui_seq"]
+        switches["live_on"] = False
+        event2 = _next_event(reader, timeout=2.5)
+        assert event2["kind"] == "ui.tile"
+        assert not event2["tile"]["on"]
+        assert event2["ui_seq"] > event["ui_seq"]
+        assert ui.snapshot(hello["conn"])["tiles"][0] == event2["tile"]
+    finally:
+        if sock is not None:
+            sock.close()
+        srv.shutdown()
+        srv.server_close()
+
+
 def test_ui_events_http_overflow_then_eof(monkeypatch):
     ui = _reset(monkeypatch)
     ui._QUEUE_MAX = 1

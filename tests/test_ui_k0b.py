@@ -6,6 +6,7 @@ import re
 import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 from PIL import Image
 
@@ -184,6 +185,262 @@ def _stop_loop(loop):
     if sid:
         loop.request_stop_current(StopInfo("user"))
         loop.join(session_id=sid, timeout=WAIT)
+
+
+def _read_loop_switches(monkeypatch, ui, loop, read_switches):
+    from astral_toolkit.core import settings
+    from astral_toolkit.tasks.system import common
+
+    monkeypatch.setattr(settings, "load", lambda: {"live_on": False})
+    monkeypatch.setattr(
+        common,
+        "_engines",
+        lambda: SimpleNamespace(live=SimpleNamespace(loop=loop, running=loop.running)),
+    )
+    monkeypatch.setattr(ui, "read_switches", read_switches)
+
+
+def _mining_tile(ui):
+    return next(t for t in ui.snapshot(1)["tiles"] if t["tile_id"] == "mining")
+
+
+def test_mining_tile_tracks_real_cleanup_without_reviving_activity(monkeypatch):
+    """终态不会清掉收尾提示；新会话仍可停止，真实退出后的刷新才清提示。"""
+    read_switches = ui_stream.read_switches
+    ui, worker, loop, q = _new_loop(monkeypatch, gate_session=1)
+    _read_loop_switches(monkeypatch, ui, loop, read_switches)
+    try:
+        old = loop.start()
+        assert old is not None
+        assert worker.entered.wait(WAIT)
+        ui.refresh_switches()
+        assert _mining_tile(ui)["on"]
+        assert _mining_tile(ui)["available"]["ok"]
+
+        loop.request_stop_current(StopInfo("user"))
+        ui.refresh_switches()
+        stopping = _mining_tile(ui)
+        assert not stopping["on"]
+        assert not stopping["available"]["ok"]
+        assert "收尾" in stopping["status_line"]
+        assert not loop.join(session_id=old, timeout=0.01)
+        ui.refresh_switches()
+        ended = _mining_tile(ui)
+        assert ended["available"]["ok"]
+        assert "收尾" in ended["status_line"]
+        assert not ui.snapshot(1)["activities"]
+
+        # 新连接的快照也得记住收尾，不能靠前端保留旧活动。
+        hello, reconnect = ui.subscribe()
+        assert reconnect is not None
+        ui.unsubscribe(reconnect)
+        assert "收尾" in ui.snapshot(hello["conn"])["tiles"][0]["status_line"]
+
+        new = loop.start()
+        assert new is not None and new != old
+        ui.refresh_switches()
+        running = _mining_tile(ui)
+        assert running["on"] and running["available"]["ok"]
+        assert running["activity_id"] == f"mining:{new}"
+        assert "收尾" in running["status_line"]
+        ui.publish_ui("ui.activity", {"activity": _activity(old)})
+        ui.publish_ui("ui.notice", {"notice": {"notice_id": "drain-probe"}})
+        ui.dismiss_notice("drain-probe")
+        assert _mining_tile(ui) == running
+
+        worker.gate.set()
+        assert _wait_until(lambda: not loop.state().pending)
+        ui.refresh_switches()
+        clean = _mining_tile(ui)
+        assert clean["on"] and clean["available"]["ok"]
+        assert "收尾" not in clean["status_line"]
+        assert clean["activity_id"] == f"mining:{new}"
+        ends = [m for m in _drain_ui(ui, q) if m["kind"] == "ui.activity_end"]
+        assert [m["activity_id"] for m in ends] == [f"mining:{old}"]
+    finally:
+        worker.gate.set()
+        _stop_loop(loop)
+        loop.join_all(timeout=WAIT)
+        ui.unsubscribe(q)
+
+
+def test_mining_tile_blocks_another_start_while_two_workers_stop(monkeypatch):
+    read_switches = ui_stream.read_switches
+    ui, worker, loop, q = _new_loop(monkeypatch)
+    _read_loop_switches(monkeypatch, ui, loop, read_switches)
+    gates = {sid: threading.Event() for sid in (1, 2)}
+    entered = {sid: threading.Event() for sid in (1, 2)}
+
+    def tick(session, ctx, now):
+        entered[session.id].set()
+        assert gates[session.id].wait(WAIT)
+        return Tick(0.01)
+
+    monkeypatch.setattr(worker, "tick", tick)
+    try:
+        first = loop.start()
+        assert first is not None
+        assert entered[1].wait(WAIT)
+        loop.request_stop_current(StopInfo("user"))
+        assert not loop.join(session_id=first, timeout=0.01)
+        second = loop.start()
+        assert second is not None
+        assert entered[2].wait(WAIT)
+        loop.request_stop_current(StopInfo("user"))
+        assert not loop.join(session_id=second, timeout=0.01)
+        ui.refresh_switches()
+        tile = _mining_tile(ui)
+        assert not tile["on"] and not tile["available"]["ok"]
+        assert tile["available"]["reason"]
+        assert "收尾" in tile["status_line"]
+        assert loop.start() is None
+    finally:
+        for gate in gates.values():
+            gate.set()
+        _stop_loop(loop)
+        loop.join_all(timeout=WAIT)
+        ui.unsubscribe(q)
+
+
+def test_mining_tile_discards_sample_if_session_changes_during_read(monkeypatch):
+    """state/can_start 之间开启新会话时，不发布拼接出的旧状态。"""
+    read_switches = ui_stream.read_switches
+    ui, worker, loop, q = _new_loop(monkeypatch, gate_session=1)
+    _read_loop_switches(monkeypatch, ui, loop, read_switches)
+    ui.refresh_switches()
+    can_start = loop.can_start
+
+    def start_during_read():
+        allowed = can_start()
+        assert loop.start() is not None
+        assert worker.entered.wait(WAIT)
+        return allowed
+
+    monkeypatch.setattr(loop, "can_start", start_during_read)
+    try:
+        values = ui.read_switches()
+        assert "mining_runtime" not in values
+        assert "live_on" not in values
+        assert "live_running" not in values
+        monkeypatch.setattr(loop, "can_start", can_start)
+        ui.refresh_switches()
+        tile = _mining_tile(ui)
+        assert tile["on"] and tile["available"]["ok"]
+    finally:
+        worker.gate.set()
+        _stop_loop(loop)
+        loop.join_all(timeout=WAIT)
+        ui.unsubscribe(q)
+
+
+def test_mining_tile_switch_update_keeps_drain_and_rejects_older_read(monkeypatch):
+    ui = _reset(monkeypatch)
+    ui.set_switches(
+        {
+            "live_on": False,
+            "live_running": False,
+            "mining_runtime": {
+                "state": "stopping",
+                "running": False,
+                "draining": True,
+                "can_start": False,
+            },
+        },
+        read_mono=10,
+    )
+    assert not _mining_tile(ui)["available"]["ok"]
+    # 新会话的开关消息先到，运行快照稍后到：保留旧收尾，但停止新会话可用。
+    ui.set_switches({"live_on": True, "live_running": True}, read_mono=12)
+    current = _mining_tile(ui)
+    assert current["on"] and current["available"]["ok"]
+    assert "收尾" in current["status_line"]
+    ui.set_switches(
+        {
+            "live_on": False,
+            "live_running": False,
+            "mining_runtime": {
+                "state": "stopped",
+                "running": False,
+                "draining": False,
+                "can_start": True,
+            },
+        },
+        read_mono=11,
+    )
+    assert _mining_tile(ui) == current
+
+
+def test_mining_tile_stop_message_does_not_reuse_running_availability(monkeypatch):
+    ui = _reset(monkeypatch)
+    ui.set_switches(
+        {
+            "live_on": True,
+            "live_running": True,
+            "mining_runtime": {
+                "state": "running",
+                "running": True,
+                "draining": False,
+                "can_start": False,
+            },
+        }
+    )
+    BusOutput().apply(("bus", "live", {"running": False}))
+    tile = _mining_tile(ui)
+    assert not tile["on"] and not tile["available"]["ok"]
+    assert tile["available"]["reason"]
+
+
+def test_mining_tile_quick_start_stop_waits_for_runtime_confirmation(monkeypatch):
+    """一轮采样之间快速开停，不得沿用上次 STOPPED 时允许开启的旧答案。"""
+    ui = _reset(monkeypatch)
+    stopped = {
+        "state": "stopped",
+        "running": False,
+        "draining": False,
+        "can_start": True,
+    }
+    ui.set_switches({"live_on": False, "mining_runtime": stopped})
+    output = BusOutput()
+    output.apply(("bus", "live", {"running": True}))
+    assert _mining_tile(ui)["available"]["ok"]
+    output.apply(("bus", "live", {"running": False}))
+    tile = _mining_tile(ui)
+    assert not tile["on"] and not tile["available"]["ok"]
+    ui.set_switches(
+        {"live_on": False, "live_running": False, "mining_runtime": stopped}
+    )
+    assert _mining_tile(ui)["available"]["ok"]
+
+
+def test_mining_tile_equal_clock_old_sample_cannot_override_new_switch(monkeypatch):
+    """Windows 同一时钟刻度内，迟到的采样也不能盖掉已发布的新会话。"""
+    ui = _reset(monkeypatch)
+    old = {
+        "live_on": False,
+        "live_running": False,
+        "mining_runtime": {
+            "state": "stopping",
+            "running": False,
+            "draining": True,
+            "can_start": True,
+        },
+    }
+    monkeypatch.setattr(ui.time, "monotonic", lambda: 10.0)
+    ui.set_switches(old, read_mono=10.0)
+
+    def delayed_sample():
+        BusOutput().apply(("bus", "live", {"running": True}))
+        ui.publish_ui("ui.activity", {"activity": _activity(2)})
+        return old
+
+    monkeypatch.setattr(ui, "read_switches", delayed_sample)
+    ui.refresh_switches()
+    tile = _mining_tile(ui)
+    assert tile["on"] and tile["available"]["ok"]
+    assert tile["activity_id"] == "mining:2"
+    # 同刻度内真实的新停止消息仍要接受，不能把时间比较简单改成 <=。
+    BusOutput().apply(("bus", "live", {"running": False}))
+    assert not _mining_tile(ui)["on"]
 
 
 class _Hud:

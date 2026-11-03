@@ -34,6 +34,7 @@ MAX_BODY = (
 _last_client = {"t": time.time(), "ever": False}
 # 新展示流心跳间隔（秒）；测试可调小，不需要长 sleep
 UI_HEARTBEAT_INTERVAL = 5.0
+UI_STATE_REFRESH_INTERVAL = 1.0  # 无业务事件时也确认旧线程是否已收尾，不另起后台线程
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -270,12 +271,19 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         conn = hello["conn"]
         interval = max(0.01, float(UI_HEARTBEAT_INTERVAL))
-        poll = min(1.0, interval)
+        refresh = max(0.01, float(UI_STATE_REFRESH_INTERVAL))
+        poll = min(1.0, interval, refresh)
         try:
             self.wfile.write(ui_stream.encode(hello).encode("utf-8"))
             self.wfile.flush()
             last_hb = time.time()
+            next_refresh = time.monotonic() + refresh
             while True:
+                if not ui_stream.is_connected(q):
+                    break
+                if time.monotonic() >= next_refresh:
+                    ui_stream.refresh_switches()
+                    next_refresh = time.monotonic() + refresh
                 try:
                     msg = q.get(timeout=poll)
                 except queue.Empty:
