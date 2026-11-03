@@ -2001,12 +2001,11 @@ def test_live_scan_resumes_after_restart(monkeypatch, tmp_path):
         monkeypatch.setattr(getattr(em, name), "start", lambda: None)
     monkeypatch.setattr(t_sys, "_online_loop", lambda: None)  # 测试里不联网检查更新
     monkeypatch.setattr(em.game_events, "start", lambda: None)  # 不读真实 Game.log
+    from astral_toolkit import ocr as OCR
     from astral_toolkit.core.perfmon import monitor
     from astral_toolkit.crafting import itemsearch
 
-    import astral_toolkit.ocr as ocr_pkg
-
-    monkeypatch.setattr(ocr_pkg, "warmup", lambda: None)  # 不预热 OCR
+    monkeypatch.setattr(OCR, "warmup", lambda: None)  # 不预热 OCR
     monkeypatch.setattr(monitor, "start", lambda: None)  # 不起 perfmon 常驻线程
     monkeypatch.setattr(itemsearch, "warm_up", lambda: None)
     monkeypatch.setattr(

@@ -30,9 +30,9 @@ def _ms(fn, n=N):
 
 
 def main():
-    from astral_toolkit.ocr import runtime as ocr_runtime
     from astral_toolkit.tasks import hover as S
-    from astral_toolkit.ocr import recognize
+    from astral_toolkit.ocr import recognize, warmup, ocr_device
+    from astral_toolkit.ocr import runtime as OR
     from astral_toolkit.mining import screen
     from astral_toolkit.navigation import displayinfo
 
@@ -40,12 +40,9 @@ def main():
         f"## {time.strftime('%F %T')} 版本 {__import__('astral_toolkit.core.version', fromlist=['VERSION']).VERSION}"
     ]
     t = time.perf_counter()
-    ocr_runtime.rapidocr()
-    dev = ocr_runtime.ocr_device()
-    parts = ",".join(ocr_runtime.GPU_PARTS) or "无"
+    warmup()
     out.append(
-        f"- 识别引擎加载：{(time.perf_counter() - t) * 1000:.0f} ms"
-        f"（{dev}，显卡部分 {parts}）"
+        f"- 识别引擎加载：{(time.perf_counter() - t) * 1000:.0f} ms（{ocr_device()}，显卡部分 {','.join(OR.GPU_PARTS) or '无'}）"
     )
     samples = sorted((ROOT / "测试数据" / "识别样本").glob("*.png"))[:3] or [
         ROOT / "tests" / "samples" / "scan1.png"
