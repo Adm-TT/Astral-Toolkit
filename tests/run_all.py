@@ -70,6 +70,7 @@ MODULES = [
     "tests.test_data_pack",
     "tests.test_gridtext",
     "tests.test_camdir_sign",
+    "tests.test_di_live",
     "tests.test_station_lifts",
     "tests.test_stage0",
     "tests.test_stage3",

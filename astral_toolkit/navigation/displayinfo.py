@@ -11,6 +11,7 @@
 
 import re
 import time
+from typing import Any
 
 REGION = (
     0.66,
@@ -503,6 +504,9 @@ def _ocr_location(piece, arr, top, screen_h, key=None):
     没有就看这一行的字的像素（2026-10-27 实测：直接比像素，背后游戏画面一动就算变，平均 2 秒认一次，太勤）"""
     from . import gridtext
 
+    done = _LOC_JOB.pop("done", None)
+    if done is not None:  # 后台认完了：结果在读屏线程里收（学字模只在这个线程做）
+        _loc_accept(*done)
     lh = gridtext._for(screen_h).g.lh
     y0, y1 = max(0, top - 3), min(piece.height, top + lh + 3)
     band = arr[y0:y1]
@@ -518,14 +522,54 @@ def _ocr_location(piece, arr, top, screen_h, key=None):
     _loc["at"] = time.time()
     try:
         from PIL import Image
-        from ..ocr import read_line
 
         cols = (gridtext.textness(band) > 50).sum(0)
         xs = [x for x, v in enumerate(cols) if v]
         x0 = max(0, (xs[0] if xs else 0) - 4)
         img = piece.crop((x0, y0, piece.width, y1))
         img = img.resize((img.width * UPSCALE, img.height * UPSCALE), Image.LANCZOS)
-        text = read_line(img)[0]
+    except Exception:
+        return _loc["text"]
+    if getattr(_TL, "live", False):
+        # 实时读屏：识别引擎认一行要 0.5–1 秒，以前就在读位置的线程里等，坐标和镜头方向跟着停顿，
+        # 导航记号 1.5 秒没新读数就收起（老大 11-03 实测诊断：一分钟里 25 秒耗在这）。改成后台认，下次进来收结果
+        _loc_start(img, arr, top, lh, h, screen_h)
+        return _loc["text"]
+    try:
+        from ..ocr import read_line
+
+        return _loc_accept(read_line(img)[0], arr, top, lh, h, screen_h)
+    except Exception:
+        return _loc["text"]
+
+
+_LOC_JOB: dict[str, Any] = {"busy": False}
+
+
+def _loc_start(img, arr, top, lh, h, screen_h):
+    """地点那一行交给后台小线程认（同时只认一张）；认完的结果下次 _ocr_location 进来时收"""
+    if _LOC_JOB.get("busy"):
+        return
+    _LOC_JOB["busy"] = True
+
+    def run():
+        try:
+            from ..ocr import read_line
+
+            _LOC_JOB["done"] = (read_line(img)[0], arr, top, lh, h, screen_h)
+        except Exception:
+            pass
+        finally:
+            _LOC_JOB["busy"] = False
+
+    _threading.Thread(target=run, daemon=True, name="displayinfo-loc").start()
+
+
+def _loc_accept(text, arr, top, lh, h, screen_h):
+    """识别引擎认出的地点那一行 → 更新地点（认错字母的要连着两次一样才换），返回现在用的地点"""
+    from . import gridtext
+
+    try:
         m = LOC.search(text.replace("：", ":"))
         loc = m.group("loc").strip() if m else ""
         if not loc:  # 这次没认出来：保留上次的地点，过 2 秒再认（以前会把地点冲成空的）
@@ -619,12 +663,28 @@ def read(img=None, allow_yield=True):
         _YIELD["calib_at"] = time.time()
         skip = False
     _TL.skip_ocr = skip
+    _TL.live = img is None
     try:
         info = _grid_read(piece, screen_h)
     except Exception:
         info = None
     finally:
         _TL.skip_ocr = False
+        _TL.live = False
+    if img is None and info is not None:
+        _GRID_OK["at"] = time.time()
+    if (
+        info is None
+        and img is None
+        and was_ready
+        and time.time() - _GRID_OK["at"] < GRID_GRACE
+    ):
+        # 字模几秒前还读得出：多半是亮光 / 背景一时盖住了字（老大 11-03 实测截图），不换识别引擎
+        # （认一次几秒、之后还要隔 2 秒，导航记号就收了），当成快速读失败，0.2 秒后再用字模试
+        info = parse([])
+        info.update(fast=True, t=shot_at, grid_miss=True)
+        _diag(piece, screen_h, was_ready, info)
+        return info
     if info is None and skip:
         info = parse([])
         info.update(fast=False, yielded=True, t=shot_at)
@@ -648,6 +708,8 @@ def read(img=None, allow_yield=True):
     return info
 
 
+_GRID_OK = {"at": 0.0}  # 实时读屏字模最近一次读出来的时间
+GRID_GRACE = 3.0  # 字模这么久内读出来过：这一帧读不出先不换识别引擎
 _DIAG = {"shot_at": 0.0}
 DIAG_SHOT_EVERY = 5.0  # 字模没读出来的画面最多每 5 秒存一张
 DIAG_KEEP = 15
@@ -661,9 +723,11 @@ def _diag(piece, screen_h, was_ready, info):
         from ..core import paths
 
         fast = bool(info.get("fast"))
+        if info.get("grid_miss"):
+            fast = True  # 字模这帧没读出、在等下一帧：不是识别引擎读的，也不存图
         line = (
             f"{time.strftime('%H:%M:%S')}.{int(time.time() * 1000) % 1000:03d} "
-            f"h={screen_h} 字模={'好' if was_ready else '没好'} 路={'字模' if fast else '识别引擎'} "
+            f"h={screen_h} 字模={'好' if was_ready else '没好'} 路={'字模没读出' if info.get('grid_miss') else '字模' if fast else '识别引擎'} "
             f"坐标={'有' if info.get('global') else '无'} 镜头={info.get('camdir')}\n"
         )
         with paths.log("di_log.txt").open("a", encoding="utf-8") as f:
