@@ -372,7 +372,6 @@ NEED_ROW = re.compile(r"Zone|CamDir|player|locat|Planet", re.I)
 _NUM_Q = re.compile(r"\?(?=[\d.,])|(?<=[\d.,\-])\?")
 
 
-_CAM_LOST_SIGN = re.compile(r"(?<=[:\d]) {2,}(?=\d)")
 _LOST_SIGN = re.compile(
     r"(?<=[:m]) {2,}(?=\d)"
 )  # 坐标固定一个空格隔开：Pos: / km / m 后面两个以上空格才接数字 = 中间那格是没认出的负号
@@ -381,15 +380,10 @@ _LOST_SIGN = re.compile(
 def grid_text(t):
     """字模认出的一行 → 给 parse 的文字：数字旁边认不出的格子（?）写成 #，让这个坐标解析失败（以前当空格删掉，
     「?2462326.4853km」会变成少一位的坐标，2026-10-27 补审）；别处的 ? 多半是邻格漏进来的墨，当空格。
-    负号只有一小横，字模有时把它当空格丢掉，两行会一起丢、照样「一致」：Pos: 后面出现双空格接数字就作废这一帧（2026-10-30）"""
+    负号只有一小横，字模有时把它当空格丢掉，两行会一起丢、照样「一致」：Pos: 后面出现双空格接数字就作废这一帧（2026-10-30）。
+    CamDir 不按空格判：游戏把三个角度右对齐，正数前面本来就是两个空格（以前当成丢了负号，正数整行作废，导航记号跟着消失，
+    Astra 二轮研究 2026-11-03）；负号没认出来的那一格由 gridtext._faint_signs 按像素写成 ?，这里照常变 # 作废"""
     t = _NUM_Q.sub("#", t).replace("?", " ")
-    c = t.find("CamDir:")
-    if (
-        c >= 0
-    ):  # CamDir 三个数也是一个空格隔开：双空格接数字 = 负号丢了（审查 2026-10-31）
-        f = t.find("FOV", c)
-        f = len(t) if f < 0 else f
-        t = t[:c] + _CAM_LOST_SIGN.sub(" #", t[c:f]) + t[f:]
     i = t.find("Pos:")
     return t if i < 0 else t[:i] + _LOST_SIGN.sub(" #", t[i:])
 

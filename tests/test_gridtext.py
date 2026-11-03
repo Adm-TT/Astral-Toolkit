@@ -573,15 +573,26 @@ def test_dot_after_unit_may_be_lost_minus():
 
 
 def test_camdir_broken_row_rejected():
-    """CamDir 那行残缺（认不出的格子、丢了负号、数多了少了）整行不要（审查 2026-10-31）"""
+    """CamDir 那行残缺（认不出的格子、丢了负号、数多了少了）整行不要（审查 2026-10-31）。
+    正数前面的双空格是游戏右对齐的正常留白，不算丢负号（Astra 二轮研究 2026-11-03）；
+    丢负号改由字模按像素写成 ?（见 test_camdir_sign）"""
     from astral_toolkit.navigation.displayinfo import parse, grid_text
 
     assert parse(["CamDir: 52 27 -176 FOV: 64"])["camdir"] == (52, 27, -176)
     assert parse(["CamDir: 5# 27 -176 FOV: 64"])["camdir"] is None
+    assert parse([grid_text("CamDir:  52  27 -176 FOV: 64")])["camdir"] == (
+        52,
+        27,
+        -176,
+    )
+    assert parse([grid_text("CamDir:  45 -63  114 FOV: 58")])["camdir"] == (
+        45,
+        -63,
+        114,
+    )
     assert (
-        parse([grid_text("CamDir: 52  27 -176 FOV: 64")])["camdir"] is None
-    )  # 27 前面丢了负号
-    assert parse([grid_text("CamDir:  52 27 -176 FOV: 64")])["camdir"] is None
+        parse([grid_text("CamDir:  52 ?27 -176 FOV: 64")])["camdir"] is None
+    )  # 27 前那格有负号残迹
     assert parse(["CamDir: 52 27 -176 3 FOV: 64"])["camdir"] is None
     assert parse(["CamDir: 52 27 -176 FQV: 64 Focal: 3.00 FStop: 64.0"])["camdir"] == (
         52,
