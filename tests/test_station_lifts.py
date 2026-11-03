@@ -493,23 +493,16 @@ def test_pos_zone_change_counts_as_moved():
 
 
 def test_nav_engine_station_branch(monkeypatch, tmp_path):
-    """导航线程的空间站分支走一遍：机库里指向机库电梯、悬浮窗和窗口都有步骤；进了电梯（坐标不变、区域名变）提示选哪站"""
+    """导航 Worker 的空间站分支走一遍：机库里指向机库电梯、悬浮窗和窗口都有步骤；进了电梯（坐标不变、区域名变）提示选哪站"""
     import threading
     import time
-    import types
+    from types import SimpleNamespace
 
     n, ps = _station(tmp_path, monkeypatch)
-    from astral_toolkit.tasks import (
-        mining as t_mining,
-        navigation as t_nav,
-        system as t_sys,
-    )
-    from astral_toolkit.app.engines.manager import EngineManager
-
-    em = EngineManager.get_instance()
-    from astral_toolkit.app import hud_state
+    from astral_toolkit.tasks import mining as t_mining, navigation as t_nav
     from astral_toolkit.app import bus
     from astral_toolkit.app.engines import nav as nav_mod
+    from astral_toolkit.runtime.session import Session
 
     tgt = ps["rr_x"]
     monkeypatch.setattr(n, "load", lambda: {"bodies": {}, "pois": [], "points": []})
@@ -526,51 +519,72 @@ def test_nav_engine_station_branch(monkeypatch, tmp_path):
             pass
 
     _v = lambda: Hud()  # noqa: E731
-    for _m in (t_mining, t_nav, t_sys, hud_state):
+    for _m in (t_mining, t_nav):
         monkeypatch.setattr(_m, "_hud", _v)
     monkeypatch.setattr(t_mining, "_marker_tick", lambda *a, **k: None)
     monkeypatch.setattr(bus, "publish", lambda topic, data: pubs.append((topic, data)))
+
     now = time.time()
     g = (600.0, 0.5, 0.0)
-    fake = types.SimpleNamespace(
-        current=(now, g, {"inner_zone": "Hangar SmallFront RestStop 1", "t": now}),
-        latest=(0.0, None, None),
-        read_at=now,
-        reader=types.SimpleNamespace(active=True),
+
+    class Pos:
+        def __init__(self):
+            self.current = (
+                now,
+                g,
+                {"inner_zone": "Hangar SmallFront RestStop 1", "t": now},
+            )
+            self.latest = (0.0, None, None)
+            self.read_at = now
+            self.reader_active = True
+            self.reader_ok_at = 0.0
+
+        def snapshot(self):
+            return SimpleNamespace(
+                current=self.current,
+                latest=self.latest,
+                read_at=self.read_at,
+                reader_active=self.reader_active,
+                reader_ok_at=self.reader_ok_at,
+            )
+
+    class Loop:
+        def commit(self, session, *ops):
+            for op in ops:
+                if op[0] == "hud.set" and op[1] == "导航":
+                    huds.append(op[2])
+                elif op[0] == "bus" and op[1] == "nav":
+                    pubs.append(("nav", op[2]))
+            return True
+
+    pos = Pos()
+    worker = nav_mod._NavWorker(pos, nav_mod._CamFilter(), threading.Lock())
+    worker.loop = Loop()
+    session = Session(1, threading.Event(), nav_mod.NavPayload(tgt, tgt, False))
+    ctx = nav_mod._NavCtx(1, session.payload)
+    ctx.data = n.load()
+    ctx.first = False
+    ctx.seen = pos.current[0]
+
+    worker.tick(session, ctx, now)
+    assert any("→ 1. 去机库电梯（Hangar Lift）" in h for h in huds)
+    here = [d["here"] for t, d in pubs if t == "nav" and d.get("here")]
+    assert (
+        here
+        and here[-1]["steps"][0] == "→ 1. 去机库电梯（Hangar Lift）"
+        and here[-1]["arrived"] is False
     )
-    monkeypatch.setattr(em, "pos", fake)
-    nv = nav_mod._Nav()
-    nv.target, nv.session = tgt, 1
-    ev = threading.Event()
-    th = threading.Thread(target=nv._run, args=(ev, 1), daemon=True)
-    th.start()
 
-    def wait(pred):
-        end = time.time() + 5
-        while time.time() < end:
-            if any(pred(h) for h in huds):
-                return True
-            time.sleep(0.05)
-        return False
-
-    try:
-        assert wait(lambda h: "→ 1. 去机库电梯（Hangar Lift）" in h)
-        here = [d["here"] for t, d in pubs if t == "nav" and d.get("here")]
-        assert (
-            here
-            and here[-1]["steps"][0] == "→ 1. 去机库电梯（Hangar Lift）"
-            and here[-1]["arrived"] is False
-        )
-        fake.latest = (
-            time.time(),
-            g,
-            {"inner_zone": "TransitCarriage elev util 2", "t": time.time()},
-        )  # 进电梯：坐标没变
-        assert wait(lambda h: "在电梯里选「大厅（Lobby）」" in h)
-    finally:
-        ev.set()
-        th.join(3)
-    assert not th.is_alive()
+    later = (
+        now + 1.0
+    )  # 严格晚于上一帧：Windows 上 time.time() 15 ms 一跳，同一跳会被当成没新读数
+    pos.latest = (  # pyright: ignore[reportAttributeAccessIssue]  # 测试替身
+        later,
+        g,
+        {"inner_zone": "TransitCarriage elev util 2", "t": later},
+    )  # 进电梯：坐标没变
+    worker.tick(session, ctx, later)
+    assert any("在电梯里选「大厅（Lobby）」" in h for h in huds)
 
 
 def test_station_leg_habs_floor_and_no_zone_fixes(monkeypatch, tmp_path):
@@ -854,6 +868,9 @@ def test_pos_hints_use_latest_read_even_when_hovering():
     from astral_toolkit.app.engines.pos import _Pos
 
     p = object.__new__(_Pos)
+    import threading
+
+    p._lock = threading.Lock()  # 跳过 __init__ 的替身：补上 RT-B5b 起 hints() 要用的锁
     p.latest = (_t.time() - 60, (1.0, 2.0, 3.0), {"zone": "old"})
     p.current = (
         _t.time(),

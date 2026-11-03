@@ -1631,7 +1631,14 @@ def test_nav_uses_display_info_waypoints_use_showlocation():
     from astral_toolkit.tasks import navigation as t_nav
     import astral_toolkit.app.engines.nav as nav_mod
 
-    run = inspect.getsource(nav_mod._Nav._run)
+    run = "\n".join(
+        inspect.getsource(fn)
+        for fn in (
+            nav_mod._NavWorker._first_tick,
+            nav_mod._NavWorker._ground_tick,
+            nav_mod._NavWorker._space_tick,
+        )
+    )
     assert (
         "showlocation(" not in run and "showloc import" not in run
     )  # 实时导航：读右上角，不往游戏里打字（读不到时只接玩家自己输的 /showlocation）

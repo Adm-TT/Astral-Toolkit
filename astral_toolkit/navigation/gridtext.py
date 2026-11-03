@@ -46,6 +46,7 @@ CAP_HEIGHT = 0.729  # 大写字母高 / 字号（Vera Sans Mono）
 FONT_RETRY = 15.0  # 画字模没成功（没在游戏里、没开调试信息）：过多久再试
 DIGITS = set("0123456789.")
 DASH_MIN = 0.3  # 负号最低相关（游戏的负号和字体的不太一样，要求放低，但完全不像就不算）
+SIGN_FAINT = 40  # CamDir 数字前那一格判成空白、可格子里还有这么亮的像素：可能是没认出的负号，写 ?（真空白实测 ≤ 20，负号 200 上下）
 MAX_SAMPLES = (
     40  # 每个字最多留几张学字样本（finalize 只用最后 40 张；多的删掉，免得内存一直涨）
 )
@@ -468,6 +469,32 @@ def _digit_context(out, sc_of, SK, keys):
             seg.append(i)
 
 
+def _faint_signs(out, imgs):
+    """CamDir 三个数：正数前面本来就有空格（游戏右对齐，正数的符号位是空白），不能按空格多少判丢负号（Astra 二轮研究 2026-11-03）。
+    改看像素：数字前一格判成了空白，但格子里还有明显的亮像素（负号太淡、没认出来）→ 写 ?，这一行作废；
+    真正干净的空白照常当空格，正数照常读。只管 CamDir: 到 FOV 之间，别的行不动"""
+    t = "".join(out)
+    c = t.find("CamDir:")
+    if c < 0:
+        return
+    f = t.find("FOV", c)
+    f = len(out) if f < 0 else f
+    lh = imgs.shape[1]
+    r0, r1 = (
+        int(lh * 0.25),
+        int(np.ceil(lh * 0.7)),
+    )  # 负号那一小横在字高中间（实测 13 行里第 5–6 行）
+    for i in range(c + len("CamDir:"), min(f, len(out) - 1)):
+        # 看中间那几行、左边列也看（左邻是空格，没有漏墨）；右边 2 列是后面数字漏进来的，不看。
+        # 负号格相位偏了一两像素、落在左边列里也查得到（DeepSeek 审查 2026-11-03）
+        if (
+            out[i] == " "
+            and out[i + 1] in "0123456789"
+            and float(imgs[i][r0:r1, :-2].max()) >= SIGN_FAINT
+        ):
+            out[i] = "?"
+
+
 def _is_dash(SK, j, kd, dig):
     """段首这一格是负号还是数字：负号那张字模比所有数字都像，或者数字里最像的也不太像（< 0.7）"""
     bd = max(SK[j, k] for k in dig)
@@ -656,6 +683,7 @@ class Glyphs:
             out.append(ch)
             sc_of.append(sc)  # noqa: E702
         _digit_context(out, sc_of, SK, keys)
+        _faint_signs(out, imgs)
         low = min([v for v, c in zip(sc_of, out) if c != " "] or [1.0])
         return "".join(out).strip(), low, scale
 

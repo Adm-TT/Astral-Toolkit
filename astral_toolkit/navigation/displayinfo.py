@@ -11,6 +11,7 @@
 
 import re
 import time
+from typing import Any
 
 REGION = (
     0.66,
@@ -372,7 +373,7 @@ NEED_ROW = re.compile(r"Zone|CamDir|player|locat|Planet", re.I)
 _NUM_Q = re.compile(r"\?(?=[\d.,])|(?<=[\d.,\-])\?")
 
 
-_CAM_LOST_SIGN = re.compile(r"(?<=[:\d]) {2,}(?=\d)")
+_CAM_ZERO = re.compile(r"(?<= )[Oo](?= )")
 _LOST_SIGN = re.compile(
     r"(?<=[:m]) {2,}(?=\d)"
 )  # 坐标固定一个空格隔开：Pos: / km / m 后面两个以上空格才接数字 = 中间那格是没认出的负号
@@ -381,15 +382,17 @@ _LOST_SIGN = re.compile(
 def grid_text(t):
     """字模认出的一行 → 给 parse 的文字：数字旁边认不出的格子（?）写成 #，让这个坐标解析失败（以前当空格删掉，
     「?2462326.4853km」会变成少一位的坐标，2026-10-27 补审）；别处的 ? 多半是邻格漏进来的墨，当空格。
-    负号只有一小横，字模有时把它当空格丢掉，两行会一起丢、照样「一致」：Pos: 后面出现双空格接数字就作废这一帧（2026-10-30）"""
+    负号只有一小横，字模有时把它当空格丢掉，两行会一起丢、照样「一致」：Pos: 后面出现双空格接数字就作废这一帧（2026-10-30）。
+    CamDir 不按空格判：游戏把三个角度右对齐，正数前面本来就是两个空格（以前当成丢了负号，正数整行作废，导航记号跟着消失，
+    Astra 二轮研究 2026-11-03）；负号没认出来的那一格由 gridtext._faint_signs 按像素写成 ?，这里照常变 # 作废"""
     t = _NUM_Q.sub("#", t).replace("?", " ")
     c = t.find("CamDir:")
-    if (
-        c >= 0
-    ):  # CamDir 三个数也是一个空格隔开：双空格接数字 = 负号丢了（审查 2026-10-31）
+    if c >= 0:
+        # 角度正好是 0：单独一个 0 前后都是空格，字模按字母认成 O，整行作废（老大 11-03 诊断：「-125   O   39」）。
+        # CamDir: 到 FOV 之间单独的 O / o 就是 0
         f = t.find("FOV", c)
         f = len(t) if f < 0 else f
-        t = t[:c] + _CAM_LOST_SIGN.sub(" #", t[c:f]) + t[f:]
+        t = t[:c] + _CAM_ZERO.sub("0", t[c:f]) + t[f:]
     i = t.find("Pos:")
     return t if i < 0 else t[:i] + _LOST_SIGN.sub(" #", t[i:])
 
@@ -413,6 +416,10 @@ def _grid_read(piece, screen_h):
         info = parse([grid_text(t) for _, t, _, _ in rows], need_both=True)
     if not info["global"]:
         return None
+    if not info.get("camdir"):  # 诊断用：镜头方向没读出来时，那一行字模认成了什么
+        info["cam_raw"] = next(
+            (grid_text(str(r[1])) for r in rows if CAMDIR.search(str(r[1]))), None
+        )
     if not only:
         need = [
             top for top, t, _, _ in rows if NEED_ROW.search(t) or LOC_LOOSE.search(t)
@@ -509,6 +516,9 @@ def _ocr_location(piece, arr, top, screen_h, key=None):
     没有就看这一行的字的像素（2026-10-27 实测：直接比像素，背后游戏画面一动就算变，平均 2 秒认一次，太勤）"""
     from . import gridtext
 
+    done = _LOC_JOB.pop("done", None)
+    if done is not None:  # 后台认完了：结果在读屏线程里收（学字模只在这个线程做）
+        _loc_accept(*done)
     lh = gridtext._for(screen_h).g.lh
     y0, y1 = max(0, top - 3), min(piece.height, top + lh + 3)
     band = arr[y0:y1]
@@ -524,14 +534,54 @@ def _ocr_location(piece, arr, top, screen_h, key=None):
     _loc["at"] = time.time()
     try:
         from PIL import Image
-        from ..ocr import read_line
 
         cols = (gridtext.textness(band) > 50).sum(0)
         xs = [x for x, v in enumerate(cols) if v]
         x0 = max(0, (xs[0] if xs else 0) - 4)
         img = piece.crop((x0, y0, piece.width, y1))
         img = img.resize((img.width * UPSCALE, img.height * UPSCALE), Image.LANCZOS)
-        text = read_line(img)[0]
+    except Exception:
+        return _loc["text"]
+    if getattr(_TL, "live", False):
+        # 实时读屏：识别引擎认一行要 0.5–1 秒，以前就在读位置的线程里等，坐标和镜头方向跟着停顿，
+        # 导航记号 1.5 秒没新读数就收起（老大 11-03 实测诊断：一分钟里 25 秒耗在这）。改成后台认，下次进来收结果
+        _loc_start(img, arr, top, lh, h, screen_h)
+        return _loc["text"]
+    try:
+        from ..ocr import read_line
+
+        return _loc_accept(read_line(img)[0], arr, top, lh, h, screen_h)
+    except Exception:
+        return _loc["text"]
+
+
+_LOC_JOB: dict[str, Any] = {"busy": False}
+
+
+def _loc_start(img, arr, top, lh, h, screen_h):
+    """地点那一行交给后台小线程认（同时只认一张）；认完的结果下次 _ocr_location 进来时收"""
+    if _LOC_JOB.get("busy"):
+        return
+    _LOC_JOB["busy"] = True
+
+    def run():
+        try:
+            from ..ocr import read_line
+
+            _LOC_JOB["done"] = (read_line(img)[0], arr, top, lh, h, screen_h)
+        except Exception:
+            pass
+        finally:
+            _LOC_JOB["busy"] = False
+
+    _threading.Thread(target=run, daemon=True, name="displayinfo-loc").start()
+
+
+def _loc_accept(text, arr, top, lh, h, screen_h):
+    """识别引擎认出的地点那一行 → 更新地点（认错字母的要连着两次一样才换），返回现在用的地点"""
+    from . import gridtext
+
+    try:
         m = LOC.search(text.replace("：", ":"))
         loc = m.group("loc").strip() if m else ""
         if not loc:  # 这次没认出来：保留上次的地点，过 2 秒再认（以前会把地点冲成空的）
@@ -625,12 +675,29 @@ def read(img=None, allow_yield=True):
         _YIELD["calib_at"] = time.time()
         skip = False
     _TL.skip_ocr = skip
+    _TL.live = img is None
     try:
         info = _grid_read(piece, screen_h)
     except Exception:
         info = None
     finally:
         _TL.skip_ocr = False
+        _TL.live = False
+    if img is None and info is not None:
+        _GRID_OK["at"] = time.time()
+    if (
+        info is None
+        and img is None
+        and not skip  # 给采矿助手让路：照旧走下面的「让路」（Reader 记让路时间、隔一会再试）
+        and was_ready
+        and time.time() - _GRID_OK["at"] < GRID_GRACE
+    ):
+        # 字模几秒前还读得出：多半是亮光 / 背景一时盖住了字（老大 11-03 实测截图），不换识别引擎
+        # （认一次几秒、之后还要隔 2 秒，导航记号就收了），当成快速读失败，0.2 秒后再用字模试
+        info = parse([])
+        info.update(fast=True, t=shot_at, grid_miss=True)
+        _diag(piece, screen_h, was_ready, info)
+        return info
     if info is None and skip:
         info = parse([])
         info.update(fast=False, yielded=True, t=shot_at)
@@ -649,7 +716,52 @@ def read(img=None, allow_yield=True):
     elif was_ready:
         gridtext.note(True)
     info["t"] = shot_at
+    if img is None:
+        _diag(piece, screen_h, was_ready, info)
     return info
+
+
+_GRID_OK = {"at": 0.0}  # 实时读屏字模最近一次读出来的时间
+GRID_GRACE = 3.0  # 字模这么久内读出来过：这一帧读不出先不换识别引擎
+_DIAG = {"shot_at": 0.0}
+DIAG_SHOT_EVERY = 5.0  # 字模没读出来的画面最多每 5 秒存一张
+DIAG_KEEP = 15
+
+
+def _diag(piece, screen_h, was_ready, info):
+    """实时读右上角的诊断（老大 11-03 实测「记号还是消失、转向不跟手」，要数据定位）：
+    每次读一行进 logs/di_log.txt（字模好没好、走的哪条路、有没有坐标、有没有镜头方向）；
+    字模没读出来的画面存到 shots/di_fail（最多 15 张，只有右上角这一小块）"""
+    try:
+        from ..core import paths
+
+        fast = bool(info.get("fast"))
+        if info.get("grid_miss"):
+            fast = True  # 字模这帧没读出、在等下一帧：不是识别引擎读的，也不存图
+        line = (
+            f"{time.strftime('%H:%M:%S')}.{int(time.time() * 1000) % 1000:03d} "
+            f"h={screen_h} 字模={'好' if was_ready else '没好'} 路={'字模没读出' if info.get('grid_miss') else '字模' if fast else '识别引擎'} "
+            f"坐标={'有' if info.get('global') else '无'} 镜头={info.get('camdir')}"
+            + (
+                f" 原文={info.get('cam_raw')!r}"
+                if info.get("global") and not info.get("camdir")
+                else ""
+            )
+            + "\n"
+        )
+        with paths.log("di_log.txt").open("a", encoding="utf-8") as f:
+            f.write(line)
+        now = time.time()
+        if not fast and now - _DIAG["shot_at"] >= DIAG_SHOT_EVERY:
+            _DIAG["shot_at"] = now
+            d = paths.shots("di_fail")
+            piece.save(d / f"{time.strftime('%H%M%S')}_{screen_h}.png")
+            for old in sorted(d.glob("*.png"), key=lambda p: p.stat().st_mtime)[
+                :-DIAG_KEEP
+            ]:
+                old.unlink()
+    except Exception:
+        pass
 
 
 class Reader:
