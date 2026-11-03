@@ -129,15 +129,16 @@ def main(open_ui=True, port=0, restart=False):
         target=server.serve_forever, daemon=True, name="http"
     )
     http_thread.start()
+    from .engines.manager import EngineManager
+
+    # 网页服务一起来就登记收尾（展示流排空 → 关网页服务）：后面悬浮窗 / 后台启动出错，退出时也照样关（审查 RT-B6）
+    EngineManager.get_instance().lifecycle.register(
+        _FinalService(ui_stream, server, http_thread)
+    )
     from .overlay import hud
 
     hud()
     _sys_task.start_background()  # = EngineManager.get_instance().start_all()
-    from .engines.manager import EngineManager
-
-    EngineManager.get_instance().lifecycle.register(
-        _FinalService(ui_stream, server, http_thread)
-    )
     print(f"AT 已启动（端口 {server.server_address[1]}）")
     from ..core import run_records
 
