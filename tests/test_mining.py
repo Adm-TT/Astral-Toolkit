@@ -125,16 +125,16 @@ def test_i18n_minerals():
 
 
 def test_calibration_from_observations(monkeypatch, tmp_path):
-    import tempfile
-    from pathlib import Path
     from astral_toolkit.mining import laser as calibrate
     from astral_toolkit.mining.laser import active_model
 
     _author_mole(
         monkeypatch, tmp_path
     )  # 按作者的 MOLE 配装（Helix II 带满模组），不读电脑上真实的设置
+    from tests.minipytest import tmpdir
+
     old = calibrate.LOG
-    calibrate.LOG = Path(tempfile.mkdtemp()) / "obs.csv"
+    calibrate.LOG = tmpdir() / "obs.csv"
     try:
         assert active_model() == ("user", 0.2)
         # Helix II 满配输出 ≈7318 W（0% 抗性）
@@ -457,8 +457,6 @@ def test_nav_matches_starmap():
 
 
 def test_waypoints_and_latlon(tmp=None):
-    import tempfile
-    from pathlib import Path
 
     n, d = _nav_data()
     loc = n.from_latlon(54.5397, 38.0131, 295, 488)
@@ -469,8 +467,10 @@ def test_waypoints_and_latlon(tmp=None):
         and abs(r - 295.488) < 1e-6
     )
     assert n.direct_km(loc, n.pos(d["pois"][0])) < 0.1  # 就是 Sand Cave #003
+    from tests.minipytest import tmpdir
+
     old = n.WAYPOINTS
-    n.WAYPOINTS = Path(tempfile.mkdtemp()) / "waypoints.json"
+    n.WAYPOINTS = tmpdir() / "waypoints.json"
     try:
         n.add_waypoint("集合点", "Daymar", loc)
         hits, _ = n.search("集合点", d)
@@ -626,12 +626,12 @@ def test_nearby_and_feed():
 
 
 def test_settings_roundtrip():
-    import tempfile
     from pathlib import Path
     from astral_toolkit.core import settings
+    from tests.minipytest import tmpdir
 
     old = settings.FILE
-    settings.FILE = Path(tempfile.mkdtemp()) / "settings.json"
+    settings.FILE = Path(tmpdir()) / "settings.json"
     try:
         c = settings.load()
         assert c["admin"] is None

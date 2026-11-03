@@ -969,6 +969,39 @@ def test_superseded_during_finish_output_leaves_no_residue():
         loop.join(session_id=loop.state().session_id)
 
 
+def test_start_after_stopped_thread_is_not_superseded():
+    """已经写 STOPPED、线程还没退完：按开始直接开新会话，不进 pending、不记取代"""
+    gate = Gate()
+    worker = FakeWorker(wait=0.01)
+    loop, _, out = make_loop(worker, join_timeout=0.02)
+    old_hook = loop._finish_hook
+    loop._finish_hook = gate.hold
+    try:
+        sid_a = _start(loop, worker)
+        loop.request_stop_current(StopInfo("user"))
+        assert gate.entered.wait(WAIT)
+        assert loop.state().state is RunState.STOPPED
+        assert loop.state().current_alive
+        out.clear()
+        sid_b = loop.start()
+        assert sid_b is not None and sid_b != sid_a
+        assert _wait_state(loop, RunState.RUNNING)
+        assert loop.state().pending == ()
+        assert not any("上次停止还没结束" in op[2] for op in out.records())
+        assert (
+            len([c for c in worker.calls if c[0] == "stop_ops" and c[1] == sid_a]) == 1
+        )
+        gate.release.set()
+        assert loop.state().session_id == sid_b
+        loop.request_stop_current(StopInfo("user"))
+        assert loop.join(session_id=sid_b)
+    finally:
+        loop._finish_hook = old_hook
+        gate.release.set()
+        loop.request_stop_current(StopInfo("user"))
+        loop.join(session_id=loop.state().session_id)
+
+
 def test_join_of_a_running_session_only_times_out():
     """3-5：RUNNING 时 join 超时不起看门狗、不标停止超时；之后按停止 → 超时前 start 被拒、超时后能开"""
     gate = Gate()
