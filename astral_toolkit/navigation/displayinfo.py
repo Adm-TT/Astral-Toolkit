@@ -643,7 +643,42 @@ def read(img=None, allow_yield=True):
     elif was_ready:
         gridtext.note(True)
     info["t"] = shot_at
+    if img is None:
+        _diag(piece, screen_h, was_ready, info)
     return info
+
+
+_DIAG = {"shot_at": 0.0}
+DIAG_SHOT_EVERY = 5.0  # 字模没读出来的画面最多每 5 秒存一张
+DIAG_KEEP = 15
+
+
+def _diag(piece, screen_h, was_ready, info):
+    """实时读右上角的诊断（老大 11-03 实测「记号还是消失、转向不跟手」，要数据定位）：
+    每次读一行进 logs/di_log.txt（字模好没好、走的哪条路、有没有坐标、有没有镜头方向）；
+    字模没读出来的画面存到 shots/di_fail（最多 15 张，只有右上角这一小块）"""
+    try:
+        from ..core import paths
+
+        fast = bool(info.get("fast"))
+        line = (
+            f"{time.strftime('%H:%M:%S')}.{int(time.time() * 1000) % 1000:03d} "
+            f"h={screen_h} 字模={'好' if was_ready else '没好'} 路={'字模' if fast else '识别引擎'} "
+            f"坐标={'有' if info.get('global') else '无'} 镜头={info.get('camdir')}\n"
+        )
+        with paths.log("di_log.txt").open("a", encoding="utf-8") as f:
+            f.write(line)
+        now = time.time()
+        if not fast and now - _DIAG["shot_at"] >= DIAG_SHOT_EVERY:
+            _DIAG["shot_at"] = now
+            d = paths.shots("di_fail")
+            piece.save(d / f"{time.strftime('%H%M%S')}_{screen_h}.png")
+            for old in sorted(d.glob("*.png"), key=lambda p: p.stat().st_mtime)[
+                :-DIAG_KEEP
+            ]:
+                old.unlink()
+    except Exception:
+        pass
 
 
 class Reader:
