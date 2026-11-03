@@ -4,7 +4,12 @@
 import os
 import tempfile
 
-os.environ["LOCALAPPDATA"] = tempfile.mkdtemp(prefix="at_test_localappdata_")
+from tests.minipytest import ROOT as _TMP_ROOT
+
+# 放在本轮临时目录里：不往 C 盘写，全部通过时跟着一起删
+os.environ["LOCALAPPDATA"] = tempfile.mkdtemp(
+    prefix="at_test_localappdata_", dir=_TMP_ROOT
+)
 os.environ["AT_FEEDBACK_OFF"] = (
     "1"  # 测试一律不往服务器发反馈：以前只在 run_all 里设，单跑一个模块会漏（2026-11-01 收件箱出现过测试数据）
 )

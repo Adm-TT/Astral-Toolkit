@@ -32,6 +32,10 @@ def _never() -> bool:
     return False
 
 
+def _noop() -> None:
+    pass
+
+
 class RunState(Enum):
     """会话状态（架构稿 §7.4）。FAILED 只在工作线程已经退出后出现（出错用尽）"""
 
@@ -255,6 +259,9 @@ class SessionLoop:
         self._join_timeout = join_timeout
         self._run_flag = run_flag
         self._closing = closing
+        self._finish_hook: Callable[[], object] = (
+            _noop  # 只给测试：线程收尾最后一步前停住
+        )
         self._lock = _OwnedLock()
         self._flag_lock = threading.Lock()
         self._flag_want: bool | None = None
@@ -368,13 +375,7 @@ class SessionLoop:
                 RunState.PAUSED,
             ):
                 return cur.session.id if cur.session.payload == payload else None
-            if cur is not None and (
-                cur.state is RunState.STOPPING
-                or (
-                    cur.state in (RunState.STOPPED, RunState.FAILED)
-                    and cur.thread.is_alive()
-                )
-            ):
+            if cur is not None and cur.state is RunState.STOPPING:
                 if cur.thread.is_alive():
                     if not self._may_replace_locked(cur):
                         return None
@@ -1055,3 +1056,4 @@ class SessionLoop:
                 pending = self._pending.pop(session.id, None)
                 if pending is not None:
                     pending.stop_timeout = False
+        self._finish_hook()

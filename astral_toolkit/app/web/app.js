@@ -1001,6 +1001,7 @@ function drawMineral() {
   const box = $("#iout"), m = state.mineral;
   if (!box || !m) return;
   document.querySelectorAll("#ilist button").forEach((b) => b.classList.toggle("on", b.dataset.m === m.en));
+  document.querySelectorAll("#ilist button[data-i]").forEach((b) => b.classList.remove("on"));
   box.innerHTML = `<div class="panel"><div class="item-head"><span class="name">${esc(m.zh)}</span><span class="muted">${esc(m.en)}</span><span class="tag">${m.gem ? esc(m.gem.kind) : "矿物"}${m.rarity ? "｜" + esc(m.rarity) : ""}</span><span style="margin-left:auto"><button class="btn small" id="to-stock" title="在库存页入库此矿物">入库</button></span></div>
     ${m.gem ? `<p class="muted" style="margin:0">信号 ${money(m.gem.rs)} / 块｜终端价 ${m.gem.price ? `<span class="money">${money(m.gem.price)}</span> aUEC/个` : "暂无"}｜共 ${m.total} 个地点</p>
     <p class="muted" style="margin:4px 0 0">不稳定性 ${esc(m.gem.inst)}｜抗性 ${esc(m.gem.res)}</p>${goalBox([m.goal])}</div>`
@@ -1708,6 +1709,11 @@ function drawItem() {
   const box = $("#iout");
   if (!box || !state.item) return;
   const it = state.item;
+  document.querySelectorAll("#ilist button").forEach((b) => {
+    const i = b.dataset.i;
+    const r = i === undefined ? null : state.itemRows && state.itemRows[+i];
+    b.classList.toggle("on", !!r && r.name === it.name && r.id === it.id);
+  });
   const near = it.here ? `按距当前位置远近排序：${it.here.label}${it.here.minutes > 10 ? `，${it.here.minutes} 分钟前` : ""}` : "按价格从低到高排序（打开过游戏库存后按远近排序）";
   const ways = [];
   if (it.nowhere) {                                          // 只有汉化包里有名字（1.6.41）

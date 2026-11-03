@@ -27,6 +27,7 @@
 !/商标和图标说明.txt
 !/latest.json
 !/data.json
+/.test_tmp/
 # docs 里只有 README 用的公开截图，其余是内部文档
 /docs/*
 !/docs/download_cn.png
