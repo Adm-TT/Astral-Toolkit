@@ -25,6 +25,7 @@ from typing import Any, Callable
 
 from .. import bus
 from ..output import BusOutput
+from ..presenters.nav import activity as _nav_activity
 from ...runtime.results import ResultStore
 from ...runtime.session import (
     RunState,
@@ -194,6 +195,7 @@ class _NavCtx:
         self.last_view = None
         self.steady = _Steady()
         self.seen = 0.0
+        self.last_ok = 0.0
         self.prev_goal = None
         self.plan = {}
         self.mk_seen = None
@@ -208,6 +210,7 @@ class _NavWorker:
     """导航 Worker：只做一轮位置判断 / 定位 / 视图 / nav_tip，输出统一走 loop.commit"""
 
     name: str = "nav"
+    activity_kind: str = "nav"
     retries: int = 3
     idle_close: float | None = None
     stale_after: dict[str, float] = {}
@@ -245,7 +248,17 @@ class _NavWorker:
         return ""
 
     def start_ops(self, session: Session) -> list[tuple[Any, ...]]:
-        return []
+        payload = session.payload
+        if not isinstance(payload, NavPayload):
+            return []
+        view = {
+            "state": "starting",
+            "quality": "partial",
+            "here": None,
+            "status": None,
+            "stale_since": None,
+        }
+        return [("ui", "ui.activity", _nav_activity(session.id, payload, view))]
 
     def stop_ops(
         self, session: Session | None, info: StopInfo
@@ -361,13 +374,28 @@ class _NavWorker:
                 "status": hint,
                 "help": "",
             }
+            ctx.state = state
+            activity = _nav_activity(
+                session.id,
+                ctx.payload,
+                {
+                    "state": "starting",
+                    "quality": "partial",
+                    "here": None,
+                    "status": hint,
+                    "stale_since": None,
+                },
+            )
             hud = f"→ {n.label(target)}\n" + (
                 f"按 {key} 后输入 /showlocation 定位"
                 if hint.startswith("一键定位")
                 else hint
             )
             ok = self._require_loop().commit(
-                session, ("bus", "nav", state), ("hud.set", "导航", hud)
+                session,
+                ("bus", "nav", state),
+                ("hud.set", "导航", hud),
+                ("ui", "ui.activity", activity),
             )
             if ok:
                 ctx.clip_seen = n.read_clipboard()
@@ -382,10 +410,22 @@ class _NavWorker:
             "here": None,
         }
         ctx.state = state
+        activity = _nav_activity(
+            session.id,
+            ctx.payload,
+            {
+                "state": "starting",
+                "quality": "partial",
+                "here": None,
+                "status": state["status"],
+                "stale_since": None,
+            },
+        )
         ok = self._require_loop().commit(
             session,
             ("bus", "nav", state),
             ("hud.set", "导航", f"{head}\n等待位置信息…"),
+            ("ui", "ui.activity", activity),
         )
         if not ok:
             return False
@@ -487,10 +527,22 @@ class _NavWorker:
             "help": "",
             "at": time.strftime("%H:%M:%S"),
         }
+        activity = _nav_activity(
+            session.id,
+            ctx.payload,
+            {
+                "state": "running",
+                "quality": "partial",
+                "here": view,
+                "status": state["status"],
+                "stale_since": None,
+            },
+        )
         ok = self._require_loop().commit(
             session,
             ("bus", "nav", state),
             ("hud.set", "导航", f"→ {n.label(target)}\n{text}"),
+            ("ui", "ui.activity", activity),
         )
         if not ok:
             return None
@@ -514,6 +566,7 @@ class _NavWorker:
             data = ctx.data = n.load()
         snap = self._pos.snapshot()
         fresh = False
+        by_clip = False
         got: tuple[Any, dict[str, Any], bool] | None = None
         cur = snap.current
         if (
@@ -645,6 +698,7 @@ class _NavWorker:
                 except Exception:
                     pass
             fresh = True
+            ctx.last_ok = time.time()
         head = f"→ {n.label(target)}"
         stat_text, tip = nav_tip(
             snap.reader_active,
@@ -662,6 +716,20 @@ class _NavWorker:
         ops: list[tuple[Any, ...]] = []
         if pub is not None:
             ops.append(("bus", "nav", pub))
+            act_state = "running" if fresh else "stale"
+            stale_since = None
+            if act_state == "stale":
+                stale_since = snap.reader_ok_at or ctx.last_ok or None
+            act_view = {
+                "state": act_state,
+                "quality": "partial" if (not fresh or by_clip) else "complete",
+                "here": pub.get("here"),
+                "status": pub.get("status"),
+                "stale_since": stale_since,
+            }
+            ops.append(
+                ("ui", "ui.activity", _nav_activity(session.id, ctx.payload, act_view))
+            )
         ops.append(("hud.set", "导航", f"{head}\n{ctx.shown or '等待位置信息…'}" + tip))
         ok = self._require_loop().commit(session, *ops)
         if not ok:

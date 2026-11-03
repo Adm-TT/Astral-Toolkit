@@ -16,6 +16,7 @@ import threading
 import time
 
 from .presenters.mining import tile_status as mining_tile_status
+from .presenters.nav import tile_status as nav_tile_status
 
 PROTOCOL = "ui/1"
 instance_id = secrets.token_urlsafe(18)  # 进程启动一次，重启就换
@@ -172,8 +173,13 @@ def _derive_tiles_locked(publish):
         if isinstance(runtime, dict):
             derived["mining"].update(mining_tile_status(on, runtime))
     nav_id = _current_activity_id("nav")
-    if "nav_running" in _switches:
-        derived["nav"] = _make_tile("nav", _switches["nav_running"], nav_id)
+    if "nav_running" in _switches or "nav_runtime" in _switches:
+        runtime = _switches.get("nav_runtime")
+        # on 只看 nav_running：bus「已停止」比下一次采样先到时它已是新值，不能被旧采样的 running 盖回去（K0c 审查）
+        on = bool(_switches.get("nav_running"))
+        derived["nav"] = _make_tile("nav", on, nav_id)
+        if isinstance(runtime, dict):
+            derived["nav"].update(nav_tile_status(on, runtime))
     if "position_active" in _switches:
         tile = _make_tile("position", _switches["position_active"])
         derived["position"] = tile
@@ -447,9 +453,17 @@ def _clean_switches(switches):
         "hover_on",
         "overlay_on",
     )
-    clean = {key: bool(switches[key]) for key in allowed if key in switches}
+    clean: dict[str, object] = {
+        key: bool(switches[key]) for key in allowed if key in switches
+    }
     if isinstance(switches.get("mining_runtime"), dict):
         clean["mining_runtime"] = _copy(switches["mining_runtime"])
+    if isinstance(switches.get("nav_runtime"), dict):
+        clean["nav_runtime"] = _copy(switches["nav_runtime"])
+    elif "nav_runtime" in switches and switches["nav_runtime"] is None:
+        clean["nav_runtime"] = (
+            None  # 本轮确认没有导航循环：清掉旧运行事实，回落到 nav_running
+        )
     return clean
 
 
@@ -478,6 +492,13 @@ def set_switches(switches, read_mono=None, expected_revision=None):
         ):
             # 开停消息比采样先到：保留旧线程收尾事实，开启许可等新采样确认。
             _switches["mining_runtime"] = {**runtime, "pending_read": True}
+        nav_runtime = _switches.get("nav_runtime")
+        if (
+            "nav_runtime" not in clean
+            and "nav_running" in clean
+            and isinstance(nav_runtime, dict)
+        ):
+            _switches["nav_runtime"] = {**nav_runtime, "pending_read": True}
         _switches.update(clean)
         _switch_revision += 1
         _derive_tiles_locked(True)
@@ -503,6 +524,24 @@ def _read_mining_state(loop):
         return {
             "state": state.state.value,
             "running": state.state.value in ("starting", "running", "paused"),
+            "draining": state.prev_stop_pending,
+            "can_start": can_start,
+        }
+    except Exception:
+        return None
+
+
+def _read_nav_state(loop):
+    """只能在展示锁外读；前后两次 state() 不一致就这轮不采。"""
+    try:
+        state = loop.state()
+        can_start = loop.can_start()
+        if loop.state() != state:
+            return None
+        running = state.state.value in ("starting", "running", "paused")
+        return {
+            "state": state.state.value,
+            "running": running,
             "draining": state.prev_stop_pending,
             "can_start": can_start,
         }
@@ -549,9 +588,17 @@ def read_switches():
             running = _call_running(live)
             if running is not None:
                 out["live_running"] = running
-        running = _call_running(getattr(engines, "nav", None))
-        if running is not None:
-            out["nav_running"] = running
+        nav = getattr(engines, "nav", None)
+        nav_loop = getattr(nav, "loop", None)
+        if nav_loop is not None:
+            runtime = _read_nav_state(nav_loop)
+            if runtime is not None:
+                out.update(nav_running=runtime["running"], nav_runtime=runtime)
+        else:
+            out["nav_runtime"] = None
+            running = _call_running(nav)
+            if running is not None:
+                out["nav_running"] = running
         pos = getattr(engines, "pos", None)
         reader = getattr(pos, "reader", None)
         if reader is not None and hasattr(reader, "active"):

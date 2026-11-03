@@ -41,6 +41,17 @@ def _live_switch(data):
         pass
 
 
+def _nav_switch(data):
+    """导航开关变了：只用这条消息本身更新磁贴开关（锁内不读运行层）。"""
+    if not isinstance(data, dict) or "active" not in data:
+        return
+    try:
+        on = bool(data["active"])
+        ui_stream.set_switches({"nav_running": on}, read_mono=time.monotonic())
+    except Exception:
+        pass
+
+
 class BusOutput:
     def apply(self, op):
         kind, *args = op
@@ -48,6 +59,8 @@ class BusOutput:
             bus.publish(*args)
             if args and args[0] == "live":
                 _live_switch(args[1] if len(args) > 1 else None)
+            elif args and args[0] == "nav":
+                _nav_switch(args[1] if len(args) > 1 else None)
         elif kind == "ui":
             ui_stream.publish_ui(args[0], args[1])
         elif kind == "hud.set":
