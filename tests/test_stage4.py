@@ -225,6 +225,33 @@ def test_no_services_module():
     assert not bad, bad
 
 
+def test_feedback_scrub_unicode_paths_inside_json(monkeypatch, tmp_path):
+    """中文路径即使转成 JSON 的 Unicode 转义，也不能留在反馈文字里。"""
+    import json
+
+    from astral_toolkit.core import paths
+    from astral_toolkit.tasks import system as t_sys
+
+    root = tmp_path / "中文目录"
+    monkeypatch.setattr(paths, "ROOT", root)
+    monkeypatch.setattr(paths, "USER", root / "userdata")
+    monkeypatch.setattr(paths, "DATA", root / "data")
+    source = json.dumps(
+        {
+            "native": str(root / "userdata" / "settings.json"),
+            "slash": (root / "data" / "shops.json").as_posix(),
+            "note": "普通中文说明保留",
+        }
+    )
+    scrubbed = t_sys._scrub(source)
+    decoded = json.loads(scrubbed)
+    assert decoded["native"].startswith("<USERDATA>")
+    assert decoded["slash"] == "<DATA>/shops.json"
+    assert decoded["note"] == "普通中文说明保留"
+    assert str(tmp_path) not in scrubbed
+    assert json.dumps(str(tmp_path))[1:-1] not in scrubbed
+
+
 def test_feedback_scrub_personal_info(monkeypatch, tmp_path):
     """反馈包里的日志、情况.json：AT / 数据 / userdata 文件夹换成占位符，别的 C:\\Users\\<名字> 也抹掉，网址里的口令换掉
     （审查 2026-10-31：日志尾巴原样进反馈包、默认自动上传，会带出 Windows 用户名）"""

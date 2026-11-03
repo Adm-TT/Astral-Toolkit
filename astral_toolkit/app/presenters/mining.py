@@ -7,6 +7,34 @@ from ...mining.analysis import MiningResult, PlanFacts, Rank
 RANK_ZH = {Rank.HIGH: "高品质", Rank.MID: "中等品质", Rank.LOW: "低品质"}
 
 
+def tile_status(on: bool, runtime: dict) -> dict:
+    """只映射运行事实；开启仍由运行层复核，旧线程收尾不妨碍停止新会话。"""
+    draining = bool(runtime.get("draining"))
+    pending_read = bool(runtime.get("pending_read"))
+    if on:
+        line = (
+            "已暂停"
+            if runtime.get("state") == "paused" and not pending_read
+            else "运行中"
+        )
+        if draining:
+            line += "，旧线程仍在收尾"
+        return {"status_line": line, "available": {"ok": True}}
+    can_start = bool(runtime.get("can_start")) and not pending_read
+    if draining:
+        line = "正在收尾，可重新开启" if can_start else "正在收尾，请稍候"
+    elif runtime.get("running") or pending_read:
+        # 停止消息已到、下一次运行快照还没到：不能用旧的运行态报「已关闭」。
+        line = "正在停止，请稍候"
+        can_start = False
+    else:
+        line = "已关闭" if can_start else "暂不能开启"
+    available: dict[str, object] = {"ok": can_start}
+    if not can_start:
+        available["reason"] = line
+    return {"status_line": line, "available": available}
+
+
 def _thaw(value):
     """结果里的只读结构变回 JSON 用的 dict / list，每次新建"""
     if isinstance(value, Mapping):

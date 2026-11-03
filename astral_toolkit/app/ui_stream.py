@@ -15,6 +15,8 @@ import secrets
 import threading
 import time
 
+from .presenters.mining import tile_status as mining_tile_status
+
 PROTOCOL = "ui/1"
 instance_id = secrets.token_urlsafe(18)  # 进程启动一次，重启就换
 INSTANCE_ID = instance_id
@@ -37,6 +39,7 @@ _notice_times = {}
 _ended = {}
 _switches = {}
 _switch_read_mono = None
+_switch_revision = 0  # 仅保护锁外采样提交，不进入展示协议
 _shutting_down = False
 
 
@@ -165,6 +168,9 @@ def _derive_tiles_locked(publish):
     if "live_on" in _switches or "live_running" in _switches:
         on = bool(_switches.get("live_on") or _switches.get("live_running"))
         derived["mining"] = _make_tile("mining", on, mining_id)
+        runtime = _switches.get("mining_runtime")
+        if isinstance(runtime, dict):
+            derived["mining"].update(mining_tile_status(on, runtime))
     nav_id = _current_activity_id("nav")
     if "nav_running" in _switches:
         derived["nav"] = _make_tile("nav", _switches["nav_running"], nav_id)
@@ -350,9 +356,8 @@ def subscribe(maxsize=None):
     with _lock:
         if _shutting_down:
             return _closed_locked(), None
-    read_mono = time.monotonic()
     try:
-        set_switches(read_switches(), read_mono=read_mono)
+        refresh_switches()
     except Exception:
         pass
     q = queue.Queue(maxsize=maxsize)
@@ -442,14 +447,19 @@ def _clean_switches(switches):
         "hover_on",
         "overlay_on",
     )
-    return {key: bool(switches[key]) for key in allowed if key in switches}
+    clean = {key: bool(switches[key]) for key in allowed if key in switches}
+    if isinstance(switches.get("mining_runtime"), dict):
+        clean["mining_runtime"] = _copy(switches["mining_runtime"])
+    return clean
 
 
-def set_switches(switches, read_mono=None):
+def set_switches(switches, read_mono=None, expected_revision=None):
     """开关变化唯一入口：锁内派生磁贴，有变化就分配 ui_seq 并广播 ui.tile。"""
-    global _switch_read_mono
+    global _switch_read_mono, _switch_revision
     with _lock:
         if _shutting_down:
+            return _seq
+        if expected_revision is not None and expected_revision != _switch_revision:
             return _seq
         if (
             read_mono is not None
@@ -459,7 +469,17 @@ def set_switches(switches, read_mono=None):
             return _seq
         if read_mono is not None:
             _switch_read_mono = read_mono
-        _switches.update(_clean_switches(switches))
+        clean = _clean_switches(switches)
+        runtime = _switches.get("mining_runtime")
+        if (
+            "mining_runtime" not in clean
+            and ("live_on" in clean or "live_running" in clean)
+            and isinstance(runtime, dict)
+        ):
+            # 开停消息比采样先到：保留旧线程收尾事实，开启许可等新采样确认。
+            _switches["mining_runtime"] = {**runtime, "pending_read": True}
+        _switches.update(clean)
+        _switch_revision += 1
         _derive_tiles_locked(True)
         return _seq
 
@@ -473,24 +493,62 @@ def _call_running(obj):
     return bool(value)
 
 
+def _read_mining_state(loop):
+    """只能在展示锁外读；跨调用碰上会话变化就留待下一轮，不拼接两个时刻。"""
+    try:
+        state = loop.state()
+        can_start = loop.can_start()
+        if loop.state() != state:
+            return None
+        return {
+            "state": state.state.value,
+            "running": state.state.value in ("starting", "running", "paused"),
+            "draining": state.prev_stop_pending,
+            "can_start": can_start,
+        }
+    except Exception:
+        return None
+
+
 def read_switches():
     """在锁外读现有开关状态；读不到的项目不放进来，也不生成对应磁贴"""
     out = {}
-    try:
-        from ..core import settings
-
-        cfg = settings.load()
-        if isinstance(cfg, dict) and "live_on" in cfg:
-            out["live_on"] = bool(cfg.get("live_on"))
-    except Exception:
-        pass
+    engines = live = loop = None
     try:
         from ..tasks.system.common import _engines
 
         engines = _engines()
-        running = _call_running(getattr(engines, "live", None))
-        if running is not None:
-            out["live_running"] = running
+        live = getattr(engines, "live", None)
+        loop = getattr(live, "loop", None)
+    except Exception:
+        pass
+    if loop is None:
+        # 有会话循环时 live_on 以运行事实为准，不用每秒读一次设置文件
+        try:
+            from ..core import settings
+
+            cfg = settings.load()
+            if isinstance(cfg, dict) and "live_on" in cfg:
+                out["live_on"] = bool(cfg.get("live_on"))
+        except Exception:
+            pass
+    try:
+        if engines is None:
+            raise LookupError
+        if loop is not None:
+            # 运行事实优先于持久化开关；采样不完整时保留上次展示，不用旧设置覆盖。
+            out.pop("live_on", None)
+            runtime = _read_mining_state(loop)
+            if runtime is not None:
+                out.update(
+                    live_on=runtime["running"],
+                    live_running=runtime["running"],
+                    mining_runtime=runtime,
+                )
+        else:
+            running = _call_running(live)
+            if running is not None:
+                out["live_running"] = running
         running = _call_running(getattr(engines, "nav", None))
         if running is not None:
             out["nav_running"] = running
@@ -505,8 +563,14 @@ def read_switches():
 
 def refresh_switches():
     """刷新一次运行层开关；有变化走 set_switches()，因而会广播 ui.tile。"""
+    with _lock:
+        if _shutting_down:
+            return _seq
+        revision = _switch_revision
     read_mono = time.monotonic()
-    return set_switches(read_switches(), read_mono=read_mono)
+    return set_switches(
+        read_switches(), read_mono=read_mono, expected_revision=revision
+    )
 
 
 def dismiss_notice(notice_id):
@@ -592,6 +656,7 @@ def encode(msg):
 def reset_for_tests():
     """只给测试用：清空本模块的进程内状态，不换 instance_id"""
     global _seq, _notice_seq, _conn_seq, _shutting_down, _switches, _switch_read_mono
+    global _switch_revision
     with _idle:
         _subs.clear()
         _queues.clear()
@@ -605,5 +670,6 @@ def reset_for_tests():
         _ended.clear()
         _switches = {}
         _switch_read_mono = None
+        _switch_revision = 0
         _shutting_down = False
         _idle.notify_all()
