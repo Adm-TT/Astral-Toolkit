@@ -982,6 +982,7 @@ def test_start_after_stopped_thread_is_not_superseded():
         assert gate.entered.wait(WAIT)
         assert loop.state().state is RunState.STOPPED
         assert loop.state().current_alive
+        assert loop.can_start(), "can_start 和 start 判断要一致"
         out.clear()
         sid_b = loop.start()
         assert sid_b is not None and sid_b != sid_a
