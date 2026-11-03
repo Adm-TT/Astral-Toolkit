@@ -62,7 +62,9 @@ def warm_up():
         except Exception:
             pass
 
-    threading.Thread(target=run, daemon=True, name="search-warmup").start()
+    thread = threading.Thread(target=run, daemon=True, name="search-warmup")
+    thread.start()
+    return thread
 
 
 def _empty_index():

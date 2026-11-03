@@ -207,13 +207,26 @@ class Monitor:
     def __init__(self):
         self.thread = None
         self.prev = {}
+        self.stop_ev = threading.Event()
 
     def start(self):
-        if not self.thread:
-            self.thread = threading.Thread(
-                target=self._run, daemon=True, name="perfmon"
-            )
-            self.thread.start()
+        if self.thread is not None and self.thread.is_alive():
+            return
+        self.stop_ev.clear()
+        self.thread = threading.Thread(target=self._run, daemon=True, name="perfmon")
+        self.thread.start()
+
+    def request_stop(self):
+        self.stop_ev.set()
+
+    def join(self, timeout=None):
+        thread = self.thread
+        if thread is None:
+            return True
+        if thread is threading.current_thread():
+            return not thread.is_alive()
+        thread.join(timeout)
+        return not thread.is_alive()
 
     def sample(self):
         """{名字: (累计 CPU 秒, 实占内存 MB, 提交内存 MB)}"""
@@ -260,8 +273,7 @@ class Monitor:
         path = log("perf_log.txt")
         last = time.time()
         self.prev = self.sample()
-        while True:
-            time.sleep(EVERY)
+        while not self.stop_ev.wait(EVERY):
             try:
                 now = time.time()
                 cur = self.sample()
