@@ -479,11 +479,18 @@ def _faint_signs(out, imgs):
         return
     f = t.find("FOV", c)
     f = len(out) if f < 0 else f
+    lh = imgs.shape[1]
+    r0, r1 = (
+        int(lh * 0.25),
+        int(np.ceil(lh * 0.7)),
+    )  # 负号那一小横在字高中间（实测 13 行里第 5–6 行）
     for i in range(c + len("CamDir:"), min(f, len(out) - 1)):
+        # 看中间那几行、左边列也看（左邻是空格，没有漏墨）；右边 2 列是后面数字漏进来的，不看。
+        # 负号格相位偏了一两像素、落在左边列里也查得到（DeepSeek 审查 2026-11-03）
         if (
             out[i] == " "
             and out[i + 1] in "0123456789"
-            and float(imgs[i][:, 2:-2].max()) >= SIGN_FAINT
+            and float(imgs[i][r0:r1, :-2].max()) >= SIGN_FAINT
         ):
             out[i] = "?"
 

@@ -149,3 +149,24 @@ def test_faint_signs_only_touches_camdir_sign_slots():
     out = list(pos)
     _faint_signs(out, np.full((len(pos), 12, 8), 255, np.float32))
     assert "".join(out) == pos  # 别的行不归它管
+
+
+def test_faint_signs_cell_geometry():
+    """负号残迹偏到格子左边列也要查到；右边 2 列（后面数字漏进来的墨）、字高上下的杂讯不算（DeepSeek 审查 2026-11-03）"""
+    from astral_toolkit.navigation.gridtext import SIGN_FAINT, _faint_signs
+
+    text = "CamDir:  45 -63  114 FOV: 58"
+    j = text.index("45") - 1
+
+    def run(y, x, v=255):
+        imgs = np.zeros((len(text), 13, 9), np.float32)
+        imgs[j, y, x] = v
+        out = list(text)
+        _faint_signs(out, imgs)
+        return out[j]
+
+    assert run(5, 0) == "?"  # 偏到最左列
+    assert run(6, 4) == "?"  # 正中
+    assert run(5, 4, SIGN_FAINT - 1) == " "  # 阈值以下：干净空白
+    assert run(5, 8) == " " and run(5, 7) == " "  # 右边 2 列：后面数字漏进来的
+    assert run(0, 4) == " " and run(12, 4) == " "  # 字高最上 / 最下：不是负号的位置
