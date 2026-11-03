@@ -513,20 +513,28 @@ def _read_mining_state(loop):
 def read_switches():
     """在锁外读现有开关状态；读不到的项目不放进来，也不生成对应磁贴"""
     out = {}
-    try:
-        from ..core import settings
-
-        cfg = settings.load()
-        if isinstance(cfg, dict) and "live_on" in cfg:
-            out["live_on"] = bool(cfg.get("live_on"))
-    except Exception:
-        pass
+    engines = live = loop = None
     try:
         from ..tasks.system.common import _engines
 
         engines = _engines()
         live = getattr(engines, "live", None)
         loop = getattr(live, "loop", None)
+    except Exception:
+        pass
+    if loop is None:
+        # 有会话循环时 live_on 以运行事实为准，不用每秒读一次设置文件
+        try:
+            from ..core import settings
+
+            cfg = settings.load()
+            if isinstance(cfg, dict) and "live_on" in cfg:
+                out["live_on"] = bool(cfg.get("live_on"))
+        except Exception:
+            pass
+    try:
+        if engines is None:
+            raise LookupError
         if loop is not None:
             # 运行事实优先于持久化开关；采样不完整时保留上次展示，不用旧设置覆盖。
             out.pop("live_on", None)
