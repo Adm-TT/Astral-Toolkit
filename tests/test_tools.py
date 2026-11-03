@@ -2006,7 +2006,7 @@ def test_live_scan_resumes_after_restart(monkeypatch, tmp_path):
     monkeypatch.setattr(em.live, "stop", lambda: StopAttempt(None, False, False))
     for name in ("hover", "pos", "logwatch"):
         monkeypatch.setattr(getattr(em, name), "start", lambda: None)
-    monkeypatch.setattr(t_sys, "_online_loop", lambda: None)  # 测试里不联网检查更新
+    monkeypatch.setattr(t_sys, "_online_loop", lambda *a: None)  # 测试里不联网检查更新
     monkeypatch.setattr(em.game_events, "start", lambda: None)  # 不读真实 Game.log
     from astral_toolkit import ocr as OCR
     from astral_toolkit.core.perfmon import monitor
