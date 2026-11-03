@@ -191,15 +191,24 @@ def test_start_all_needs_agreed(monkeypatch):
 
 
 def test_stop_all_sets_events(monkeypatch):
+    """退出时 live、nav 两个会话循环都收到停止（RT-B6 起由 lifecycle 统一停，返回停止报告）"""
     from astral_toolkit.app.engines.manager import EngineManager
 
     m = EngineManager.get_instance()
+    m._ensure_registered()
+    # 单例在别的测试里可能已经退出过一次：换一份没退出过的状态（测试完 monkeypatch 还原）
+    monkeypatch.setattr(m.lifecycle, "_closing", threading.Event())
+    monkeypatch.setattr(m.lifecycle, "_stop_report", None)
+    monkeypatch.setattr(
+        "astral_toolkit.runtime.lifecycle._write_run_record", lambda t: None
+    )
     calls = []
-    monkeypatch.setattr(m.live.loop, "request_shutdown", lambda: calls.append(1))
-    monkeypatch.setattr(m.nav, "stop_ev", threading.Event())
-    m.stop_all()
-    assert calls == [1]
-    assert m.nav.stop_ev.is_set()
+    for name, loop in (("live", m.live.loop), ("nav", m.nav.loop)):
+        monkeypatch.setattr(loop, "request_shutdown", lambda n=name: calls.append(n))
+        monkeypatch.setattr(loop, "join_all", lambda timeout: [])
+    report = m.stop_all(1.0)
+    assert sorted(calls) == ["live", "nav"]
+    assert {r.name for r in report} >= {"live", "nav", "count"}
 
 
 def _run_main(monkeypatch, tmp_path, shell):
@@ -283,8 +292,15 @@ def _run_main(monkeypatch, tmp_path, shell):
     monkeypatch.setattr(
         launcher, "STATE", {"url": "", "tray": None, "told_tray": False}
     )  # 别留下假托盘给后面的测试
+    from astral_toolkit.runtime.lifecycle import Lifecycle
+
     monkeypatch.setattr(
-        EngineManager.get_instance(), "stop_all", lambda: calls.append("stop_all")
+        EngineManager.get_instance(), "lifecycle", Lifecycle()
+    )  # main 往这里登记收尾服务：每次用新的，别越积越多
+    monkeypatch.setattr(
+        EngineManager.get_instance(),
+        "stop_all",
+        lambda budget=5.0: calls.append("stop_all"),
     )
     try:
         server.main()
@@ -306,13 +322,31 @@ def test_main_opens_shell_or_edge(monkeypatch, tmp_path):
     popen, calls = _run_main(monkeypatch, tmp_path, shell)
     assert len(popen) == 1, popen
     assert popen[0][0] == str(shell) and popen[0][1:3] == ["--url", url]
-    assert "stop_all" in calls and "shutdown" in calls
+    assert "stop_all" in calls
+    from astral_toolkit.app.engines.manager import EngineManager
+
+    final = [  # 收尾服务登记了：展示流排空后关网页服务（RT-B6）
+        svc
+        for svc, _ in EngineManager.get_instance().lifecycle._services
+        if svc.name == "final-ui-http"
+    ]
+    assert len(final) == 1
+    assert final[0].join(0.5) and "shutdown" in calls
     monkeypatch.restore()
 
     popen, calls = _run_main(monkeypatch, tmp_path, None)
     assert len(popen) == 1, popen
     assert popen[0][0] == "msedge.exe" and f"--app={url}" in popen[0]
-    assert "stop_all" in calls and "shutdown" in calls
+    assert "stop_all" in calls
+    from astral_toolkit.app.engines.manager import EngineManager
+
+    final = [  # 收尾服务登记了：展示流排空后关网页服务（RT-B6）
+        svc
+        for svc, _ in EngineManager.get_instance().lifecycle._services
+        if svc.name == "final-ui-http"
+    ]
+    assert len(final) == 1
+    assert final[0].join(0.5) and "shutdown" in calls
     assert "webview" not in sys.modules
 
 

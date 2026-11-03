@@ -1,5 +1,6 @@
 """在线更新检测、后台轮询与版本回滚（Velopack；旧 Inno 桥接升级保留到 1.1.4）"""
 
+import threading
 import time
 
 from ...app import bus
@@ -33,11 +34,16 @@ def _online_info(force=False):
     return info
 
 
-def _online_loop():
-    time.sleep(20)  # 刚启动先让识别、窗口起来
-    while True:
+def _online_loop(stop_ev=None):
+    if stop_ev is None:
+        stop_ev = threading.Event()
+    if stop_ev.wait(20):  # 刚启动先让识别、窗口起来
+        return
+    while not stop_ev.is_set():
         _online_info()
-        time.sleep(1800)  # 检查本身 6 小时才真的联网一次（update_check.EVERY）
+        if stop_ev.wait(1800):
+            # 检查本身 6 小时才真的联网一次（update_check.EVERY）
+            break
 
 
 def _online_public(info):

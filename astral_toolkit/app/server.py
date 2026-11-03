@@ -9,6 +9,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from typing import Any
 
 from . import bus
 from . import http_server, instance, launcher, ui_stream
@@ -30,6 +31,7 @@ from .launcher import (
     _close_edge,  # noqa: F401
 )  # noqa: F401
 from .instance import _call_old, _try_lock, release_instance, _single_instance  # noqa: F401
+from ..runtime.lifecycle import Phase
 
 RESTART = threading.Event()
 
@@ -57,6 +59,62 @@ def _told_tray(tray):
     )
 
 
+class _FinalService:
+    """Phase 5：先把展示流冲刷掉，再关 HTTP，最后等 HTTP 线程退出"""
+
+    name = "final-ui-http"
+    phase = Phase.FINAL
+
+    def __init__(self, ui: Any, server: Any, http_thread: threading.Thread | None):
+        self.ui = ui
+        self.server = server
+        self.http_thread = http_thread
+
+    def start(self) -> None:
+        return None
+
+    def request_stop(self) -> None:
+        return None
+
+    def join(self, timeout: float | None) -> bool:
+        budget = 5.0 if timeout is None else max(0.0, float(timeout))
+        deadline = time.monotonic() + budget
+        try:
+            remaining = max(0.0, deadline - time.monotonic())
+            self.ui.drain_and_bye(min(remaining, 1.0))
+        except Exception:
+            pass
+        try:
+            self.server.shutdown()
+        except Exception:
+            pass
+        try:
+            self.server.server_close()
+        except Exception:
+            pass
+        thread = self.http_thread
+        if thread is None or thread is threading.current_thread():
+            return True
+        thread.join(max(0.0, deadline - time.monotonic()))
+        return not thread.is_alive()
+
+
+def _exit_sequence(
+    manager: Any,
+    tray: Any,
+    *,
+    budget: float = 5.0,
+    publish: Any = None,
+    close_edge: Any = None,
+) -> Any:
+    """退出前段：窗口 / 托盘立刻消失，再让 lifecycle 在预算内收后台"""
+    (publish if publish is not None else bus.publish)("quit", {})
+    (close_edge if close_edge is not None else launcher._close_edge)()
+    if tray is not None:
+        tray.remove()
+    return manager.stop_all(budget)
+
+
 def main(open_ui=True, port=0, restart=False):
     if open_ui and not instance._single_instance(restart):
         return
@@ -67,7 +125,16 @@ def main(open_ui=True, port=0, restart=False):
     server = http_server.Server(("127.0.0.1", port), http_server.Handler)
     url = f"http://127.0.0.1:{server.server_address[1]}/#t={http_server.TOKEN}"
     launcher.STATE["url"] = url
-    threading.Thread(target=server.serve_forever, daemon=True, name="http").start()
+    http_thread = threading.Thread(
+        target=server.serve_forever, daemon=True, name="http"
+    )
+    http_thread.start()
+    from .engines.manager import EngineManager
+
+    # 网页服务一起来就登记收尾（展示流排空 → 关网页服务）：后面悬浮窗 / 后台启动出错，退出时也照样关（审查 RT-B6）
+    EngineManager.get_instance().lifecycle.register(
+        _FinalService(ui_stream, server, http_thread)
+    )
     from .overlay import hud
 
     hud()
@@ -126,16 +193,6 @@ def main(open_ui=True, port=0, restart=False):
     except KeyboardInterrupt:
         pass
     finally:
-        bus.publish("quit", {})
-        time.sleep(0.3)
-        launcher._close_edge()
-        if tray:
-            tray.remove()
         from .engines.manager import EngineManager
 
-        EngineManager.get_instance().stop_all()
-        try:
-            ui_stream.drain_and_bye(1.0)
-        except Exception:
-            pass
-        server.shutdown()
+        _exit_sequence(EngineManager.get_instance(), tray)

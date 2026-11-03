@@ -221,7 +221,7 @@ class _Live:
         ),
     }
 
-    def __init__(self, results=None, output=None, clock=None):
+    def __init__(self, results=None, output=None, clock=None, closing=None):
         self.results = results if results is not None else ResultStore()
         self.loop: Any = SessionLoop(
             self,
@@ -230,6 +230,7 @@ class _Live:
             foreground=_foreground,
             clock=clock,
             run_flag=setting_run_flag("live_on"),
+            closing=closing if closing is not None else (lambda: False),
         )
 
     @property

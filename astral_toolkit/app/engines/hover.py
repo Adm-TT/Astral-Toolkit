@@ -9,7 +9,6 @@ _T("mining").xxx = tasks/mining.py，_H().xxx = app/hud_state.py，_E().live / .
 import importlib
 import sys
 import threading
-import time
 
 from .. import bus
 
@@ -41,23 +40,37 @@ class _Hover:
         self.thread = None
         self.busy = False
         self.label = {}  # 热键名 → 当前绑定的键（如 trade_capture_key → F8）
+        self.stop_ev = threading.Event()
 
     def start(self):
-        if WIN and not self.thread:
+        if WIN and (self.thread is None or not self.thread.is_alive()):
+            self.stop_ev.clear()
             self.thread = threading.Thread(
                 target=self._guard, daemon=True, name="hover-key"
             )
             self.thread.start()
 
+    def request_stop(self):
+        self.stop_ev.set()
+
+    def join(self, timeout=None):
+        thread = self.thread
+        if thread is None:
+            return True
+        if thread is threading.current_thread():
+            return not thread.is_alive()
+        thread.join(timeout)
+        return not thread.is_alive()
+
     def _guard(self):
         """热键线程出错就记一笔、等 1 秒重来，别让 F5/F6/F8 全失效（细查 2026-10-28）"""
-        while True:
+        while not self.stop_ev.is_set():
             try:
                 self._run()
             except Exception as e:
                 print(f"热键监听出错，1 秒后重来：{e!r}")
                 self.busy = False  # 别让 busy 卡死（二审 2026-10-28）
-                time.sleep(1)
+                self.stop_ev.wait(1)
 
     def _run(self):
         import ctypes
@@ -99,7 +112,7 @@ class _Hover:
             ),
         }
         prev = {}
-        while True:
+        while not self.stop_ev.is_set():
             keys, seen, label = [], set(), {}
             for key, _, name in _T("system")._hotkey_values(settings.load()):
                 if key and key in VK and key not in seen:  # 撞键时只有排在前面的生效
@@ -147,7 +160,8 @@ class _Hover:
                                 level="WARN",
                             )
                     prev[name] = down
-                time.sleep(0.03)
+                if self.stop_ev.wait(0.03):
+                    return
 
     def _toggle_live(self):
         """采矿助手开关键：开着就关，关着就开；悬浮窗上按实际结果显示（正在停止时说清楚）"""
