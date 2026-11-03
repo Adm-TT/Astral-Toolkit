@@ -9,7 +9,7 @@
 
 from typing import Any, Iterable, Protocol
 
-LOCK_IN_KINDS = frozenset({"bus", "hud.set", "hud.clear", "note", "shared"})
+LOCK_IN_KINDS = frozenset({"bus", "hud.set", "hud.clear", "note", "ui", "shared"})
 POST_LOCK_KINDS = frozenset({"log", "record"})
 OP_KINDS = LOCK_IN_KINDS | POST_LOCK_KINDS
 

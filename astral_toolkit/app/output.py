@@ -7,8 +7,10 @@
 循环保证它们在锁外调用。
 """
 
+import time
+
 from ..runtime.session import RunFlag
-from . import bus, hud_state
+from . import bus, hud_state, ui_stream
 
 
 def _hud_set(section, text, rich=None):
@@ -24,11 +26,30 @@ def _note(section, text, secs=None):
         hud_state._note_hud(section, text, secs)
 
 
+def _live_switch(data):
+    """采矿开关变了：只用这条消息本身更新磁贴开关。
+
+    这里在会话循环锁内，不能调 read_switches（读盘、回调别的引擎的锁）"""
+    if not isinstance(data, dict) or "running" not in data:
+        return
+    try:
+        on = bool(data["running"])
+        ui_stream.set_switches(
+            {"live_on": on, "live_running": on}, read_mono=time.monotonic()
+        )
+    except Exception:
+        pass
+
+
 class BusOutput:
     def apply(self, op):
         kind, *args = op
         if kind == "bus":
             bus.publish(*args)
+            if args and args[0] == "live":
+                _live_switch(args[1] if len(args) > 1 else None)
+        elif kind == "ui":
+            ui_stream.publish_ui(args[0], args[1])
         elif kind == "hud.set":
             _hud_set(*args)
         elif kind == "hud.clear":
