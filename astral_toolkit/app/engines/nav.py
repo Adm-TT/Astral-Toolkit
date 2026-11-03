@@ -196,7 +196,9 @@ class _NavCtx:
         self.last_view = None
         self.steady = _Steady()
         self.seen = 0.0
-        self.seen_cur = 0.0  # 坐标没变的读数（原地转机头）处理到哪一帧：转向提示要跟着镜头重算
+        self.seen_cur = (
+            0.0  # 坐标没变的读数（原地转机头）处理到哪一帧：转向提示要跟着镜头重算
+        )
         self.last_ok = 0.0
         self.prev_goal = None
         self.plan = {}

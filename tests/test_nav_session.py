@@ -3,6 +3,7 @@
 import threading
 import time
 from types import SimpleNamespace
+from typing import Any
 
 from astral_toolkit.app.engines import nav as navmod
 from astral_toolkit.runtime.session import RunState, Session, StopAttempt, StopInfo
@@ -10,8 +11,8 @@ from astral_toolkit.runtime.session import RunState, Session, StopAttempt, StopI
 
 class _FakePos:
     def __init__(self):
-        self.current = (time.time(), None, None)
-        self.latest = (0.0, None, None)
+        self.current: tuple[Any, Any, Any] = (time.time(), None, None)
+        self.latest: tuple[Any, Any, Any] = (0.0, None, None)
         self.read_at = 0.0
         self.reader_active = False
         self.reader_ok_at = 0.0
@@ -347,7 +348,14 @@ def test_space_steer_follows_camera_while_hovering(monkeypatch):
             huds.extend(op[2] for op in ops if op[0] == "hud.set")
             return True
 
-    tgt = {"space": True, "n": "1", "zh": "1", "x": 8163217.9574, "y": 18591209.2105, "z": -4278.6308}
+    tgt = {
+        "space": True,
+        "n": "1",
+        "zh": "1",
+        "x": 8163217.9574,
+        "y": 18591209.2105,
+        "z": -4278.6308,
+    }
     g = (8163210720.5, 18591214824.5, -4288975.1)
     now = time.time()
     pos = _FakePos()
@@ -365,7 +373,11 @@ def test_space_steer_follows_camera_while_hovering(monkeypatch):
     assert "左转 14°" in huds[-1], huds[-1]
 
     later = now + 1.0
-    pos.current = (later, g, {"t": later, "camdir": (75.0, -41.0, 165.0)})  # 坐标没变、镜头转了
+    pos.current = (
+        later,
+        g,
+        {"t": later, "camdir": (75.0, -41.0, 165.0)},
+    )  # 坐标没变、镜头转了
     worker.tick(session, ctx, later)
     assert "直飞" in huds[-1], huds[-1]
     n_before = len(huds)
