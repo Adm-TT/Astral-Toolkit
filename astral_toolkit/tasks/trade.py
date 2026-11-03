@@ -51,7 +51,7 @@ def _goal_text(g, q=None, lots=None):
 def _nav_objects():
     from . import navigation as n_mod
 
-    return n_mod._place_row, n_mod._places, n_mod._nav
+    return n_mod._place_row, n_mod._places, n_mod._start_nav
 
 
 def _get_last_hover():
@@ -300,9 +300,13 @@ def nav_shop(shop="", place=""):
                 break
     if hit is None:
         return {"error": "导航数据里没有这个地点"}
-    _place_row, _places, _nav = _nav_objects()
+    _place_row, _places, _start_nav = _nav_objects()
     row = _place_row(hit)
-    _nav.start(_places[row["key"]])
+    err = _start_nav(
+        _places[row["key"]]
+    )  # 停止中被拒时如实返回，不报「已开始」（RT-B5b）
+    if err:
+        return err
     return {"key": row["key"], "label": row["label"]}
 
 

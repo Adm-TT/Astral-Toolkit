@@ -13,8 +13,49 @@ import os  # noqa: F401
 import re
 import threading
 import time
+from typing import Any, Protocol
 
 from ..app import bus
+
+
+class _NavLike(Protocol):
+    target: Any
+    space_mode: bool
+
+    @property
+    def session(self) -> Any: ...
+
+    def start(
+        self,
+        target: Any,
+        target_row: Any = None,
+        space_mode: bool | None = None,
+    ) -> Any: ...
+
+    def stop(self) -> Any: ...
+
+    def refresh(self) -> None: ...
+
+    def add_fix(self, g: Any, clip: Any = None, session: int | None = None) -> Any: ...
+
+
+class _PosLike(Protocol):
+    def snapshot(self) -> Any: ...
+
+    def read_now(self, force: bool = True) -> Any: ...
+
+    def hints(self, max_age: float = 5.0) -> dict[str, str]: ...
+
+    def set_demand(self, key: str, until: float) -> None: ...
+
+
+class _GameEventsLike(Protocol):
+    arrived_at: float
+
+
+class _ResultsLike(Protocol):
+    def get(self, slot: str) -> Any: ...
+
 
 # ---------------------------------------------------------------- 基础状态与常量
 _places = {}
@@ -70,13 +111,147 @@ DI_HELP = "未检测到右上角位置信息：在游戏中按 ~ 打开控制台
 # 2026-10-30 重构阶段 2：悬浮窗从 app.hud_state 拿，引擎和最近结果（ResultStore）从 EngineManager 拿，
 # 不再经 services 转发、出错也不再回头找 services 兜底。接口由 app/api/navigation.py 的 ROUTES 注册，不再用 api 装饰器。
 from ..app.hud_state import _hud, _note_hud  # noqa: E402
-from ..app.engines.manager import EngineManager  # noqa: E402
 from ..runtime.results import MINING_SCAN  # noqa: E402
 
-_M = EngineManager.get_instance()
-_pos = _M.pos
-_nav = _M.nav
-_game_events = _M.game_events
+_nav: _NavLike | None = None
+_pos: _PosLike | None = None
+_game_events: _GameEventsLike | None = None
+_results: _ResultsLike | None = None
+
+_UNBOUND = (
+    "tasks.navigation 未绑定引擎：先调用 bind(nav, positions, game_events, results)"
+)
+
+
+def bind(
+    nav: _NavLike,
+    positions: _PosLike,
+    game_events: _GameEventsLike,
+    results: _ResultsLike,
+) -> None:
+    """组装处调用一次（B5b 过渡；B7 移到 bootstrap）。导入本模块不再取引擎、不再有副作用"""
+    global _nav, _pos, _game_events, _results
+    _nav, _pos, _game_events, _results = nav, positions, game_events, results
+
+
+def _need_nav() -> _NavLike:
+    nav = _nav
+    if nav is None:
+        raise RuntimeError(_UNBOUND)
+    return nav
+
+
+def _need_pos() -> _PosLike:
+    pos = _pos
+    if pos is None:
+        raise RuntimeError(_UNBOUND)
+    return pos
+
+
+def _need_events() -> _GameEventsLike:
+    events = _game_events
+    if events is None:
+        raise RuntimeError(_UNBOUND)
+    return events
+
+
+def _need_results() -> _ResultsLike:
+    results = _results
+    if results is None:
+        raise RuntimeError(_UNBOUND)
+    return results
+
+
+def _need() -> tuple[_NavLike, _PosLike, _GameEventsLike, _ResultsLike]:
+    nav = _nav
+    pos = _pos
+    events = _game_events
+    results = _results
+    if nav is None or pos is None or events is None or results is None:
+        raise RuntimeError(_UNBOUND)
+    return nav, pos, events, results
+
+
+def _engines() -> tuple[_NavLike, _PosLike, _GameEventsLike, _ResultsLike]:
+    """旧名字兼容：统一走 _need()，保证返回的四个对象都不是 None"""
+    return _need()
+
+
+class _ManagerCompat:
+    """B7 之前旧测试 / 旧调用方的过渡口；正式代码只用 bind()。"""
+
+    @property
+    def nav(self) -> _NavLike | None:
+        return _nav
+
+    @nav.setter
+    def nav(self, value: _NavLike | None) -> None:
+        global _nav
+        _nav = value
+
+    @property
+    def pos(self) -> _PosLike | None:
+        return _pos
+
+    @pos.setter
+    def pos(self, value: _PosLike | None) -> None:
+        global _pos
+        _pos = value
+
+    @property
+    def game_events(self) -> _GameEventsLike | None:
+        return _game_events
+
+    @game_events.setter
+    def game_events(self, value: _GameEventsLike | None) -> None:
+        global _game_events
+        _game_events = value
+
+    @property
+    def results(self) -> _ResultsLike | None:
+        return _results
+
+    @results.setter
+    def results(self, value: _ResultsLike | None) -> None:
+        global _results
+        _results = value
+
+
+_M = _ManagerCompat()
+
+
+def _start_error(result: Any) -> dict[str, str] | None:
+    status = getattr(result, "status", "started")
+    if status == "started":
+        return None
+    if status == "closing":
+        return {"error": "正在退出，稍后再试"}
+    return {"error": "导航正在停止，请稍候"}
+
+
+def _start_nav(
+    target: Any, row: Any = None, space_mode: bool | None = None
+) -> dict[str, str] | None:
+    nav = _need_nav()
+    if row is None:
+        row = _place_row(target)
+    return _start_error(nav.start(target, target_row=row, space_mode=space_mode))
+
+
+def _pos_current() -> Any:
+    pos = _need_pos()
+    snap = getattr(pos, "snapshot", None)
+    if callable(snap):
+        return getattr(snap(), "current", (0.0, None, None))
+    return getattr(pos, "current", (0.0, None, None))
+
+
+def _pos_latest() -> Any:
+    pos = _need_pos()
+    snap = getattr(pos, "snapshot", None)
+    if callable(snap):
+        return getattr(snap(), "latest", (0.0, None, None))
+    return getattr(pos, "latest", (0.0, None, None))
 
 
 # ---------------------------------------------------------------- 导航与地点搜索
@@ -118,7 +293,7 @@ def nav_near(kind=""):
     if kind not in n.NEAR_KINDS and kind not in n.SITE_KINDS:
         return {"error": "不支持的分类"}
     data = n.load()
-    t, g, info = _pos.current
+    t, g, info = _pos_current()
     info = info or {}
     fresh = bool(g) and time.time() - t < POS_FRESH
     here, system, when, sure = None, "", None, False
@@ -178,7 +353,11 @@ def nav_near(kind=""):
         and rows[0]["dist"] is not None
         and n.target_system(hits[0][1], data) == system
     ):
-        _nav.start(_places[rows[0]["key"]])
+        err = _start_nav(
+            _places[rows[0]["key"]]
+        )  # 目标行由 _place_row 现算，和手动开始一致
+        if err:
+            return err
         return {"rows": rows, "total": len(rows), "started": rows[0]["key"]}
     return {"rows": rows, "total": len(rows), "started": None}
 
@@ -187,7 +366,7 @@ def nav_site():
     """现在在哪个主城 / 空间站里、这里有哪些分类（导航页那排按钮，2026-10-27）；不在就 site=None"""
     from ..navigation import navigate as n
 
-    t, g, info = _pos.current
+    t, g, info = _pos_current()
     info = info or {}
     if not g or time.time() - t > POS_FRESH:
         return {"site": None, "all": list(n.SITE_KINDS)}
@@ -297,6 +476,10 @@ def nav_start(key=""):
     p = _places.get(key)
     if not p:
         return {"error": "未找到此地点，需重新搜索"}
+    row = _place_row(p)
+    err = _start_nav(p, row)
+    if err:
+        return err
     from ..core import run_records
 
     run_records.record(
@@ -305,7 +488,6 @@ def nav_start(key=""):
         p.get("t"),  # 只记地点类型：自定义路标名是玩家自己起的，会随 F10 上传
         ui_tag="NAV",
     )
-    _nav.start(p)
     return {"ok": True}
 
 
@@ -313,13 +495,16 @@ def nav_mode(mode="auto"):
     """导航页的开关：实时定位（ground / auto）/ 手动定位（space，只用 /showlocation）；正在导航就按新方式重新开始"""
     from ..core import settings
 
+    nav = _need_nav()
     if mode not in ("auto", "ground", "space"):
         return {"error": "导航方式仅支持 实时定位 / 手动定位"}
     settings.update(nav_mode=mode)
-    t = _nav.target
+    t = nav.target
     if t:
-        _nav.start(t)
-    return {"mode": mode, "space": _nav.space_mode if t else None}
+        err = _start_nav(t, _place_row(t))
+        if err:
+            return err
+    return {"mode": mode, "space": nav.space_mode if t else None}
 
 
 def sig_name(value=0, name=""):
@@ -344,13 +529,20 @@ def sig_names():
 def nav_stop():
     from ..core import run_records
 
+    nav = _need_nav()
     run_records.record("NAV", "停止导航", ui_tag="NAV")
-    _nav.stop()
+    att = nav.stop()
+    if getattr(att, "timed_out", False):
+        return {
+            "ok": True,
+            "stopping": True,
+            "message": "正在停止导航，旧线程还没退出",
+        }
     return {"ok": True}
 
 
 def nav_refresh():
-    _nav.refresh()
+    _need_nav().refresh()
     return {"ok": True}
 
 
@@ -486,23 +678,23 @@ def _where_now():
     import re
     from ..navigation import navigate as n
 
+    pos = _need_pos()
     now = time.time()
     if now - _WHERE["t"] < 60:
         return _WHERE["v"]
-    t, g, info = _pos.latest
+    t, g, info = _pos_latest()
     if not g or now - t > 60:
         if now - _WHERE["tried"] < 20:
             return None
         _WHERE["tried"] = now
         try:
-            _pos.reader.poll(force=True)
+            rd = pos.read_now(force=True)
         except Exception:
             return None
-        ok_at, info = _pos.reader.snapshot()
-        info = info or {}
-        if not info.get("global") or now - ok_at > 5:
+        info = rd.info or {}
+        if not info.get("global") or now - rd.ok_at > 5:
             return None
-        g = info["global"]
+        g = tuple(info["global"])
     info = info or {}
     if re.search(r"asteroid", info.get("location") or "", re.I):
         v = "space"  # 小行星带
@@ -534,7 +726,7 @@ def _area_now():
     from ..mining import mining_area
 
     now = time.time()
-    t, g, info = _pos.current
+    t, g, info = _pos_current()
     if not g or now - t > AREA_MAX_AGE:
         return None
     info = info or {}
@@ -664,11 +856,12 @@ def _surface_limit(here):
 def _hints_near(g, km=100):
     """右上角线索（定星系用）只在 g 就是你现在的位置时才可信：粘贴别人给的坐标、事后补存的原矿坐标，
     线索说的是你现在在哪个星系，不是那个坐标在哪个星系（审查 2026-10-31）"""
+    pos = _need_pos()
     try:
-        _, live, _ = _pos.current
+        _, live, _ = _pos_current()
         if live is None or math.dist(live, g) > km * 1000:
             return {}
-        return _pos.hints()
+        return pos.hints()
     except Exception:
         return {}
 
@@ -815,7 +1008,8 @@ def ore_record(here=False):
     """记下最近这块矿。here=True（游戏里按热键）：等玩家自己输 /showlocation，把坐标一起记下；窗口里点的不记坐标"""
     from ..mining import ore_log
 
-    entry = _M.results.get(MINING_SCAN)
+    results = _need_results()
+    entry = results.get(MINING_SCAN)
     view = entry.value if entry else None
     if not view:
         _note_hud("原矿", "暂无扫描结果，先扫描矿石", 5)
@@ -994,15 +1188,17 @@ def _halo_watch(sess, ev):
     （/showlocation 只在必要时用，2026-10-27 用户定；太空导航进行中时剪贴板归导航管）"""
     from ..navigation import navigate as n
 
-    seen_live, live_at, prev, arr = None, 0.0, None, _game_events.arrived_at
+    nav = _need_nav()
+    events = _need_events()
+    seen_live, live_at, prev, arr = None, 0.0, None, events.arrived_at
     while not ev.is_set():
         try:
             if (
-                _game_events.arrived_at != arr
+                events.arrived_at != arr
             ):  # 游戏日志说量子到了：马上核对，不用等测速（2026-10-27）
-                arr, prev, live_at = _game_events.arrived_at, None, 0.0
+                arr, prev, live_at = events.arrived_at, None, 0.0
             t, g_live, _ = (
-                _pos.current
+                _pos_current()
             )  # 每次读到都更新（停着不动也有新的一份），latest 只在坐标变了才换（审查 2026-10-27）
             if g_live and t != seen_live and time.time() - t < 3:
                 seen_live = t
@@ -1019,7 +1215,7 @@ def _halo_watch(sess, ev):
                     halo_check(g_live, None, sess)
             clip = n.read_clipboard()
             g = n.parse_clip(clip)
-            if g and clip != _HALO["seen"] and not (_nav.target and _nav.space_mode):
+            if g and clip != _HALO["seen"] and not (nav.target and nav.space_mode):
                 halo_check(g, clip, sess)
         except Exception:
             pass
@@ -1055,7 +1251,8 @@ def fix_here():
     挂着小行星带方案时，核对现在在不在那条带里"""
     from ..navigation import navigate as n
 
-    if (not _nav.target or not _nav.space_mode) and _HALO["plan"]:
+    nav = _need_nav()
+    if (not nav.target or not nav.space_mode) and _HALO["plan"]:
         sess = _HALO["sess"]  # 等坐标期间方案取下或换了，这次结果就作废
         g, clip = _wait_showloc()
         with _HALO["lock"]:
@@ -1067,19 +1264,19 @@ def fix_here():
         return halo_check(g, clip, sess) or {
             "error": "小行星带方案已移除或更换，本次定位无效"
         }
-    if not _nav.target or not _nav.space_mode:
+    if not nav.target or not nav.space_mode:
         _hud().set("导航", "一键定位仅用于手动定位（可在导航页切换）")
         threading.Timer(
-            5, lambda: _hud().clear("导航") if not _nav.target else None
+            5, lambda: _hud().clear("导航") if not nav.target else None
         ).start()
         return {"error": "当前未导航到太空路标"}
-    sess = _nav.session  # 等坐标期间导航结束或换了目标，这次结果就作废
+    sess = nav.session  # 等坐标期间导航结束或换了目标，这次结果就作废
     g, clip = _wait_showloc()
     if not g:
-        if _nav.session == sess and _nav.target:
-            _hud().set("导航", f"→ {n.label(_nav.target)}\n这次没定位成功：{clip}")
+        if nav.session == sess and nav.target:
+            _hud().set("导航", f"→ {n.label(nav.target)}\n这次没定位成功：{clip}")
         return {"error": clip}
-    return _nav.add_fix(g, clip, session=sess) or {
+    return nav.add_fix(g, clip, session=sess) or {
         "error": "导航已结束或目标已更换，本次定位无效"
     }
 
@@ -1099,6 +1296,7 @@ __all__ = [
     "LIVE_STALE",
     "DI_HELP",
     # 核心函数
+    "bind",
     "_place_row",
     "nav_search",
     "nav_near",

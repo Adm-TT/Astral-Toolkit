@@ -106,6 +106,8 @@ MODULES = [
     "tests.test_ui_stream",
     "tests.test_ui_k0b",
     "tests.test_ui_client",
+    "tests.test_nav_session",
+    "tests.test_pos_service",
 ]
 
 if __name__ == "__main__":

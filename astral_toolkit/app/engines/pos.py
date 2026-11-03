@@ -10,6 +10,8 @@ import importlib
 import sys
 import threading
 import time
+from dataclasses import dataclass
+from typing import Any
 
 from .. import bus
 
@@ -39,6 +41,30 @@ def _E():
     return EngineManager.get_instance()
 
 
+@dataclass(frozen=True)
+class PositionSnapshot:
+    """一次锁内复制出来的位置快照；兼容字段供 status / mining / 旧测试过渡用"""
+
+    current: Any
+    latest: Any
+    read_at: float
+    label: Any
+    system: Any
+    fast: bool
+    reader_active: bool
+    reader_ok_at: float
+    here: Any = None
+
+
+@dataclass(frozen=True)
+class PositionRead:
+    """read_now() 的同步读结果：给 _where_now 这类非要马上读一次的地方用"""
+
+    ok_at: float
+    info: dict
+    global_: tuple | None
+
+
 class _Pos:
     """一直在后台读游戏右上角的调试信息（r_DisplayInfo 2）：有就随时知道你在哪，导航、路标、「离你最近的买点」都用它。
     2026-10-26 起：字模识别（gridtext）几毫秒认一次，游戏在最前面就每 0.2 秒读一次，顶栏位置是实时的；
@@ -50,43 +76,163 @@ class _Pos:
     def __init__(self):
         from ...navigation.displayinfo import Reader
 
-        self.reader = Reader(every=1.0)
-        self.latest = (
+        self.reader: Any = Reader(every=1.0)
+        self.latest: Any = (
             0.0,
             None,
             None,
         )  # (时间, 星系坐标, 那次读到的全部信息)：坐标变了才换
-        self.read_at = 0.0  # 最后一次读到位置（坐标没变也算）的截图时间
-        self.current = (
+        self.read_at: float = 0.0  # 最后一次读到位置（坐标没变也算）的截图时间
+        self.current: Any = (
             0.0,
             None,
             None,
         )  # 最后一次读到的（时间, 坐标, 全部信息），坐标没变也换
-        self.want_until = 0.0  # 不导航也临时读一会（新建路标要当前位置时）
-        self.label = (0.0, "")  # (时间, 具体地点中文名)：最后一次从右上角认出的地点
-        self.system = (0.0, "")  # (时间, 星系)：最后一次从右上角定下的星系
-        self.fast = False  # 最近一次是字模认的
+        self.here: Any = None  # 最后一次 locate 结果（原来寄在 nav.last_here）
+        self.label: Any = (
+            0.0,
+            "",
+        )  # (时间, 具体地点中文名)：最后一次从右上角认出的地点
+        self.system: Any = (0.0, "")  # (时间, 星系)：最后一次从右上角定下的星系
+        self.fast: bool = False  # 最近一次是字模认的
+        self.reader_active = False
+        self.reader_ok_at = 0.0
+        self.demand = {}  # key -> until（导航开始放 inf，结束清 0）
         self.thread = None
+        self.stop_ev = threading.Event()
+        self._lock = threading.Lock()
+        self._reader_lock = threading.Lock()
         self._pub_at = 0.0
 
     def start(self):
-        from ...navigation import navigate as n
-
-        n.HINTS = self.hints  # 太空导航定星系要用右上角线索（审查 2026-10-31）
-        if WIN and not self.thread:
+        if WIN and (self.thread is None or not self.thread.is_alive()):
+            self.stop_ev.clear()
             self.thread = threading.Thread(
                 target=self._run, daemon=True, name="displayinfo"
             )
             self.thread.start()
 
+    def request_stop(self):
+        self.stop_ev.set()
+
+    def join(self, timeout=None):
+        thread = self.thread
+        if thread is None:
+            return True
+        if thread is threading.current_thread():
+            return not thread.is_alive()
+        thread.join(timeout)
+        return not thread.is_alive()
+
+    def snapshot(self):
+        with self._lock:
+            return PositionSnapshot(
+                current=self.current,
+                latest=self.latest,
+                read_at=self.read_at,
+                label=self.label,
+                system=self.system,
+                fast=self.fast,
+                reader_active=self.reader_active,
+                reader_ok_at=self.reader_ok_at,
+                here=self.here,
+            )
+
     def hints(self, max_age=5.0):
         """给 system_of 用的线索（最近 max_age 秒内读到的）：zone、location、solar_id"""
-        t, g, info = (
-            self.current
-        )  # latest 只在坐标变了才换：悬停不动 5 秒后线索就没了（复审 2026-10-31）
+        with self._lock:
+            t, g, info = self.current
         if not info or time.time() - t > max_age:
             return {}
         return {k: info.get(k) or "" for k in ("zone", "location", "solar_id")}
+
+    def request_read_now(self):
+        """只置「尽快读」，不在调用线程读"""
+        with self._reader_lock:
+            self.reader.next_at = 0.0
+            self.reader.misses = 0
+
+    def read_now(self, force=True):
+        """在调用线程同步读一次；和 pos 线程共用一把 reader 锁（_where_now 用）"""
+        with self._reader_lock:
+            if force:
+                self.reader.poll(force=True)
+            ok_at, info = self.reader.snapshot()
+        info = info or {}
+        g = tuple(info["global"]) if info.get("global") else None
+        return PositionRead(ok_at, info, g)
+
+    def set_demand(self, key, until):
+        with self._lock:
+            if until:
+                self.demand[key] = float(until)
+            else:
+                self.demand.pop(key, None)
+
+    def _navigating(self):
+        now = time.time()
+        with self._lock:
+            return any(until > now for until in self.demand.values())
+
+    def _absorb(self, n, ok_at, info):
+        g = tuple(info["global"])
+        fast = bool(info.get("fast"))
+        label_changed = False
+        if info.get("location"):
+            from ...navigation.position import display_label
+
+            lab = display_label(info["location"])
+            with self._lock:
+                old = self.label[1]
+                self.label = (time.time(), lab or old)
+                label_changed = bool(lab and lab != old)
+        sysname = None
+        try:
+            sysname = n.system_of(
+                info["global"],
+                zone=info.get("zone"),
+                location=info.get("location"),
+                solar_id=info.get("solar_id"),
+            )
+        except Exception:
+            pass
+        system_changed = False
+        if sysname is not None:
+            with self._lock:
+                system_changed = sysname != self.system[1]
+                self.system = (time.time(), sysname)
+        zb = _zone_base(info)
+        need_publish = False
+        with self._lock:
+            self.fast = fast
+            prev = self.latest[1]
+            moved = prev is None or max(abs(a - b) for a, b in zip(g, prev)) > 1.0
+            moved = moved or bool(zb) and zb != _zone_base(self.latest[2])
+            read_at = info.get("t") or ok_at
+            self.read_at = read_at
+            self.current = (read_at, g, dict(info))
+            if moved:
+                self.latest = (read_at, g, dict(info))
+                need_publish = True
+        if need_publish:
+            here = None
+            try:
+                here = n.locate(
+                    g,
+                    when=info.get("t"),
+                    local=info.get("local"),
+                    zone=info.get("zone"),
+                    local_ok=info.get("local_ok"),
+                )
+            except Exception:
+                here = None
+            with (
+                self._lock
+            ):  # 位置变了就更新，算不出也写 None，别留着上一处的地点（审查 RT-B5b）
+                self.here = here
+            self._publish()
+        if label_changed or system_changed:
+            self._publish(force=True)
 
     def _publish(self, force=False):
         now = time.time()
@@ -101,100 +247,51 @@ class _Pos:
         from ...system.showloc import game_foreground
 
         was = False
-        while True:
-            try:
-                fg = game_foreground()
-            except Exception:
-                fg = True
+        while not self.stop_ev.is_set():
             ready = False
             try:
-                from ...core.perf import game_area
+                try:
+                    fg = game_foreground()
+                except Exception:
+                    fg = True
+                try:
+                    from ...core.perf import game_area
 
-                ready = gridtext.ready(game_area()["height"])
-            except Exception:
-                pass
-            navigating = bool(_E().nav.target) or time.time() < self.want_until
-            if not fg:
-                time.sleep(0.5)
-                continue
-            self.reader.max_gap = (
-                5.0 if navigating else 60.0
-            )  # 导航时读不到最多隔 5 秒再试（玩家反馈 2026-10-30：以前最长一分钟）
-            if ready:
-                self.reader.every = self.FAST_EVERY
-            elif navigating:
-                self.reader.every = 1.0
-            else:
-                self.reader.every = (
-                    self.CALIB_EVERY
-                )  # 没导航、字模没好：认几帧把字模学出来
-            try:
-                seen = self.reader.ok_at
-                self.reader.poll()
-                # 坐标、详情、截图时间都取同一次读数（另一个线程可能在中间读过一次，不能拼两帧，2026-10-27 复审）
-                ok_at, info = self.reader.snapshot()
+                    ready = gridtext.ready(game_area()["height"])
+                except Exception:
+                    pass
+                navigating = self._navigating()
+                if not fg:
+                    self.stop_ev.wait(0.5)
+                    continue
+                with self._reader_lock:
+                    self.reader.max_gap = 5.0 if navigating else 60.0
+                    if ready:
+                        self.reader.every = self.FAST_EVERY
+                    elif navigating:
+                        self.reader.every = 1.0
+                    else:
+                        self.reader.every = self.CALIB_EVERY
+                    seen = self.reader.ok_at
+                    self.reader.poll()
+                    ok_at, info = self.reader.snapshot()
+                    reader_active = bool(self.reader.active)
                 info = info or {}
                 if ok_at != seen and info.get("global"):
-                    self.fast = bool(info.get("fast"))
-                    if info.get("location"):
-                        from ...navigation.position import display_label
-
-                        lab = display_label(info["location"])
-                        old = self.label[1]
-                        self.label = (time.time(), lab or old)
-                        if lab and lab != old:
-                            self._publish(force=True)
-                    try:
-                        sysname = n.system_of(
-                            info["global"],
-                            zone=info.get("zone"),
-                            location=info.get("location"),
-                            solar_id=info.get("solar_id"),
-                        )
-                        changed = sysname != self.system[1]
-                        self.system = (time.time(), sysname)
-                        if changed:
-                            self._publish(force=True)
-                    except Exception:
-                        pass
-                    g = tuple(info["global"])
-                    prev = self.latest[1]
-                    moved = (
-                        prev is None or max(abs(a - b) for a, b in zip(g, prev)) > 1.0
-                    )
-                    # 最里层区域名变了也算（进电梯站着选楼层时坐标不动，区域名变成轿厢，导航要马上提示选哪站，审查 2026-10-28）
-                    zb = _zone_base(info)
-                    moved = (
-                        moved or bool(zb) and zb != _zone_base(self.latest[2])
-                    )  # 读不到（空）不算变
-                    # 停着不动也算读到了（read_at 更新）：以前停车扫描 10 秒后就被当成「位置过期」（2026-10-27 复审）。
-                    # latest 照旧只在坐标变了才换（导航按它重算，停着不用每 0.2 秒重算一遍）
-                    self.read_at = info.get("t") or ok_at
-                    self.current = (
-                        self.read_at,
-                        g,
-                        dict(info),
-                    )  # 每次读到的完整一份（产矿区用：地名可能后几帧才认出来）
-                    if moved:
-                        self.latest = (self.read_at, g, dict(info))
-                        # 顺便记进 last_position.json；星球局部坐标用游戏给的，比推算准
-                        here = n.locate(
-                            g,
-                            when=info.get("t"),
-                            local=info.get("local"),
-                            zone=info.get("zone"),
-                            local_ok=info.get("local_ok"),
-                        )
-                        _E().nav.last_here = here
-                        self._publish()
+                    self._absorb(n, ok_at, info)
+                active_changed = reader_active != was
+                was = reader_active
+                with self._lock:
+                    self.reader_active = reader_active
+                    if info.get("global"):
+                        self.reader_ok_at = ok_at
+                if active_changed:
+                    self._publish(force=True)
             except Exception as e:
                 bus.publish(
                     "log", {"task": "displayinfo", "line": f"右上角识别失败：{e}"}
                 )
-            if self.reader.active != was:
-                was = self.reader.active
-                self._publish(force=True)
-            time.sleep(0.05 if ready else 0.2)
+            self.stop_ev.wait(0.05 if ready else 0.2)
 
 
 class _LogWatch:
@@ -206,18 +303,32 @@ class _LogWatch:
     def __init__(self):
         self.thread = None
         self.last = None
+        self.stop_ev = threading.Event()
 
     def start(self):
-        if not self.thread:
+        if self.thread is None or not self.thread.is_alive():
+            self.stop_ev.clear()
             self.thread = threading.Thread(
                 target=self._run, daemon=True, name="logwatch"
             )
             self.thread.start()
 
+    def request_stop(self):
+        self.stop_ev.set()
+
+    def join(self, timeout=None):
+        thread = self.thread
+        if thread is None:
+            return True
+        if thread is threading.current_thread():
+            return not thread.is_alive()
+        thread.join(timeout)
+        return not thread.is_alive()
+
     def _run(self):
         from ...navigation.position import from_log
 
-        while True:
+        while not self.stop_ev.is_set():
             try:
                 hit = from_log()
                 now = (hit[0], hit[1]) if hit else None
@@ -226,4 +337,5 @@ class _LogWatch:
                     bus.publish("status", _T("system").status())
             except Exception:
                 pass
-            time.sleep(self.EVERY)
+            if self.stop_ev.wait(self.EVERY):
+                break

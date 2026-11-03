@@ -30,15 +30,22 @@ class EngineManager:
         from ...runtime.results import ResultStore
 
         self.results = ResultStore()
-        self.game_events = _GameEvents()
-        self.nav = _Nav()
-        self.live = _Live(self.results)
         self.pos = _Pos()
-        self.count = _Count()
-        self.hover = _Hover()
         self.cam_filter = _CamFilter()
         self.steady = _Steady()
+        self.game_events = _GameEvents(on_qt_arrived=self.pos.request_read_now)
+        self.nav = _Nav(self.pos, self.cam_filter, self.steady, self.results)
+        self.live = _Live(self.results)
+        self.count = _Count()
+        self.hover = _Hover()
         self.logwatch = _LogWatch()
+
+        # B5b 过渡：B7 移到 bootstrap。只在组装末尾写一次，导入 tasks.navigation 不再有副作用。
+        from ...navigation import navigate as navigate_data
+        from ...tasks import navigation as navigation_tasks
+
+        navigate_data.HINTS = self.pos.hints
+        navigation_tasks.bind(self.nav, self.pos, self.game_events, self.results)
 
     def start_all(self):
         """打开 AT 主窗口时启动后台服务：热键监听、定时查更新、搜索索引预热、未发送反馈补发、原矿扫描续跑
