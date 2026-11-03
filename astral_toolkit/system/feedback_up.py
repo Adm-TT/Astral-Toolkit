@@ -28,18 +28,10 @@ _lock = threading.Lock()
 
 def enabled():
     from ..core import settings
-    from ..update import update_check
 
     if os.environ.get("AT_FEEDBACK_OFF"):  # 跑测试时关掉（不能往服务器发假反馈）
         return False
-    if settings.load().get("feedback_upload") is False:
-        return False
-    try:
-        return not update_check.disabled(
-            "feedback"
-        )  # 远程开关：服务器出问题时能整体关掉
-    except Exception:
-        return True
+    return settings.load().get("feedback_upload") is not False
 
 
 def install_id():

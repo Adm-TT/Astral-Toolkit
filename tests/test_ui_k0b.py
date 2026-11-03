@@ -477,7 +477,6 @@ def _world(monkeypatch, tmp_path, analyse=None):
     monkeypatch.setattr(screen, "LAST_PANEL", {})
     monkeypatch.setattr(signals, "find_signatures", lambda img: [])
     monkeypatch.setattr(t_mining, "_game_front", lambda: None)
-    monkeypatch.setattr(hud_state, "_off", lambda feature: None)
     hud = _Hud()
     monkeypatch.setattr(hud_state, "_hud", lambda: hud)
     return hud

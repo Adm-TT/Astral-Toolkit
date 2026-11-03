@@ -10,14 +10,6 @@ _SYSTEM_API = [
     "upgrade_check",
     "upgrade_online",
     "upgrade_rollback",
-    "upgrade_mark_stable",
-    "legacy_scan",
-    "legacy_import",
-    "legacy_skip",
-    "legacy_quit",
-    "upgrade_apply",
-    "upgrade_upload",
-    "upgraded",
     "export_logs",
     "feedback_report",
     "feedback_list",
@@ -125,10 +117,6 @@ _OLD_API_NAMES = [
     "item_info",
     "item_loot",
     "item_search",
-    "legacy_import",
-    "legacy_quit",
-    "legacy_scan",
-    "legacy_skip",
     "live_start",
     "live_stop",
     "manual_scan",
@@ -186,13 +174,9 @@ _OLD_API_NAMES = [
     "third_party_licenses",
     "trade",
     "update_data",
-    "upgrade_apply",
     "upgrade_check",
-    "upgrade_mark_stable",
     "upgrade_online",
     "upgrade_rollback",
-    "upgrade_upload",
-    "upgraded",
     "waypoint_add",
     "waypoint_delete",
     "waypoint_from_text",
@@ -209,9 +193,8 @@ def test_all_api_names_routed():
 
     router.reset()
     r = router.routes()
-    assert (
-        len(_OLD_API_NAMES) == len(set(_OLD_API_NAMES)) == 108
-    )  # 109 个减去 cockpit_check（自动跑删了，整改第 5 批）
+    # 已删掉旧版导入与压缩包手动升级等退役接口，不再按旧数量硬编码。
+    assert len(_OLD_API_NAMES) == len(set(_OLD_API_NAMES))
     missing = [n for n in _OLD_API_NAMES if n not in r]
     assert not missing, missing
     for n in _OLD_API_NAMES:

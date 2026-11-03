@@ -3,7 +3,7 @@
 2026-10-28 从 app/services.py 原样剪出来（逻辑没改）。2026-10-30 重构阶段 4 删了 services.py，
 用到的函数 / 变量直接到它们所在的模块取，运行时才取，避免互相 import：
 _T("mining").xxx = tasks/mining.py，_H().xxx = app/hud_state.py，_E().live / .nav / .pos / .cam_filter = 引擎实例。
-用到：_area_now, _game_front, _hud, _mark_goal_lines, _note_hud, _off, _where_now, scan_view, settings_key
+用到：_area_now, _game_front, _hud, _mark_goal_lines, _note_hud, _where_now, scan_view, settings_key
 
 RT-B4：线程 / 停止 / 提交边界 / 暂停 / 过期 / 自动关闭 / 重试都在 runtime/session.py 的 SessionLoop；
 这里只写一轮识别（Worker）。一个会话的每次尝试的状态放在 _Ctx 里（按会话分开：停止超时后旧线程
@@ -152,7 +152,6 @@ class _Ctx:
         self.scan_live = False
         self.sig_live = False
         self.missing = 0
-        self.scan_off_cleared = False
         self._closed = False
 
     def close(self):
@@ -506,20 +505,6 @@ class _Live:
             from ...navigation.displayinfo import yield_ocr
 
             yield_ocr()
-        scan_off = bool(_H()._off("scan"))
-        if (
-            scan_off
-        ):  # 远程关了：面板在不在照样判断（雷达靠它避开面板上的数字），结果不用；
-            from ...mining.parse import parse_bag, parse_scan
-
-            scan, bag = parse_scan([]), parse_bag([])
-            ctx.recent.clear()
-            ctx.part.clear()
-            if not ctx.scan_off_cleared:
-                ctx.scan_off_cleared = True
-                self.loop.commit(session, _del("扫描", "矿袋"))
-        else:
-            ctx.scan_off_cleared = False
         # 面板顶着屏幕右边、被挡住一截（16:10 屏幕上鼹鼠炮塔的面板，2026-10-23 用户反馈）：品质和总 SCU 在屏幕外面，
         # 质量、抗性、不稳定性读到了就照样算破碎方案（part 队列，两帧一致才出）
         cut = panel_now and bool(screen.LAST_PANEL.get("cut"))
@@ -536,11 +521,7 @@ class _Live:
         elif scan.valid or not panel_now:
             ctx.part.clear()
         # 面板在却读不全：连续几帧这样就留一张图，并告诉玩家可能的原因（被屏幕挡住 / 字有色差重影）
-        ctx.miss_n = (
-            0
-            if (scan_off or scan.valid or not panel_now or part_ok)
-            else ctx.miss_n + 1
-        )
+        ctx.miss_n = 0 if (scan.valid or not panel_now or part_ok) else ctx.miss_n + 1
         if ctx.miss_n >= self.MISS_FRAMES and now - ctx.miss_t > self.MISS_GAP:
             ctx.miss_t, ctx.miss_n = now, 0
             self._save_miss(ctx, img, "读不全", raw)
@@ -556,7 +537,7 @@ class _Live:
             self.loop.commit(session, _del("信号"))
         # ---- 雷达信号（扫描面板开着时不认，2026-10-23 用户反馈把石头质量 13,586 当成了信号）
         try:
-            found = [] if panel_now or _H()._off("radar") else find_signatures(img)
+            found = [] if panel_now else find_signatures(img)
             sigs = frozenset(v for v, *_ in found)
             if sigs:
                 ctx.last_sig_t = wall
@@ -639,7 +620,7 @@ class _Live:
                 session, _pub("log", {"task": "live", "line": f"信号识别失败：{e}"})
             )
         ctx.done_here += 1
-        if panel_now and not scan_off:
+        if panel_now:
             ctx.last_panel_t, ctx.missing = wall, 0
             observed["panel"] = now
         else:
