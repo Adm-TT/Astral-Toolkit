@@ -324,15 +324,19 @@ def test_publish_hk_checks_manifest(tmp_path):
             "urls": ["https://dl.astral-trade.com/releases/v1.0.5/AT_Setup_1.0.5.exe"],
         },
     }
-    assert [e[0] for e in H.entries(lj, good)] == [
-        "Dubhe_1.0.5.zip",
-        "AT_Setup_1.0.5.exe",
-    ]
     only_setup = {"version": "1.0.5", "installer": good["installer"]}
     assert [e[0] for e in H.entries(lj, only_setup)] == ["AT_Setup_1.0.5.exe"]
     bad = [
         {},
+        good,  # 源码压缩包版已退役（RET-1）：清单里再带压缩包就不发
         {k: v for k, v in good.items() if k != "installer"},
+        dict(
+            only_setup,
+            installer=dict(
+                good["installer"],
+                urls=["https://dl.astral-trade.com/releases/x;rm/AT_Setup_1.0.5.exe"],
+            ),
+        ),
         dict(good, urls=["https://dl.astral-trade.com/releases/v1.0.5/$(id).zip"]),
         dict(
             good, urls=["https://dl.astral-trade.com/releases/v1.0.5/Dubhe_1.0.4.zip"]
