@@ -1,5 +1,5 @@
 """生成「第三方许可.txt」：从 .venv 里实际装的组件收集许可证原文（不手抄，免得漏抄错抄），再加上 Python 和 D-DIN、DejaVu Sans Mono 字体。
-打包时（tools/pack.py）自动调用；也可以单独跑：
+生成安装包前手动运行；也可以单独跑：
   .venv\\Scripts\\python.exe -X utf8 tools\\collect_licenses.py
 MIT / BSD / Apache-2.0 / OFL 等许可都要求分发时附上许可证原文和版权声明（2026-10-26）
 """

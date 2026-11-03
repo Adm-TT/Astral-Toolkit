@@ -32,6 +32,10 @@ def _never() -> bool:
     return False
 
 
+def _noop() -> None:
+    pass
+
+
 class RunState(Enum):
     """会话状态（架构稿 §7.4）。FAILED 只在工作线程已经退出后出现（出错用尽）"""
 
@@ -156,6 +160,7 @@ class Worker(Protocol):
     """每个引擎实现：只写业务，不写线程"""
 
     name: str
+    # 可选类属性 activity_kind（如 "mining"）：有就由 _confirm_stop_locked 发展示终态；不在协议里声明，按 getattr 读
     retries: int
     idle_close: float | None
     stale_after: dict[str, float]
@@ -211,6 +216,7 @@ class _Run:
     thread: threading.Thread
     state: RunState = RunState.STARTING
     confirm_sent: bool = False  # 「已停止」确认发过没
+    ui_end_sent: bool = False  # 展示终态发过没（看门狗可能先于确认发）
     superseded: bool = False  # 已被新会话取代（在 _pending 里）
     stop_timeout: bool = False  # 看门狗判过停止超时（状态仍留 STOPPING）
     join_timed_out: bool = (
@@ -253,6 +259,9 @@ class SessionLoop:
         self._join_timeout = join_timeout
         self._run_flag = run_flag
         self._closing = closing
+        self._finish_hook: Callable[[], object] = (
+            _noop  # 只给测试：线程收尾最后一步前停住
+        )
         self._lock = _OwnedLock()
         self._flag_lock = threading.Lock()
         self._flag_want: bool | None = None
@@ -338,6 +347,9 @@ class SessionLoop:
                 return True
             if cur.state in (RunState.STARTING, RunState.RUNNING, RunState.PAUSED):
                 return False
+            # 和 start() 同一判断：STOPPED / FAILED 表示已收尾，线程还没退完也能直接开
+            if cur.state in (RunState.STOPPED, RunState.FAILED):
+                return True
             if not cur.thread.is_alive():
                 return True
             return self._may_replace_locked(cur)
@@ -366,13 +378,7 @@ class SessionLoop:
                 RunState.PAUSED,
             ):
                 return cur.session.id if cur.session.payload == payload else None
-            if cur is not None and (
-                cur.state is RunState.STOPPING
-                or (
-                    cur.state in (RunState.STOPPED, RunState.FAILED)
-                    and cur.thread.is_alive()
-                )
-            ):
+            if cur is not None and cur.state is RunState.STOPPING:
                 if cur.thread.is_alive():
                     if not self._may_replace_locked(cur):
                         return None
@@ -509,11 +515,35 @@ class SessionLoop:
             deferred.append(
                 ("record", "MINING", "采矿助手引擎已停止（已被新会话取代）", "")
             )
+            self._queue_activity_end_locked(run, info, deferred)
             return
         run.confirm_sent = True
         self._apply_locked(
             self._ops_safe(self._worker.stop_ops, run.session, info), deferred
         )
+        self._queue_activity_end_locked(run, info, deferred)
+
+    def _queue_activity_end_locked(
+        self, run: _Run, info: StopInfo, deferred: list[Op]
+    ) -> None:
+        kind = getattr(self._worker, "activity_kind", None)
+        if not kind or run.ui_end_sent:
+            return
+        run.ui_end_sent = True
+        if run.superseded:
+            reason = "replaced"
+            error = ""
+        else:
+            reason = (
+                info.reason
+                if info.reason in ("user", "idle", "error", "shutdown")
+                else "done"
+            )
+            error = info.error
+        data = {"activity_id": f"{kind}:{run.session.id}", "end_reason": reason}
+        if error:
+            data["error"] = error
+        self._apply_locked([("ui", "ui.activity_end", data)], deferred)
 
     def join(self, timeout: float | None = None, *, session_id: int) -> bool:
         """只等 `session_id` 那个会话自己的线程。超时 → 发确认、留 STOPPING、起它自己的看门狗"""
@@ -611,6 +641,11 @@ class SessionLoop:
             deferred.append(
                 ("record", "MINING", "采矿助手停止超时：旧线程仍未退出", "")
             )
+            # 自停（idle / error）卡在收尾：「已停止」确认照 v4.2 d′ 不发（留给取代），
+            # 但展示终态先发，否则活动会一直挂在全家福里（UI-K0b 审查）
+            info = self._info_of(run)
+            if info.reason in ("idle", "error"):
+                self._queue_activity_end_locked(run, info, deferred)
         self._run_ops(deferred)
 
     # ---------------------------------------------------------------- 提交边界
@@ -1024,3 +1059,4 @@ class SessionLoop:
                 pending = self._pending.pop(session.id, None)
                 if pending is not None:
                     pending.stop_timeout = False
+        self._finish_hook()

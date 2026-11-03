@@ -242,7 +242,6 @@ def test_hover_sends_raw_and_canon_to_train_data(monkeypatch):
             started.append((self.target, self.args))
 
     monkeypatch.setattr(Hv, "WIN", False)
-    monkeypatch.setattr(Hv, "_off", lambda k: None)
     monkeypatch.setattr(Hv, "inspect_item", lambda img, cur: dict(res))
     monkeypatch.setattr(Hv, "item_info", lambda *a, **k: {})
     monkeypatch.setattr(Hv, "_item_hud", lambda *a, **k: None)

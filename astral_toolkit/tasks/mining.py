@@ -16,7 +16,7 @@ from types import MappingProxyType
 
 # ---------------------------------------------------------------- 依赖（2026-10-30 重构阶段 3：不再经 services 转发）
 from ..app.engines.manager import EngineManager
-from ..app.hud_state import _hud, _off
+from ..app.hud_state import _hud
 from .. import gamedata
 from ..app.presenters import mining as _present
 from ..mining import analysis as _analysis
@@ -96,7 +96,6 @@ def _marker_tick(target, data, state, shown, ref=None):
         and fg
         and not _engines().live.running()
         and _marker_on()
-        and not _off("nav_marker")
     )
     if not show:
         if shown is not None:

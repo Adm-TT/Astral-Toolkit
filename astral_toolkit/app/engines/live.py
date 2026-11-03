@@ -3,7 +3,7 @@
 2026-10-28 从 app/services.py 原样剪出来（逻辑没改）。2026-10-30 重构阶段 4 删了 services.py，
 用到的函数 / 变量直接到它们所在的模块取，运行时才取，避免互相 import：
 _T("mining").xxx = tasks/mining.py，_H().xxx = app/hud_state.py，_E().live / .nav / .pos / .cam_filter = 引擎实例。
-用到：_area_now, _game_front, _hud, _mark_goal_lines, _note_hud, _off, _where_now, scan_view, settings_key
+用到：_area_now, _game_front, _hud, _mark_goal_lines, _note_hud, _where_now, scan_view, settings_key
 
 RT-B4：线程 / 停止 / 提交边界 / 暂停 / 过期 / 自动关闭 / 重试都在 runtime/session.py 的 SessionLoop；
 这里只写一轮识别（Worker）。一个会话的每次尝试的状态放在 _Ctx 里（按会话分开：停止超时后旧线程
@@ -67,6 +67,55 @@ def _hotkey_now():
     return _T("navigation").settings_key("live_key", "F5")
 
 
+def _ui(kind, data):
+    return ("ui", kind, data)
+
+
+def _mining_activity(session_id, ui, quality=None):
+    """把本会话的展示状态拼成活动（纯函数：不读 DOM / 全局）。quality 不传就用 ui 里记的"""
+    ui = ui or {}
+    if quality is None:
+        quality = ui.get("quality") or "complete"
+    scan = ui.get("scan")
+    if isinstance(scan, dict) and scan:
+        primary = {"value": scan.get("rock") or "岩石", "unit": ""}
+        secondary = []
+        for key, label, unit in (
+            ("mass", "质量", ""),
+            ("total_scu", "矿量", "SCU"),
+            ("difficulty", "难度", ""),
+        ):
+            if key in scan and scan[key] is not None:
+                item = {"label": label, "value": scan[key]}
+                if unit:
+                    item["unit"] = unit
+                secondary.append(item)
+        secondary = secondary[:3]
+    else:
+        primary = {"value": None, "unit": ""}
+        secondary = []
+        signals = ui.get("signals")
+        if signals:
+            lines = signals.get("lines") if isinstance(signals, dict) else None
+            secondary = [{"label": "信号", "value": lines[0] if lines else ""}]
+    return {
+        "activity_id": f"mining:{session_id}",
+        "kind": "mining",
+        "title": "采矿助手",
+        "state": ui.get("state") or "starting",
+        "primary": primary,
+        "secondary": secondary,
+        "progress": None,
+        "action": {"id": "stop", "label": "结束"},
+        "link": "live",
+        "stale_since": ui.get("stale_since"),
+        "error": None,
+        "updated_wall": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "quality": quality,
+        "detail_ref": None,
+    }
+
+
 class _Ctx:
     """一个会话的一次尝试的全部可变状态：旧线程停在自己的 Ctx 里，碰不到新会话"""
 
@@ -94,10 +143,15 @@ class _Ctx:
         # 显示用的墙钟时间戳（「已过期」里的从几点起、暂停补偿）
         self.last_panel_t = now
         self.last_sig_t = now
+        self.ui = {
+            "state": "starting",
+            "scan": None,
+            "signals": None,
+            "stale_since": None,
+        }
         self.scan_live = False
         self.sig_live = False
         self.missing = 0
-        self.scan_off_cleared = False
         self._closed = False
 
     def close(self):
@@ -140,6 +194,7 @@ class _Live:
 
     # ---- 会话循环要的类属性（设计稿 v3 §2.2）
     name = "live"
+    activity_kind = "mining"
     retries = 3
     idle_close: float | None = 120.0  # 所有通道最近一次「看到」都超过这么久：自动关闭
     stale_after: dict[str, float] = {"panel": 20.0, "signals": 20.0}
@@ -226,9 +281,11 @@ class _Live:
 
     # ---------------------------------------------------------------- Worker
     def start_ops(self, session):
+        ui = {"state": "starting", "scan": None, "signals": None, "stale_since": None}
         return [
             _record("MINING", "采矿助手引擎已启动", "LIVE"),
             _pub("live", {"running": True}),
+            _ui("ui.activity", _mining_activity(session.id, ui)),
         ]
 
     def stop_ops(self, session, info):
@@ -310,6 +367,7 @@ class _Live:
         if ctx is None:
             return []
         ctx.miss_n = ctx.unstable_n = 0
+        ctx.ui["state"] = "paused"
         try:
             ctx.log.write(f"{time.strftime('%F %T')} PAUSE 游戏不在最前面，暂停识别\n")
             ctx.log.flush()
@@ -318,6 +376,7 @@ class _Live:
         return [
             _pub("live", {"running": True, "paused": True}),
             _record("MINING", "采矿助手已暂停", "LIVE", "游戏不在最前面", "WARN"),
+            _ui("ui.activity", _mining_activity(session.id, ctx.ui)),
         ]
 
     def on_resume(self, session, ctx, gap):
@@ -336,9 +395,15 @@ class _Live:
             ctx.log.flush()
         except (OSError, ValueError):
             pass
+        ctx.ui["state"] = (
+            "running"
+            if ctx.ui.get("scan") is not None or ctx.ui.get("signals") is not None
+            else "starting"
+        )
         return [
             _pub("live", {"running": True, "paused": False}),
             _record("MINING", "采矿助手已继续", "LIVE", f"暂停了 {gap:.0f} 秒", "INFO"),
+            _ui("ui.activity", _mining_activity(session.id, ctx.ui)),
         ]
 
     def on_stale(self, session, ctx, channel):
@@ -373,6 +438,8 @@ class _Live:
                 ctx.recent.clear()
                 ctx.part.clear()
                 since = time.strftime("%H:%M:%S", time.localtime(ctx.last_panel_t))
+                ctx.ui["state"] = "stale"
+                ctx.ui["stale_since"] = since
                 shown_scan = self.results.get(MINING_SCAN)
                 ops.append(_del("扫描", "矿袋"))
                 ops.append(
@@ -381,6 +448,7 @@ class _Live:
                         {**(shown_scan.value if shown_scan else {}), "stale": since},
                     )
                 )
+                ops.append(_ui("ui.activity", _mining_activity(session.id, ctx.ui)))
         return ops
 
     # ---------------------------------------------------------------- 一轮识别
@@ -437,20 +505,6 @@ class _Live:
             from ...navigation.displayinfo import yield_ocr
 
             yield_ocr()
-        scan_off = bool(_H()._off("scan"))
-        if (
-            scan_off
-        ):  # 远程关了：面板在不在照样判断（雷达靠它避开面板上的数字），结果不用；
-            from ...mining.parse import parse_bag, parse_scan
-
-            scan, bag = parse_scan([]), parse_bag([])
-            ctx.recent.clear()
-            ctx.part.clear()
-            if not ctx.scan_off_cleared:
-                ctx.scan_off_cleared = True
-                self.loop.commit(session, _del("扫描", "矿袋"))
-        else:
-            ctx.scan_off_cleared = False
         # 面板顶着屏幕右边、被挡住一截（16:10 屏幕上鼹鼠炮塔的面板，2026-10-23 用户反馈）：品质和总 SCU 在屏幕外面，
         # 质量、抗性、不稳定性读到了就照样算破碎方案（part 队列，两帧一致才出）
         cut = panel_now and bool(screen.LAST_PANEL.get("cut"))
@@ -467,11 +521,7 @@ class _Live:
         elif scan.valid or not panel_now:
             ctx.part.clear()
         # 面板在却读不全：连续几帧这样就留一张图，并告诉玩家可能的原因（被屏幕挡住 / 字有色差重影）
-        ctx.miss_n = (
-            0
-            if (scan_off or scan.valid or not panel_now or part_ok)
-            else ctx.miss_n + 1
-        )
+        ctx.miss_n = 0 if (scan.valid or not panel_now or part_ok) else ctx.miss_n + 1
         if ctx.miss_n >= self.MISS_FRAMES and now - ctx.miss_t > self.MISS_GAP:
             ctx.miss_t, ctx.miss_n = now, 0
             self._save_miss(ctx, img, "读不全", raw)
@@ -487,7 +537,7 @@ class _Live:
             self.loop.commit(session, _del("信号"))
         # ---- 雷达信号（扫描面板开着时不认，2026-10-23 用户反馈把石头质量 13,586 当成了信号）
         try:
-            found = [] if panel_now or _H()._off("radar") else find_signatures(img)
+            found = [] if panel_now else find_signatures(img)
             sigs = frozenset(v for v, *_ in found)
             if sigs:
                 ctx.last_sig_t = wall
@@ -536,6 +586,8 @@ class _Live:
                     "area": (area or {}).get("zh", ""),
                     "unknown": unknown,
                 }  # 没认准的：窗口里可以起名记下（2026-10-27）
+                prev_ui = dict(ctx.ui)
+                ctx.ui.update(state="running", signals=msg, stale_since=None)
                 if self.loop.commit(
                     session,
                     _pub("signals", msg),
@@ -550,6 +602,7 @@ class _Live:
                         f"雷达信号: {sorted(sigs)} 产区: {(area or {}).get('zh') or '未知'}",
                         "SIGNAL",
                     ),
+                    _ui("ui.activity", _mining_activity(session.id, ctx.ui)),
                     slot=MINING_SIGNALS,
                     value={"view": msg, "values": sorted(sigs)},
                     stamp=stamp,
@@ -559,13 +612,15 @@ class _Live:
                         f"{time.strftime('%F %T')} SIG {sorted(sigs)} 产矿区={(area or {}).get('zh') or '未知'}\n"
                     )
                     log.flush()
+                else:
+                    ctx.ui = prev_ui
             ctx.sig_prev = sigs
         except Exception as e:  # noqa: BLE001 —— 信号识别出错只丢这一轮的结果，不能拖垮面板识别
             self.loop.commit(
                 session, _pub("log", {"task": "live", "line": f"信号识别失败：{e}"})
             )
         ctx.done_here += 1
-        if panel_now and not scan_off:
+        if panel_now:
             ctx.last_panel_t, ctx.missing = wall, 0
             observed["panel"] = now
         else:
@@ -617,6 +672,10 @@ class _Live:
                 view = _T("mining").scan_view(
                     best, ctx.recent[-1][1]
                 )  # 慢：算完再看一次有没有停
+                prev_ui = dict(ctx.ui)
+                ctx.ui.update(
+                    state="running", scan=view, stale_since=None, quality="complete"
+                )
                 ops = [
                     _pub("scan", view),
                     _say(
@@ -627,10 +686,12 @@ class _Live:
                 ]
                 if view["bag_text"]:
                     ops.append(_set("矿袋", view["bag_text"]))
+                ops.append(_ui("ui.activity", _mining_activity(session.id, ctx.ui)))
                 if not self.loop.commit(
                     session, *ops, slot=MINING_SCAN, value=view, stamp=stamp
                 ):
                     # 算的时候停了 / 配装变了：这份作废，下一帧按新配装重算
+                    ctx.ui = prev_ui
                     ctx.settled = False
                     return
                 if ctx.hint["why"]:
@@ -675,15 +736,21 @@ class _Live:
         )
         if stable and shown != ctx.last_shown and session.alive():
             view = _T("mining").scan_view(best, bag, cut=True)
+            prev_ui = dict(ctx.ui)
+            ctx.ui.update(
+                state="running", scan=view, stale_since=None, quality="partial"
+            )
             if not self.loop.commit(
                 session,
                 _pub("scan", view),
                 _set("扫描", view["hud"], view.get("hud_rich")),
+                _ui("ui.activity", _mining_activity(session.id, ctx.ui)),
                 slot=MINING_SCAN,
                 value=view,
                 stamp=stamp,
                 quality="partial",
             ):
+                ctx.ui = prev_ui
                 ctx.settled = False
                 return
             if ctx.hint["why"]:

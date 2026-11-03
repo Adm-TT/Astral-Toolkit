@@ -7,13 +7,27 @@ import inspect
 import os
 import re
 import shutil
+import time
 import sys
 import tempfile
 import traceback
 from pathlib import Path
 
-# 这一轮所有临时目录都建在这下面；全部通过就整个删掉，有失败留着查（以前每轮留下 400 多个目录，从不清理）
-ROOT = Path(tempfile.mkdtemp(prefix="at_tests_"))
+# 测试临时根目录：不往 C 盘写；没设 AT_TEST_TMP 就放仓库下的 .test_tmp
+_BASE = Path(
+    os.environ.get("AT_TEST_TMP")
+    or Path(__file__).resolve().parent.parent / ".test_tmp"
+)
+_BASE.mkdir(parents=True, exist_ok=True)
+# 上几轮没删干净的（失败留着查，或文件还被占着删不掉）：超过一天的顺手清掉
+for _old in _BASE.glob("at_tests_*"):
+    try:
+        if time.time() - _old.stat().st_mtime > 86400:
+            shutil.rmtree(_old, ignore_errors=True)
+    except OSError:
+        pass
+# 这一轮所有临时目录都建在这下面；全部通过就整个删掉，有失败留着查
+ROOT = Path(tempfile.mkdtemp(prefix="at_tests_", dir=_BASE))
 
 
 def tmpdir():

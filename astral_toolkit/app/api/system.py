@@ -1,6 +1,6 @@
 """系统 Controller（2026-10-30 重构阶段 4）
 
-运行状态、设置、在线更新与回滚、旧版迁移、日志导出、问题反馈、关于页、窗口显示与退出的接口：
+运行状态、设置、在线更新与回滚、日志导出、问题反馈、关于页、窗口显示与退出的接口：
 收关键字参数，原样转给 tasks/system.py 里同名函数。只做转发，不加校验（校验留在 tasks 里，改行为要 NGU 定）。
 runtime_capture_now、runtime_clear_logs（实时监控页的手动截图、清日志）原来写在 services.py，原样挪到这里。
 router 自动收集文件末尾的 ROUTES。
@@ -24,38 +24,6 @@ def upgrade_online(**kw):
 
 def upgrade_rollback(**kw):
     return _t.upgrade_rollback(**kw)
-
-
-def upgrade_mark_stable(**kw):
-    return _t.upgrade_mark_stable(**kw)
-
-
-def legacy_scan(**kw):
-    return _t.legacy_scan(**kw)
-
-
-def legacy_import(**kw):
-    return _t.legacy_import(**kw)
-
-
-def legacy_skip(**kw):
-    return _t.legacy_skip(**kw)
-
-
-def legacy_quit(**kw):
-    return _t.legacy_quit(**kw)
-
-
-def upgrade_apply(**kw):
-    return _t.upgrade_apply(**kw)
-
-
-def upgrade_upload(**kw):
-    return _t.upgrade_upload(**kw)
-
-
-def upgraded(**kw):
-    return _t.upgraded(**kw)
 
 
 def export_logs(**kw):
@@ -140,14 +108,6 @@ ROUTES = {
     "upgrade_check": upgrade_check,
     "upgrade_online": upgrade_online,
     "upgrade_rollback": upgrade_rollback,
-    "upgrade_mark_stable": upgrade_mark_stable,
-    "legacy_scan": legacy_scan,
-    "legacy_import": legacy_import,
-    "legacy_skip": legacy_skip,
-    "legacy_quit": legacy_quit,
-    "upgrade_apply": upgrade_apply,
-    "upgrade_upload": upgrade_upload,
-    "upgraded": upgraded,
     "export_logs": export_logs,
     "feedback_report": feedback_report,
     "feedback_list": feedback_list,

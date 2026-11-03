@@ -64,8 +64,9 @@ MODULES = [
     "tests.test_tools",
     "tests.test_goals",
     "tests.test_loadout_sweep",
-    "tests.test_upgrade",
+    "tests.test_run_directml",
     "tests.test_update",
+    "tests.test_ret1_cleanup",
     "tests.test_data_pack",
     "tests.test_gridtext",
     "tests.test_station_lifts",
@@ -103,6 +104,8 @@ MODULES = [
     "tests.test_gamedata_b6",
     "tests.test_gamedata_b5",
     "tests.test_ui_stream",
+    "tests.test_ui_k0b",
+    "tests.test_ui_client",
 ]
 
 if __name__ == "__main__":

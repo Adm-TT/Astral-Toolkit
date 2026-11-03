@@ -1,6 +1,6 @@
 """astral_toolkit/tasks/system 门面模块
 
-统一导出系统设置、运行状态、在线升级、问题反馈、旧版迁移与关于页的业务逻辑。
+统一导出系统设置、运行状态、在线升级、问题反馈与关于页的业务逻辑。
 """
 
 import sys
@@ -26,7 +26,6 @@ from .feedback import (
     feedback_list,
     feedback_report,
 )
-from .legacy import _legacy, legacy_import, legacy_quit, legacy_scan, legacy_skip
 from .settings import (
     HOTKEYS,
     _hotkey_values,
@@ -40,28 +39,17 @@ from .settings import (
 )
 from .status import _desktop, _gridtext_status, _system_info, export_logs, status
 from .upgrade import (
-    FROZEN_UPGRADE_MSG,
     VPK_PREV,
-    _drop_upload,
-    _found,
     _online,
     _online_info,
     _online_loop,
     _online_public,
     _online_task,
-    _sweep_uploads,
     _task_print,
-    _upgrade_found,
-    _upgrade_task,
     _vpk_rollback_task,
-    upgrade_apply,
     upgrade_check,
-    upgrade_mark_stable,
     upgrade_online,
-    upgrade_receive,
     upgrade_rollback,
-    upgrade_upload,
-    upgraded,
 )
 
 __all__ = [
@@ -69,15 +57,6 @@ __all__ = [
     "upgrade_check",
     "upgrade_online",
     "upgrade_rollback",
-    "upgrade_mark_stable",
-    "upgrade_apply",
-    "upgrade_receive",
-    "upgrade_upload",
-    "upgraded",
-    "legacy_scan",
-    "legacy_import",
-    "legacy_skip",
-    "legacy_quit",
     "export_logs",
     "feedback_report",
     "feedback_list",
@@ -109,7 +88,6 @@ class _SystemModule(sys.modules[__name__].__class__):
             about as _about,
             common as _common,
             feedback as _feedback,
-            legacy as _legacy_mod,
             settings as _settings,
             upgrade as _upgrade,
         )
@@ -121,7 +99,6 @@ class _SystemModule(sys.modules[__name__].__class__):
             _settings,
             _upgrade,
             _feedback,
-            _legacy_mod,
             _about,
         ):
             if sub and hasattr(sub, name):

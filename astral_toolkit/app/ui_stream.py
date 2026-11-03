@@ -15,11 +15,15 @@ import secrets
 import threading
 import time
 
+from .presenters.mining import tile_status as mining_tile_status
+
 PROTOCOL = "ui/1"
 instance_id = secrets.token_urlsafe(18)  # 进程启动一次，重启就换
 INSTANCE_ID = instance_id
 _QUEUE_MAX = 2000
 ENDED_MAX = 256
+SUMMARY_KEEP = 1200
+TRANSIENT_KEEP = 10.0
 
 _lock = threading.Lock()
 _idle = threading.Condition(_lock)  # 等队列排空时复用同一把锁
@@ -31,8 +35,11 @@ _notice_seq = 0
 _activities = {}
 _tiles = {}
 _notices = {}
+_notice_times = {}
 _ended = {}
 _switches = {}
+_switch_read_mono = None
+_switch_revision = 0  # 仅保护锁外采样提交，不进入展示协议
 _shutting_down = False
 
 
@@ -78,6 +85,28 @@ def _remove_sub_locked(sub):
         _subs.remove(sub)
     _queues.pop(id(sub.q), None)
     _idle.notify_all()
+
+
+def _clean_notices_locked():
+    """清掉划掉的、过期的摘要 / 短暂通知；不发消息，客户端按 lifetime 自己收起。"""
+    now = time.monotonic()
+    for notice_id, notice in list(_notices.items()):
+        born = _notice_times.get(notice_id)
+        if born is None:
+            born = now
+            _notice_times[notice_id] = born
+        lifetime = notice.get("lifetime")
+        remove = bool(notice.get("dismissed"))
+        if not remove and lifetime == "summary" and now - born > SUMMARY_KEEP:
+            remove = True
+        if not remove and lifetime == "transient" and now - born > TRANSIENT_KEEP:
+            remove = True
+        if remove:
+            _notices.pop(notice_id, None)
+            _notice_times.pop(notice_id, None)
+    for notice_id in list(_notice_times):
+        if notice_id not in _notices:
+            _notice_times.pop(notice_id, None)
 
 
 def _send_locked(kind, payload):
@@ -139,6 +168,9 @@ def _derive_tiles_locked(publish):
     if "live_on" in _switches or "live_running" in _switches:
         on = bool(_switches.get("live_on") or _switches.get("live_running"))
         derived["mining"] = _make_tile("mining", on, mining_id)
+        runtime = _switches.get("mining_runtime")
+        if isinstance(runtime, dict):
+            derived["mining"].update(mining_tile_status(on, runtime))
     nav_id = _current_activity_id("nav")
     if "nav_running" in _switches:
         derived["nav"] = _make_tile("nav", _switches["nav_running"], nav_id)
@@ -220,6 +252,7 @@ def _publish_activity_end_locked(data):
         "dismissed": False,
     }
     _notices[notice_id] = _copy(notice)
+    _notice_times.setdefault(notice_id, time.monotonic())
     _send_locked("ui.notice", {"notice": notice})
     _activities.pop(activity_id, None)
     end = {
@@ -259,6 +292,7 @@ def _publish_notice_locked(data):
     notice_id = notice.get("notice_id")
     if notice_id is not None:
         _notices[notice_id] = _copy(notice)
+        _notice_times.setdefault(notice_id, time.monotonic())
     return _send_locked("ui.notice", {"notice": notice})
 
 
@@ -285,6 +319,7 @@ def publish_ui(kind, data):
     with _lock:
         if _shutting_down:
             return _seq
+        _clean_notices_locked()
         if kind == "ui.activity":
             return _publish_activity_locked(payload)
         if kind == "ui.activity_end":
@@ -381,6 +416,7 @@ def heartbeat(conn):
 def snapshot(conn):
     """返回与同一把锁下状态一致的全家福；只读，不修改开关或磁贴。"""
     with _lock:
+        _clean_notices_locked()
         seq = _seq
         activities = _copy(list(_activities.values()))
         tiles = _copy(list(_tiles.values()))
@@ -411,15 +447,39 @@ def _clean_switches(switches):
         "hover_on",
         "overlay_on",
     )
-    return {key: bool(switches[key]) for key in allowed if key in switches}
+    clean = {key: bool(switches[key]) for key in allowed if key in switches}
+    if isinstance(switches.get("mining_runtime"), dict):
+        clean["mining_runtime"] = _copy(switches["mining_runtime"])
+    return clean
 
 
-def set_switches(switches):
+def set_switches(switches, read_mono=None, expected_revision=None):
     """开关变化唯一入口：锁内派生磁贴，有变化就分配 ui_seq 并广播 ui.tile。"""
+    global _switch_read_mono, _switch_revision
     with _lock:
         if _shutting_down:
             return _seq
-        _switches.update(_clean_switches(switches))
+        if expected_revision is not None and expected_revision != _switch_revision:
+            return _seq
+        if (
+            read_mono is not None
+            and _switch_read_mono is not None
+            and read_mono < _switch_read_mono
+        ):
+            return _seq
+        if read_mono is not None:
+            _switch_read_mono = read_mono
+        clean = _clean_switches(switches)
+        runtime = _switches.get("mining_runtime")
+        if (
+            "mining_runtime" not in clean
+            and ("live_on" in clean or "live_running" in clean)
+            and isinstance(runtime, dict)
+        ):
+            # 开停消息比采样先到：保留旧线程收尾事实，开启许可等新采样确认。
+            _switches["mining_runtime"] = {**runtime, "pending_read": True}
+        _switches.update(clean)
+        _switch_revision += 1
         _derive_tiles_locked(True)
         return _seq
 
@@ -433,24 +493,62 @@ def _call_running(obj):
     return bool(value)
 
 
+def _read_mining_state(loop):
+    """只能在展示锁外读；跨调用碰上会话变化就留待下一轮，不拼接两个时刻。"""
+    try:
+        state = loop.state()
+        can_start = loop.can_start()
+        if loop.state() != state:
+            return None
+        return {
+            "state": state.state.value,
+            "running": state.state.value in ("starting", "running", "paused"),
+            "draining": state.prev_stop_pending,
+            "can_start": can_start,
+        }
+    except Exception:
+        return None
+
+
 def read_switches():
     """在锁外读现有开关状态；读不到的项目不放进来，也不生成对应磁贴"""
     out = {}
-    try:
-        from ..core import settings
-
-        cfg = settings.load()
-        if isinstance(cfg, dict) and "live_on" in cfg:
-            out["live_on"] = bool(cfg.get("live_on"))
-    except Exception:
-        pass
+    engines = live = loop = None
     try:
         from ..tasks.system.common import _engines
 
         engines = _engines()
-        running = _call_running(getattr(engines, "live", None))
-        if running is not None:
-            out["live_running"] = running
+        live = getattr(engines, "live", None)
+        loop = getattr(live, "loop", None)
+    except Exception:
+        pass
+    if loop is None:
+        # 有会话循环时 live_on 以运行事实为准，不用每秒读一次设置文件
+        try:
+            from ..core import settings
+
+            cfg = settings.load()
+            if isinstance(cfg, dict) and "live_on" in cfg:
+                out["live_on"] = bool(cfg.get("live_on"))
+        except Exception:
+            pass
+    try:
+        if engines is None:
+            raise LookupError
+        if loop is not None:
+            # 运行事实优先于持久化开关；采样不完整时保留上次展示，不用旧设置覆盖。
+            out.pop("live_on", None)
+            runtime = _read_mining_state(loop)
+            if runtime is not None:
+                out.update(
+                    live_on=runtime["running"],
+                    live_running=runtime["running"],
+                    mining_runtime=runtime,
+                )
+        else:
+            running = _call_running(live)
+            if running is not None:
+                out["live_running"] = running
         running = _call_running(getattr(engines, "nav", None))
         if running is not None:
             out["nav_running"] = running
@@ -465,7 +563,14 @@ def read_switches():
 
 def refresh_switches():
     """刷新一次运行层开关；有变化走 set_switches()，因而会广播 ui.tile。"""
-    return set_switches(read_switches())
+    with _lock:
+        if _shutting_down:
+            return _seq
+        revision = _switch_revision
+    read_mono = time.monotonic()
+    return set_switches(
+        read_switches(), read_mono=read_mono, expected_revision=revision
+    )
 
 
 def dismiss_notice(notice_id):
@@ -550,7 +655,8 @@ def encode(msg):
 
 def reset_for_tests():
     """只给测试用：清空本模块的进程内状态，不换 instance_id"""
-    global _seq, _notice_seq, _conn_seq, _shutting_down, _switches
+    global _seq, _notice_seq, _conn_seq, _shutting_down, _switches, _switch_read_mono
+    global _switch_revision
     with _idle:
         _subs.clear()
         _queues.clear()
@@ -560,7 +666,10 @@ def reset_for_tests():
         _activities.clear()
         _tiles.clear()
         _notices.clear()
+        _notice_times.clear()
         _ended.clear()
         _switches = {}
+        _switch_read_mono = None
+        _switch_revision = 0
         _shutting_down = False
         _idle.notify_all()

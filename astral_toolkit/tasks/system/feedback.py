@@ -74,7 +74,14 @@ def _scrub(text):
         for s in raw:
             if len(s) > 3:  # 别把「C:\」这种盘符根换掉
                 forms += [
-                    (f, tag) for f in {s, s.replace("\\", "/"), s.replace("\\", "\\\\")}
+                    (f, tag)
+                    for f in {
+                        s,
+                        s.replace("\\", "/"),
+                        s.replace("\\", "\\\\"),
+                        json.dumps(s)[1:-1],
+                        json.dumps(s.replace("\\", "/"))[1:-1],
+                    }
                 ]
     for f, tag in sorted(
         forms, key=lambda x: -len(x[0])

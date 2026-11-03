@@ -69,7 +69,7 @@ DI_HELP = "未检测到右上角位置信息：在游戏中按 ~ 打开控制台
 # ---------------------------------------------------------------- 依赖与辅助
 # 2026-10-30 重构阶段 2：悬浮窗从 app.hud_state 拿，引擎和最近结果（ResultStore）从 EngineManager 拿，
 # 不再经 services 转发、出错也不再回头找 services 兜底。接口由 app/api/navigation.py 的 ROUTES 注册，不再用 api 装饰器。
-from ..app.hud_state import _hud, _note_hud, _off  # noqa: E402
+from ..app.hud_state import _hud, _note_hud  # noqa: E402
 from ..app.engines.manager import EngineManager  # noqa: E402
 from ..runtime.results import MINING_SCAN  # noqa: E402
 
@@ -1004,12 +1004,7 @@ def _halo_watch(sess, ev):
             t, g_live, _ = (
                 _pos.current
             )  # 每次读到都更新（停着不动也有新的一份），latest 只在坐标变了才换（审查 2026-10-27）
-            if (
-                g_live
-                and t != seen_live
-                and time.time() - t < 3
-                and not _off("halo_auto")
-            ):
+            if g_live and t != seen_live and time.time() - t < 3:
                 seen_live = t
                 fast = (
                     prev

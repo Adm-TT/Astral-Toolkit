@@ -460,7 +460,7 @@ function renderTop() {
   const b = $("#banner");
   if (s.win && s.game_elevated && !s.admin) {
     b.hidden = false;
-    b.textContent = "游戏以管理员身份运行而 AT 没有，F8 在游戏中无法使用。关闭 AT 后重新打开「" + (s.frozen ? "AT" : "Dubhe.exe") + "」，在 Windows 确认框中点击「是」。";
+    b.textContent = "游戏以管理员身份运行而 AT 没有，F8 在游戏中无法使用。关闭 AT 后重新打开「AT」，在 Windows 确认框中点击「是」。";
   } else b.hidden = true;
   $("#pip-live").className = "pip" + (s.live ? (s.live_paused ? " new" : " on") : "");
   $("#pip-nav").className = "pip" + (s.nav ? " on" : "");
@@ -468,11 +468,6 @@ function renderTop() {
 
 async function refreshStatus() {
   try { state.status = await api("status"); renderTop(); } catch (e) { /* 后台还没好 */ }
-  if (!state.upgradedChecked && state.status) {
-    state.upgradedChecked = true;
-    const u = await api("upgraded").catch(() => ({}));
-    if (u && u.to) toast(u.rollback ? `已回滚到 AT ${u.to}` : `已升级到 AT ${u.to}`);
-  }
 }
 
 // ================================================================ 全局搜索
@@ -558,11 +553,7 @@ PAGES.home = () => {
   const set = s.settings || {};
   const d = s.data || {};
   const lastScan = state.scan;
-  const nv = s.new_version;
   $("#page").innerHTML = `
-    ${nv ? `<div class="panel" style="margin-bottom:14px;border-color:var(--amber)"><div class="row" style="justify-content:space-between">
-      <div><b>发现新版本 AT ${esc(nv.version)}</b><div class="muted" style="font-size:13px">${nv.online ? "可在线下载" : `位于「${esc(nv.where)}」（${esc(nv.at)}）`}，当前版本 ${esc(s.version || "")}</div></div>
-      <a class="btn primary" href="#settings">升级</a></div></div>` : ""}
     <h1>概览</h1>
     <p class="lede">搜索物品、矿物、地点、蓝图和维科洛兑换。游戏中鼠标停在物品上按 <kbd>${esc(s.hover_key || "F8")}</kbd> 可查看该物品。游戏建议使用无边框全屏，窗口模式也可用，画面越小识别越不准。</p>
     ${resWarn(s)}
@@ -1001,6 +992,7 @@ function drawMineral() {
   const box = $("#iout"), m = state.mineral;
   if (!box || !m) return;
   document.querySelectorAll("#ilist button").forEach((b) => b.classList.toggle("on", b.dataset.m === m.en));
+  document.querySelectorAll("#ilist button[data-i]").forEach((b) => b.classList.remove("on"));
   box.innerHTML = `<div class="panel"><div class="item-head"><span class="name">${esc(m.zh)}</span><span class="muted">${esc(m.en)}</span><span class="tag">${m.gem ? esc(m.gem.kind) : "矿物"}${m.rarity ? "｜" + esc(m.rarity) : ""}</span><span style="margin-left:auto"><button class="btn small" id="to-stock" title="在库存页入库此矿物">入库</button></span></div>
     ${m.gem ? `<p class="muted" style="margin:0">信号 ${money(m.gem.rs)} / 块｜终端价 ${m.gem.price ? `<span class="money">${money(m.gem.price)}</span> aUEC/个` : "暂无"}｜共 ${m.total} 个地点</p>
     <p class="muted" style="margin:4px 0 0">不稳定性 ${esc(m.gem.inst)}｜抗性 ${esc(m.gem.res)}</p>${goalBox([m.goal])}</div>`
@@ -1708,6 +1700,11 @@ function drawItem() {
   const box = $("#iout");
   if (!box || !state.item) return;
   const it = state.item;
+  document.querySelectorAll("#ilist button").forEach((b) => {
+    const i = b.dataset.i;
+    const r = i === undefined ? null : state.itemRows && state.itemRows[+i];
+    b.classList.toggle("on", !!r && r.name === it.name && r.id === it.id);
+  });
   const near = it.here ? `按距当前位置远近排序：${it.here.label}${it.here.minutes > 10 ? `，${it.here.minutes} 分钟前` : ""}` : "按价格从低到高排序（打开过游戏库存后按远近排序）";
   const ways = [];
   if (it.nowhere) {                                          // 只有汉化包里有名字（1.6.41）
@@ -2735,16 +2732,14 @@ PAGES.settings = () => {
     </div>
     <h2>升级 AT</h2>
     <div class="panel" id="upg">
-      <p style="margin:0 0 10px">当前版本 <b>AT ${esc(s.version || "")}</b>。${s.frozen ? "AT 检查网上的新版本，下载后自动安装并重新打开。" : "AT 检查网上的新版本，并在「下载」「桌面」以及微信、QQ 接收的文件中查找安装包（Dubhe_x.x.x.zip）。"}
+      <p style="margin:0 0 10px">当前版本 <b>AT ${esc(s.version || "")}</b>。AT 检查网上的新版本，下载后自动安装并重新打开。
         升级不影响设置、路标、配置、目标和库存。</p>
       <div id="upg-found" class="muted">查找中…</div>
-      <div class="row" style="margin-top:10px;gap:8px"><button class="btn" id="upg-scan">检查更新</button>
-        ${s.frozen ? "" : `<label class="btn" style="cursor:pointer">选择安装包…<input type="file" id="upg-file" accept=".zip" hidden></label>`}</div>
-      <div class="set" style="border:0;padding:12px 0 0"><div>启动时检查更新<p>只读取网上的版本信息，下载需点击「下载并升级」。关闭后仍会每小时读取一次功能停用通知</p></div><button class="switch ${c.update_online !== false ? "on" : ""}" id="upd-sw" aria-label="启动时检查更新"></button></div>
-      ${s.frozen && !s.vpk ? "" : `<h3 style="margin:16px 0 6px">回滚到旧版本</h3>
-      <p class="muted" style="margin:0 0 8px">${s.vpk ? "新版本出现问题时，可从更新服务器装回上一个版本，设置和数据不受影响。" : `新版本出现问题时，可回滚到上一个版本，设置和数据不受影响。每次升级前自动备份当前版本
-        （「下载」等文件夹中的旧安装包也列在此处）。`}</p>
-      <div id="upg-older" class="muted">查找中…</div>`}
+      <div class="row" style="margin-top:10px;gap:8px"><button class="btn" id="upg-scan">检查更新</button></div>
+      <div class="set" style="border:0;padding:12px 0 0"><div>启动时检查更新<p>只读取网上的版本信息，下载需点击「下载并升级」</p></div><button class="switch ${c.update_online !== false ? "on" : ""}" id="upd-sw" aria-label="启动时检查更新"></button></div>
+      ${s.vpk ? `<h3 style="margin:16px 0 6px">回滚到旧版本</h3>
+      <p class="muted" style="margin:0 0 8px">新版本出现问题时，可从更新服务器装回上一个版本，设置和数据不受影响。</p>
+      <div id="upg-older" class="muted">查找中…</div>` : ""}
       <div id="upg-prog" style="margin-top:12px" hidden><div class="row" style="justify-content:space-between;margin-bottom:6px">
         <span id="upg-prog-t">准备中</span><span class="faint" id="upg-prog-p"></span></div><div class="meter"><i style="width:0%"></i></div></div>
       <div class="log" id="log-upgrade" style="margin-top:12px${(state.logs.upgrade || []).length ? "" : ";display:none"}">${esc((state.logs.upgrade || []).join("\n"))}</div>
@@ -2855,24 +2850,20 @@ PAGES.settings = () => {
     toast(state.overlayMove ? "可拖动悬浮窗，调整完成后关闭开关" : "悬浮窗已恢复鼠标穿透");
     renderPage();
   };
-  const vnum = (v) => String(v || "").split(".").map(Number).reduce((a, x) => a * 1000 + (x || 0), 0);
   const upgList = (r) => {
     const el = $("#upg-found");
     if (!el) return;
-    const on = r.online && !r.found.some((f) => vnum(f.version) >= vnum(r.online.version)) ? r.online : null;
+    const on = r.online || null;
     const onRow = on ? `<div style="margin-bottom:8px"><div class="row" style="justify-content:space-between">
         <span><b>AT ${esc(on.version)}</b> <span class="faint">网上｜${esc(on.date || "")}${on.size ? `｜${(on.size / 1048576).toFixed(1)} MB` : ""}</span></span>
         <button class="btn primary" id="upg-online">下载并升级</button></div>
         ${(on.notes || []).length ? `<ul class="muted" style="margin:6px 0 0;padding-left:20px;font-size:13px">${on.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}</div>` : "";
-    el.innerHTML = onRow + (r.found.length ? r.found.slice(0, 3).map((f, i) => `<div class="row" style="justify-content:space-between;margin-bottom:6px">
-        <span><b>AT ${esc(f.version)}</b> <span class="faint">${esc(f.where)}｜${esc(f.at)}</span></span>
-        <button class="btn ${i === 0 && !on ? "primary" : ""} upg-go" data-p="${esc(f.path)}">升级到 ${esc(f.version)}</button></div>`).join("")
-      : on ? "" : `<span class="faint">${r.online_hint ? esc(r.online_hint) : r.online_error ? "无法连接更新服务器，未找到更新的安装包" : "当前已是最新版本"}</span>`);
+    el.innerHTML = onRow || `<span class="faint">${r.online_hint ? esc(r.online_hint) : r.online_error ? "无法连接更新服务器，未找到更新的安装包" : "当前已是最新版本"}</span>`;
     const old = $("#upg-older");
     if (old) old.innerHTML = (r.older || []).length ? r.older.map((f) => `<div class="row" style="justify-content:space-between;margin-bottom:6px">
-        <span><b>AT ${esc(f.version)}</b> ${f.stable ? `<span class="tag qt">稳定版</span>` : ""} <span class="faint">${esc(f.where)}｜${esc(f.at)}</span></span>
+        <span><b>AT ${esc(f.version)}</b> <span class="faint">${esc(f.where)}｜${esc(f.at)}</span></span>
         <button class="btn upg-back" data-p="${esc(f.path)}" data-v="${esc(f.version)}" data-a="${esc(f.action || "回滚到")}">${esc(f.action || "回滚到")} ${esc(f.version)}</button></div>`).join("")
-      : `<span class="faint">${state.status?.vpk ? "点击「检查更新」查看可回滚的版本" : "暂无可回滚的版本（下次升级时自动备份当前版本）"}</span>`;
+      : `<span class="faint">${state.status?.vpk ? "点击「检查更新」查看可回滚的版本" : ""}</span>`;
   };
   const upgStart = () => { $("#log-upgrade").style.display = ""; state.logs.upgrade = []; $("#log-upgrade").textContent = "开始升级…"; upgProgress("开始"); };
   api("upgrade_check").then(upgList).catch(() => {});
@@ -2917,24 +2908,9 @@ PAGES.settings = () => {
       catch (err) { toast(err.message); ob.disabled = false; $("#upg-prog").hidden = true; }
       return;
     }
-    const b = e.target.closest(".upg-go");
-    if (!b) return;
-    b.disabled = true;
-    try { upgStart(); const r = await api("upgrade_apply", { path: b.dataset.p }); if (r.error) throw new Error(r.error); }
-    catch (err) { toast(err.message); b.disabled = false; $("#upg-prog").hidden = true; }
+
   });
-  if ($("#upg-file")) $("#upg-file").onchange = async (e) => {
-    const f = e.target.files[0];
-    if (!f) return;
-    try {
-      upgStart();
-      const resp = await fetch("/api/upgrade_upload_raw", { method: "POST", headers: { "X-Token": TOKEN, "X-File-Name": encodeURIComponent(f.name) }, body: f });
-      const j = await resp.json();
-      if (!j.ok) throw new Error(j.error || "上传失败");
-      if (j.data && j.data.error) throw new Error(j.data.error);
-    } catch (err) { toast(err.message); $("#upg-prog").hidden = true; }
-    e.target.value = "";
-  };
+
   $("#admin-sw").onclick = async () => {
     state.status.settings = await api("set_settings", { admin: c.admin === false });
     renderPage();
@@ -3038,46 +3014,7 @@ async function showDisclaimer() {
   document.addEventListener("keydown", function esc(e) { if (e.key === "Escape") { close(); document.removeEventListener("keydown", esc); } });
 }
 
-// 安装版（1.0.1）：第一次打开时导入旧版天枢的设置和记录；旧版还开着就提示关掉（热键会冲突）
-async function legacyCheck() {
-  if (!state.status?.frozen) return;
-  let r;
-  try { r = await api("legacy_scan"); } catch (e) { return; }
-  if (r.ask) await legacyAsk(r.found);
-  const run = r.running || [];
-  if (run.length) toast(`旧版天枢 ${run[0].version} 正在运行，热键会冲突`, ["关闭旧版", async () => {
-    try { const q = await api("legacy_quit", { path: run[0].path }); if (q.error) throw new Error(q.error); toast("已关闭旧版天枢"); }
-    catch (e) { toast(e.message); }
-  }]);
-}
 
-function legacyAsk(rows) {
-  return new Promise((resolve) => {
-    const box = document.createElement("div");
-    box.className = "gate";
-    const item = (x, i) => `<label class="agree" style="display:flex;gap:8px;align-items:flex-start;margin:6px 0">
-      <input type="radio" name="lg" value="${i}" ${i === 0 ? "checked" : ""}>
-      <span><b>天枢 ${esc(x.version || "")}</b>　路标 ${x.waypoints} 个，目标 ${x.goals} 个<br>
-      <span class="faint" style="font-size:12px">${esc(x.path)}｜最近使用 ${esc(x.used)}</span></span></label>`;
-    box.innerHTML = `<div class="gate-card" role="dialog" aria-modal="true" aria-labelledby="lg-t">
-      <h2 id="lg-t">导入旧版设置</h2>
-      <p>这台电脑上有旧版天枢。可以把它的设置、配置、热键、路标和目标导入 AT，旧版那边不受影响。导入后 AT 会重新打开。</p>
-      ${rows.map(item).join("")}
-      <p class="gate-err" id="lg-err" hidden></p>
-      <div class="row" style="gap:8px;margin-top:12px"><button class="btn primary" id="lg-ok">导入</button><button class="btn" id="lg-no">不导入</button></div></div>`;
-    document.body.appendChild(box);
-    $("#lg-no").onclick = async () => { try { await api("legacy_skip"); } catch (e) { /* 下次再问 */ } box.remove(); resolve(); };
-    $("#lg-ok").onclick = async (e) => {
-      const i = +(box.querySelector("input[name=lg]:checked")?.value || 0);
-      e.currentTarget.disabled = true;
-      try {
-        const r = await api("legacy_import", { path: rows[i].path });
-        if (r.error) throw new Error(r.error);
-        box.querySelector(".gate-card").innerHTML = `<h2>已导入</h2><p>AT 正在重新打开…</p>`;
-      } catch (err) { $("#lg-err").textContent = err.message; $("#lg-err").hidden = false; e.currentTarget.disabled = false; }
-    };
-  });
-}
 
 (async function init() {
   omniInit();
@@ -3087,7 +3024,6 @@ function legacyAsk(rows) {
   await refreshStatus();
   if (state.status && !state.status.settings.agreed) await agreeGate();
   route();
-  legacyCheck();
   setInterval(refreshStatus, 30000);
 })();
 

@@ -7,7 +7,6 @@ from astral_toolkit.tasks.system import (
     about as m_about,
     common as m_common,
     feedback as m_feedback,
-    legacy as m_legacy,
     settings as m_settings,
     upgrade as m_upgrade,
 )
@@ -17,7 +16,6 @@ def test_submodules_exist():
     """所有新抽离的子模块均能直接导入，且门面函数导出正常"""
     assert m_common.WIN is not None
     assert hasattr(m_about, "about_info")
-    assert hasattr(m_legacy, "legacy_scan")
     assert hasattr(m_settings, "set_settings")
     assert hasattr(m_upgrade, "upgrade_check")
     assert hasattr(m_feedback, "feedback_report")
