@@ -37,16 +37,7 @@ def _dir():
 def enabled():
     from ..core import settings
 
-    if settings.load().get("train_upload") is False:
-        return False
-    try:
-        from ..update import update_check
-
-        return not update_check.disabled(
-            "train"
-        )  # 远程开关：服务器满了 / 出问题时整体关掉
-    except Exception:
-        return True
+    return settings.load().get("train_upload") is not False
 
 
 def _today_count(d):

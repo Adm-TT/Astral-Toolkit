@@ -1,6 +1,6 @@
 """Velopack 在线更新和回滚（2026-10-27，负责人定：换 Velopack，只下载改过的部分）
 
-- 只在 Velopack 安装版里用（paths.VELOPACK）；Python 版、老的 Inno 安装版照旧走 update_check / upgrade
+- 只在 Velopack 安装版里用（paths.VELOPACK）；源码压缩包版已退役，老的 Inno 安装版只走 update_check 的桥接安装程序
 - 更新源：自己的香港服务器 https://dl.astral-trade.com/velopack/（releases.win.json + 完整包 / 增量包）；
   连不上（出错 / 超时）再用国内镜像（腾讯云 COS，路径一样，2026-10-29：国内连不上香港）
 - 升级：查到新版本 → 下载（有增量包就只下改动）→ 等 AT 退出后换程序文件 → 自动重新打开
@@ -46,9 +46,9 @@ def _channels(rollback):
 
 def _installed_channel():
     """本机装的是哪个频道：测试版（x.y.z-beta.N）是 beta，正式版是 win"""
-    from . import upgrade
+    from . import version
 
-    return "beta" if "-" in str(upgrade.VERSION) else CHANNEL
+    return "beta" if "-" in str(version.VERSION) else CHANNEL
 
 
 def _mgr(rollback=False, timeout_ms=0, feed=None, channel=None):
@@ -81,7 +81,7 @@ _last = {"feed": None}  # 上一次答上来的源：下次先问它（国内不
 
 def _ask(feed, rollback, timeout_ms=8000):
     """在一个源上把要问的频道都问一遍 → (版本最新的 UpdateInfo 或 None, 它的频道)；所有频道都出错才抛错"""
-    from .upgrade import vkey
+    from .version import vkey
 
     best, best_ch, err, ok = None, None, None, False
     for ch in _channels(rollback):
@@ -136,7 +136,7 @@ def install(rollback=False, progress=print):
     if not info:
         raise ValueError("没有可回滚的上一个版本" if rollback else "未找到新版本")
     v = _version_of(info)
-    from .upgrade import vkey, current_key  # 算上 beta 后缀比（1.1.2-beta.1 < 1.1.2）
+    from .version import vkey, current_key  # 算上 beta 后缀比（1.1.2-beta.1 < 1.1.2）
 
     if rollback and vkey(v) >= current_key():
         raise ValueError(f"服务器上的上一个版本是 {v}，不比现在的旧，不用回滚")

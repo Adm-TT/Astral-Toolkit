@@ -1,11 +1,10 @@
-"""在线更新：读版本说明、核对下载的安装包（不联网：换掉 _open）"""
+"""在线更新：读版本说明、安装程序下载、版本号比较（不联网：换掉 _open）"""
 
 import hashlib
 import io
 import json
 import threading
-
-from tests.test_upgrade import _pkg
+from pathlib import Path
 
 
 class _Resp(io.BytesIO):
@@ -22,10 +21,6 @@ def _setup(monkeypatch, tmp_path, pages):
     monkeypatch.setattr(
         C, "_state", {"at": 0.0, "info": None, "error": "", "lock": threading.Lock()}
     )
-    monkeypatch.setattr(
-        C, "KILL_FILE", tmp_path / "killswitch.json"
-    )  # 不碰真实的关功能记录（审查 2026-10-27）
-    monkeypatch.setattr(C, "_kill", {"list": None, "at": 0.0})
     calls = []
 
     def fake_open(url, timeout):
@@ -39,51 +34,21 @@ def _setup(monkeypatch, tmp_path, pages):
     return C, calls
 
 
-def _manifest(zip_path, version="9.0.0", sha=None):
-    data = zip_path.read_bytes()
+def _installer_manifest(exe, version="9.0.0", sha=None):
+    data = exe.read_bytes()
     return {
         "version": version,
-        "file": zip_path.name,
-        "size": len(data),
         "notes": ["新功能"],
-        "sha256": sha or hashlib.sha256(data).hexdigest(),
-        "urls": [
-            "https://dl.astral-trade.com/releases/v9.0.0/" + zip_path.name,
-            "https://github.com/at/at/releases/download/v9.0.0/" + zip_path.name,
-        ],
+        "installer": {
+            "file": exe.name,
+            "size": len(data),
+            "sha256": sha or hashlib.sha256(data).hexdigest(),
+            "urls": [
+                "https://dl.astral-trade.com/releases/v9.0.0/" + exe.name,
+                "https://github.com/at/at/releases/download/v9.0.0/" + exe.name,
+            ],
+        },
     }
-
-
-def test_falls_back_to_github_and_ignores_older(monkeypatch, tmp_path):
-    z = _pkg(tmp_path / "Dubhe_9.0.0.zip", "9.0.0", {})
-    m = _manifest(z)
-    C, calls = _setup(
-        monkeypatch,
-        tmp_path,
-        {
-            "https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(
-                m
-            ).encode()
-        },
-    )
-    info = C.check(force=True)
-    assert info and info["version"] == "9.0.0" and info["source"] == "GitHub"
-    assert {c.split("/")[2] for c in calls} == {
-        "dl.astral-trade.com",
-        "at-dl-1323647399.cos.ap-guangzhou.myqcloud.com",
-        "raw.githubusercontent.com",
-    }  # 三处一起问
-    old = dict(m, version="0.0.1")
-    C, _ = _setup(
-        monkeypatch,
-        tmp_path,
-        {
-            "https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(
-                old
-            ).encode()
-        },
-    )
-    assert C.check(force=True) is None  # 比现在旧：不提示
 
 
 def test_offline_returns_none(monkeypatch, tmp_path):
@@ -91,484 +56,214 @@ def test_offline_returns_none(monkeypatch, tmp_path):
     assert C.check(force=True) is None and C.last_error()
 
 
-def test_parse_rejects_bad_manifest():
+def test_parse_installer_and_source_retired(tmp_path):
     from astral_toolkit.update import update_check as C
 
-    good = {
-        "version": "1.7.1",
-        "file": "Dubhe_1.7.1.zip",
-        "sha256": "a" * 64,
-        "urls": ["https://github.com/x/y/z.zip"],
-    }
-    assert C.parse(json.dumps(good))["version"] == "1.7.1"
+    exe = tmp_path / "AT_Setup_9.0.0.exe"
+    exe.write_bytes(b"MZ setup")
+    m = _installer_manifest(exe)
+    vp = C.parse(json.dumps(m), velopack=True)
+    assert vp["version"] == "9.0.0" and vp["urls"] == []
+    fz = C.parse(json.dumps(m), frozen=True, velopack=False)
+    assert fz["file"] == exe.name and fz["installer"]
+    try:
+        C.parse(json.dumps(m), frozen=False, velopack=False)
+        assert False
+    except C.NoPackage:
+        pass
     for bad in (
-        {**good, "sha256": "123"},
-        {**good, "file": "virus.exe"},
-        {**good, "urls": ["http://evil.com/a.zip"]},
-        {**good, "version": "abc"},
+        {**m, "installer": {**m["installer"], "file": "virus.exe"}},
+        {**m, "installer": {**m["installer"], "urls": ["http://evil.com/a.exe"]}},
+        {**m, "installer": {**m["installer"], "sha256": "123"}},
+        {"version": "x.y"},
     ):
         try:
-            C.parse(json.dumps(bad))
+            C.parse(json.dumps(bad), frozen=True, velopack=False)
             assert False, bad
         except ValueError:
             pass
 
 
 def test_download_checks_sha_and_uses_mirror(monkeypatch, tmp_path):
-    z = _pkg(tmp_path / "Dubhe_9.0.0.zip", "9.0.0", {})
-    data = z.read_bytes()
-    m = _manifest(z)
+
+    exe = tmp_path / "AT_Setup_9.0.0.exe"
+    exe.write_bytes(b"MZ setup")
+    data = exe.read_bytes()
+    m = _installer_manifest(exe)
+    updates = tmp_path / "updates"
+    updates.mkdir()
+    old_zip = updates / "Dubhe_1.0.zip"
+    old_zip.write_bytes(b"old")
     C, _ = _setup(
-        monkeypatch, tmp_path, {m["urls"][0]: data[:-5] + b"xxxxx", m["urls"][1]: data}
-    )  # AT 服务器的坏了，走 GitHub
-    out = C.download(C.parse(json.dumps(m)), progress=lambda *_: None)
-    assert out.read_bytes() == data and not list((tmp_path / "updates").glob("*.part"))
-    bad = _manifest(z, sha="0" * 64)
-    C, _ = _setup(monkeypatch, tmp_path, {u: data for u in bad["urls"]})
-    (tmp_path / "updates" / z.name).unlink()
+        monkeypatch,
+        tmp_path,
+        {
+            m["installer"]["urls"][0]: data[:-2] + b"xx",
+            m["installer"]["urls"][1]: data,
+        },
+    )
+    out = C.download(
+        C.parse(json.dumps(m), frozen=True, velopack=False),
+        progress=lambda *_: None,
+    )
+    assert out.read_bytes() == data and old_zip.exists()
+    assert not list((tmp_path / "updates").glob("*.part"))
+    bad = _installer_manifest(exe, sha="0" * 64)
+    C, _ = _setup(monkeypatch, tmp_path, {u: data for u in bad["installer"]["urls"]})
+    out.unlink()
     try:
-        C.download(C.parse(json.dumps(bad)), progress=lambda *_: None)
+        C.download(
+            C.parse(json.dumps(bad), frozen=True, velopack=False),
+            progress=lambda *_: None,
+        )
         assert False
     except ValueError as e:
         assert "下载失败" in str(e)
-    assert not list((tmp_path / "updates").glob("Dubhe_*"))  # 校验不符的不留
-
-
-def test_disabled_without_repo(monkeypatch):
-    from astral_toolkit.update import update_check as C
-
-    monkeypatch.setattr(C, "GITHUB", "")
-    monkeypatch.setattr(C, "OWN", "")
-    monkeypatch.setattr(C, "COS", "")
-    assert not C.enabled() and C.check(force=True) is None
-
-
-def test_installer_entry_only_for_standalone(tmp_path):
-    """1.7.0 起 latest.json 多一项 installer：Python 版照旧用 Dubhe_*.zip，独立安装版只认 AT_Setup_*.exe"""
-    from astral_toolkit.update import update_check as C
-
-    m = {
-        "version": "1.7.1",
-        "file": "Dubhe_1.7.1.zip",
-        "sha256": "a" * 64,
-        "urls": ["https://github.com/x/y/Dubhe_1.7.1.zip"],
-        "installer": {
-            "file": "AT_Setup_1.7.1.exe",
-            "sha256": "b" * 64,
-            "size": 9,
-            "urls": ["https://github.com/x/y/AT_Setup_1.7.1.exe"],
-        },
-    }
-    py = C.parse(json.dumps(m), frozen=False)
-    assert py["file"] == "Dubhe_1.7.1.zip" and not py["installer"]
-    fz = C.parse(json.dumps(m), frozen=True)
-    assert (
-        fz["file"] == "AT_Setup_1.7.1.exe"
-        and fz["sha256"] == "b" * 64
-        and fz["installer"]
-    )
-    for bad in (
-        {k: v for k, v in m.items() if k != "installer"},
-        {**m, "installer": {**m["installer"], "file": "virus.exe"}},
-    ):
-        try:
-            C.parse(json.dumps(bad), frozen=True)
-            assert False, bad
-        except ValueError:
-            pass
+    assert not list((tmp_path / "updates").glob("AT_Setup_*"))
 
 
 def test_make_manifest_with_installer(monkeypatch, tmp_path):
-    z = _pkg(tmp_path / "Dubhe_9.0.0.zip", "9.0.0", {})
+    from astral_toolkit.update import update_check as C
+
     exe = tmp_path / "AT_Setup_9.0.0.exe"
     exe.write_bytes(b"MZ setup")
-    C, _ = _setup(monkeypatch, tmp_path, {})
-    m = C.make_manifest(z, ["x"], installer=exe)
+    _setup(monkeypatch, tmp_path, {})
+    m = C.make_manifest(notes=["x"], installer=exe)
     assert m["installer"]["file"] == exe.name and m["installer"]["size"] == 8
     assert m["installer"]["urls"][:3] == [
         "https://dl.astral-trade.com/releases/v9.0.0/AT_Setup_9.0.0.exe",
         "https://at-dl-1323647399.cos.ap-guangzhou.myqcloud.com/releases/v9.0.0/AT_Setup_9.0.0.exe",
         "https://github.com/at/at/releases/download/v9.0.0/AT_Setup_9.0.0.exe",
     ]
-    assert (
-        C.where(m["installer"]["urls"][0]) == "AT 服务器"
-        and C.where("https://evil.com/dl.astral-trade.com/x") == "网上"
-    )
-    assert C.where(m["installer"]["urls"][1]) == "国内镜像"
-    assert [n for n, _ in C.manifest_urls()][:2] == ["AT 服务器", "国内镜像"]
-    assert C.parse(json.dumps(m), frozen=True)["version"] == "9.0.0"
+    assert m["kill_rev"] == C.LEGACY_KILL_REV
+    assert m["disabled"] == C.LEGACY_DISABLED
+    assert not {"file", "size", "sha256", "urls"} & set(m)
+    assert C.parse(json.dumps(m), frozen=True, velopack=False)["version"] == "9.0.0"
     wrong = tmp_path / "AT_Setup_8.0.0.exe"
     wrong.write_bytes(b"MZ")
     try:
-        C.make_manifest(z, installer=wrong)
+        C.make_manifest(notes=[], version="9.0.0", installer=wrong)
         assert False
     except ValueError:
         pass
 
 
-def test_manifest_installer_only(monkeypatch, tmp_path):
-    """压缩包版停止维护：只给安装程序也能生成 latest.json；顶层不写 file（不会出现新版本号配旧压缩包），
-    源码版读到当作没有新版本、不报错，安装版照常认 installer"""
-    exe = tmp_path / "AT_Setup_9.0.0.exe"
-    exe.write_bytes(b"MZ setup")
-    C, _ = _setup(monkeypatch, tmp_path, {})
-    online = {
-        "version": "1.1.1",
-        "file": "Dubhe_1.1.1.zip",
-        "sha256": "a" * 64,
-        "size": 1,
-        "urls": ["https://dl.astral-trade.com/releases/v1.1.1/Dubhe_1.1.1.zip"],
-        "kill_rev": 5,
-        "disabled": [],
-    }
-    m = C.make_manifest(None, ["x"], installer=exe, keep=online)
-    assert (
-        m["version"] == "9.0.0"
-        and m["kill_rev"] == 5
-        and m["installer"]["file"] == exe.name
-    )
-    assert not {"file", "size", "sha256", "urls"} & set(m)
-    assert C.parse(json.dumps(m), frozen=True)["file"] == "AT_Setup_9.0.0.exe"
-    try:
-        C.parse(json.dumps(m), frozen=False)
-        assert False
-    except C.NoPackage:
-        pass
-    for bad in ((None, None), (None, tmp_path / "setup.exe")):
+def test_manifest_version_only():
+    from astral_toolkit.update import update_check as C
+
+    m = C.make_manifest(notes=["新功能"], version="9.0.0")
+    assert m["version"] == "9.0.0" and m["notes"] == ["新功能"]
+    assert m["kill_rev"] == C.LEGACY_KILL_REV
+    assert m["disabled"] == C.LEGACY_DISABLED
+    assert not {"file", "size", "sha256", "urls", "installer"} & set(m)
+    vp = C.parse(json.dumps(m), velopack=True)
+    assert vp["version"] == "9.0.0" and vp["notes"] == ["新功能"] and vp["urls"] == []
+    for frozen in (True, False):
         try:
-            C.make_manifest(bad[0], installer=bad[1])
-            assert False, bad
+            C.parse(json.dumps(m), frozen=frozen, velopack=False)
+            assert False
+        except C.NoPackage:
+            pass
+    for bad in ("", "x.y", "0.0.0"):
+        try:
+            C.make_manifest(notes=[], version=bad)
+            assert False
         except ValueError:
             pass
-    C, _ = _setup(
-        monkeypatch,
-        tmp_path,
-        {
-            "https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(
-                m
-            ).encode()
-        },
-    )
-    monkeypatch.setattr(C.paths, "FROZEN", False)
-    assert (
-        C.check(force=True) is None and C.last_error() == ""
-    )  # 源码版：没有新版本，不是「连不上」
-    C, _ = _setup(
-        monkeypatch,
-        tmp_path,
-        {
-            "https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(
-                m
-            ).encode()
-        },
-    )
-    monkeypatch.setattr(C.paths, "FROZEN", True)
-    assert C.check(force=True)["file"] == "AT_Setup_9.0.0.exe"  # 安装版照常提示
 
 
 def test_make_manifest_tool_installer_only(monkeypatch, tmp_path):
-    """tools/make_manifest.py 只给 --installer：latest.json 生成在安装程序旁边"""
     import sys
-    from pathlib import Path
 
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
     import make_manifest as T
 
     exe = tmp_path / "AT_Setup_9.0.0.exe"
     exe.write_bytes(b"MZ setup")
-    C, _ = _setup(monkeypatch, tmp_path, {})
+    _setup(monkeypatch, tmp_path, {})
     monkeypatch.setattr("builtins.print", lambda *a, **k: None)
-    assert T.main(["--installer", str(exe), "--fresh", "新功能"]) == 0
+    assert T.main(["--installer", str(exe), "新功能"]) == 0
     m = json.loads((tmp_path / "latest.json").read_text(encoding="utf-8"))
     assert m["version"] == "9.0.0" and "file" not in m and m["notes"] == ["新功能"]
-    assert T.main(["--fresh", "只有说明"]) == 1
-
-
-def test_manifest_version_only(monkeypatch, tmp_path):
-    """2026-11-02 起只发 Velopack 版：清单只有版本号、说明和远程关功能，不带任何安装包。
-    Velopack 安装版照常提示新版本和说明；其他独立打包版、源码版当作没有新版本、不报错、不去下载；
-    三种版本都照常收远程关功能；生成时带上网上已有的 kill_rev / disabled"""
-    C, _ = _setup(monkeypatch, tmp_path, {})
-    online = {"version": "1.1.3", "kill_rev": 5, "disabled": [{"feature": "radar"}]}
-    m = C.make_manifest(None, ["新功能"], version="9.0.0", keep=online)
-    assert m == {
-        "version": "9.0.0",
-        "date": m["date"],
-        "notes": ["新功能"],
-        "kill_rev": 5,
-        "disabled": [{"feature": "radar"}],
-    }
-    vp = C.parse(json.dumps(m), velopack=True)
-    assert vp["version"] == "9.0.0" and vp["notes"] == ["新功能"] and vp["urls"] == []
-    for frozen in (True, False):
-        try:
-            C.parse(json.dumps(m), frozen=frozen, velopack=False)
-            raise AssertionError(frozen)
-        except C.NoPackage:
-            pass
-    for bad in ("", "x.y", "0.0.0"):
-        try:
-            C.make_manifest(None, version=bad)
-            raise AssertionError(bad)
-        except ValueError:
-            pass
-    page = {
-        "https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(
-            dict(m, kill_rev=300, disabled=[{"feature": "radar", "why": "坏了"}])
-        ).encode()
-    }
-    for frozen, velopack in ((True, True), (True, False), (False, False)):
-        C, calls = _setup(monkeypatch, tmp_path, page)
-        monkeypatch.setattr(C.paths, "FROZEN", frozen)
-        monkeypatch.setattr(C.paths, "VELOPACK", velopack)
-        info = C.check(force=True)
-        assert C.disabled("radar"), (frozen, velopack)  # 远程关功能照常生效
-        assert calls and all(u.endswith("/latest.json") for u in calls), (
-            calls
-        )  # 只读了清单，没去下载任何东西
-        if velopack:
-            assert info and info["version"] == "9.0.0" and info["notes"] == ["新功能"]
-        else:
-            assert info is None and C.last_error() == ""  # 没有新版本，不是「连不上」
-
-
-def test_make_manifest_version_must_match_package(monkeypatch, tmp_path):
-    """同时给压缩包和 --version：一致放行，不一致报错，不悄悄用其中一个（审查 2026-11-03）"""
-    C, _ = _setup(monkeypatch, tmp_path, {})
-    z = _pkg(tmp_path / "Dubhe_9.0.0.zip", "9.0.0", {})
-    assert C.make_manifest(z, version="9.0.0")["version"] == "9.0.0"
-    try:
-        C.make_manifest(z, version="9.0.1")
-        raise AssertionError("版本不一致应报错")
-    except ValueError as e:
-        assert "不一致" in str(e)
-
-
-def test_newest_manifest_without_package_blocks_older_package(monkeypatch, tmp_path):
-    """AT 服务器上是只写版本号的新清单（9.0.0），GitHub 上还留着带旧压缩包的清单（5.0.0）：
-    源码版当作没有新版本、不报错、不下载，不能退回去提示 5.0.0；Velopack 版照常提示 9.0.0（审查 2026-11-03）"""
-    z = _pkg(tmp_path / "Dubhe_5.0.0.zip", "5.0.0", {})
-    pages = {
-        "https://dl.astral-trade.com/latest.json": json.dumps(
-            {"version": "9.0.0", "notes": ["新功能"], "kill_rev": 7, "disabled": []}
-        ).encode(),
-        "https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(
-            _manifest(z, version="5.0.0")
-        ).encode(),
-    }
-    C, calls = _setup(monkeypatch, tmp_path, pages)
-    monkeypatch.setattr(C.paths, "FROZEN", False)
-    monkeypatch.setattr(C.paths, "VELOPACK", False)
-    assert C.check(force=True) is None and C.last_error() == ""
-    assert calls and all(u.endswith("/latest.json") for u in calls), calls
-    C, _ = _setup(monkeypatch, tmp_path, pages)
-    monkeypatch.setattr(C.paths, "FROZEN", True)
-    monkeypatch.setattr(C.paths, "VELOPACK", True)
-    info = C.check(force=True)
-    assert info and info["version"] == "9.0.0" and info["source"] == "AT 服务器"
+    assert m["kill_rev"] == 1793426539
+    assert T.main(["--fresh", "x"]) == 1
+    assert T.main(["Dubhe_9.0.0.zip", "x"]) == 1
+    assert T.main(["--version"]) == 1
 
 
 def test_make_manifest_tool_version_only(monkeypatch, tmp_path):
-    """tools/make_manifest.py --version：不给安装包也能生成；--out 指定生成位置"""
     import sys
-    from pathlib import Path
 
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
     import make_manifest as T  # pyright: ignore[reportMissingImports]
 
-    C, _ = _setup(monkeypatch, tmp_path, {})
+    _setup(monkeypatch, tmp_path, {})
     monkeypatch.setattr("builtins.print", lambda *a, **k: None)
     out = tmp_path / "out"
-    assert T.main(["--version", "9.0.0", "--out", str(out), "--fresh", "新功能"]) == 0
+    assert T.main(["--version", "9.0.0", "--out", str(out), "新功能"]) == 0
     m = json.loads((out / "latest.json").read_text(encoding="utf-8"))
     assert m["version"] == "9.0.0" and m["notes"] == ["新功能"]
     assert not {"file", "installer", "urls"} & set(m)
-    assert T.main(["--version"]) == 1
-    z = _pkg(tmp_path / "Dubhe_9.0.0.zip", "9.0.0", {})
-    assert (
-        T.main([str(z), "--version", "9.0.1", "--fresh", "新功能"]) == 1
-    )  # 版本对不上：停
-
-
-def _old_install(d, version="1.6.72", settings=None, waypoints=None):
-    (d / "sc_mining").mkdir(parents=True)
-    (d / "userdata").mkdir()
-    (d / "Dubhe.exe").write_bytes(b"MZ")
-    (d / "sc_mining" / "version.py").write_text(
-        f'VERSION = "{version}"\n', encoding="utf-8"
-    )
-    (d / "userdata" / "settings.json").write_text(
-        json.dumps(settings or {"agreed": True, "mark_key": "F4"}), encoding="utf-8"
-    )
-    if waypoints is not None:
-        (d / "userdata" / "waypoints.json").write_text(
-            json.dumps(waypoints, ensure_ascii=False), encoding="utf-8-sig"
-        )  # 带 BOM 也要认
-    return d
-
-
-def test_legacy_find_and_import(monkeypatch, tmp_path):
-    """1.0.1：安装版找旧版天枢、导入设置和路标（免责声明那项不带过来、AT 原来的文件先备份）"""
-    from astral_toolkit.update import legacy
-    from astral_toolkit.core import paths
-
-    me = tmp_path / "AT"
-    (me / "userdata").mkdir(parents=True)
-    monkeypatch.setattr(paths, "ROOT", me)
-    monkeypatch.setattr(paths, "USER", me / "userdata")
-    old = _old_install(
-        tmp_path / "Downloads" / "Dubhe_1.6.36" / "Dubhe_1.6.36",
-        waypoints=[{"n": "空间站"}],
-    )
-    _old_install(
-        tmp_path / "Downloads" / "deep" / "a" / "b" / "c" / "Dubhe"
-    )  # 太深，不找
-    rows = legacy.find(roots=[(tmp_path / "Downloads", 3)])
-    assert (
-        [r["path"] for r in rows] == [str(old)]
-        and rows[0]["version"] == "1.6.72"
-        and rows[0]["waypoints"] == 1
-    )
-    (me / "userdata" / "settings.json").write_text(
-        json.dumps({"agreed": False, "mark_key": "F7"}), encoding="utf-8"
-    )
-    done = legacy.import_from(old)
-    assert "settings.json" in done and "waypoints.json" in done
-    cfg = json.loads((me / "userdata" / "settings.json").read_text(encoding="utf-8"))
-    assert (
-        cfg["mark_key"] == "F4" and cfg["agreed"] is False
-    )  # 免责声明要在 AT 里重新同意
-    assert json.loads(
-        (me / "userdata" / "waypoints.json").read_text(encoding="utf-8")
-    ) == [{"n": "空间站"}]
-    bak = list((me / "userdata").glob("import_backup_*/settings.json"))
-    assert bak and json.loads(bak[0].read_text(encoding="utf-8"))["mark_key"] == "F7"
-    assert (
-        json.loads((old / "userdata" / "settings.json").read_text(encoding="utf-8"))[
-            "mark_key"
-        ]
-        == "F4"
-    )  # 旧版不动
-    try:
-        legacy.import_from(tmp_path)
-        assert False
-    except ValueError:
-        pass
-    assert legacy.running(rows) == []  # 旧版没开着
-
-
-def test_legacy_skips_self(monkeypatch, tmp_path):
-    from astral_toolkit.update import legacy
-    from astral_toolkit.core import paths
-
-    me = _old_install(tmp_path / "Documents" / "sc_mining")
-    monkeypatch.setattr(paths, "ROOT", me)
-    assert legacy.find(roots=[(tmp_path / "Documents", 3)]) == []
-
-
-def test_killswitch(monkeypatch, tmp_path):
-    """远程关功能（2026-10-27，借鉴 EDMC）：latest.json 的 disabled 按版本范围关掉指定功能；写错的不关；存到本地离线也照样关"""
-    import json
-    from astral_toolkit.update import update_check as U, upgrade
-
-    monkeypatch.setattr(U, "KILL_FILE", tmp_path / "killswitch.json")
-    monkeypatch.setattr(U, "_kill", {"list": None, "at": 0.0})
-    monkeypatch.setattr(upgrade, "VERSION", "1.0.4")
-    v = upgrade.ver("1.0.4")
-    assert (
-        U._in_range("", v)
-        and U._in_range("*", v)
-        and U._in_range("1.0.4", v)
-        and not U._in_range("1.0.3", v)
-    )
-    assert (
-        U._in_range("<=1.0.4", v)
-        and not U._in_range("<1.0.4", v)
-        and U._in_range(">=1.0.2", v)
-    )
-    assert (
-        U._in_range("1.0.2-1.0.4", v)
-        and not U._in_range("1.0.5-1.0.9", v)
-        and not U._in_range("胡写", v)
-    )
-    U._set_kill(
-        [
-            {"feature": "nav_marker", "versions": "<=1.0.4", "why": "记号位置不对"},
-            {"feature": "radar", "versions": "1.0.3"},
-            {"feature": "不认识的", "versions": "*"},
-            "坏的",
-        ]
-    )
-    assert (
-        U.disabled("nav_marker") == "记号位置不对"
-        and U.disabled("radar") is None
-        and U.disabled("item") is None
-    )
-    assert (
-        len(
-            json.loads((tmp_path / "killswitch.json").read_text(encoding="utf-8"))[
-                "list"
+    assert m["disabled"] == json.loads(
+        json.dumps(
+            [
+                {
+                    "feature": "feedback",
+                    "versions": "<=1.1.1",
+                    "why": "请升级到 1.1.2（已删除全部模拟按键）",
+                },
+                {
+                    "feature": "train",
+                    "versions": "<=1.1.1",
+                    "why": "请升级到 1.1.2（已删除全部模拟按键）",
+                },
+                {
+                    "feature": "nav_marker",
+                    "versions": "<=1.1.1",
+                    "why": "请升级到 1.1.2（已删除全部模拟按键）",
+                },
+                {
+                    "feature": "radar",
+                    "versions": "<=1.1.1",
+                    "why": "请升级到 1.1.2（已删除全部模拟按键）",
+                },
+                {
+                    "feature": "scan",
+                    "versions": "<=1.1.1",
+                    "why": "请升级到 1.1.2（已删除全部模拟按键）",
+                },
+                {
+                    "feature": "item",
+                    "versions": "<=1.1.1",
+                    "why": "请升级到 1.1.2（已删除全部模拟按键）",
+                },
+                {
+                    "feature": "halo_auto",
+                    "versions": "<=1.1.1",
+                    "why": "请升级到 1.1.2（已删除全部模拟按键）",
+                },
+                {
+                    "feature": "game_events",
+                    "versions": "<=1.1.1",
+                    "why": "请升级到 1.1.2（已删除全部模拟按键）",
+                },
             ]
         )
-        == 2
     )
-    U._kill.update(list=None)  # 重开 AT：从本地文件读回来
-    assert U.disabled("nav_marker") == "记号位置不对"
-    U._set_kill([])
-    assert U.disabled("nav_marker") is None
-    # 拿到的不是版本说明（错误页面）：保留原来关掉的功能（审查 2026-10-27）
-    import io
-
-    U._set_kill([{"feature": "radar", "versions": "*"}])
-    monkeypatch.setattr(
-        U, "manifest_urls", lambda: [("GitHub", "https://github.com/x/latest.json")]
-    )
-    monkeypatch.setattr(
-        U, "_open", lambda url, timeout: io.BytesIO(b'{"message": "not found"}')
-    )
-    assert U.fetch()[0] is None and U.disabled("radar")
-
-
-def test_own_server_stale_does_not_hide_newer(monkeypatch, tmp_path):
-    """审查 2026-10-27：自己服务器上的清单旧了，GitHub 上有新版本，要用新的；关功能列表取 kill_rev 最大的那份"""
-    z = _pkg(tmp_path / "Dubhe_9.0.0.zip", "9.0.0", {})
-    new = dict(_manifest(z), kill_rev=5, disabled=[{"feature": "radar", "why": "新"}])
-    old = dict(
-        new,
-        version="0.0.1",
-        kill_rev=9,
-        disabled=[{"feature": "scan", "why": "旧但关功能更新"}],
-    )
-    C, calls = _setup(
-        monkeypatch,
-        tmp_path,
-        {
-            "https://dl.astral-trade.com/latest.json": json.dumps(old).encode(),
-            "https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(
-                new
-            ).encode(),
-        },
-    )
-    info = C.check(force=True)
-    assert info and info["version"] == "9.0.0" and info["source"] == "GitHub"
-    assert C.disabled("scan") and not C.disabled("radar")
 
 
 def test_beta_sees_same_number_live(monkeypatch, tmp_path):
-    """本机是 beta（1.1.2-beta.1）时，同号的 live（1.1.2）也提示更新；live 装的不提示同号（2026-10-30）"""
-    from astral_toolkit.update import upgrade
+    from astral_toolkit.update import version
 
-    z = _pkg(tmp_path / "Dubhe_9.0.0.zip", "9.0.0", {})
-    C, calls = _setup(
-        monkeypatch,
-        tmp_path,
-        {
-            "https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(
-                _manifest(z)
-            ).encode()
-        },
-    )
-    monkeypatch.setattr(upgrade, "current", lambda: (9, 0, 0))
+    page = {
+        "https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(
+            {"version": "9.0.0", "notes": []}
+        ).encode()
+    }
+    C, _ = _setup(monkeypatch, tmp_path, page)
+    monkeypatch.setattr(C.paths, "VELOPACK", True)
+    monkeypatch.setattr(C.paths, "FROZEN", False)
+    monkeypatch.setattr(version, "current", lambda: (9, 0, 0))
     monkeypatch.setattr(C, "_is_beta", lambda: True)
     assert C.check(force=True)["version"] == "9.0.0"
     monkeypatch.setattr(C, "_is_beta", lambda: False)
@@ -606,12 +301,11 @@ def test_data_pack_takes_newest_source(monkeypatch, tmp_path):
 
 
 def test_publish_hk_checks_manifest(tmp_path):
-    """发布脚本：空清单、地址里带命令、文件名和地址不一致都要停（不碰服务器）"""
     import sys
     from pathlib import Path
 
     tools = Path(__file__).resolve().parent.parent / "tools"
-    if not (tools / "publish_hk.py").exists():  # 开源版不带服务器发布工具
+    if not (tools / "publish_hk.py").exists():
         from tests.minipytest import skip
 
         skip("没有 tools/publish_hk.py")
@@ -634,10 +328,7 @@ def test_publish_hk_checks_manifest(tmp_path):
         "Dubhe_1.0.5.zip",
         "AT_Setup_1.0.5.exe",
     ]
-    only_setup = {
-        "version": "1.0.5",
-        "installer": good["installer"],
-    }  # 压缩包版停了：清单只给安装程序也合法（整改第 1 批）
+    only_setup = {"version": "1.0.5", "installer": good["installer"]}
     assert [e[0] for e in H.entries(lj, only_setup)] == ["AT_Setup_1.0.5.exe"]
     bad = [
         {},
@@ -656,11 +347,86 @@ def test_publish_hk_checks_manifest(tmp_path):
         raise AssertionError(m)
 
 
+def test_import_inno_userdata(monkeypatch, tmp_path):
+    import os
+    import time
+    from astral_toolkit.core import paths
+
+    old, new = tmp_path / "Programs" / "AT" / "userdata", tmp_path / "AT_userdata"
+    (old / "logs").mkdir(parents=True)
+    (old / "window").mkdir()
+    (old / "settings.json").write_text('{"a": 1}', encoding="utf-8")
+    (old / "waypoints.json").write_text("old", encoding="utf-8")
+    (old / "window_url.txt").write_text("http://x", encoding="utf-8")
+    (old / "instance.lock").write_text("", encoding="utf-8")
+    (old / "window" / "cache.bin").write_text("x", encoding="utf-8")
+    (old / "logs" / "app_log.txt").write_text("log", encoding="utf-8")
+    new.mkdir()
+    (new / "waypoints.json").write_text("new", encoding="utf-8")
+    t = time.time()
+    os.utime(old / "waypoints.json", (t - 100, t - 100))
+    monkeypatch.setattr(paths, "VELOPACK", True)
+    monkeypatch.setattr(paths, "INNO_USER", old)
+    monkeypatch.setattr(paths, "USER", new)
+    monkeypatch.setattr(paths, "MIGRATED", new / ".migrated_from_inno")
+    assert paths.import_inno() == 2
+    assert (new / "settings.json").exists() and (new / "logs" / "app_log.txt").exists()
+    assert (new / "waypoints.json").read_text(encoding="utf-8") == "new"
+    assert not (new / "window_url.txt").exists()
+    assert not (new / "instance.lock").exists()
+    assert not (new / "window").exists()
+    assert (new / ".migrated_from_inno").exists()
+    (old / "settings.json").write_text('{"a": 2}', encoding="utf-8")
+    assert paths.import_inno() == 0
+    monkeypatch.setattr(paths, "VELOPACK", False)
+    assert paths.import_inno() == 0
+
+
+def test_vkey_beta_older_than_live():
+    from astral_toolkit.update.version import vkey
+
+    assert vkey("1.1.2-beta.1") < vkey("1.1.2")
+    assert vkey("1.1.2-beta.1") < vkey("1.1.2-beta.2") < vkey("1.1.2-beta.10")
+    assert vkey("1.1.1") < vkey("1.1.2-beta.1") < vkey("1.1.2")
+    assert vkey("1.1.2") == vkey("1.1.2")
+    assert vkey("") < vkey("0.0.1")
+
+
+def _fake_velopack(versions):
+    import types
+
+    class Mgr:
+        def __init__(self, src, opts):
+            self.channel = opts[2]
+
+        def check_for_updates(self):
+            v = versions.get(self.channel)
+            return (
+                types.SimpleNamespace(
+                    TargetFullRelease=types.SimpleNamespace(Version=v)
+                )
+                if v
+                else None
+            )
+
+        def download_updates(self, info, cb=None):
+            pass
+
+        def wait_exit_then_apply_updates(self, *a):
+            pass
+
+    return types.SimpleNamespace(
+        UpdateOptions=lambda *a: a,
+        HttpOptions=lambda *a: a,
+        HttpSource=lambda feed, o: feed,
+        UpdateManager=Mgr,
+    )
+
+
 def test_vpk_falls_back_to_cos(monkeypatch):
-    """Velopack：香港连不上（出错 / 超时）就用国内镜像查版本、下载（2026-10-29）；用假的 velopack，不联网"""
     import sys
     import types
-    from astral_toolkit.update import vpk, upgrade
+    from astral_toolkit.update import version, vpk
 
     calls = []
 
@@ -701,19 +467,17 @@ def test_vpk_falls_back_to_cos(monkeypatch):
             ),
         ],
     )
-    monkeypatch.setattr(upgrade, "current", lambda: (1, 0, 0))
+    monkeypatch.setattr(version, "VERSION", "1.0.0")
     try:
         vpk._last["feed"] = None
         assert vpk.check()[1:] == ("99.0.0", "国内镜像")
         n_hk = sum(1 for k, s in calls if k == "check" and "astral-trade" in s)
-        vpk.check()  # 下次先问上次答上来的国内镜像，不再等香港
+        vpk.check()
         assert sum(1 for k, s in calls if k == "check" and "astral-trade" in s) == n_hk
         msgs = []
         assert vpk.install(progress=msgs.append) == "99.0.0"
         vpk._last["feed"] = None
-        Mgr.check_for_updates = lambda self: (_ for _ in ()).throw(
-            OSError("timed out")
-        )  # 两个都连不上：中文报错
+        Mgr.check_for_updates = lambda self: (_ for _ in ()).throw(OSError("timed out"))
         try:
             vpk.check()
             raise AssertionError("应该报错")
@@ -730,174 +494,9 @@ def test_vpk_falls_back_to_cos(monkeypatch):
     )
 
 
-def test_vpk_check_fail_not_up_to_date(monkeypatch):
-    """Velopack 版：香港和国内镜像都连不上时「检查更新」不说「已是最新」；latest.json 有新版本就提示手动下载（审查 2026-10-29）"""
-    from astral_toolkit.update import vpk
-    from astral_toolkit.tasks import system as t_sys
-
-    def boom(rollback=False):
-        raise RuntimeError("AT 服务器和国内镜像都无法连接：timed out")
-
-    monkeypatch.setattr(vpk, "installed", lambda: True)
-    monkeypatch.setattr(vpk, "check", boom)
-    monkeypatch.setattr(
-        t_sys,
-        "_online_info",
-        lambda force=False: {
-            "version": "99.0.0",
-            "date": "",
-            "notes": [],
-            "size": 1,
-            "source": "GitHub",
-        },
-    )
-    r = t_sys.upgrade_check(online=True)
-    assert (
-        r["online"] is None
-        and r["online_error"] == "无法连接更新服务器"
-        and "AT 99.0.0" in r["online_hint"]
-    )
-    monkeypatch.setattr(
-        vpk, "check", lambda rollback=False: (None, "", "国内镜像")
-    )  # 连得上、没有新版本：照常
-    r = t_sys.upgrade_check(online=True)
-    assert r["online"] is None and r["online_error"] == "" and r["online_hint"] == ""
-    t_sys._online.pop("vpk_fail", None)
-
-
-def test_killswitch_old_mirror_cannot_undo(monkeypatch, tmp_path):
-    """审查 2026-10-27：第一次读到 kill_rev=200 关了雷达；第二次只有旧镜像（kill_rev=100、没关）能连上，雷达照样关着；
-    重开 AT 从本地文件读回来也一样。发新版的 make_manifest 带上网上的 disabled 和 kill_rev"""
-    z = _pkg(tmp_path / "Dubhe_9.0.0.zip", "9.0.0", {})
-    m = _manifest(z)
-    new = dict(m, kill_rev=200, disabled=[{"feature": "radar", "why": "坏了"}])
-    old = dict(m, kill_rev=100, disabled=[])
-    C, _ = _setup(
-        monkeypatch,
-        tmp_path,
-        {"https://dl.astral-trade.com/latest.json": json.dumps(new).encode()},
-    )
-    C.check(force=True)
-    assert C.disabled("radar")
-    C, _ = _setup(
-        monkeypatch,
-        tmp_path,
-        {
-            "https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(
-                old
-            ).encode()
-        },
-    )
-    C.check(force=True)
-    assert C.disabled("radar")
-    newer = dict(m, kill_rev=300, disabled=[])
-    C, _ = _setup(
-        monkeypatch,
-        tmp_path,
-        {
-            "https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(
-                newer
-            ).encode()
-        },
-    )
-    C.check(force=True)
-    assert not C.disabled("radar")
-    mm = C.make_manifest(z, keep=new)
-    assert mm["kill_rev"] == 200 and mm["disabled"] == new["disabled"]
-    assert "disabled" not in C.make_manifest(z)
-    try:
-        C.make_manifest(z, keep=dict(new, disabled={"feature": "radar"}))
-        raise AssertionError("disabled 写成对象要报错")
-    except ValueError:
-        pass
-
-
-def test_import_inno_userdata(monkeypatch, tmp_path):
-    """Velopack 版第一次启动：老 Inno 版的设置和记录搬过来（窗口缓存、窗口地址、锁不搬；新位置更新的文件不盖）；搬完写标记，不再搬"""
-    import os
-    import time
-    from astral_toolkit.core import paths
-
-    old, new = tmp_path / "Programs" / "AT" / "userdata", tmp_path / "AT_userdata"
-    (old / "logs").mkdir(parents=True)
-    (old / "window").mkdir()
-    (old / "settings.json").write_text('{"a": 1}', encoding="utf-8")
-    (old / "waypoints.json").write_text("old", encoding="utf-8")
-    (old / "window_url.txt").write_text("http://x", encoding="utf-8")
-    (old / "instance.lock").write_text("", encoding="utf-8")
-    (old / "window" / "cache.bin").write_text("x", encoding="utf-8")
-    (old / "logs" / "app_log.txt").write_text("log", encoding="utf-8")
-    new.mkdir()
-    (new / "waypoints.json").write_text("new", encoding="utf-8")
-    t = time.time()
-    os.utime(old / "waypoints.json", (t - 100, t - 100))
-    monkeypatch.setattr(paths, "VELOPACK", True)
-    monkeypatch.setattr(paths, "INNO_USER", old)
-    monkeypatch.setattr(paths, "USER", new)
-    monkeypatch.setattr(paths, "MIGRATED", new / ".migrated_from_inno")
-    assert paths.import_inno() == 2
-    assert (new / "settings.json").exists() and (new / "logs" / "app_log.txt").exists()
-    assert (new / "waypoints.json").read_text(encoding="utf-8") == "new"
-    assert (
-        not (new / "window_url.txt").exists()
-        and not (new / "instance.lock").exists()
-        and not (new / "window").exists()
-    )
-    assert (new / ".migrated_from_inno").exists()
-    (old / "settings.json").write_text('{"a": 2}', encoding="utf-8")
-    assert paths.import_inno() == 0
-    monkeypatch.setattr(paths, "VELOPACK", False)
-    assert paths.import_inno() == 0
-
-
-def test_vkey_beta_older_than_live():
-    """版本比较按 semver：x.y.z-beta.N 比同号 x.y.z 旧；beta.2 比 beta.1 新，beta.10 比 beta.9 新（审查 2026-10-31）"""
-    from astral_toolkit.update.upgrade import vkey
-
-    assert vkey("1.1.2-beta.1") < vkey("1.1.2")
-    assert vkey("1.1.2-beta.1") < vkey("1.1.2-beta.2") < vkey("1.1.2-beta.10")
-    assert vkey("1.1.1") < vkey("1.1.2-beta.1") < vkey("1.1.2")
-    assert vkey("1.1.2") == vkey("1.1.2")
-    assert vkey("") < vkey("0.0.1")
-
-
-def _fake_velopack(versions):
-    """假的 velopack：versions = {"win": 新版本号, "prev": 上一个版本号}（频道 → 版本，None 表示没有）"""
-    import types
-
-    class Mgr:
-        def __init__(self, src, opts):
-            self.channel = opts[2]
-
-        def check_for_updates(self):
-            v = versions.get(self.channel)
-            return (
-                types.SimpleNamespace(
-                    TargetFullRelease=types.SimpleNamespace(Version=v)
-                )
-                if v
-                else None
-            )
-
-        def download_updates(self, info, cb=None):
-            pass
-
-        def wait_exit_then_apply_updates(self, *a):
-            pass
-
-    return types.SimpleNamespace(
-        UpdateOptions=lambda *a: a,
-        HttpOptions=lambda *a: a,
-        HttpSource=lambda feed, o: feed,
-        UpdateManager=Mgr,
-    )
-
-
 def test_vpk_beta_gets_same_number_live(monkeypatch):
-    """Velopack 版装着 1.1.2-beta.1：服务器上的 1.1.2 正式版能升级、界面也提示；同号 beta 不算新；
-    装着 1.1.2 时上一个版本 1.1.2-beta.3 能回滚（审查 2026-10-31：以前比版本丢掉 beta 后缀，测试玩家收不到同号正式版）"""
     import sys
-    from astral_toolkit.update import upgrade, vpk
+    from astral_toolkit.update import version, vpk
     from astral_toolkit.tasks import system as t_sys
 
     versions = {"win": "1.1.2", "beta": None, "prev": None}
@@ -906,34 +505,31 @@ def test_vpk_beta_gets_same_number_live(monkeypatch):
     monkeypatch.setattr(vpk, "installed", lambda: True)
     monkeypatch.setattr(t_sys, "_online_info", lambda force=False: None)
     monkeypatch.setattr(t_sys, "_online", {})
-    monkeypatch.setattr(upgrade, "VERSION", "1.1.2-beta.1")
+    monkeypatch.setattr(version, "VERSION", "1.1.2-beta.1")
     old = sys.modules.get("velopack")
     sys.modules["velopack"] = _fake_velopack(versions)
     try:
         assert vpk.install(progress=lambda *a: None) == "1.1.2"
         assert t_sys.upgrade_check(online=True)["online"]["version"] == "1.1.2"
-        versions.update(win=None, beta="1.1.2-beta.1")  # 同号同 beta：不是新版本
+        versions.update(win=None, beta="1.1.2-beta.1")
         try:
             vpk.install(progress=lambda *a: None)
             raise AssertionError("应该报已经是最新")
         except ValueError as e:
             assert "最新" in str(e)
         assert t_sys.upgrade_check(online=True)["online"] is None
-        # 测试版在 beta 频道（发布脚本的规定）：装着 beta.1 能收到 beta.2；win 上旧的正式版不抢（合并后审查 2026-10-31）
         versions.update(win="1.1.1", beta="1.1.2-beta.2")
         assert vpk.install(progress=lambda *a: None) == "1.1.2-beta.2"
-        # beta 频道清单 404（还没发过测试版）不算源失败；连不上、超时才算
         assert vpk._missing(RuntimeError("HTTP 404 Not Found"))
         assert not vpk._missing(TimeoutError("timed out"))
-        # 正式版玩家不看 beta 频道
-        monkeypatch.setattr(upgrade, "VERSION", "1.1.2")
+        monkeypatch.setattr(version, "VERSION", "1.1.2")
         versions.update(win=None, beta="1.1.3-beta.1")
         try:
             vpk.install(progress=lambda *a: None)
             raise AssertionError("正式版不该收到测试版")
         except ValueError as e:
             assert "未找到" in str(e) or "最新" in str(e)
-        monkeypatch.setattr(upgrade, "VERSION", "1.1.2")  # 正式版回滚到同号 beta
+        monkeypatch.setattr(version, "VERSION", "1.1.2")
         versions.update(win=None, prev="1.1.2-beta.3")
         assert vpk.install(rollback=True, progress=lambda *a: None) == "1.1.2-beta.3"
         assert [r["version"] for r in t_sys.upgrade_check(online=True)["older"]] == [
@@ -946,40 +542,7 @@ def test_vpk_beta_gets_same_number_live(monkeypatch):
             sys.modules["velopack"] = old
 
 
-def test_killswitch_refreshes_when_update_check_off(monkeypatch):
-    """玩家关了「启动时检查更新」：不提示新版本，但远程关功能清单照常每小时查一次
-    （整改第 2 批选 A，2026-10-31：远程关是游戏更新后防止给出错误识别结果的兜底）"""
-    import time as _t
-    from astral_toolkit.core import settings
-    from astral_toolkit.tasks import system as t_sys
-    from astral_toolkit.update import update_check as U
-
-    calls = []
-
-    def fake_fetch(timeout=None):
-        calls.append(1)
-        U._kill["at"] = _t.time()  # 真的 fetch 读到清单时也会记下时间
-        return {"version": "99.0.0"}, "测试源"
-
-    monkeypatch.setattr(U, "fetch", fake_fetch)
-    monkeypatch.setattr(U, "enabled", lambda: True)
-    monkeypatch.setattr(U, "_kill", {"list": [], "at": 0.0, "key": None})
-    monkeypatch.setattr(
-        U, "_state", {"at": 0.0, "info": None, "error": "", "lock": threading.Lock()}
-    )
-    monkeypatch.setattr(
-        settings, "load", lambda: {**settings.DEFAULTS, "update_online": False}
-    )
-    monkeypatch.setattr(t_sys, "_online", {"info": None, "told": ""})
-    assert t_sys._online_info() is None and calls == [1]  # 查了清单，但不提示新版本
-    assert t_sys._online_info() is None and calls == [1]  # 一小时内不再联网
-    U._kill["at"] = 0.0
-    t_sys._online_info()
-    assert calls == [1, 1]
-
-
 def test_game_source_marker(monkeypatch, tmp_path):
-    """数据文件的 source 标记：由游戏数据构建的（新写法、兼容旧数据包的旧写法）更新时不让网站版盖掉；网站来的照常更新"""
     from astral_toolkit import run
     from astral_toolkit.core import paths
     from astral_toolkit.crafting import build_crafting
@@ -1000,7 +563,6 @@ def test_game_source_marker(monkeypatch, tmp_path):
 
 
 def test_build_input_rows(monkeypatch, tmp_path):
-    """本机构建输入目录里同版本的蓝图 + 任务文件成对才算；不成对、没有目录都返回 None"""
     from astral_toolkit.core import paths
     from astral_toolkit.crafting import build_crafting
 
@@ -1017,8 +579,6 @@ def test_build_input_rows(monkeypatch, tmp_path):
 
 
 def test_make_data_pack_keeps_game_starmap(monkeypatch, tmp_path):
-    """本机星图是游戏数据版、却没设好构建目录（或脚本目录里没有合并脚本）：直接停下，不拿网站版盖掉再打进数据包；
-    带 --no-update 不会去网站更新，不用停；设好了：星图合并脚本拿到这份仓库和输入目录（不会去改别的签出）"""
     import runpy
     import subprocess
     from pathlib import Path
@@ -1045,7 +605,7 @@ def test_make_data_pack_keeps_game_starmap(monkeypatch, tmp_path):
     empty = tmp_path / "empty"
     empty.mkdir()
     monkeypatch.setenv("AT_SRC_DIR", str(src))
-    monkeypatch.setenv("AT_DATA_TOOLS", str(empty))  # 目录对、里面没有合并脚本
+    monkeypatch.setenv("AT_DATA_TOOLS", str(empty))
     assert M["main"]([]) == 2 and calls == []
 
     class Stop(Exception):
@@ -1054,9 +614,7 @@ def test_make_data_pack_keeps_game_starmap(monkeypatch, tmp_path):
     def stop(*a, **kw):
         raise Stop
 
-    monkeypatch.setattr(
-        data_pack, "make", stop
-    )  # 走到打包这一步就算没停下（也不真打包）
+    monkeypatch.setattr(data_pack, "make", stop)
     with raises(Stop):
         M["main"](["--no-update", "--no-loot"])
     tools = tmp_path / "tools"
@@ -1075,3 +633,313 @@ def test_make_data_pack_keeps_game_starmap(monkeypatch, tmp_path):
     cmd, env = seen[0]
     assert cmd[-2].endswith("starmap_merge.py") and cmd[-1] == "--write"
     assert env["AT_REPO"] == str(M["ROOT"]) and env["AT_SRC_DIR"] == str(src)
+
+
+def test_falls_back_to_github_and_ignores_older(monkeypatch, tmp_path):
+    from astral_toolkit.update import version
+
+    exe = tmp_path / "AT_Setup_9.0.0.exe"
+    exe.write_bytes(b"MZ setup")
+    m = _installer_manifest(exe)
+    C, calls = _setup(
+        monkeypatch,
+        tmp_path,
+        {
+            "https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(
+                m
+            ).encode()
+        },
+    )
+    monkeypatch.setattr(C.paths, "FROZEN", True)
+    monkeypatch.setattr(C.paths, "VELOPACK", False)
+    monkeypatch.setattr(version, "current", lambda: (1, 0, 0))
+    info = C.check(force=True)
+    assert info and info["version"] == "9.0.0" and info["source"] == "GitHub"
+    assert {c.split("/")[2] for c in calls} == {
+        "dl.astral-trade.com",
+        "at-dl-1323647399.cos.ap-guangzhou.myqcloud.com",
+        "raw.githubusercontent.com",
+    }
+    old = dict(m, version="0.0.1")
+    C, _ = _setup(
+        monkeypatch,
+        tmp_path,
+        {
+            "https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(
+                old
+            ).encode()
+        },
+    )
+    monkeypatch.setattr(C.paths, "FROZEN", True)
+    monkeypatch.setattr(C.paths, "VELOPACK", False)
+    monkeypatch.setattr(version, "current", lambda: (1, 0, 0))
+    assert C.check(force=True) is None
+
+
+def test_own_server_stale_does_not_hide_newer(monkeypatch, tmp_path):
+    from astral_toolkit.update import version
+
+    exe = tmp_path / "AT_Setup_9.0.0.exe"
+    exe.write_bytes(b"MZ setup")
+    new = _installer_manifest(exe)
+    old = dict(new, version="0.0.1")
+    C, _ = _setup(
+        monkeypatch,
+        tmp_path,
+        {
+            "https://dl.astral-trade.com/latest.json": json.dumps(old).encode(),
+            "https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(
+                new
+            ).encode(),
+        },
+    )
+    monkeypatch.setattr(C.paths, "FROZEN", True)
+    monkeypatch.setattr(C.paths, "VELOPACK", False)
+    monkeypatch.setattr(version, "current", lambda: (1, 0, 0))
+    info = C.check(force=True)
+    assert info and info["version"] == "9.0.0" and info["source"] == "GitHub"
+
+
+def test_vpk_check_fail_not_up_to_date(monkeypatch):
+    from astral_toolkit.tasks.system import upgrade as U
+    from astral_toolkit.update import version, vpk
+
+    def boom(rollback=False):
+        raise RuntimeError("AT 服务器和国内镜像都无法连接：timed out")
+
+    monkeypatch.setattr(vpk, "installed", lambda: True)
+    monkeypatch.setattr(vpk, "check", boom)
+    monkeypatch.setattr(version, "VERSION", "1.0.0")
+    monkeypatch.setattr(U, "_online", {})
+    monkeypatch.setattr(
+        U,
+        "_online_info",
+        lambda force=False: {
+            "version": "99.0.0",
+            "date": "",
+            "notes": [],
+            "size": 1,
+            "source": "GitHub",
+        },
+    )
+    r = U.upgrade_check(online=True)
+    assert r["online"] is None
+    assert r["online_error"] == "无法连接更新服务器"
+    assert "AT 99.0.0" in r["online_hint"]
+    monkeypatch.setattr(vpk, "check", lambda rollback=False: (None, "", "国内镜像"))
+    monkeypatch.setattr(U, "_online", {})
+    r = U.upgrade_check(online=True)
+    assert r["online"] is None and r["online_error"] == "" and r["online_hint"] == ""
+
+
+def test_installer_entry_only_for_standalone(tmp_path):
+    from astral_toolkit.update import update_check as C
+
+    exe = tmp_path / "AT_Setup_9.0.0.exe"
+    exe.write_bytes(b"MZ setup")
+    m = _installer_manifest(exe)
+    fz = C.parse(json.dumps(m), frozen=True, velopack=False)
+    assert fz["file"] == exe.name and fz["installer"]
+    vp = C.parse(json.dumps(m), frozen=False, velopack=True)
+    assert vp["version"] == "9.0.0" and vp["urls"] == []
+    try:
+        C.parse(json.dumps(m), frozen=False, velopack=False)
+        assert False
+    except C.NoPackage:
+        pass
+    for bad in (
+        {k: v for k, v in m.items() if k != "installer"},
+        {**m, "installer": {**m["installer"], "file": "virus.exe"}},
+    ):
+        try:
+            C.parse(json.dumps(bad), frozen=True, velopack=False)
+            assert False, bad
+        except ValueError:
+            pass
+
+
+def test_parse_rejects_bad_manifest(tmp_path):
+    from astral_toolkit.update import update_check as C
+
+    exe = tmp_path / "AT_Setup_9.0.0.exe"
+    exe.write_bytes(b"MZ setup")
+    good = _installer_manifest(exe)
+    assert C.parse(json.dumps(good), frozen=True, velopack=False)["version"] == "9.0.0"
+    for bad in (
+        {**good, "installer": {**good["installer"], "sha256": "123"}},
+        {**good, "installer": {**good["installer"], "file": "virus.exe"}},
+        {
+            **good,
+            "installer": {
+                **good["installer"],
+                "urls": ["http://evil.com/a.exe"],
+            },
+        },
+        {**good, "version": "abc"},
+    ):
+        try:
+            C.parse(json.dumps(bad), frozen=True, velopack=False)
+            assert False, bad
+        except ValueError:
+            pass
+
+
+def test_manifest_installer_only(monkeypatch, tmp_path):
+    from astral_toolkit.update import update_check as C
+    from astral_toolkit.update import version
+
+    exe = tmp_path / "AT_Setup_9.0.0.exe"
+    exe.write_bytes(b"MZ setup")
+    m = C.make_manifest(notes=["x"], installer=exe)
+    assert m["version"] == "9.0.0" and m["installer"]["file"] == exe.name
+    assert m["kill_rev"] == C.LEGACY_KILL_REV
+    assert m["disabled"] == C.LEGACY_DISABLED
+    assert not {"file", "size", "sha256", "urls"} & set(m)
+    assert C.parse(json.dumps(m), frozen=True, velopack=False)["file"] == exe.name
+    try:
+        C.parse(json.dumps(m), frozen=False, velopack=False)
+        assert False
+    except C.NoPackage:
+        pass
+    C, _ = _setup(
+        monkeypatch,
+        tmp_path,
+        {
+            "https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(
+                m
+            ).encode()
+        },
+    )
+    monkeypatch.setattr(C.paths, "FROZEN", False)
+    monkeypatch.setattr(C.paths, "VELOPACK", False)
+    monkeypatch.setattr(version, "current", lambda: (1, 0, 0))
+    assert C.check(force=True) is None and C.last_error() == ""
+    C, _ = _setup(
+        monkeypatch,
+        tmp_path,
+        {
+            "https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(
+                m
+            ).encode()
+        },
+    )
+    monkeypatch.setattr(C.paths, "FROZEN", True)
+    monkeypatch.setattr(C.paths, "VELOPACK", False)
+    monkeypatch.setattr(version, "current", lambda: (1, 0, 0))
+    info = C.check(force=True)
+    assert info and info["file"] == exe.name
+
+
+def test_newest_manifest_without_package_blocks_older_package(monkeypatch, tmp_path):
+    """对桥接安装版仍成立：新清单 9.0.0 没有 installer，不能退回旧清单里的 5.0.0 安装程序。"""
+    from astral_toolkit.update import version
+
+    exe = tmp_path / "AT_Setup_5.0.0.exe"
+    exe.write_bytes(b"MZ setup")
+    older = _installer_manifest(exe, version="5.0.0")
+    pages = {
+        "https://dl.astral-trade.com/latest.json": json.dumps(
+            {"version": "9.0.0", "notes": ["新功能"]}
+        ).encode(),
+        "https://raw.githubusercontent.com/at/at/main/latest.json": json.dumps(
+            older
+        ).encode(),
+    }
+    C, calls = _setup(monkeypatch, tmp_path, pages)
+    monkeypatch.setattr(C.paths, "FROZEN", True)
+    monkeypatch.setattr(C.paths, "VELOPACK", False)
+    monkeypatch.setattr(version, "current", lambda: (1, 0, 0))
+    assert C.check(force=True) is None and C.last_error() == ""
+    assert calls and all(u.endswith("/latest.json") for u in calls)
+    C, _ = _setup(monkeypatch, tmp_path, pages)
+    monkeypatch.setattr(C.paths, "FROZEN", False)
+    monkeypatch.setattr(C.paths, "VELOPACK", True)
+    monkeypatch.setattr(version, "current", lambda: (1, 0, 0))
+    info = C.check(force=True)
+    assert info and info["version"] == "9.0.0" and info["source"] == "AT 服务器"
+
+
+def test_make_manifest_version_must_match_package(tmp_path):
+    from astral_toolkit.update import update_check as C
+
+    exe = tmp_path / "AT_Setup_9.0.0.exe"
+    exe.write_bytes(b"MZ setup")
+    assert C.make_manifest(installer=exe, version="9.0.0")["version"] == "9.0.0"
+    try:
+        C.make_manifest(installer=exe, version="9.0.1")
+        raise AssertionError("版本不一致应报错")
+    except ValueError as e:
+        assert "不一致" in str(e)
+
+
+def test_zip_in_downloads_not_scanned(monkeypatch, tmp_path):
+    import types
+    from astral_toolkit.core import paths
+    from astral_toolkit.tasks.system import upgrade as U
+    import importlib
+
+    S = importlib.import_module("astral_toolkit.tasks.system.status")
+    from astral_toolkit.update import vpk
+
+    downloads = tmp_path / "Downloads"
+    downloads.mkdir()
+    (downloads / "Dubhe_9.9.9.zip").write_bytes(b"PK")
+    root = tmp_path / "AT"
+    root.mkdir()
+    user = tmp_path / "userdata"
+    user.mkdir()
+    monkeypatch.setattr(paths, "ROOT", root)
+    monkeypatch.setattr(paths, "USER", user)
+    monkeypatch.setattr(paths, "FROZEN", True)
+    monkeypatch.setattr(paths, "VELOPACK", False)
+    monkeypatch.setattr(vpk, "installed", lambda: False)
+    monkeypatch.setattr(U, "_online", {})
+    r = U.upgrade_check()
+    assert "found" not in r and "new_version" not in r
+    assert "Dubhe_9.9.9.zip" not in json.dumps(r, ensure_ascii=False)
+
+    live = types.SimpleNamespace(running=lambda: False, paused=False)
+    nav = types.SimpleNamespace(target_label=lambda: "", space_mode=False)
+    pos = types.SimpleNamespace(
+        reader=types.SimpleNamespace(active=False),
+        label=(0.0, None),
+        system=(0.0, ""),
+    )
+    game_events = types.SimpleNamespace(last={})
+    m = types.SimpleNamespace(live=live, nav=nav, pos=pos, game_events=game_events)
+    monkeypatch.setattr(S, "_engines", lambda: m)
+    monkeypatch.setattr(S, "_gridtext_status", lambda: {})
+    monkeypatch.setattr(S, "WIN", False)
+    st = S.status()
+    assert "new_version" not in st
+    assert "Dubhe_9.9.9.zip" not in json.dumps(st, ensure_ascii=False, default=str)
+
+
+def test_retired_routes_absent():
+    from astral_toolkit.app.api import router
+
+    router.reset()
+    routes = router.routes()
+    retired = (
+        "upgrade_apply",
+        "upgrade_upload",
+        "upgrade_upload_raw",
+        "legacy_scan",
+        "legacy_import",
+        "legacy_skip",
+        "legacy_quit",
+    )
+    for name in retired:
+        assert name not in routes, name
+        try:
+            got = router.call(name, {})
+        except Exception:
+            continue
+        assert not (isinstance(got, dict) and got.get("ok")), (name, got)
+
+
+def test_source_import_without_legacy():
+    import astral_toolkit.app.server  # noqa: F401
+    from astral_toolkit import selftest
+
+    assert "update.legacy" not in selftest.MODULES
