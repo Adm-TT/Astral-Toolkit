@@ -16,7 +16,6 @@ def status():
     from ...system import showloc
     from .about import _data_versions, _version
     from .settings import hotkey_conflicts
-    from .upgrade import _upgrade_found
 
     cfg = settings.load()
     m = _engines()
@@ -44,7 +43,6 @@ def status():
         "data": _data_versions(),
         "displayinfo": pos_reader_active,
         "version": _version(),
-        "new_version": _upgrade_found(),
         "game_size": None,
         "game_events": game_events_dict,
         "frozen": __import__("astral_toolkit.core.paths", fromlist=["FROZEN"]).FROZEN,

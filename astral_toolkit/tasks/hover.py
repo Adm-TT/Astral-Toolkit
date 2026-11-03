@@ -24,7 +24,7 @@ _seq = itertools.count(
 
 
 # ---------------------------------------------------------------- 依赖（2026-10-30 重构阶段 3：不再经 services 转发）
-from ..app.hud_state import _item_hud, _off  # noqa: E402
+from ..app.hud_state import _item_hud  # noqa: E402
 from . import goals as _t_goals  # noqa: E402
 from . import trade as _t_trade  # noqa: E402
 
@@ -226,10 +226,6 @@ def hover_once(img=None):
     from ..mining.screen import grab
     from ..trade import console as C
 
-    why = _off("item")
-    if why:
-        _item_hud(f"物品识别暂时关闭：{why}", 8)
-        return {"error": why}
     t0 = time.time()
     _last_hover.clear()
     _last_hover["seq"] = None  # 上一次 F8 后台还没查完的价格，不再往悬浮窗上写

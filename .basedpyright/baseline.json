@@ -18,48 +18,6 @@
                 }
             }
         ],
-        "./astral_toolkit/app/engines/live.py": [
-            {
-                "code": "reportOperatorIssue",
-                "range": {
-                    "startColumn": 24,
-                    "endColumn": 51,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportOptionalOperand",
-                "range": {
-                    "startColumn": 29,
-                    "endColumn": 44,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 37,
-                    "endColumn": 46,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 75,
-                    "endColumn": 84,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 30,
-                    "endColumn": 39,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./astral_toolkit/app/engines/nav.py": [
             {
                 "code": "reportOptionalMemberAccess",
@@ -1636,6 +1594,24 @@
                 }
             }
         ],
+        "./astral_toolkit/ocr/runtime.py": [
+            {
+                "code": "reportAttributeAccessIssue",
+                "range": {
+                    "startColumn": 30,
+                    "endColumn": 37,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportMissingImports",
+                "range": {
+                    "startColumn": 13,
+                    "endColumn": 21,
+                    "lineCount": 1
+                }
+            }
+        ],
         "./astral_toolkit/run.py": [
             {
                 "code": "reportArgumentType",
@@ -2096,24 +2072,6 @@
                 }
             }
         ],
-        "./astral_toolkit/tasks/system/legacy.py": [
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 12,
-                    "endColumn": 27,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 12,
-                    "endColumn": 27,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./astral_toolkit/tasks/system/status.py": [
             {
                 "code": "reportOperatorIssue",
@@ -2304,26 +2262,6 @@
                 "range": {
                     "startColumn": 41,
                     "endColumn": 45,
-                    "lineCount": 1
-                }
-            }
-        ],
-        "./astral_toolkit/update/update_check.py": [
-            {
-                "code": "reportPossiblyUnboundVariable",
-                "range": {
-                    "startColumn": 18,
-                    "endColumn": 19,
-                    "lineCount": 1
-                }
-            }
-        ],
-        "./astral_toolkit/update/upgrade.py": [
-            {
-                "code": "reportOptionalMemberAccess",
-                "range": {
-                    "startColumn": 42,
-                    "endColumn": 47,
                     "lineCount": 1
                 }
             }
@@ -4322,24 +4260,6 @@
                 }
             }
         ],
-        "./tests/test_upgrade.py": [
-            {
-                "code": "reportMissingImports",
-                "range": {
-                    "startColumn": 11,
-                    "endColumn": 17,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportMissingImports",
-                "range": {
-                    "startColumn": 11,
-                    "endColumn": 17,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./tools/build_item_stats.py": [
             {
                 "code": "reportOptionalSubscript",
@@ -4412,48 +4332,12 @@
                 }
             }
         ],
-        "./tools/make_manifest.py": [
-            {
-                "code": "reportOptionalMemberAccess",
-                "range": {
-                    "startColumn": 34,
-                    "endColumn": 40,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./tools/make_splash.py": [
             {
                 "code": "reportAttributeAccessIssue",
                 "range": {
                     "startColumn": 32,
                     "endColumn": 39,
-                    "lineCount": 1
-                }
-            }
-        ],
-        "./tools/release_check.py": [
-            {
-                "code": "reportOptionalMemberAccess",
-                "range": {
-                    "startColumn": 23,
-                    "endColumn": 31,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportOptionalMemberAccess",
-                "range": {
-                    "startColumn": 27,
-                    "endColumn": 35,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportOptionalIterable",
-                "range": {
-                    "startColumn": 54,
-                    "endColumn": 65,
                     "lineCount": 1
                 }
             }

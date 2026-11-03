@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 
 from . import bus
-from . import http_server, instance, launcher
+from . import http_server, instance, launcher, ui_stream
 from ..tasks import system as _sys_task  # main 里启动后台引擎
 
 # 2026-10-31 按职责拆开（整改第 1 批）：网页服务在 http_server，开窗口在 launcher，只开一个 AT 在 instance；
@@ -134,4 +134,8 @@ def main(open_ui=True, port=0, restart=False):
         from .engines.manager import EngineManager
 
         EngineManager.get_instance().stop_all()
+        try:
+            ui_stream.drain_and_bye(1.0)
+        except Exception:
+            pass
         server.shutdown()

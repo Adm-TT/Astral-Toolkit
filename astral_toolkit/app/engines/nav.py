@@ -3,7 +3,7 @@
 2026-10-28 从 app/services.py 原样剪出来（逻辑没改）。2026-10-30 重构阶段 4 删了 services.py，
 用到的函数 / 变量直接到它们所在的模块取，运行时才取，避免互相 import：
 _T("mining").xxx = tasks/mining.py，_H().xxx = app/hud_state.py，_E().live / .nav / .pos / .cam_filter = 引擎实例。
-用到：DI_HELP, LIVE_STALE, WIN, _cam_filter, _hud, _mark_hud, _marker_tick, _nav, _nav_log, _nav_view, _off, _place_row, _pos, _space_view, _station_view, _wp_log, fix_key_hint, settings_key, status
+用到：DI_HELP, LIVE_STALE, WIN, _cam_filter, _hud, _mark_hud, _marker_tick, _nav, _nav_log, _nav_view, _place_row, _pos, _space_view, _station_view, _wp_log, fix_key_hint, settings_key, status
 """
 
 import importlib
@@ -556,9 +556,6 @@ class _GameEvents:
 
         tail = EventTail()
         while True:
-            if _H()._off("game_events"):
-                time.sleep(5)
-                continue
             try:
                 for t, k, v in tail.poll():
                     self.last[k] = (t, v)

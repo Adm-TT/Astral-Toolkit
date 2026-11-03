@@ -10,14 +10,6 @@ _SYSTEM_API = [
     "upgrade_check",
     "upgrade_online",
     "upgrade_rollback",
-    "upgrade_mark_stable",
-    "legacy_scan",
-    "legacy_import",
-    "legacy_skip",
-    "legacy_quit",
-    "upgrade_apply",
-    "upgrade_upload",
-    "upgraded",
     "export_logs",
     "feedback_report",
     "feedback_list",
@@ -125,10 +117,6 @@ _OLD_API_NAMES = [
     "item_info",
     "item_loot",
     "item_search",
-    "legacy_import",
-    "legacy_quit",
-    "legacy_scan",
-    "legacy_skip",
     "live_start",
     "live_stop",
     "manual_scan",
@@ -186,13 +174,9 @@ _OLD_API_NAMES = [
     "third_party_licenses",
     "trade",
     "update_data",
-    "upgrade_apply",
     "upgrade_check",
-    "upgrade_mark_stable",
     "upgrade_online",
     "upgrade_rollback",
-    "upgrade_upload",
-    "upgraded",
     "waypoint_add",
     "waypoint_delete",
     "waypoint_from_text",
@@ -209,9 +193,8 @@ def test_all_api_names_routed():
 
     router.reset()
     r = router.routes()
-    assert (
-        len(_OLD_API_NAMES) == len(set(_OLD_API_NAMES)) == 108
-    )  # 109 个减去 cockpit_check（自动跑删了，整改第 5 批）
+    # 已删掉旧版导入与压缩包手动升级等退役接口，不再按旧数量硬编码。
+    assert len(_OLD_API_NAMES) == len(set(_OLD_API_NAMES))
     missing = [n for n in _OLD_API_NAMES if n not in r]
     assert not missing, missing
     for n in _OLD_API_NAMES:
@@ -240,6 +223,33 @@ def test_no_services_module():
             if s in text:
                 bad.append((str(f.relative_to(ROOT)), s))
     assert not bad, bad
+
+
+def test_feedback_scrub_unicode_paths_inside_json(monkeypatch, tmp_path):
+    """中文路径即使转成 JSON 的 Unicode 转义，也不能留在反馈文字里。"""
+    import json
+
+    from astral_toolkit.core import paths
+    from astral_toolkit.tasks import system as t_sys
+
+    root = tmp_path / "中文目录"
+    monkeypatch.setattr(paths, "ROOT", root)
+    monkeypatch.setattr(paths, "USER", root / "userdata")
+    monkeypatch.setattr(paths, "DATA", root / "data")
+    source = json.dumps(
+        {
+            "native": str(root / "userdata" / "settings.json"),
+            "slash": (root / "data" / "shops.json").as_posix(),
+            "note": "普通中文说明保留",
+        }
+    )
+    scrubbed = t_sys._scrub(source)
+    decoded = json.loads(scrubbed)
+    assert decoded["native"].startswith("<USERDATA>")
+    assert decoded["slash"] == "<DATA>/shops.json"
+    assert decoded["note"] == "普通中文说明保留"
+    assert str(tmp_path) not in scrubbed
+    assert json.dumps(str(tmp_path))[1:-1] not in scrubbed
 
 
 def test_feedback_scrub_personal_info(monkeypatch, tmp_path):
