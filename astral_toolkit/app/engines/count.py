@@ -43,6 +43,11 @@ class _Count:
         return bool(self.thread and self.thread.is_alive())
 
     def start(self):
+        from ..lifecycle_gate import closing_error
+
+        refused = closing_error()
+        if refused:
+            return refused
         if not WIN or self.running():
             return {"running": self.running()}
         from ...crafting import stockplaces as SP

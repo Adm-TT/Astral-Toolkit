@@ -12,6 +12,11 @@ def scan_view(**kw):
 
 
 def live_start(**kw):
+    from ..lifecycle_gate import closing_error
+
+    refused = closing_error()
+    if refused:
+        return refused
     return _t.live_start(**kw)
 
 

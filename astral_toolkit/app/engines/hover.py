@@ -11,6 +11,7 @@ import sys
 import threading
 
 from .. import bus
+from ..lifecycle_gate import is_closing
 
 WIN = sys.platform == "win32"
 
@@ -103,7 +104,7 @@ class _Hover:
             "count_key": (
                 False,
                 lambda: threading.Thread(
-                    target=_T("count").count_toggle, daemon=True, name="count-key"
+                    target=self._toggle_count, daemon=True, name="count-key"
                 ).start(),
             ),
             "ore_key": (
@@ -171,6 +172,9 @@ class _Hover:
                 _T("mining").live_stop()
                 _H()._note_hud("采矿助手", f"采矿助手已关闭｜按 {k} 开启")
             else:
+                if is_closing():
+                    _H()._note_hud("采矿助手", "正在退出")
+                    return
                 res = _T("mining").live_start() or {}
                 if res.get("error"):
                     # 正在停止 / 正在退出：别说「已开启」（3-2）
@@ -180,6 +184,12 @@ class _Hover:
         except Exception as e:
             bus.publish("log", {"task": "live", "line": f"采矿助手开关失败：{e}"})
 
+    def _toggle_count(self):
+        if not _E().count.running() and is_closing():
+            _H()._note_hud("盘点", "正在退出")
+            return {"error": "正在退出"}
+        return _T("count").count_toggle()
+
     def _report(self):
         try:
             return _T("system").feedback_report(kind="auto")
@@ -187,12 +197,18 @@ class _Hover:
             self.busy = False
 
     def _mark(self):  # 不占着忙，结束时也不能清别人（F8、F10）的忙
+        if is_closing():
+            return {"error": "正在退出"}
         return _T("navigation").mark_here()
 
     def _ore(self):
+        if is_closing():
+            return {"error": "正在退出"}
         return _T("navigation").ore_record(here=True)
 
     def _fix(self):
+        if is_closing():
+            return {"error": "正在退出"}
         return _T("navigation").fix_here()
 
     def _start_hover(self):
