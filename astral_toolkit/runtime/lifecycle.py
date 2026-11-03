@@ -339,6 +339,14 @@ class Lifecycle:
                         exited = False
                         part = f"join: {exc!r}"
                         error = f"{error}；{part}" if error else part
+                    if not exited:
+                        try:
+                            detail = getattr(service, "last_error", "")
+                        except Exception:
+                            detail = ""
+                        if detail:
+                            part = str(detail)
+                            error = f"{error}；{part}" if error else part
                     secs = time.monotonic() - stop_at.get(index, started)
                     records.append(
                         StopRecord(

@@ -155,7 +155,12 @@ def _count_review(place, items):
 
 # ================================================================ 盘点控制与对账 API
 def count_toggle():
-    """盘点开关（窗口按钮；游戏里是 F6）"""
+    """盘点开关（窗口按钮；游戏里是 F6）。正在退出时只拦「开」，正在盘点照样能停（RT-B6）"""
+    if not _count.running():
+        from ..app.lifecycle_gate import is_closing
+
+        if is_closing():
+            return {"error": "正在退出"}
     return _count.stop() if _count.running() else _count.start()
 
 

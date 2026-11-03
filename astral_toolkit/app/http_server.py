@@ -15,6 +15,7 @@ from pathlib import Path
 
 from . import bus
 from . import ui_stream
+from .http_writes import WRITES
 
 # 2026-10-30 阶段 4：services.py 删了。import tasks 这一层会把全部任务模块加载好（tasks/__init__.py），
 # tasks.goals / tasks.navigation 在 import 时登记数据包清缓存函数，和原来 import services 时顺带做的一样早
@@ -132,23 +133,35 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(
                 413, json.dumps({"ok": False, "error": "请求太大"}, ensure_ascii=False)
             )
-        raw = self.rfile.read(n) if n else b""
-        if name == "ui/dismiss":
-            return self._ui_dismiss(raw)
-        from .api import router  # 2026-10-30 阶段 0：接口统一走 router
-
-        if name not in router.routes():
+        if not WRITES.try_begin_write(name):
+            self.close_connection = True
             return self._send(
-                404,
-                json.dumps({"ok": False, "error": f"没有 {name}"}, ensure_ascii=False),
+                200,
+                json.dumps({"ok": False, "error": "正在退出"}, ensure_ascii=False),
             )
         try:
-            args = json.loads(raw or b"{}")
-        except Exception as e:
-            return self._send(
-                200, json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
-            )
-        self._send(200, json.dumps(router.call(name, args), ensure_ascii=False))
+            raw = self.rfile.read(n) if n else b""
+            if name == "ui/dismiss":
+                return self._ui_dismiss(raw)
+            from .api import router  # 2026-10-30 阶段 0：接口统一走 router
+
+            if name not in router.routes():
+                return self._send(
+                    404,
+                    json.dumps(
+                        {"ok": False, "error": f"没有 {name}"}, ensure_ascii=False
+                    ),
+                )
+            try:
+                args = json.loads(raw or b"{}")
+            except Exception as e:
+                return self._send(
+                    200,
+                    json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False),
+                )
+            self._send(200, json.dumps(router.call(name, args), ensure_ascii=False))
+        finally:
+            WRITES.end_write(name)
 
     def _screenshot(self):
         from urllib.parse import urlparse, parse_qs

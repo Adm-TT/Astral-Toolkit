@@ -12,7 +12,6 @@ RT-B4：线程 / 停止 / 提交边界 / 暂停 / 过期 / 自动关闭 / 重试
 
 import collections
 import importlib
-import threading
 import time
 from typing import Any
 
@@ -223,6 +222,9 @@ class _Live:
 
     def __init__(self, results=None, output=None, clock=None, closing=None):
         self.results = results if results is not None else ResultStore()
+        from ..miss_shots import MissShotsService
+
+        self.miss_shots = MissShotsService()
         self.loop: Any = SessionLoop(
             self,
             results=self.results,
@@ -775,18 +777,11 @@ class _Live:
         except (OSError, ValueError):
             pass
 
-        def save():
-            try:
-                d = paths.shots("miss")
-                img.save(d / f"{stamp}.png")
-                for f in sorted(d.glob("*.png"), key=lambda f: f.stat().st_mtime)[
-                    : -self.MISS_KEEP
-                ]:
-                    f.unlink()
-            except OSError:
-                pass
-
-        threading.Thread(target=save, daemon=True).start()  # 存截图的小线程，保留
+        try:
+            d = paths.shots("miss")
+        except OSError:
+            return
+        self.miss_shots.submit(d, stamp, img, self.MISS_KEEP)
 
     def _hint_ops(self, ctx, why, clear_hud=False):
         """读不全的提示 ops；why=None 收起（clear_hud：悬浮窗上的提示也擦掉）"""

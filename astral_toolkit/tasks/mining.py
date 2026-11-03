@@ -415,6 +415,11 @@ def scan_view(scan, bag, cut=False):
 
 
 def live_start():
+    from ..app.lifecycle_gate import closing_error
+
+    refused = closing_error()
+    if refused:
+        return refused
     live = _engines().live
     if live.start() is None:
         view = live.loop.state()

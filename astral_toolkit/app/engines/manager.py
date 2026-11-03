@@ -125,6 +125,10 @@ class EngineManager:
         from ...runtime.results import ResultStore
 
         self.lifecycle = Lifecycle()
+        from ..http_writes import WRITES as _http_writes
+
+        _http_writes.bind_closing(self.lifecycle.is_closing)
+        self.lifecycle.register(_http_writes)
         self._register_lock = threading.Lock()
         self._registered = False
         self._warmups_enabled = True
@@ -312,6 +316,7 @@ class EngineManager:
                         start=monitor.start,
                     )
                 )
+            self.lifecycle.register(self.live.miss_shots)
 
             # B6 明确不登记（靠 closing 门 / 进程退出收尾）：
             # - feedback-retry：最长一次网络请求 60 s，退出预算内等不到就放弃

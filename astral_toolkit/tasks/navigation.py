@@ -286,6 +286,9 @@ def nav_search(q=""):
 
 
 def nav_near(kind=""):
+    refused = _rt_b6_closing_error()
+    if refused:
+        return refused
     """导航页「医院 / 空港 / 买船」：知道当前位置就直接导航到最近的那个，列表按远近排；
     位置不知道就只列出来让玩家自己挑（2026-10-27 负责人定）"""
     from ..navigation import navigate as n
@@ -472,7 +475,16 @@ def nav_plan(key=""):
     }
 
 
+def _rt_b6_closing_error():
+    from ..app.lifecycle_gate import closing_error
+
+    return closing_error()
+
+
 def nav_start(key=""):
+    refused = _rt_b6_closing_error()
+    if refused:
+        return refused
     p = _places.get(key)
     if not p:
         return {"error": "未找到此地点，需重新搜索"}
@@ -493,6 +505,9 @@ def nav_start(key=""):
 
 def nav_mode(mode="auto"):
     """导航页的开关：实时定位（ground / auto）/ 手动定位（space，只用 /showlocation）；正在导航就按新方式重新开始"""
+    refused = _rt_b6_closing_error()
+    if refused:
+        return refused
     from ..core import settings
 
     nav = _need_nav()
@@ -955,6 +970,9 @@ def _wait_showloc():
 
 
 def mark_here():
+    refused = _rt_b6_closing_error()
+    if refused:
+        return refused
     """游戏里按热键：等你在聊天框输入 /showlocation，读剪贴板里的坐标记成路标（AT 不替你输入）。
     点过「用当前位置新建」就用那里填的名字，否则按时间和地点起名"""
     if (
@@ -1076,6 +1094,9 @@ def ore_restore(rec=None):
 
 
 def ore_go(id=""):
+    refused = _rt_b6_closing_error()
+    if refused:
+        return refused
     """「去这里」：把这条记录的坐标记成路标（同一条只记一次），然后开始导航"""
     from ..mining import ore_log
 
