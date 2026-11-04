@@ -79,8 +79,14 @@ def test_closing_gate_f5_f6(monkeypatch):
 
     refused = mining.live_start()
     assert isinstance(refused, dict) and refused.get("error") == "正在退出"
-    refused = count_task.count_toggle()
-    assert isinstance(refused, dict) and refused.get("error") == "正在退出"
+
+    old_count = count_task._count
+    count_task.bind(manager.count)
+    try:
+        refused = count_task.count_toggle()
+        assert isinstance(refused, dict) and refused.get("error") == "正在退出"
+    finally:
+        count_task._count = old_count
 
     notes = []
     monkeypatch.setattr(

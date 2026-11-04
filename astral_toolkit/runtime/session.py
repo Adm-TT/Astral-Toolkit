@@ -336,6 +336,16 @@ class SessionLoop:
         with self._lock:
             return self._shared.get(name)
 
+    def shared_set(self, name: str, value: Any) -> None:
+        """命令层写共享结果（如盘点确认失败时把对账放回）：锁内写"""
+        with self._lock:
+            self._shared[name] = value
+
+    def shared_take(self, name: str) -> Any:
+        """命令层原子地取走共享结果（取走后读到 None）"""
+        with self._lock:
+            return self._shared.pop(name, None)
+
     def lock_held_by_me(self) -> bool:
         """测试辅助：当前线程是否持有 loop 锁"""
         return self._lock.held_by_me()

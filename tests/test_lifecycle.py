@@ -4,7 +4,6 @@ import threading
 import time
 
 from astral_toolkit.app.engines import hover as hover_mod
-from astral_toolkit.app.engines.manager import _CountService
 from astral_toolkit.runtime.lifecycle import (
     Lifecycle,
     OneShot,
@@ -64,18 +63,6 @@ class _NeverService:
     def join(self, timeout):
         self.thread.join(timeout)
         return not self.thread.is_alive()
-
-
-class _CountFake:
-    def __init__(self):
-        self.ev = threading.Event()
-        self.thread = threading.Thread(target=self.ev.wait, daemon=True)
-
-    def running(self):
-        return self.thread.is_alive()
-
-    def stop(self):
-        self.ev.set()
 
 
 def test_stop_orders_phases_and_requests_all_before_join(monkeypatch):
@@ -176,14 +163,33 @@ def test_hover_shell_starts_and_stops(monkeypatch):
     assert hover.join(2.0) is True
 
 
-def test_count_wrapper_stops_and_joins_thread():
-    count = _CountFake()
-    count.thread.start()
-    service = _CountService(count)
+def test_count_service_stops_session_loop(monkeypatch):
+    from astral_toolkit.app import lifecycle_gate
+    from astral_toolkit.app.engines import count as count_mod
+    from astral_toolkit.crafting import stockplaces
+    from astral_toolkit.tasks import navigation
+    from tests.runtime_fakes import RecordingOutput
 
-    service.request_stop()
-    assert service.join(2.0) is True
-    assert count.thread.is_alive() is False
+    monkeypatch.setattr(count_mod, "WIN", True)
+    monkeypatch.setattr(lifecycle_gate, "closing_error", lambda: None)
+    monkeypatch.setattr(stockplaces, "current_place", lambda: {"label": "测试站"})
+    monkeypatch.setattr(navigation, "settings_key", lambda key, default=None: default)
+    ticks = iter(range(100000))
+    count = count_mod._Count(
+        output=RecordingOutput(),
+        foreground=lambda: True,
+        cursor_pos=lambda: (next(ticks), 0),
+    )
+    try:
+        assert count.start() == {"running": True, "place": "测试站"}
+        service = SessionLoopService("count", Phase.SESSIONS, count.loop)
+        service.request_stop()
+        assert service.join(2.0) is True
+        assert count.running() is False
+    finally:
+        if count.running():
+            count.stop()
+        count.loop.join_all(2.0)
 
 
 def test_live_gets_closing_before_new_session():
