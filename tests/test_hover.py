@@ -1,6 +1,12 @@
-"""F8 悬停识别自适应区域与兜底流程测试"""
+"""F8 悬停识别自适应区域与兜底流程测试
+
+2026-11-04 F8 标题带方案（docs/superpowers/specs/2026-11-04-f8-title-band-ocr.md）：
+识别顺序改成「高度阶段 × 宽度条带」的级联——标题带 24%~36%（native=True，主路径）
+→ 说明框带 24%~70% → 全高 0%~100% → 整屏兜底；标题带要「高把握库命中」（汉化包 / 矿物表精确对上）才停。
+"""
 
 import unittest
+
 from astral_toolkit.ocr import OcrToken
 from astral_toolkit.trade.inspector import (
     get_hover_regions,
@@ -68,23 +74,78 @@ class TestHoverRegions(unittest.TestCase):
         self.assertEqual(r_out[0][4], "中间")
 
 
+# 一整套说明框：中文名 + 英文名 + 锚点行（体积）
+_ITEM = [
+    OcrToken("实准枪口补偿器2", 90, (350, 300, 100, 18)),
+    OcrToken("VeraCompensator2", 90, (350, 324, 100, 18)),
+    OcrToken("体积：20uSCU", 90, (350, 348, 100, 18)),
+]
+# 认错一个字的同一件物品（中文弱模糊、英文也不精确）
+_WEAK = [
+    OcrToken("实准枪口补偿器", 90, (350, 300, 100, 18)),
+    OcrToken("VeraCompensato", 90, (350, 324, 100, 18)),
+    OcrToken("体积：20uSCU", 90, (350, 348, 100, 18)),
+]
+
+
+def _fake_ocr(monkeypatch, script):
+    """假识别：按调用次序返回 script 里的 token 列表（用完就一直返回最后一个）。
+
+    记下每次的 (offset, native, 裁切图尺寸)——尺寸能看出这一档是标题带 (H*0.12) 还是说明框带 (H*0.46) 还是全高。
+    """
+    from astral_toolkit import ocr
+
+    calls = []
+
+    def fake(img, urgent=False, offset=(0, 0), native=False):
+        calls.append((offset, native, img.size))
+        return script[min(len(calls) - 1, len(script) - 1)]
+
+    monkeypatch.setattr(ocr, "recognize", fake)
+    return calls
+
+
+def _names(monkeypatch, pairs):
+    """把汉化包名字表换成一小组，canonical / canonical_exact 都只用它（不受本机数据包影响）"""
+    from astral_toolkit.trade import names
+
+    t = dict(pairs)
+    zh_map = {names._norm_zh(zh): (zh, en) for zh, en in t.items()}
+    en_map = {names._fold_en(en): (zh, en) for zh, en in t.items()}
+    monkeypatch.setattr(names, "table", lambda: t)
+    monkeypatch.setattr(names, "_index", lambda: (zh_map, en_map))
+
+
 class TestReadTooltipExecution(unittest.TestCase):
     def setUp(self):
         from astral_toolkit import ocr
+        from astral_toolkit.trade import names
 
         self.ocr = ocr
         self._orig_recognize = ocr.recognize
+        # 汉化包名字表换成一小组：本机没装数据包时 names.table() 是空的，
+        # 「标题带高把握库命中就停」这条路径测不出来
+        t = {"实准枪口补偿器2": "VeraCompensator2"}
+        self._orig_table, self._orig_index = names.table, names._index
+        names.table = lambda: t
+        names._index = lambda: (
+            {names._norm_zh(zh): (zh, en) for zh, en in t.items()},
+            {names._fold_en(en): (zh, en) for zh, en in t.items()},
+        )
         self.img = MockImage(1000, 1000)
 
     def tearDown(self):
+        from astral_toolkit.trade import names
+
         self.ocr.recognize = self._orig_recognize
+        names.table, names._index = self._orig_table, self._orig_index
 
     def test_first_stage_hit(self):
-        """首选区域命中时，直接返回首选区域结果，不触发备选或全屏"""
+        """标题带（24%~36%，native=True）命中高把握库命中：只认这一次就停"""
         calls = []
 
-        def fake_recognize(img, urgent=False, offset=(0, 0)):
-            calls.append(offset)
+        def fake_recognize(img, urgent=False, offset=(0, 0), native=False):
+            calls.append((offset, native, img.size))
             # 在 30%~50% 区域（x=300~500）生成有效说明框
             return [
                 OcrToken("实准枪口补偿器2", 90, (350, 300, 100, 18)),
@@ -94,101 +155,133 @@ class TestReadTooltipExecution(unittest.TestCase):
 
         self.ocr.recognize = fake_recognize
         toks, name, where = _read_tooltip(self.img, (100, 500))  # 鼠标在 10%
-        self.assertEqual(where, "30-50%")
+        self.assertEqual(where, "30-50%@title")
         self.assertEqual(name, ("实准枪口补偿器2", "VeraCompensator2"))
         self.assertEqual(len(calls), 1)
-        self.assertEqual(calls[0], (300, 0))
+        self.assertEqual(calls[0], ((300, 240), True, (200, 120)))  # 标题带顶 0.24H
 
     def test_second_stage_hit(self):
-        """首选区域未命中，备选 30%~70% 命中"""
+        """标题带没认到，说明框带（24%~70%）看到完整说明框：停在这一档，不走到全高和整屏"""
         calls = []
 
-        def fake_recognize(img, urgent=False, offset=(0, 0)):
-            calls.append(offset)
-            if len(calls) == 1:
+        def fake_recognize(img, urgent=False, offset=(0, 0), native=False):
+            calls.append((offset, native, img.size))
+            if len(calls) <= 2:  # 标题带的两个宽度条带
                 return []
             return [
-                OcrToken("实准枪口补偿器2", 90, (600, 300, 100, 18)),
-                OcrToken("VeraCompensator2", 90, (600, 324, 100, 18)),
-                OcrToken("体积：20uSCU", 90, (600, 348, 100, 18)),
+                OcrToken("实准枪口补偿器2", 90, (350, 300, 100, 18)),
+                OcrToken("VeraCompensator2", 90, (350, 324, 100, 18)),
+                OcrToken("体积：20uSCU", 90, (350, 348, 100, 18)),
             ]
 
         self.ocr.recognize = fake_recognize
         toks, name, where = _read_tooltip(self.img, (100, 500))  # 鼠标在 10%
-        self.assertEqual(where, "30-70%")
+        self.assertEqual(where, "30-50%@body")
         self.assertEqual(name, ("实准枪口补偿器2", "VeraCompensator2"))
-        self.assertEqual(len(calls), 2)
-        self.assertEqual(calls[0], (300, 0))
-        self.assertEqual(calls[1], (300, 0))
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(calls[2], ((300, 240), False, (200, 460)))  # 说明框带 24%~70%
 
     def test_fullscreen_fallback(self):
-        """首选和备选均未命中，整屏兜底命中"""
+        """标题带、说明框带、全高都没认到，整屏兜底命中"""
         calls = []
 
-        def fake_recognize(img, urgent=False, offset=(0, 0)):
-            calls.append(offset)
-            if len(calls) < 3:
+        def fake_recognize(img, urgent=False, offset=(0, 0), native=False):
+            calls.append((offset, native, img.size))
+            if len(calls) <= 6:  # 3 个高度阶段 × 2 个宽度条带
                 return []
             return [
-                OcrToken("实准枪口补偿器2", 90, (800, 300, 100, 18)),
-                OcrToken("VeraCompensator2", 90, (800, 324, 100, 18)),
-                OcrToken("体积：20uSCU", 90, (800, 348, 100, 18)),
+                OcrToken("实准枪口补偿器2", 90, (350, 300, 100, 18)),
+                OcrToken("VeraCompensator2", 90, (350, 324, 100, 18)),
+                OcrToken("体积：20uSCU", 90, (350, 348, 100, 18)),
             ]
 
         self.ocr.recognize = fake_recognize
         toks, name, where = _read_tooltip(self.img, (100, 500))  # 鼠标在 10%
         self.assertEqual(where, "整屏")
         self.assertEqual(name, ("实准枪口补偿器2", "VeraCompensator2"))
-        self.assertEqual(len(calls), 3)
+        self.assertEqual(len(calls), 7)
+        self.assertEqual(calls[-1][2], (1000, 1000))  # 整屏是整张图
 
 
-def _fake_ocr(monkeypatch, toks):
-    """假识别：每次都返回 toks（位置按偏移挪），记下每次认的图多宽"""
-    from astral_toolkit import ocr
-
-    widths = []
-
-    def fake(img, urgent=False, offset=(0, 0), native=False):
-        widths.append(img.width)
-        return [
-            OcrToken(
-                k.text,
-                k.confidence,
-                (k.box[0] + offset[0], k.box[1] + offset[1], k.box[2], k.box[3]),
-            )
-            for k in toks
-        ]
-
-    monkeypatch.setattr(ocr, "recognize", fake)
-    return widths
-
-
-def test_cockpit_guard_no_fullscreen_with_candidate(monkeypatch):
-    """鼠标在中间、认过的区域里没有说明框特征：不认整屏，有像样的候选名就返回候选"""
-    widths = _fake_ocr(
-        monkeypatch,
-        [
-            OcrToken("能量突击步枪", 90, (60, 300, 100, 18)),
-            OcrToken("P4-AR Rifle", 90, (60, 324, 100, 18)),
-        ],
-    )
+def test_cascade_order_and_cockpit_guard(monkeypatch):
+    """级联顺序：标题带 2 个宽度 → 说明框带 2 个 → 全高 2 个（native 只有标题带是 True）；
+    鼠标在中间带、一直没见到说明框特征：多半在驾驶位，不整屏"""
+    _names(monkeypatch, {})
+    calls = _fake_ocr(monkeypatch, [[OcrToken("SCM 220", 90, (60, 300, 60, 18))]])
     toks, name, where = _read_tooltip(MockImage(1000, 1000), (500, 500))
-    assert 1000 not in widths and len(widths) == 2  # 两个区域都认了，整屏没认
-    assert name == ("能量突击步枪", "P4-AR Rifle") and where == "30-50%"
+    assert name is None
+    assert calls == [
+        ((300, 240), True, (200, 120)),  # 标题带 30-50%
+        ((300, 240), True, (400, 120)),  # 标题带 30-70%
+        ((300, 240), False, (200, 460)),  # 说明框带 30-50%
+        ((300, 240), False, (400, 460)),  # 说明框带 30-70%
+        ((300, 0), False, (200, 1000)),  # 全高 30-50%
+        ((300, 0), False, (400, 1000)),  # 全高 30-70%
+    ]
 
 
-def test_cockpit_guard_no_fullscreen_miss(monkeypatch):
-    """鼠标在中间、只认到 HUD 碎字：不认整屏，直接返回认不出"""
-    widths = _fake_ocr(monkeypatch, [OcrToken("SCM 220", 90, (60, 300, 60, 18))])
-    toks, name, where = _read_tooltip(MockImage(1000, 1000), None)
-    assert 1000 not in widths and len(widths) == 1 and name is None
+def test_title_stage_stops_on_chinese_library_hit(monkeypatch):
+    """中文标题行在汉化包里精确对上：标题带第一次就停（中文已经是高把握命中，不再用英文行兜）"""
+    _names(monkeypatch, {"实准枪口补偿器2": "VeraCompensator2"})
+    calls = _fake_ocr(monkeypatch, [_ITEM])
+    toks, name, where = _read_tooltip(MockImage(1000, 1000), (100, 500))
+    assert where == "30-50%@title" and len(calls) == 1
+    assert name == ("实准枪口补偿器2", "VeraCompensator2")
+
+
+def test_title_stage_falls_back_to_english_line(monkeypatch):
+    """中文认错字（不在库里精确对上）时，用下面那行英文再查，英文精确就停"""
+    _names(monkeypatch, {"实准枪口补偿器2": "VeraCompensator2"})
+    weak_zh = [
+        OcrToken("实准枪口补偿器", 90, (350, 300, 100, 18)),
+        OcrToken("VeraCompensator2", 90, (350, 324, 100, 18)),
+        OcrToken("体积：20uSCU", 90, (350, 348, 100, 18)),
+    ]
+    calls = _fake_ocr(monkeypatch, [weak_zh])
+    toks, name, where = _read_tooltip(MockImage(1000, 1000), (100, 500))
+    assert where == "30-50%@title" and len(calls) == 1
+    assert name == ("实准枪口补偿器", "VeraCompensator2")
+
+
+def test_title_stage_does_not_stop_on_weak_fuzzy(monkeypatch):
+    """中文弱模糊（canonical 的 ratio≥0.75 档会命中）+ 英文不精确：标题带不停，放大到说明框带"""
+    _names(monkeypatch, {"实准枪口补偿器2": "VeraCompensator2"})
+    calls = _fake_ocr(monkeypatch, [_WEAK])
+    toks, name, where = _read_tooltip(MockImage(1000, 1000), (100, 500))
+    # 标题带两个宽度都没高把握命中；说明框带看到完整说明框（英文下面紧跟体积）才停
+    assert where == "30-50%@body" and len(calls) == 3
+
+
+def test_weak_fuzzy_still_resolved_later(monkeypatch):
+    """弱模糊不在窄带停，但认物结果不丢：inspect_item 后面还会用完整 canonical 纠正"""
+    from astral_toolkit.trade.inspector import inspect_item
+
+    _names(monkeypatch, {"实准枪口补偿器2": "VeraCompensator2"})
+    _fake_ocr(monkeypatch, [_WEAK])
+    res = inspect_item(MockImage(1000, 1000), (100, 500))
+    assert res is not None
+    assert res["raw"] == ("实准枪口补偿器", "VeraCompensato")
+    assert (res["zh"], res["en"]) == ("实准枪口补偿器2", "VeraCompensator2")
+    assert res["sure"]
+
+
+def test_full_stage_stops_on_anchor_without_library_hit(monkeypatch):
+    """前三档都没认到、全高档看到完整说明框（英文下紧跟体积）：照旧当认到了，不为没入库的物品再跑整屏"""
+    _names(monkeypatch, {})
+    calls = _fake_ocr(monkeypatch, [[], [], [], [], [], _ITEM])
+    toks, name, where = _read_tooltip(MockImage(1000, 1000), (100, 500))
+    # 全高第二个宽度条带（30~70%）认到的
+    assert where == "30-70%@full" and len(calls) == 6
+    assert name == ("实准枪口补偿器2", "VeraCompensator2")
 
 
 def test_cockpit_guard_allows_fullscreen_when_anchor_seen(monkeypatch):
     """认过的区域里有说明框特征（体积…）但没对上名字：照旧整屏兜底"""
-    widths = _fake_ocr(monkeypatch, [OcrToken("体积：20uSCU", 90, (60, 348, 100, 18))])
+    _names(monkeypatch, {})
+    anchor_only = [OcrToken("体积：20uSCU", 90, (60, 348, 100, 18))]
+    calls = _fake_ocr(monkeypatch, [[], [], [], [], [], anchor_only])
     _read_tooltip(MockImage(1000, 1000), (500, 500))
-    assert widths[-1] == 1000
+    assert calls[-1][2] == (1000, 1000)
 
 
 if __name__ == "__main__":

@@ -311,5 +311,235 @@ def test_count_read_item_uses_craft_override(monkeypatch):
     assert seen == {"craft_override": True}
 
 
+def test_stage_regions_order_and_boxes():
+    """高度阶段 × 宽度条带的裁切顺序、像素框、native 标记（纯函数，不认图）"""
+    from astral_toolkit.trade.inspector import (
+        BODY_Y0,
+        BODY_Y1,
+        HEIGHT_STAGES,
+        TITLE_Y0,
+        TITLE_Y1,
+        get_stage_regions,
+        region_box,
+    )
+
+    assert TITLE_Y0 == 0.24 and TITLE_Y1 == 0.36  # 初值照方案
+    assert BODY_Y0 == 0.24 and BODY_Y1 == 0.70
+    assert [s[2] for s in HEIGHT_STAGES] == ["title", "body", "full"]
+    assert [(s[0], s[1]) for s in HEIGHT_STAGES] == [
+        (0.24, 0.36),
+        (0.24, 0.70),
+        (0.0, 1.0),
+    ]
+    assert [s[3] for s in HEIGHT_STAGES] == [True, False, False]  # 只有标题带按原尺寸认
+
+    regions = [(0.30, 0.0, 0.50, 1.0, "30-50%"), (0.30, 0.0, 0.70, 1.0, "30-70%")]
+    got = get_stage_regions(regions, 1000, 1000)
+    assert [label for _box, label, _stage, _native in got] == [
+        "30-50%@title",
+        "30-70%@title",
+        "30-50%@body",
+        "30-70%@body",
+        "30-50%@full",
+        "30-70%@full",
+    ]
+    assert [box for box, *_ in got] == [
+        (300, 240, 500, 360),
+        (300, 240, 700, 360),
+        (300, 240, 500, 700),
+        (300, 240, 700, 700),
+        (300, 0, 500, 1000),
+        (300, 0, 700, 1000),
+    ]
+    assert [native for *_, native in got] == [True, True, False, False, False, False]
+
+    assert region_box("50-70%@body", 1000, 1000) == (500, 240, 700, 700)
+    assert region_box("整屏", 1000, 1000) == (0, 0, 1000, 1000)
+    assert region_box("30-50%", 1000, 1000) == (300, 0, 500, 1000)  # 旧标签按全高
+    assert region_box("30-50%@nope", 1000, 1000) is None
+    assert region_box(None, 1000, 1000) is None
+
+
+def _tiny_names(monkeypatch):
+    """汉化包名字表换成一小组：canonical / canonical_exact 都只用它（不受本机数据包影响）"""
+    from astral_toolkit.trade import names
+
+    t = {"实准枪口补偿器2": "VeraCompensator2"}
+    zh_map = {names._norm_zh(zh): (zh, en) for zh, en in t.items()}
+    en_map = {names._fold_en(en): (zh, en) for zh, en in t.items()}
+    monkeypatch.setattr(names, "table", lambda: t)
+    monkeypatch.setattr(names, "_index", lambda: (zh_map, en_map))
+    return names
+
+
+def test_canonical_exact_rejects_fuzzy(monkeypatch):
+    """标题带的「高把握库命中」只认精确：中文弱模糊 / 英文近似那几档都不算"""
+    names = _tiny_names(monkeypatch)
+    assert names.canonical_exact("实准枪口补偿器2") == (
+        "实准枪口补偿器2",
+        "VeraCompensator2",
+    )  # 中文规整精确
+    # 只剩模糊档
+    assert names.canonical_exact("实准枪口补偿器", "VeraCompensato") is None
+    assert names.canonical("实准枪口补偿器") == (
+        "实准枪口补偿器2",
+        "VeraCompensator2",
+    )  # 完整 canonical 的模糊档照旧能用（放大后再纠正）
+    assert names.canonical_exact("実准", "VeraCompensator2") == (
+        "实准枪口补偿器2",
+        "VeraCompensator2",
+    )  # 中文认错、英文精确兜
+    assert names.canonical_exact("塔兰导电石", "Taranite") == (
+        "塔兰导电石",
+        "Taranite",
+    )  # 矿物精确
+    assert names.canonical_exact() is None
+
+
+def test_cell_labels_reuse_respects_height_stage(monkeypatch):
+    """角标复用看区域标签的高度阶段：全高条带把鼠标那格圈住了就复用 tokens，标题窄带圈不住就重新认"""
+    from astral_toolkit.trade import inspector
+
+    toks = [OcrToken(text="医疗笔", confidence=0.99, box=(390, 470, 80, 20))]
+    seen = []
+    monkeypatch.setattr(
+        inspector,
+        "cell_labels",
+        lambda img, cur, tokens=None: seen.append(tokens) or (None, 1),
+    )
+    monkeypatch.setattr(
+        inspector,
+        "_read_tooltip",
+        lambda img, cur: (toks, ("医疗笔", "MedPen"), "30-50%@full"),
+    )
+    inspector.inspect_item(MockImage(), (400, 500))
+    assert seen == [toks]  # 鼠标那格在 30-50% 全高条带里：复用同一次识别的 tokens
+
+    seen.clear()
+    monkeypatch.setattr(
+        inspector,
+        "_read_tooltip",
+        lambda img, cur: (toks, ("医疗笔", "MedPen"), "30-50%@title"),
+    )
+    inspector.inspect_item(MockImage(), (400, 500))
+    assert seen == [None]  # 标题带只有 24%~36%，不含鼠标那格：重新认一块小图
+
+    seen.clear()
+    monkeypatch.setattr(
+        inspector,
+        "_read_tooltip",
+        lambda img, cur: (toks, ("医疗笔", "MedPen"), "30-50%@body"),
+    )
+    inspector.inspect_item(MockImage(), (400, 500))
+    assert seen == [toks]  # 说明框带 24%~70% 把 (400,500) 圈住了：复用
+
+    seen.clear()
+    inspector.inspect_item(MockImage(), (400, 200))
+    assert seen == [
+        None
+    ]  # (400,200) 在说明框带上面（旧全高条带里）：不复用，免得拿错格的角标
+
+
+def test_crafted_item_keeps_bonus_lines_after_title_hit(monkeypatch):
+    """标题带停下的制造品：加成行在说明框正文（标题带外），按同一宽度条带补认一次，倒推品质不丢"""
+    from astral_toolkit import ocr
+    from astral_toolkit.trade import inspector
+    from astral_toolkit.crafting import crafting
+
+    title = [
+        OcrToken("能量突击步枪", 90, (350, 40, 100, 18)),
+        OcrToken("P4-AR Rifle", 90, (350, 64, 100, 18)),
+    ]
+    body = title + [
+        OcrToken("体积：20uSCU", 90, (350, 120, 100, 18)),
+        OcrToken("武器伤害 +5%", 90, (350, 600, 100, 18)),
+    ]
+    crops = []
+    monkeypatch.setattr(
+        ocr,
+        "recognize",
+        lambda img, urgent=False, offset=(0, 0), native=False: (
+            crops.append((offset, img.size)) or body
+        ),
+    )
+    monkeypatch.setattr(
+        inspector,
+        "_read_tooltip",
+        lambda img, cur: (title, ("能量突击步枪", "P4-AR Rifle"), "30-50%@title"),
+    )
+    monkeypatch.setattr(inspector, "cell_labels", lambda *a, **k: (None, 1))
+    slots = [{"slot": "Frame", "q": 700}]
+    monkeypatch.setattr(
+        crafting,
+        "parse_mods",
+        lambda toks: ["mod"] if any("+" in t.text for t in toks) else [],
+    )
+    monkeypatch.setattr(crafting, "for_item", lambda en, zh: "bp")
+    monkeypatch.setattr(
+        crafting,
+        "solve_slots",
+        lambda bp, mods: {"exact": True, "avg": 700, "slots": slots},
+    )
+    res = inspector.inspect_item(MockImage(), (400, 500))
+    assert res is not None
+    assert res["quality"] == 700 and res["craft"] == slots
+    # 只补认说明框带那一条（同一宽度条带 30%~50%，屏高 24%~70%），不是旧的全高竖条
+    assert crops == [((300, 240), (200, 460))]
+    assert res["tokens"] is body  # 日志 / 收错题用补认到的那份（字更全）
+
+
+def test_no_extra_scan_when_no_blueprint_or_bonus_in_tokens(monkeypatch):
+    """不是制造品（没有蓝图）、或者加成行本来就在 tokens 里：不补认说明框带（方案 §5 不为品质加大图 OCR）"""
+    from astral_toolkit import ocr
+    from astral_toolkit.trade import inspector
+    from astral_toolkit.crafting import crafting
+
+    title = [
+        OcrToken("能量突击步枪", 90, (350, 40, 100, 18)),
+        OcrToken("P4-AR Rifle", 90, (350, 64, 100, 18)),
+    ]
+    calls = []
+    monkeypatch.setattr(ocr, "recognize", lambda *a, **k: calls.append(1) or title)
+    monkeypatch.setattr(
+        inspector,
+        "_read_tooltip",
+        lambda img, cur: (title, ("能量突击步枪", "P4-AR Rifle"), "30-50%@title"),
+    )
+    monkeypatch.setattr(inspector, "cell_labels", lambda *a, **k: (None, 1))
+    monkeypatch.setattr(crafting, "parse_mods", lambda toks: [])
+    monkeypatch.setattr(
+        crafting, "for_item", lambda en, zh: None
+    )  # 没有蓝图：不是制造品
+    res = inspector.inspect_item(MockImage(), (400, 500))
+    assert res is not None
+    assert calls == [] and res["quality"] == 0 and res["craft"] is None
+
+    # 加成行已经读到了（说明框带 / 全高档停下才会这样）：也不再补认
+    slots = [{"slot": "Frame", "q": 700}]
+    monkeypatch.setattr(crafting, "parse_mods", lambda toks: ["mod"])
+    monkeypatch.setattr(crafting, "for_item", lambda en, zh: "bp")
+    monkeypatch.setattr(
+        crafting,
+        "solve_slots",
+        lambda bp, mods: {"exact": True, "avg": 700, "slots": slots},
+    )
+    res = inspector.inspect_item(MockImage(), (400, 500), craft_override=True)
+    assert res is not None
+    assert calls == [] and res["quality"] == 700 and res["craft"] == slots
+
+    # 不是标题带停下的（说明框带、全高低两档、整屏、旧标签、没有标签）：说明框那一段已经认过了，
+    # 绝不能再补认一次（否则 F6 盘点逐格白多一次大图 OCR，正好抵消本方案的提速）
+    monkeypatch.setattr(crafting, "parse_mods", lambda toks: [])
+    for where in ("30-50%@body", "30-50%@full", "整屏", "30-50%", None):
+        monkeypatch.setattr(
+            inspector,
+            "_read_tooltip",
+            lambda img, cur, w=where: (title, ("能量突击步枪", "P4-AR Rifle"), w),
+        )
+        res = inspector.inspect_item(MockImage(), (400, 500), craft_override=True)
+        assert res is not None and calls == [], where
+        assert res["tokens"] is title, where  # 没用补认的那份，还是原来识别到的
+
+
 if __name__ == "__main__":
     unittest.main()

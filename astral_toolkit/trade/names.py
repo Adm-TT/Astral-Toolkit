@@ -210,6 +210,29 @@ def canonical(zh="", en=""):
     return None
 
 
+def canonical_exact(zh="", en=""):
+    """精确命中汉化包 / 矿物表的 (中文名, 英文名)；对不上返回 None。
+
+    和 canonical() 的区别是**不做模糊**：英文近似（ratio≥0.9）、矿名错一个字、中文近似（ratio≥0.75）
+    那几档都不算。F8 标题带裁切阶段用它判断「高把握库命中」——弱模糊命中不算，宁可再放大一档裁切
+    （见 docs/superpowers/specs/2026-11-04-f8-title-band-ocr.md §4）。
+    顺序：拆中英连写 → 矿物（精确）→ 中文名规整精确 → 英文名折叠精确。中文标题行在英文行上面、先看它，
+    中文没精确对上才用英文行兜（英文很少认错）。
+    """
+    zh, en = (zh or "").strip(), (en or "").strip()
+    if zh and not en:
+        zh, en = split_bilingual(zh)
+    hit = _mineral(zh, en)
+    if hit:
+        return hit
+    zh_map, en_map = _index()
+    if zh and _norm_zh(zh) in zh_map:
+        return zh_map[_norm_zh(zh)]
+    if en and _fold_en(en) in en_map:
+        return en_map[_fold_en(en)]
+    return None
+
+
 def zh_for(en):
     """英文名 → 汉化包里的中文名（只认精确的，忽略大小写、空格、标点）"""
     hit = _mineral("", en) or _index()[1].get(_fold_en(en))

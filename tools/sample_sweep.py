@@ -5,6 +5,8 @@
   每张图依次跑：扫描面板（screen.analyse）、雷达信号（signals.find_signatures）、物品说明框（_read_tooltip）、
   右上角调试信息（displayinfo）。只在本机跑，不上传任何图片。
   结果写到 测试数据\\稳定性测试_<时间>.md（汇总 + 每张图一行）和同名 .json（明细）
+  汇总结论里统计「物品说明框停在哪一档」：标题带 title / 说明框带 body / 全高条带 full / 整屏
+  （2026-11-04 起 _read_tooltip 是高度阶段级联，区域标签形如 "30-50%@title"）
 """
 
 import json
@@ -61,6 +63,21 @@ def run(fn):
         )
 
 
+STAGE_NAMES = {"title": "标题带", "body": "说明框带", "full": "全高条带"}
+
+
+def stage_of(where):
+    """识别区域标签 → 高度阶段名：title / body / full / 整屏；认不出返回 None。
+    where 是 _read_tooltip 第三项：2026-11-04 起形如 "30-50%@title"、"50-70%@full"、"整屏"，
+    以前只有 "30-50%" / "整屏"（旧标签归不了档，不计入统计）"""
+    if not where:
+        return None
+    if where == "整屏":
+        return "整屏"
+    stage = where.rpartition("@")[2]
+    return stage if stage in STAGE_NAMES else None
+
+
 def one(label, p):
     from PIL import Image
     from astral_toolkit.mining import screen, signals
@@ -115,6 +132,7 @@ def one(label, p):
         r["err"]["物品"] = e
     elif v and v[1]:
         r["item"] = list(v[1]) + [v[2]]
+        r["where"] = v[2]  # 停在哪一档（如 "30-50%@title"），汇总结论里统计
     return r
 
 
@@ -145,6 +163,15 @@ def main():
             json.dumps(rows, ensure_ascii=False, indent=1), encoding="utf-8"
         )
     errs = [r for r in rows if r["err"]]
+    # 物品说明框停在哪一档：只算认出名字的图（没认出时 where 是最后试过的一档，不是停下的地方）
+    tried = [r for r in rows if "物品" in r["ms"] and "物品" not in r["err"]]
+    got = [r for r in tried if r.get("item")]
+    stage_hits = {k: 0 for k in ("title", "body", "full", "整屏")}
+    for r in got:
+        s = stage_of(r.get("where"))
+        if s:
+            stage_hits[s] += 1
+    other = len(got) - sum(stage_hits.values())  # 旧标签（没有 @阶段）归不了档
     lines = [
         f"# AT 稳定性测试（截图样本全量）{time.strftime('%Y-%m-%d %H:%M')}",
         "",
@@ -153,6 +180,13 @@ def main():
         f"- 认出扫描面板 {sum(1 for r in rows if 'scan' in r)} 张（其中读全 {sum(1 for r in rows if r.get('scan', {}).get('valid'))} 张）",
         f"- 认出信号 {sum(1 for r in rows if r.get('sig'))} 张",
         f"- 认出物品说明框 {sum(1 for r in rows if r.get('item'))} 张",
+        (
+            f"- 说明框停在哪一档（跑过物品识别 {len(tried)} 张，不含报错：F8 小图、整屏大图都跑；"
+            f"只算认出名的那 {len(got)} 张）：标题带 {stage_hits['title']} 张、"
+            f"说明框带 {stage_hits['body']} 张、全高条带 {stage_hits['full']} 张、"
+            f"整屏 {stage_hits['整屏']} 张；没认出 {len(tried) - len(got)} 张"
+            + (f"；旧标签无法归类 {other} 张" if other else "")
+        ),
         f"- 读到右上角坐标 {sum(1 for r in rows if r.get('di'))} 张",
         "",
     ]
