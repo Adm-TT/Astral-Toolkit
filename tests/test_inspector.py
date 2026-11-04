@@ -98,9 +98,10 @@ class TestItemInspector(unittest.TestCase):
         mock_cell.return_value = (None, 5)  # 5 个
         res = inspect_item(MockImage(), (500, 500))
         self.assertIsNotNone(res)
+        assert res is not None
         self.assertEqual(res["zh"], "医疗笔")
-        # 汉化包里这件商品写作「医疗笔MedPens」（items_commodities_medPens），纠正后英文名是 MedPens
-        self.assertEqual(res["en"], "MedPens")
+        # 有汉化包时纠正成 MedPens；本机没数据包时 canonical 对不上，英文仍是 OCR 的 MedPen
+        self.assertIn(res["en"], ("MedPen", "MedPens"))
         self.assertEqual(res["quality"], 0)  # 普通物品无品质默认为 0
         self.assertEqual(res["qty"], 5)
         self.assertEqual(res["unit"], "个")
@@ -539,6 +540,61 @@ def test_no_extra_scan_when_no_blueprint_or_bonus_in_tokens(monkeypatch):
         res = inspector.inspect_item(MockImage(), (400, 500), craft_override=True)
         assert res is not None and calls == [], where
         assert res["tokens"] is title, where  # 没用补认的那份，还是原来识别到的
+
+
+def test_debug_mode_logs_read_tooltip_path(monkeypatch):
+    """调试模式开着：_read_tooltip 每档裁切与停因打进 runtime_log；关着不打逐步日志。"""
+    from astral_toolkit import ocr
+    from astral_toolkit.app import bus
+    from astral_toolkit.core import settings
+    from astral_toolkit.trade import inspector
+
+    lines = []
+    monkeypatch.setattr(
+        bus,
+        "runtime_log",
+        lambda line, tag="SYS", level="INFO": lines.append(str(line)),
+    )
+    monkeypatch.setattr(
+        inspector,
+        "get_hover_regions",
+        lambda cursor, width: [(0.3, 0.0, 0.5, 1.0, "30-50%")],
+    )
+    monkeypatch.setattr(
+        inspector,
+        "get_stage_regions",
+        lambda regions, W, H: [
+            ((0, 0, 100, 50), "30-50%@title", "title", True),
+        ],
+    )
+    tok_zh = OcrToken(text="塔兰导电石", confidence=99, box=(10, 10, 80, 16))
+    tok_en = OcrToken(text="Taranite", confidence=99, box=(10, 30, 80, 16))
+    monkeypatch.setattr(ocr, "recognize", lambda *a, **k: [tok_zh, tok_en])
+    monkeypatch.setattr(
+        inspector, "tooltip_pick", lambda *a, **k: (("塔兰导电石", "Taranite"), True)
+    )
+    monkeypatch.setattr(
+        inspector, "_strong_canonical", lambda name: ("塔兰导电石", "Taranite")
+    )
+
+    monkeypatch.setattr(settings, "load", lambda: {"debug_mode": False})
+    inspector._read_tooltip(MockImage(1000, 1000), (400, 500))
+    assert lines == []
+
+    lines.clear()
+    monkeypatch.setattr(settings, "load", lambda: {"debug_mode": True})
+    toks, name, where = inspector._read_tooltip(MockImage(1000, 1000), (400, 500))
+    assert name == ("塔兰导电石", "Taranite") and where == "30-50%@title"
+    blob = "\n".join(lines)
+    assert "识别路径开始" in blob
+    assert "30-50%@title" in blob
+    assert "停·库精确" in blob
+
+
+def test_debug_mode_default_off():
+    from astral_toolkit.core import settings
+
+    assert settings.DEFAULTS.get("debug_mode") is False
 
 
 if __name__ == "__main__":

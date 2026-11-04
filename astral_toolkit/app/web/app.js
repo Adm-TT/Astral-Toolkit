@@ -2767,6 +2767,9 @@ PAGES.settings = () => {
       <span id="ocr-state">${ocrStateHtml(s, c)}</span>
       </p></div>
       ${segH("ocr-device", [["gpu", "显卡 (GPU)"], ["cpu", "处理器 (CPU)"]], (c.ocr_device || (c.always_use_gpu !== false ? "gpu" : "cpu")), "文字识别硬件")}</div>
+    <div class="set"><div>调试模式
+      <p>开启后，每次 F8 物品识别与 F6 盘点会把裁切阶段、停因写入运行日志，便于排查认错或偏慢。日志会明显变多；平时请保持关闭。</p></div>
+      <button class="switch ${c.debug_mode ? "on" : ""}" id="debug-sw" aria-label="调试模式"></button></div>
     <div class="set" style="border:0;padding:0"><div>导出日志
       <p>将运行日志、设置和系统信息打包到桌面，发给作者用于排查问题。不含聊天记录、浏览数据等个人信息。识别类问题（扫描、F8、导航）建议附上出现问题时的游戏截图。</p></div>
       <button class="btn" id="export-logs">导出日志</button></div></div>
@@ -2883,6 +2886,11 @@ PAGES.settings = () => {
     const on = !e.currentTarget.classList.contains("on");
     e.currentTarget.classList.toggle("on", on);
     try { state.status.settings = await api("set_settings", { train_upload: on }); } catch (err) { toast(err.message); }
+  };
+  $("#debug-sw").onclick = async (e) => {
+    const on = !e.currentTarget.classList.contains("on");
+    e.currentTarget.classList.toggle("on", on);
+    try { state.status.settings = await api("set_settings", { debug_mode: on }); } catch (err) { toast(err.message); }
   };
   $("#upd-sw").onclick = async (e) => {
     const on = !e.currentTarget.classList.contains("on");
