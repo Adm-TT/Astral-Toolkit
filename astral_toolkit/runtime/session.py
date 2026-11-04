@@ -252,6 +252,8 @@ class SessionLoop:
         closing: Callable[[], bool] = _never,
     ) -> None:
         self._worker = worker
+        # ResultStore 的拒收线按循环分开记：会话号各循环各数各的（2026-11-04）
+        self._owner = str(getattr(worker, "name", "") or "")
         self._results = results
         self._output = output
         self._foreground = foreground
@@ -486,7 +488,7 @@ class SessionLoop:
     def _stop_locked(self, run: _Run, info: StopInfo) -> None:
         run.session.cancel.set()
         self._epoch += 1
-        self._results.end(run.session.id)
+        self._results.end(run.session.id, owner=self._owner)
         run.state = RunState.STOPPING
         run.stop_reason = info.reason
         run.stop_info = info
@@ -704,6 +706,7 @@ class SessionLoop:
                     stamp.mono,
                     stamp.wall,
                     quality,
+                    owner=self._owner,
                 ):
                     return False
             self._apply_locked(ops, deferred)
