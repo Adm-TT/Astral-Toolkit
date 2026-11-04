@@ -710,6 +710,7 @@ function gearRender() {
       <b>${esc(ship.name)}</b>${ship.crew_max > 1 ? `<span class="muted">${lo.crew || 1} 人同时操作</span>` : ""}
       <span class="chips">${lo.heads.map(([k, mods], i) => `<span class="chip">${esc(headName(k))}${(lo.craft || [])[i] ? "（自制）" : ""}${mods.length ? ` <i>+${esc(gearModsText(g, mods))}</i>` : ""}</span>`).join("")}</span>
       <span class="muted num">总功率 <b>${money(sum.power)}</b> W</span>
+      ${(g.gadgets || []).length ? `<span class="muted">手持工具 ${g.gadgets.filter((x) => x.on).length}/${g.gadgets.length}</span>` : ""}
       <button class="btn small" id="g-open" style="margin-left:auto">修改配置</button></div>
       ${ship.is_default ? `<p class="gear-hint">当前为出厂配置。按实际安装的矿头和模组修改后，破碎方案才准确</p>` : ""}`;
     $("#g-open").onclick = () => { state.gearOpen = true; gearRender(); };
@@ -747,10 +748,13 @@ function gearRender() {
     </div>
     ${ship.fixed ? `<p class="gear-hint">魔像的矿头不可更换，只能更换模组</p>` : ""}
     <div class="gear-cards">${cards}</div>
+    ${(g.gadgets || []).length ? `<div class="gear-line"><span class="muted">带了哪些手持工具</span>
+      <span class="chips">${g.gadgets.map((x) => `<button type="button" class="chip g-gad${x.on ? " on" : ""}" data-k="${x.key}" title="${esc(x.desc)}">${esc(x.name)}</button>`).join("")}</span>
+      <span class="faint" style="font-size:13px">点亮的才会出现在破碎方案里；全灭 = 不贴</span></div>` : ""}
     <div class="gear-sum num">
       <div><span>总功率（${sum.crew} 人同时操作）</span><b>${money(sum.power)}<small>W</small></b></div>
       <div><span>可破碎质量（抗性 30%）</span><b>${money(sum.mass)}<small>kg</small></b></div>
-      <div><span>可破碎质量（使用${esc(sum.gadget)}）</span><b>${money(sum.mass_gadget)}<small>kg</small></b></div>
+      ${sum.gadget ? `<div><span>可破碎质量（使用${esc(sum.gadget)}）</span><b>${money(sum.mass_gadget)}<small>kg</small></b></div>` : ""}
       <div><span>保存</span><p>修改后自动保存，当前扫描结果按新配置重新计算</p></div>
     </div>`;
   const save = async (patch) => {
@@ -794,6 +798,13 @@ function gearRender() {
     const i = +b.dataset.h, h = g.heads.find((x) => x.key === c.heads[i][0]);
     setCraft(c, i, Object.fromEntries(h.craft.map((s) => [s.slot, +b.dataset.q])));
   })));
+  // 手持工具：点一下切换带 / 不带（老大 11-04）
+  box.querySelectorAll(".g-gad").forEach((el) => (el.onclick = async () => {
+    const on = new Set(g.gadgets.filter((x) => x.on).map((x) => x.key));
+    if (on.has(el.dataset.k)) on.delete(el.dataset.k); else on.add(el.dataset.k);
+    try { state.gear = await api("set_mining_gadgets", { keys: [...on] }); gearRender(); toast("已保存"); }
+    catch (e) { toast(e.message); }
+  }));
   // 模组槽：点一下弹出按用途分组的选单，点模组即装上（以前 20 个模组挤在一个下拉框里）
   box.querySelectorAll(".g-slot").forEach((el) => (el.onclick = () => {
     const i = +el.dataset.h, j = +el.dataset.m, cur = lo.heads[i][1][j] || "";
