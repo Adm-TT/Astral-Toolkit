@@ -73,36 +73,6 @@ class _DirectService:
         return not thread.is_alive()
 
 
-class _CountService:
-    """B5a 前的最小盘点外壳：stop() 后必须 join thread，不能只看 running=False"""
-
-    name = "count"
-    phase = Phase.SESSIONS
-
-    def __init__(self, count: Any) -> None:
-        self._count = count
-
-    def start(self) -> None:
-        return None
-
-    def request_stop(self) -> None:
-        running = getattr(self._count, "running", None)
-        if callable(running) and not running():
-            return
-        stopper = getattr(self._count, "stop", None)
-        if callable(stopper):
-            stopper()
-
-    def join(self, timeout: float | None) -> bool:
-        thread = getattr(self._count, "thread", None)
-        if thread is None:
-            return True
-        if thread is threading.current_thread():
-            return not thread.is_alive()
-        thread.join(timeout)
-        return not thread.is_alive()
-
-
 class EngineManager:
     _instance = None
     _lock = threading.Lock()
@@ -146,16 +116,19 @@ class EngineManager:
             closing=self.lifecycle.is_closing,
         )
         self.live = _Live(self.results, closing=self.lifecycle.is_closing)
-        self.count = _Count()
+        self.count = _Count(self.results, closing=self.lifecycle.is_closing)
         self.hover = _Hover()
         self.logwatch = _LogWatch()
 
         # B5b 过渡：B7 移到 bootstrap。只在组装末尾写一次，导入 tasks.navigation 不再有副作用。
         from ...navigation import navigate as navigate_data
+        from ...tasks import count as count_tasks
         from ...tasks import navigation as navigation_tasks
 
         navigate_data.HINTS = self.pos.hints
         navigation_tasks.bind(self.nav, self.pos, self.game_events, self.results)
+        # B5a 过渡：B7 移到 bootstrap。盘点任务模块导入时不再自己拿引擎。
+        count_tasks.bind(self.count)
 
     def start_all(self):
         """打开 AT 主窗口时启动后台服务（顺序照旧；由 Lifecycle 统一记账）"""
@@ -298,7 +271,10 @@ class EngineManager:
                 SessionLoopService("nav", Phase.SESSIONS, self.nav.loop),
                 gate=False,
             )
-            self.lifecycle.register(_CountService(self.count), gate=False)
+            self.lifecycle.register(
+                SessionLoopService("count", Phase.SESSIONS, self.count.loop),
+                gate=False,
+            )
 
             self.lifecycle.register(
                 OneShot("ocr-warmup", Phase.WORKERS, factory=start_ocr)

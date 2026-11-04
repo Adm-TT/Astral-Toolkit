@@ -1,23 +1,5 @@
 {
     "files": {
-        "./astral_toolkit/app/engines/count.py": [
-            {
-                "code": "reportOptionalMemberAccess",
-                "range": {
-                    "startColumn": 20,
-                    "endColumn": 23,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportOptionalMemberAccess",
-                "range": {
-                    "startColumn": 20,
-                    "endColumn": 25,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./astral_toolkit/app/http_server.py": [
             {
                 "code": "reportIncompatibleMethodOverride",

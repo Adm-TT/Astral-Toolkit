@@ -16,7 +16,6 @@ API = {}
 
 
 # ---------------------------------------------------------------- 依赖（2026-10-30 重构阶段 3：不再经 services 转发）
-from ..app.engines.manager import EngineManager  # noqa: E402
 from ..trade.inspector import (  # noqa: E402
     _read_tooltip,  # noqa: F401
     tooltip_row,  # noqa: F401
@@ -52,7 +51,21 @@ def _invalidate_short():
     _t_stock._invalidate_short()
 
 
-_count = EngineManager.get_instance().count
+_count: Any = None
+_UNBOUND = "tasks.count 未绑定盘点引擎：先调用 bind(count)"
+
+
+def bind(count) -> None:
+    """组装处调用一次（B5a 过渡；B7 移到 bootstrap）。导入本模块不再取引擎、不再有副作用"""
+    global _count
+    _count = count
+
+
+def _need_count() -> Any:
+    count = _count
+    if count is None:
+        raise RuntimeError(_UNBOUND)
+    return count
 
 
 # ================================================================ 盘点（F6）核心识别与对账
@@ -156,27 +169,28 @@ def _count_review(place, items):
 # ================================================================ 盘点控制与对账 API
 def count_toggle():
     """盘点开关（窗口按钮；游戏里是 F6）。正在退出时只拦「开」，正在盘点照样能停（RT-B6）"""
-    if not _count.running():
+    count = _need_count()
+    if not count.running():
         from ..app.lifecycle_gate import is_closing
 
         if is_closing():
             return {"error": "正在退出"}
-    return _count.stop() if _count.running() else _count.start()
+    return count.stop() if count.running() else count.start()
 
 
 def count_state():
-    return {"running": _count.running(), "place": _count.place, "review": _count.review}
+    count = _need_count()
+    return {"running": count.running(), "place": count.place, "review": count.review}
 
 
 def count_apply(zero=None):
     """确认对账：看到的按游戏里的数改；zero：账上有、这轮没看到、要清零的行（[[物品, 品质, 位置, 单位], …]）"""
+    count = _need_count()
     from ..crafting import goals as G
     from ..trade.models import StockKey
 
-    rv, _count.review = (
-        _count.review,
-        None,
-    )  # 先拿走：连点两下「确认」第二下直接提示没有待确认的
+    # 先拿走：连点两下「确认」第二下直接提示没有待确认的
+    rv = count.take_review()
     if not rv:
         return {"error": "没有待确认的盘点"}
     t = trade()
@@ -236,28 +250,29 @@ def count_apply(zero=None):
             list(targets.items()), rv.get("revision"), source="盘点"
         )
     except ValueError as e:  # 一行都没改：库存变过了要重新盘；别的错把这轮对账放回去
-        if "重新盘点" not in str(e) and _count.review is None and not _count.running():
-            _count.review = rv
+        if "重新盘点" not in str(e) and count.review is None and not count.running():
+            count.review = rv
         else:
-            bus.publish("count", {"running": _count.running(), "review": None})
+            bus.publish("count", {"running": count.running(), "review": None})
         return {"error": str(e)}
     except Exception:  # 数据库出错之类：对账放回去，窗口里还能再点确认
-        if _count.review is None and not _count.running():
-            _count.review = rv
+        if count.review is None and not count.running():
+            count.review = rv
         raise
     for iid, q, slots in crafts:  # 制造品各槽品质：不是库存数，批次写完再记
         try:
             t.inventory.set_craft(iid, q, slots)
         except Exception:
             pass
-    _count.review = None
-    bus.publish("count", {"running": _count.running(), "review": None})
+    count.review = None
+    bus.publish("count", {"running": count.running(), "review": None})
     return stock()
 
 
 def count_cancel():
-    _count.review = None
-    bus.publish("count", {"running": _count.running(), "review": None})
+    count = _need_count()
+    count.review = None
+    bus.publish("count", {"running": count.running(), "review": None})
     return {"ok": True}
 
 

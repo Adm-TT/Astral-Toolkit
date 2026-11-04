@@ -1,19 +1,28 @@
 """库存盘点读屏（_Count）
 
-2026-10-28 从 app/services.py 原样剪出来（逻辑没改）。2026-10-30 重构阶段 4 删了 services.py，
-用到的函数 / 变量直接到它们所在的模块取，运行时才取，避免互相 import：
-_T("mining").xxx = tasks/mining.py，_H().xxx = app/hud_state.py，_E().live / .nav / .pos / .cam_filter = 引擎实例。
-用到：WIN, _count_review, _game_front, _hud, _note_hud, _place_of, _read_item, qty_text, settings_key, trade
+会话循环只管线程、暂停、计时、停止和输出通道；这里只写盘点的「一轮」：
+读光标、认物品、记格子、出新格 HUD、收尾时算对账。
+
+2026-10-30 重构阶段 4 删了 services.py，用到的任务模块运行时才取，避免互相 import：
+_T("mining").xxx = tasks/mining.py，_H().xxx = app/hud_state.py，
+_T("count")._read_item / _count_review = tasks/count.py。
 """
+
+from __future__ import annotations
 
 import importlib
 import sys
 import threading
-import time
+import traceback
+from dataclasses import dataclass, field
+from typing import Any, Callable
 
-from .. import bus
+from ...runtime.results import ResultStore
+from ...runtime.session import SessionLoop, StopInfo, Tick
+from ..output import BusOutput
 
 WIN = sys.platform == "win32"
+REVIEW = "count.review"
 
 
 def _T(name):
@@ -27,20 +36,281 @@ def _H():
     return hud_state
 
 
-class _Count:
-    IDLE_CLOSE = 60  # 这么多秒没认到物品：自动结束（切出游戏的那段不算）
-    STILL = 0.35  # 鼠标停这么久才认（说明框要一点时间才出来）
+def _foreground():
+    """游戏在不在最前面：判断不了返回 None，照常跑"""
+    return _T("mining")._game_front()
 
-    def __init__(self):
-        self.ev = None
-        self.thread = None
-        self.place = ""
-        self.items = {}  # (en, 品质, 单位) → {zh, en, quality, unit, qty, cells}
-        self.cells = set()
-        self.review = None  # 结束后的对账结果，等窗口里确认
+
+def _hotkey_now():
+    """收尾提示里的热键名；只在锁外调用"""
+    try:
+        return _T("navigation").settings_key("count_key", "F6")
+    except Exception:
+        return "F6"
+
+
+def _win_cursor_pos() -> tuple[int, int]:
+    """读一次 Windows 光标位置；导入本模块时不碰 Win32"""
+    import ctypes
+    from ctypes import wintypes
+
+    pt = wintypes.POINT()
+    ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
+    return (pt.x, pt.y)
+
+
+def _key(r):  # 制造出来的同名东西，各槽品质不一样就分开记
+    return (
+        (r["en"] or r["zh"]),
+        r["quality"],
+        r["unit"],
+        tuple(x["q"] for x in r.get("craft") or []),
+    )
+
+
+def _hud_text(place, items) -> str:
+    """悬浮窗里的盘点文字：最近 8 项，品质为空时不带 Q"""
+    lines = [f"盘点｜{place}"]
+    for v in list(items.values())[-8:]:
+        q = "" if v["quality"] is None else f" Q{v['quality']}"
+        lines.append(
+            f"{v['zh'] or v['en']}{q} ×{v['cells']}  "
+            f"{_T('hover').qty_text(v['qty'], v['unit'])}"
+        )
+    return "\n".join(lines)
+
+
+@dataclass
+class _CountCtx:
+    """一次盘点的全部可变状态：线程重启也换一份新的"""
+
+    items: dict = field(default_factory=dict)
+    cells: set = field(default_factory=set)
+    prev_pos: tuple[int, int] | None = None
+    still_since: float = 0.0
+    done_pos: tuple[int, int] | None = None
+    tries: int = 0
+    logged: str | None = None
+
+
+class _CountWorker:
+    """盘点 Worker：只写业务，不碰线程"""
+
+    name = "count"
+    retries = 1
+    idle_close: float | None = 60.0
+    stale_after: dict[str, float] = {}
+    needs_foreground = True
+    pause_wait = 0.25
+    restart_while_stopping = False
+    STILL = 0.35
+    loop: Any = None
+
+    def __init__(self, cursor_pos: Callable[[], tuple[int, int]] | None = None) -> None:
+        self._cursor_pos = cursor_pos or _win_cursor_pos
+
+    def hotkey(self) -> str:
+        return _hotkey_now()
+
+    def start_ops(self, session: Any) -> list[tuple[Any, ...]]:
+        place = session.payload
+        return [
+            ("shared", REVIEW, None),
+            ("hud.set", "盘点", f"盘点｜{place}"),
+            ("record", "COUNT", "触发 F6 盘点", "COUNT"),
+            ("bus", "count", {"running": True, "place": place}),
+        ]
+
+    def stop_ops(self, session: Any, info: StopInfo) -> list[tuple[Any, ...]]:
+        if info.reason in ("user", "shutdown"):
+            return [("record", "COUNT", "F6 盘点结束", "COUNT")]
+        return []
+
+    def setup(self, session: Any) -> _CountCtx:
+        return _CountCtx()
+
+    def tick(self, session: Any, ctx: _CountCtx, now: float) -> Tick:
+        pos = self._cursor_pos()
+        if pos != ctx.prev_pos:
+            ctx.prev_pos, ctx.still_since = pos, now
+            if (
+                ctx.done_pos is not None
+                and abs(pos[0] - ctx.done_pos[0]) + abs(pos[1] - ctx.done_pos[1]) > 8
+            ):
+                ctx.done_pos, ctx.tries = None, 0
+            return Tick(0.1)
+
+        if now - ctx.still_since < self.STILL or ctx.done_pos == pos:
+            return Tick(0.1)
+
+        from ...mining.screen import grab
+        from ...trade import console as C
+
+        img = grab()
+        cursor = C._cursor_on_image(img)
+        try:
+            r = _T("count")._read_item(img, cursor)
+        except Exception as e:
+            r = None
+            if repr(e) != ctx.logged:
+                # 同一种错只记一次：以前吞掉，认不出时日志里看不到原因
+                ctx.logged = repr(e)
+                self.loop.commit(
+                    session,
+                    ("log", f"盘点识别出错：{e!r}", "COUNT", "ERROR"),
+                )
+
+        ctx.tries += 1
+        if r is None or (r["unit"] == "SCU" and not r["qty"]) or not r["sure"]:
+            if ctx.tries >= 3:
+                ctx.done_pos = pos  # 停在这里认了 3 次都没认出：等鼠标挪开
+            return Tick(0.3)
+
+        ctx.done_pos, ctx.tries = pos, 0
+        # 同一格重复认到也算「看到」，要在去重之前刷新 60 秒计时
+        seen = {"item": now}
+        W, H = img.size
+        cell = (
+            _key(r),
+            r["qty"],
+            round(cursor[0] / (W * 0.065)),
+            round(cursor[1] / (H * 0.11)),
+        )
+        if cell in ctx.cells:
+            return Tick(0.0, seen)
+
+        ctx.cells.add(cell)
+        v = ctx.items.setdefault(
+            _key(r),
+            {
+                "zh": r["zh"],
+                "en": r["en"],
+                "quality": r["quality"],
+                "unit": r["unit"],
+                "qty": 0,
+                "cells": 0,
+                "craft": r.get("craft"),
+            },
+        )
+        v["qty"] = round(v["qty"] + r["qty"], 6)
+        v["cells"] += 1
+        self.loop.commit(
+            session, ("hud.set", "盘点", _hud_text(session.payload, ctx.items))
+        )
+        return Tick(0.0, seen)
+
+    def on_pause(self, session: Any, ctx: _CountCtx) -> list[tuple[Any, ...]]:
+        return []
+
+    def on_resume(
+        self, session: Any, ctx: _CountCtx, gap: float
+    ) -> list[tuple[Any, ...]]:
+        return []
+
+    def on_stale(
+        self, session: Any, ctx: _CountCtx, channel: str
+    ) -> list[tuple[Any, ...]]:
+        return []
+
+    def on_error(self, session: Any, ctx: _CountCtx | None, exc: BaseException) -> None:
+        if sys.stderr is None:
+            return
+        try:
+            # 打包版里 stderr 就是 app_log.txt，和现在线程崩溃时 Python 打的一样
+            print("盘点出错：", file=sys.stderr)
+            traceback.print_exception(
+                type(exc), exc, exc.__traceback__, file=sys.stderr
+            )
+        except Exception:
+            pass
+
+    def before_retry(
+        self, session: Any, ctx: _CountCtx | None, error: str
+    ) -> list[tuple[Any, ...]]:
+        return []
+
+    def finish(
+        self, session: Any, ctx: _CountCtx | None, info: StopInfo
+    ) -> list[tuple[Any, ...]]:
+        place = session.payload
+        items = ctx.items if ctx is not None else {}
+        ops: list[tuple[Any, ...]] = [("hud.clear", "盘点")]
+        try:
+            review = _T("count")._count_review(place, items) if items else None
+        except Exception as e:
+            review = None
+            ops.append(("bus", "log", {"task": "count", "line": f"盘点对账失败：{e}"}))
+
+        ops.append(("shared", REVIEW, review))
+        if review:
+            n = len([r for r in review["rows"] if r["delta"]]) + len(review["missing"])
+            text = (
+                f"盘点结束｜{n} 处不一致，需在 AT 中确认" if n else "盘点结束｜数量一致"
+            )
+            ops.append(("note", "盘点", text, 8))
+        else:
+            k = info.hotkey or self.hotkey()
+            ops.append(("note", "盘点", f"盘点结束｜未识别到物品｜按 {k} 重新开始", 8))
+        ops.append(("bus", "count", {"running": False, "review": review}))
+        return ops
+
+    def teardown(self, session: Any, ctx: _CountCtx | None) -> None:
+        return None
+
+
+class _Count:
+    """兼容外壳（RT-B7 删）：对外接口照旧，里面换成会话循环"""
+
+    IDLE_CLOSE = 60
+    STILL = 0.35
+
+    def __init__(
+        self,
+        results=None,
+        output=None,
+        *,
+        clock=None,
+        closing=None,
+        foreground=None,
+        cursor_pos=None,
+        join_timeout=3.0,
+        _loop_factory=None,
+    ):
+        self._start_lock = threading.Lock()
+        self._last_place = ""
+        self._worker = _CountWorker(cursor_pos)
+        factory = _loop_factory or SessionLoop
+        self.loop = factory(
+            self._worker,
+            results=results or ResultStore(),
+            output=output or BusOutput(),
+            foreground=foreground or _foreground,
+            clock=clock,
+            join_timeout=join_timeout,
+            closing=closing or (lambda: False),
+        )
+        self._worker.loop = self.loop
 
     def running(self):
-        return bool(self.thread and self.thread.is_alive())
+        return bool(self.loop.running())
+
+    @property
+    def place(self):
+        return self._last_place
+
+    @property
+    def review(self):
+        return self.loop.shared_get(REVIEW)
+
+    @review.setter
+    def review(self, value):
+        self.loop.shared_set(REVIEW, value)
+
+    def take_review(self):
+        return self.loop.shared_take(REVIEW)
+
+    def hotkey(self):
+        return self._worker.hotkey()
 
     def start(self):
         from ..lifecycle_gate import closing_error
@@ -48,166 +318,30 @@ class _Count:
         refused = closing_error()
         if refused:
             return refused
-        if not WIN or self.running():
-            return {"running": self.running()}
-        from ...crafting import stockplaces as SP
+        with self._start_lock:
+            if not WIN or self.running():
+                return {"running": self.running()}
+            from ...crafting import stockplaces as SP
 
-        here = SP.current_place()
-        place = (
-            here["label"]
-            if here
-            else _T("stock")._place_of(
-                _T("trade").trade().db.get("last_location", "") or ""
-            )[0]
-        )
-        if not place:
-            _H()._note_hud("盘点", "盘点：当前位置未知｜先在游戏中打开一次库存")
-            return {"error": "当前位置未知：先在游戏中打开一次库存"}
-        self.place, self.items, self.cells, self.review = place, {}, set(), None
-        self.ev = ev = threading.Event()
-        self.thread = threading.Thread(
-            target=self._run, args=(ev,), daemon=True, name="count"
-        )
-        self.thread.start()
-        self._show()
-        from ...core import run_records
-
-        run_records.record("COUNT", "触发 F6 盘点", ui_tag="COUNT")
-        bus.publish("count", {"running": True, "place": place})
-        return {"running": True, "place": place}
+            here = SP.current_place()
+            place = (
+                here["label"]
+                if here
+                else _T("stock")._place_of(
+                    _T("trade").trade().db.get("last_location", "") or ""
+                )[0]
+            )
+            if not place:
+                _H()._note_hud("盘点", "盘点：当前位置未知｜先在游戏中打开一次库存")
+                return {"error": "当前位置未知：先在游戏中打开一次库存"}
+            sid = self.loop.start(place)
+            if sid is None:
+                return {"running": self.running()}
+            self._last_place = place
+            return {"running": True, "place": place}
 
     def stop(self):
-        """手动结束（F6 / 窗口里的按钮）：识别线程自己收尾"""
-        if self.ev:
-            self.ev.set()
-        from ...core import run_records
-
-        run_records.record("COUNT", "F6 盘点结束", ui_tag="COUNT")
+        sid = self.loop.request_stop_current(StopInfo("user", hotkey=self.hotkey()))
+        if sid is not None:
+            self.loop.join(session_id=sid)
         return {"running": False}
-
-    def _key(self, r):  # 制造出来的同名东西，各槽品质不一样就分开记
-        return (
-            (r["en"] or r["zh"]),
-            r["quality"],
-            r["unit"],
-            tuple(x["q"] for x in r.get("craft") or []),
-        )
-
-    def _show(self):
-        lines = [f"盘点｜{self.place}"]
-        for v in list(self.items.values())[-8:]:
-            q = "" if v["quality"] is None else f" Q{v['quality']}"
-            lines.append(
-                f"{v['zh'] or v['en']}{q} ×{v['cells']}  {_T('hover').qty_text(v['qty'], v['unit'])}"
-            )
-        _H()._hud().set("盘点", "\n".join(lines))
-
-    def _run(self, ev):
-        import ctypes
-        from ctypes import wintypes
-        from ...mining.screen import grab
-        from ...trade import console as C
-
-        last_hit = time.time()
-        prev_pos, still_since, done_pos, tries = None, time.time(), None, 0
-        logged = None
-        pt = wintypes.POINT()
-        try:
-            while not ev.is_set():
-                if _T("mining")._game_front() is False:  # 切出游戏：不认，也不算闲着
-                    last_hit += 0.25
-                    ev.wait(0.25)
-                    continue
-                now = time.time()
-                if now - last_hit > self.IDLE_CLOSE:
-                    break
-                ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
-                pos = (pt.x, pt.y)
-                if pos != prev_pos:
-                    prev_pos, still_since = pos, now
-                    if (
-                        done_pos
-                        and abs(pos[0] - done_pos[0]) + abs(pos[1] - done_pos[1]) > 8
-                    ):
-                        done_pos, tries = None, 0
-                    ev.wait(0.1)
-                    continue
-                if now - still_since < self.STILL or done_pos == pos:
-                    ev.wait(0.1)
-                    continue
-                img = grab()
-                cursor = C._cursor_on_image(img)
-                try:
-                    r = _T("count")._read_item(img, cursor)
-                except Exception as e:
-                    r = None
-                    if (
-                        repr(e) != logged
-                    ):  # 同一种错只记一次（以前吞掉，认不出时日志里看不到原因）
-                        logged = repr(e)
-                        bus.runtime_log(
-                            f"盘点识别出错：{e!r}", tag="COUNT", level="ERROR"
-                        )
-                tries += 1
-                if r is None or (r["unit"] == "SCU" and not r["qty"]) or not r["sure"]:
-                    if tries >= 3:  # 停在这里认了 3 次都没认出：不再认，等鼠标挪开
-                        done_pos = pos
-                    ev.wait(0.3)
-                    continue
-                done_pos, tries = pos, 0
-                last_hit = time.time()
-                W, H = img.size
-                cell = (
-                    self._key(r),
-                    r["qty"],
-                    round(cursor[0] / (W * 0.065)),
-                    round(cursor[1] / (H * 0.11)),
-                )
-                if cell in self.cells:  # 同一格按过了
-                    continue
-                self.cells.add(cell)
-                v = self.items.setdefault(
-                    self._key(r),
-                    {
-                        "zh": r["zh"],
-                        "en": r["en"],
-                        "quality": r["quality"],
-                        "unit": r["unit"],
-                        "qty": 0,
-                        "cells": 0,
-                        "craft": r.get("craft"),
-                    },
-                )
-                v["qty"] = round(v["qty"] + r["qty"], 6)
-                v["cells"] += 1
-                if not ev.is_set():
-                    self._show()
-        finally:
-            self._finish()
-
-    def _finish(self):
-        _H()._hud().clear("盘点")
-        try:
-            self.review = (
-                _T("count")._count_review(self.place, self.items)
-                if self.items
-                else None
-            )
-        except Exception as e:
-            self.review = None
-            bus.publish("log", {"task": "count", "line": f"盘点对账失败：{e}"})
-        k = _T("navigation").settings_key("count_key", "F6")
-        if self.review:
-            n = len([r for r in self.review["rows"] if r["delta"]]) + len(
-                self.review["missing"]
-            )
-            _H()._note_hud(
-                "盘点",
-                f"盘点结束｜{n} 处不一致，需在 AT 中确认"
-                if n
-                else "盘点结束｜数量一致",
-                8,
-            )
-        else:
-            _H()._note_hud("盘点", f"盘点结束｜未识别到物品｜按 {k} 重新开始", 8)
-        bus.publish("count", {"running": False, "review": self.review})
