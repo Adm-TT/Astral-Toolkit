@@ -3,14 +3,15 @@
 状态：已确认（grill 2026-11-04）  
 日期：2026-11-04  
 项目：Astral Toolkit（AT）  
-范围：收紧 F8 说明框 OCR 的垂直裁切级联；同次 OCR 内先中文标题、再英文标题查本地汉化/物品数据；品质/SCU/格子角标逻辑保留但不为它们加大图 OCR。  
-风险：高（读屏识别：`trade/inspector.py`、`tasks/hover.py` 相关路径）
+范围：收紧 F8（及共用 `inspect_item` 的 F6）说明框 OCR 垂直裁切级联；同次 OCR 内先中文标题、再英文标题查本地汉化/物品数据；品质/SCU/格子角标逻辑保留但不为它们加大图 OCR。另记录 F6 后续专属优化建议（本 PR 非必须）。  
+风险：高（读屏识别：`trade/inspector.py`、`tasks/hover.py`、`tasks/count.py` / `app/engines/count.py`）
 
 ## 变更记录
 
 | 日期 | 改动 | 原因 |
 |---|---|---|
 | 2026-11-04 | 初稿：目标、级联、命中门槛、非目标、验证 | grill 确认 Q1–Q17 |
+| 2026-11-04 | 增补 §10：F8/F6 关系与 F6 优化建议及优先级 | 梳理盘点路径后补文档 |
 
 ---
 
@@ -131,10 +132,11 @@ for y0,y1,stage,native in [(0.24,0.36,"title",True), (0.24,0.70,"body",False), (
 | `astral_toolkit/trade/inspector.py` | 高度常量；`_read_tooltip` 级联；标题抽行+强命中；区域标签 |
 | `astral_toolkit/trade/names.py` | 可选：导出「仅精确/强命中」辅助，避免复制 fold 逻辑 |
 | `astral_toolkit/tasks/hover.py` | 若依赖 `_read_tooltip` 返回值/日志字段，仅适配标签与耗时说明 |
-| `tests/test_inspector.py`、`tests/test_tools.py`（hover 相关） | 级联、native、强命中、驾驶位、中英顺序 |
+| `astral_toolkit/tasks/count.py` / `app/engines/count.py` | **本批通常不改**；经 `_read_item` → `inspect_item` 自动吃到新裁切。若改 `where` 标签影响 `cell_labels` 复用判断，测盘点角标路径 |
+| `tests/test_inspector.py`、`tests/test_tools.py`（hover / count 相关） | 级联、native、强命中、驾驶位、中英顺序；F6 `sure`/craft_override 不回归 |
 | `tools/sample_sweep.py` / `tools/bench_ocr.py` | 若写死全高 `HOVER_REGION`，改为可测新阶段或保持对比基线 |
 
-`app/engines/hover.py` 热键入口不改合同。
+`app/engines/hover.py` 热键入口不改合同。F6 开关与 `busy` 策略不变。
 
 ---
 
@@ -145,13 +147,15 @@ for y0,y1,stage,native in [(0.24,0.36,"title",True), (0.24,0.70,"body",False), (
 1. `ruff check` / `ruff format --check` / `basedpyright` / `AT_FEEDBACK_OFF=1 tests.run_all`  
 2. **读屏相关**：`.venv\Scripts\python.exe -X utf8 tools\sample_sweep.py`  
 3. `tools\bench_ocr.py`：对比标题带 vs 旧中间全高中位 ms（记录到测试笔记即可）  
-4. 人工抽查：标准库存悬停、仅中文名物品、聊天旁说明框、驾驶位中间按 F8（不应整屏）
+4. 人工抽查：标准库存悬停、仅中文名物品、聊天旁说明框、驾驶位中间按 F8（不应整屏）  
+5. F6 抽查：库存网格连点若干格；`sure` 仍要求库命中才记账；制造品 `craft_override` 槽位品质行为不差于改前
 
 **通过标准**
 
 - 样本回归认物不差于改前（负责人抽查或 sweep 基线）。  
 - 主路径（标题带即命中）中位耗时下降（预期随像素减少；不设死百分比，以 bench 数字为准）。  
-- 驾驶位仍不整屏。
+- 驾驶位仍不整屏。  
+- F6 对账语义不变（弱命中不记账；角标/倒推可用）。
 
 ---
 
@@ -160,9 +164,10 @@ for y0,y1,stage,native in [(0.24,0.36,"title",True), (0.24,0.70,"body",False), (
 | 风险 | 缓解 |
 |---|---|
 | `TITLE_Y1=0.36` 裁掉折行中文第二行 | 样本调常量；失败进 24%–70% |
-| 弱模糊被误当成功 | §4 强命中门槛 |
-| 品质更少从说明框读到 | 已接受；角标路径保留 |
+| 弱模糊被误当成功 | §4 强命中门槛（F6 尤依赖 `sure`） |
+| 品质更少从说明框读到 | 已接受；角标路径保留；盘点制造品仍走 `craft_override` |
 | UI 缩放导致 24% 不准 | 比例裁切 + 级联放大；极端再调常量 |
+| F6 连点时标题带偶发 miss → 每格放大到全高 | 级联仍正确；后续用 §10.2 会话记忆裁切缓解 |
 
 回滚：恢复 `_read_tooltip` 全高级联前逻辑（单 PR 易逆）。
 
@@ -172,5 +177,43 @@ for y0,y1,stage,native in [(0.24,0.36,"title",True), (0.24,0.70,"body",False), (
 
 1. 加常量与纯函数：给定 `(l,t,r,b)` 列表的阶段生成；强命中判定单测。  
 2. 改 `_read_tooltip` 级联；测宽度×高度顺序与驾驶位。  
-3. 接 `inspect_item` 日志/`where`；跑 sweep + bench。  
-4. PR：Testing / Risk / How to revert；高风险需负责人实机验收。
+3. 接 `inspect_item` 日志/`where`；跑 sweep + bench；抽查 F6。  
+4. PR：Testing / Risk / How to revert；高风险需负责人实机验收。  
+5. **本批不做** §10.2 专属项；另开 PR / 方案增量。
+
+---
+
+## 10. F8 / F6 关系与后续优化
+
+### 10.1 关系（为何本方案影响盘点）
+
+| | F8 | F6 |
+|---|---|---|
+| 入口 | `hover_once` → `inspect_item(...)` | `_read_item` → `inspect_item(..., craft_override=True)` |
+| 视觉核心 | 同一 `_read_tooltip` / 抽名 / `canonical` / 角标 | 同左 |
+| 模式 | 按一次认一件 + 后台市价 | 会话内鼠标停住连认 + 库存对账 |
+| 品质 | 读到的数字优先，缺了才倒推 | 制造品蓝图对上时倒推可压过读数 |
+| 记账门槛 | 可显示「不确定」 | 必须 `sure`；失败同格最多试 3 次 |
+
+因此：**改 `_read_tooltip` 级联 = F8 与 F6 共用加速**。盘点连点 N 格时总耗时近似按格数放大，比单次 F8 更吃像素。  
+约束：F6 的 `sure` / `craft_override` / 角标语义本批不得故意削弱。
+
+### 10.2 F6 专属优化建议（后续，非本 PR 必须）
+
+按建议优先级：
+
+1. **标题带级联（本方案）** — 每格 OCR 变便宜，盘点总时间受益最大。  
+2. **按格子索引提前跳过 OCR** — 现有 `cells` 去重在识别**之后**；微抖会白跑全量 OCR。可先用现有格宽高估算（约 `0.065W × 0.11H`）判断「此格已点过」再决定是否 `inspect_item`。风险低，注意缩放。  
+3. **失败重试更聪明** — 今失败仍 `0.3s × ≤3` 次 OCR；说明框未弹出时浪费大。可第 1 次 miss 后略延长等待，或无标题/无锚点时再重试。风险低。  
+4. **会话内记住成功裁切阶段** — 同一背包页连续命中后，下一格先试上次成功的宽高阶段；滚动/换页需失效。风险中。  
+5. **`craft_override` 懒计算** — 先名+角标；仅制造品缺品质或需槽位时再 `parse_mods` / `solve_slots`。风险中，须保持对账语义。  
+6. **盘点首裁可比 F8 更矮（可选）** — 库存 UI 更稳时可单独常量；要盘点样本，勿与 F8 混用未验证的更狠裁切。
+
+**暂缓 / 不建议**
+
+- 再缩短 `STILL=0.35`（框未出易误检）  
+- 为本优化换 PP-OCRv5/v6  
+- 整页一次 OCR 认多格（与悬停说明框模型不符）  
+- 让 F6 占用 F8 的 `busy`（现状不占 busy 是对的）；OCR 锁上 F8 `urgent` 插队保持
+
+触及（仅后续 PR）：`app/engines/count.py`（去重时机、重试、会话裁切缓存）、可选 `tasks/count.py`；验证用连点盘点实机 + 既有 count 测试。
