@@ -456,13 +456,20 @@ STAT_ZH = {
     "window": "绿区",
     "rate": "充能",
     "filter": "过滤",
+    "cluster": "聚集",
 }
 
 
 def _gear_summary(key, lo):
     """一条船当前配置的汇总：同时操作的矿头总功率、满功率能破多重（抗性 30%；使用萨比尔 Sabir 时）。
     和破碎方案同一套公式（laser.evaluate）：在 crew 个矿头的组合里取最强的"""
-    from ..mining.laser import HeadSetup, evaluate, active_model, gadget_label
+    from ..mining.laser import (
+        HeadSetup,
+        evaluate,
+        active_model,
+        gadget_label,
+        carried_gadgets,
+    )
 
     craft = lo.get("craft") or [None] * len(lo["heads"])
     setups = [HeadSetup(k, mods, craft[i]) for i, (k, mods) in enumerate(lo["heads"])]
@@ -472,12 +479,15 @@ def _gear_summary(key, lo):
     best = lambda g: max(  # noqa: E731
         evaluate(list(c), g, 1.0, 30, 0, k=k, model=model).max_mass for c in combos
     )  # noqa: E731
+    # 带了的手持工具里挑能破最重的那个（以前固定按萨比尔算）；一样都没带就不显示这一项
+    carried = carried_gadgets()
+    top = max(carried, key=best) if carried else None
     return {
         "crew": n,
         "power": round(max(sum(h.max_power() for h in c) for c in combos)),
         "mass": round(best(None), -1),
-        "mass_gadget": round(best("sabir"), -1),
-        "gadget": gadget_label("sabir"),
+        "mass_gadget": round(best(top), -1) if top else None,
+        "gadget": gadget_label(top) if top else "",
     }
 
 
@@ -594,8 +604,19 @@ def _gear(ship=None):
         }
         for k, m in MODULES.items()
     ]
-    from ..mining.laser import chosen_ship
+    from ..mining.laser import chosen_ship, carried_gadgets
+    from ..mining.data import GADGETS
 
+    carried = set(carried_gadgets())
+    gadgets = [
+        {
+            "key": k,
+            "name": gear_label(str(g["name"])),
+            "desc": fmt(g, ("res", "instab", "window", "rate", "cluster")),
+            "on": k in carried,
+        }
+        for k, g in GADGETS.items()
+    ]
     return {
         "ship": current_ship(),
         "chosen": chosen_ship() is not None,
@@ -603,6 +624,7 @@ def _gear(ship=None):
         "heads": heads,
         "modules": mods,
         "groups": list(dict.fromkeys(g for _, g in MOD_GROUPS)),
+        "gadgets": gadgets,
     }
 
 
@@ -624,6 +646,22 @@ def set_mining_gear(ship="mole", loadout=None, reset=False):
     elif loadout is not None:
         saved[ship] = clean_loadout(ship, loadout)
     settings.update(mining_ship=ship, mining_loadouts=saved)
+    _engines().live.config_changed()
+    return _gear()
+
+
+def set_mining_gadgets(keys=None):
+    """带了哪些手持工具（列表；空列表 = 一样都不带，破碎方案只给不贴的）"""
+    from ..core import settings
+    from ..mining.data import GADGETS
+
+    if not isinstance(keys, list):
+        raise ValueError("手持工具要给一个列表")
+    want = {str(k) for k in keys}
+    bad = want - set(GADGETS)
+    if bad:
+        raise ValueError(f"没有这种手持工具：{'、'.join(sorted(bad))}")
+    settings.update(mining_gadgets=[k for k in GADGETS if k in want])
     _engines().live.config_changed()
     return _gear()
 

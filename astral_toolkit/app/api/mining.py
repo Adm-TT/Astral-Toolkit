@@ -32,6 +32,10 @@ def set_mining_gear(**kw):
     return _t.set_mining_gear(**kw)
 
 
+def set_mining_gadgets(**kw):
+    return _t.set_mining_gadgets(**kw)
+
+
 def manual_scan(**kw):
     return _t.manual_scan(**kw)
 
@@ -42,5 +46,6 @@ ROUTES = {
     "live_stop": live_stop,
     "mining_gear": mining_gear,
     "set_mining_gear": set_mining_gear,
+    "set_mining_gadgets": set_mining_gadgets,
     "manual_scan": manual_scan,
 }

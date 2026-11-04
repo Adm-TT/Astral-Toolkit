@@ -8,6 +8,7 @@ MINING = (
     "live_stop",
     "mining_gear",
     "set_mining_gear",
+    "set_mining_gadgets",
     "manual_scan",
 )
 VISION = ("hover_trigger", "count_toggle", "count_state", "count_apply", "count_cancel")

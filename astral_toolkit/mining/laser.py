@@ -317,6 +317,17 @@ def clean_loadout(ship, lo):
     return out
 
 
+def carried_gadgets():
+    """玩家带了哪些手持工具（设置 mining_gadgets，按 GADGETS 的顺序）；没设过 = 全都带（老大 11-04：要能选携带的手持工具）"""
+    from ..core import settings
+
+    raw = settings.load().get("mining_gadgets")
+    if not isinstance(raw, list):
+        return tuple(GADGETS)
+    want = {str(k) for k in raw}
+    return tuple(k for k in GADGETS if k in want)
+
+
 def gadget_label(key):
     """手持工具「萨比尔 Sabir」"""
     from ..core.i18n import gear_label
@@ -363,12 +374,13 @@ class LoadoutFacts:
     crew: int
     model: str
     k: float
+    gadgets: tuple = tuple(GADGETS)  # 玩家带了的手持工具：破碎方案只在这几样里挑
 
 
 def loadout_facts():
     _, lo = ship_loadout()
     model, k = active_model()
-    return LoadoutFacts(tuple(_setups(lo)), lo["crew"], model, k)
+    return LoadoutFacts(tuple(_setups(lo)), lo["crew"], model, k, carried_gadgets())
 
 
 def evaluate(heads, gadget, mass, resistance_pct, instability, k=None, model=None):
@@ -423,7 +435,7 @@ def recommend(mass, resistance_pct, instability, top=3, loadout=None):
     plans = []
     for n in range(1, facts.crew + 1):
         for combo in combinations(facts.setups, n):
-            for gadget in [None, *GADGETS]:
+            for gadget in [None, *facts.gadgets]:
                 plans.append(
                     evaluate(
                         list(combo),
