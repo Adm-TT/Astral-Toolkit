@@ -107,11 +107,13 @@ class _Count:
         from ctypes import wintypes
         from ...mining.screen import grab
         from ...trade import console as C
+        from ...trade import debug_shots
 
         last_hit = time.time()
         prev_pos, still_since, done_pos, tries = None, time.time(), None, 0
         logged = None
         pt = wintypes.POINT()
+        debug_shots.bind_count_run()
         try:
             while not ev.is_set():
                 if _T("mining")._game_front() is False:  # 切出游戏：不认，也不算闲着
@@ -183,6 +185,7 @@ class _Count:
                 if not ev.is_set():
                     self._show()
         finally:
+            debug_shots.unbind_count_run()
             self._finish()
 
     def _finish(self):

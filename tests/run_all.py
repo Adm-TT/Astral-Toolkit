@@ -80,6 +80,7 @@ MODULES = [
     "tests.test_gpu_ocr",
     "tests.test_hover",
     "tests.test_inspector",
+    "tests.test_debug_shots",
     "tests.test_ocr_module",
     "tests.test_nav_modules",
     "tests.test_system_modules",
