@@ -13,7 +13,7 @@ from typing import Any
 
 from . import bus
 from . import http_server, instance, launcher, ui_stream
-from ..tasks import system as _sys_task  # main 里启动后台引擎
+from .. import bootstrap
 
 # 2026-10-31 按职责拆开（整改第 1 批）：网页服务在 http_server，开窗口在 launcher，只开一个 AT 在 instance；
 # 这里只留启动 / 退出流程。下面这些名字原样导回，外面的 import 不用改
@@ -100,7 +100,7 @@ class _FinalService:
 
 
 def _exit_sequence(
-    manager: Any,
+    app: Any,
     tray: Any,
     *,
     budget: float = 5.0,
@@ -112,7 +112,7 @@ def _exit_sequence(
     (close_edge if close_edge is not None else launcher._close_edge)()
     if tray is not None:
         tray.remove()
-    return manager.stop_all(budget)
+    return bootstrap.shutdown(app, budget)
 
 
 def main(open_ui=True, port=0, restart=False):
@@ -122,6 +122,7 @@ def main(open_ui=True, port=0, restart=False):
     from ..core.perf import lower_priority
 
     lower_priority()
+    app = bootstrap.build("desktop")
     server = http_server.Server(("127.0.0.1", port), http_server.Handler)
     url = f"http://127.0.0.1:{server.server_address[1]}/#t={http_server.TOKEN}"
     launcher.STATE["url"] = url
@@ -129,16 +130,13 @@ def main(open_ui=True, port=0, restart=False):
         target=server.serve_forever, daemon=True, name="http"
     )
     http_thread.start()
-    from .engines.manager import EngineManager
 
     # 网页服务一起来就登记收尾（展示流排空 → 关网页服务）：后面悬浮窗 / 后台启动出错，退出时也照样关（审查 RT-B6）
-    EngineManager.get_instance().lifecycle.register(
-        _FinalService(ui_stream, server, http_thread)
-    )
+    app.lifecycle.register(_FinalService(ui_stream, server, http_thread))
     from .overlay import hud
 
     hud()
-    _sys_task.start_background()  # = EngineManager.get_instance().start_all()
+    bootstrap.start(app)
     print(f"AT 已启动（端口 {server.server_address[1]}）")
     from ..core import run_records
 
@@ -193,6 +191,4 @@ def main(open_ui=True, port=0, restart=False):
     except KeyboardInterrupt:
         pass
     finally:
-        from .engines.manager import EngineManager
-
-        _exit_sequence(EngineManager.get_instance(), tray)
+        _exit_sequence(app, tray)

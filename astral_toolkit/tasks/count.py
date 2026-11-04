@@ -52,12 +52,16 @@ def _invalidate_short():
 
 
 _count: Any = None
-_UNBOUND = "tasks.count 未绑定盘点引擎：先调用 bind(count)"
+_UNBOUND = "tasks.count 未绑定：先调用 bind(count)"
 
 
-def bind(count) -> None:
-    """组装处调用一次（B5a 过渡；B7 移到 bootstrap）。导入本模块不再取引擎、不再有副作用"""
+def bind(count, *, replace: bool = False) -> None:
+    """组装处调用一次（B7 由 bootstrap 完成）。导入本模块不再取引擎、不再有副作用"""
     global _count
+    if _count is not None and not replace:
+        raise RuntimeError(
+            "tasks.count 已绑定：生产只绑一次；测试用 replace=True 并在用完后恢复"
+        )
     _count = count
 
 

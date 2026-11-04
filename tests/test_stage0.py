@@ -167,53 +167,74 @@ ENGINES = (
 )
 
 
-def test_engine_manager_singleton():
-    from astral_toolkit.app.engines.manager import EngineManager
+def test_build_test_app_has_all_parts():
+    from astral_toolkit import bootstrap
 
-    m = EngineManager.get_instance()
-    assert m is EngineManager.get_instance()
-    for n in ENGINES:  # 阶段 4：services.py 删了，不再对 services._xxx 是同一个
-        assert getattr(m, n) is not None, n
+    app = bootstrap.build("test")
+    try:
+        for n in (
+            "results",
+            "output",
+            "lifecycle",
+            "live",
+            "nav",
+            "count",
+            "pos",
+            "hover",
+            "game_events",
+            "logwatch",
+            "cam_filter",
+            "steady",
+        ):
+            assert getattr(app, n) is not None, n
+    finally:
+        bootstrap.shutdown(app, 0.1)
 
 
 def test_start_all_needs_agreed(monkeypatch):
+    from astral_toolkit import bootstrap
     from astral_toolkit.core import settings
-    from astral_toolkit.app.engines.manager import EngineManager
+    from tests.bootstrap_helpers import app_for_test
 
-    m = EngineManager.get_instance()
-    monkeypatch.setattr(settings, "load", lambda: {"agreed": False, "live_on": True})
-    called = []
-    for n in ENGINES:
-        if hasattr(getattr(m, n), "start"):
-            monkeypatch.setattr(getattr(m, n), "start", lambda n=n: called.append(n))
-    m.start_all()
-    assert called == []
+    with app_for_test() as app:
+        monkeypatch.setattr(
+            settings, "load", lambda: {"agreed": False, "live_on": True}
+        )
+        called = []
+        monkeypatch.setattr(
+            app.lifecycle, "start_all", lambda: called.append(1) or True
+        )
+        assert bootstrap.start(app) is False
+        assert called == []
 
 
-def test_stop_all_sets_events(monkeypatch):
+def test_shutdown_stops_live_and_nav(monkeypatch):
     """退出时 live、nav 两个会话循环都收到停止（RT-B6 起由 lifecycle 统一停，返回停止报告）"""
-    from astral_toolkit.app.engines.manager import EngineManager
+    from astral_toolkit import bootstrap
+    from tests.bootstrap_helpers import app_for_test
 
-    m = EngineManager.get_instance()
-    m._ensure_registered()
-    # 单例在别的测试里可能已经退出过一次：换一份没退出过的状态（测试完 monkeypatch 还原）
-    monkeypatch.setattr(m.lifecycle, "_closing", threading.Event())
-    monkeypatch.setattr(m.lifecycle, "_stop_report", None)
-    monkeypatch.setattr(
-        "astral_toolkit.runtime.lifecycle._write_run_record", lambda t: None
-    )
-    calls = []
-    for name, loop in (("live", m.live.loop), ("nav", m.nav.loop)):
-        monkeypatch.setattr(loop, "request_shutdown", lambda n=name: calls.append(n))
-        monkeypatch.setattr(loop, "join_all", lambda timeout: [])
-    report = m.stop_all(1.0)
-    assert sorted(calls) == ["live", "nav"]
-    assert {r.name for r in report} >= {"live", "nav", "count"}
+    with app_for_test() as app:
+        # 这个 app 在别的测试里可能已经退出过一次：换一份没退出过的状态（测试完 monkeypatch 还原）
+        monkeypatch.setattr(app.lifecycle, "_closing", threading.Event())
+        monkeypatch.setattr(app.lifecycle, "_stop_report", None)
+        monkeypatch.setattr(
+            "astral_toolkit.runtime.lifecycle._write_run_record", lambda t: None
+        )
+        calls = []
+        for name, loop in (("live", app.live.loop), ("nav", app.nav.loop)):
+            monkeypatch.setattr(
+                loop, "request_shutdown", lambda n=name: calls.append(n)
+            )
+            monkeypatch.setattr(loop, "join_all", lambda timeout: [])
+        report = bootstrap.shutdown(app, 1.0)
+        assert sorted(calls) == ["live", "nav"]
+        assert {r.name for r in report} >= {"live", "nav", "count"}
 
 
 def _run_main(monkeypatch, tmp_path, shell):
     """server.main(open_ui=True) 跑一遍：网页服务、托盘、引擎、子进程都换成假的。
-    shell：假的 ATShell.exe 路径（None = 没有外壳）。返回 (子进程命令行列表, 其它调用)"""
+    shell：假的 ATShell.exe 路径（None = 没有外壳）。返回 (子进程命令行列表, 调用顺序, 本次 app)"""
+    from astral_toolkit import bootstrap
     from astral_toolkit.app import (
         server,
         bus,
@@ -224,23 +245,23 @@ def _run_main(monkeypatch, tmp_path, shell):
         instance,
         http_server,
     )
-    from astral_toolkit.tasks import system as t_sys
-    from astral_toolkit.app.engines.manager import EngineManager
     from astral_toolkit.core import paths, perf
 
     calls, popen = [], []
+    http_started = threading.Event()
 
     class FakeServer:
         server_address = ("127.0.0.1", 12345)
 
         def __init__(self, *a):
-            pass
+            calls.append("server_init")
 
         def serve_forever(self):
-            pass
+            calls.append("http_thread")
+            http_started.set()
 
         def shutdown(self):
-            calls.append("shutdown")
+            calls.append("server_shutdown")
 
     class FakeTray:
         ok = True
@@ -271,6 +292,22 @@ def _run_main(monkeypatch, tmp_path, shell):
         def terminate(self):
             pass
 
+    def fake_build(mode="desktop", **kwargs):
+        assert mode == "desktop" and not kwargs
+        calls.append("build")
+        return app
+
+    def fake_start(application):
+        assert application is app
+        assert http_started.wait(10.0), "HTTP 线程还没起"
+        calls.append("start")
+        return True
+
+    def fake_shutdown(application, budget=5.0):
+        assert application is app
+        calls.append("bootstrap_shutdown")
+        return []
+
     monkeypatch.setattr(server.subprocess, "Popen", FakeProc)
     monkeypatch.setattr(
         launcher, "shell_exe", lambda: shell
@@ -284,29 +321,23 @@ def _run_main(monkeypatch, tmp_path, shell):
     monkeypatch.setattr(bus, "install_router", lambda: None)
     monkeypatch.setattr(perf, "lower_priority", lambda: None)
     monkeypatch.setattr(overlay, "hud", lambda: None)
-    monkeypatch.setattr(
-        t_sys, "start_background", lambda: None
-    )  # server.main 调的是 tasks.system 的（阶段 4）
     monkeypatch.setattr(tray, "Tray", FakeTray)
     monkeypatch.setattr(paths, "USER", tmp_path)
     monkeypatch.setattr(
         launcher, "STATE", {"url": "", "tray": None, "told_tray": False}
     )  # 别留下假托盘给后面的测试
-    from astral_toolkit.runtime.lifecycle import Lifecycle
-
-    monkeypatch.setattr(
-        EngineManager.get_instance(), "lifecycle", Lifecycle()
-    )  # main 往这里登记收尾服务：每次用新的，别越积越多
-    monkeypatch.setattr(
-        EngineManager.get_instance(),
-        "stop_all",
-        lambda budget=5.0: calls.append("stop_all"),
-    )
+    app = bootstrap.build("test")  # 补丁都打好了再装配
+    monkeypatch.setattr(bootstrap, "build", fake_build)
+    monkeypatch.setattr(bootstrap, "start", fake_start)
+    monkeypatch.setattr(bootstrap, "shutdown", fake_shutdown)
     try:
         server.main()
     finally:
         server.QUIT.clear()
-    return popen, calls
+    assert calls.index("build") < calls.index("server_init")
+    assert calls.index("build") < calls.index("http_thread")
+    assert calls.index("start") > calls.index("http_thread")
+    return popen, calls, app
 
 
 def test_main_opens_shell_or_edge(monkeypatch, tmp_path):
@@ -319,34 +350,26 @@ def test_main_opens_shell_or_edge(monkeypatch, tmp_path):
     assert importlib.util.find_spec("astral_toolkit.app.api.bridge") is None
 
     shell = tmp_path / "shell" / "ATShell.exe"
-    popen, calls = _run_main(monkeypatch, tmp_path, shell)
+    popen, calls, app = _run_main(monkeypatch, tmp_path, shell)
     assert len(popen) == 1, popen
     assert popen[0][0] == str(shell) and popen[0][1:3] == ["--url", url]
-    assert "stop_all" in calls
-    from astral_toolkit.app.engines.manager import EngineManager
-
+    assert "bootstrap_shutdown" in calls
     final = [  # 收尾服务登记了：展示流排空后关网页服务（RT-B6）
-        svc
-        for svc, _ in EngineManager.get_instance().lifecycle._services
-        if svc.name == "final-ui-http"
+        svc for svc, _ in app.lifecycle._services if svc.name == "final-ui-http"
     ]
     assert len(final) == 1
-    assert final[0].join(0.5) and "shutdown" in calls
+    assert final[0].join(0.5) and "server_shutdown" in calls
     monkeypatch.restore()
 
-    popen, calls = _run_main(monkeypatch, tmp_path, None)
+    popen, calls, app = _run_main(monkeypatch, tmp_path, None)
     assert len(popen) == 1, popen
     assert popen[0][0] == "msedge.exe" and f"--app={url}" in popen[0]
-    assert "stop_all" in calls
-    from astral_toolkit.app.engines.manager import EngineManager
-
+    assert "bootstrap_shutdown" in calls
     final = [  # 收尾服务登记了：展示流排空后关网页服务（RT-B6）
-        svc
-        for svc, _ in EngineManager.get_instance().lifecycle._services
-        if svc.name == "final-ui-http"
+        svc for svc, _ in app.lifecycle._services if svc.name == "final-ui-http"
     ]
     assert len(final) == 1
-    assert final[0].join(0.5) and "shutdown" in calls
+    assert final[0].join(0.5) and "server_shutdown" in calls
     assert "webview" not in sys.modules
 
 

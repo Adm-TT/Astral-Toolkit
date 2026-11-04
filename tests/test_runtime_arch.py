@@ -82,16 +82,94 @@ def _analysis_violations(source):
     return _forbidden(mods, _ANALYSIS_FORBIDDEN) + bare + _dynamic_imports(source)
 
 
-def _toplevel_engine_calls(source):
-    """模块顶层（不算函数和类里面）调用 _engines / EngineManager 的地方"""
+def _call_names(source):
+    """调用表达式里直接写出的函数名 / 方法名；不扫字符串和注释"""
     out = []
-    for node in ast.parse(source).body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.Call):
             continue
-        for call in ast.walk(node):
-            if isinstance(call, ast.Call):
-                names = {n.id for n in ast.walk(call.func) if isinstance(n, ast.Name)}
-                out += sorted(names & {"_engines", "EngineManager"})
+        func = node.func
+        if isinstance(func, ast.Name):
+            out.append(func.id)
+        elif isinstance(func, ast.Attribute):
+            out.append(func.attr)
+    return out
+
+
+def _calls_named(source, names):
+    return [name for name in _call_names(source) if name in names]
+
+
+def _dynamic_import_targets(source):
+    """__import__ / importlib.import_module 的第一个字符串参数"""
+    out = []
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if isinstance(func, ast.Attribute):
+            name = func.attr
+        else:
+            name = getattr(func, "id", "")
+        if name not in ("__import__", "import_module"):
+            continue
+        arg = node.args[0] if node.args else None
+        if arg is None:
+            for kw in node.keywords:
+                if kw.arg == "name":
+                    arg = kw.value
+                    break
+        if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+            out.append(arg.value)
+    return out
+
+
+def _task_import_violations(source, pkg="astral_toolkit.tasks"):
+    mods = list(_imports_in_source(source, pkg))
+    return _forbidden(
+        mods, ("astral_toolkit.bootstrap", "astral_toolkit.app.engines.manager")
+    )
+
+
+def _task_dynamic_import_violations(source):
+    return [
+        target
+        for target in _dynamic_import_targets(source)
+        if _forbidden(
+            [target], ("astral_toolkit.bootstrap", "astral_toolkit.app.engines")
+        )
+    ]
+
+
+def _engine_manager_names(source):
+    out = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Name) and node.id == "EngineManager":
+            out.append(node.id)
+        elif isinstance(node, ast.Attribute) and node.attr == "EngineManager":
+            out.append(node.attr)
+        elif isinstance(node, ast.alias):
+            name = node.name.rsplit(".", 1)[-1]
+            if "EngineManager" in (name, node.asname):
+                out.append("EngineManager")
+        elif isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            if node.name == "EngineManager":
+                out.append("EngineManager")
+    return out
+
+
+def _replace_true_calls(source):
+    out = []
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.Call):
+            continue
+        for kw in node.keywords:
+            if (
+                kw.arg == "replace"
+                and isinstance(kw.value, ast.Constant)
+                and kw.value.value is True
+            ):
+                out.append("replace=True")
     return out
 
 
@@ -186,31 +264,139 @@ def test_analysis_import_is_clean_transitively():
 
 
 def test_tasks_mining_import_creates_no_engine():
-    """RT-B5a：导入 astral_toolkit.tasks 本身不创建引擎；count / navigation 都改由组装处 bind"""
+    """B7：导入 tasks 不起线程、不产生引擎绑定，管理器模块已经不存在"""
     code = (
-        "import sys, astral_toolkit.tasks;"
-        "from astral_toolkit.app.engines.manager import EngineManager;"
-        "print(EngineManager._instance is None, 'astral_toolkit.tasks.count' in sys.modules,"
-        " 'astral_toolkit.tasks.navigation' in sys.modules)"
+        "import sys, threading\n"
+        "import astral_toolkit.tasks\n"
+        "from astral_toolkit.tasks import mining, navigation, count\n"
+        "from astral_toolkit.tasks.system import common\n"
+        "from astral_toolkit.app import lifecycle_gate, ui_stream\n"
+        "values = [\n"
+        "    mining._live, mining._positions,\n"
+        "    navigation._nav, navigation._pos,\n"
+        "    navigation._game_events, navigation._results,\n"
+        "    count._count, common._status, common._start,\n"
+        "    lifecycle_gate._CLOSING, ui_stream._SOURCES,\n"
+        "]\n"
+        "print(threading.active_count(),\n"
+        "      'astral_toolkit.app.engines.manager' in sys.modules,\n"
+        "      all(value is None for value in values))\n"
+        "try:\n"
+        "    import astral_toolkit.app.engines.manager\n"
+        "except ModuleNotFoundError:\n"
+        "    print('missing')\n"
+        "else:\n"
+        "    print('present')\n"
     )
-    assert _run(code) == "True True True"
+    assert _run(code) == "1 False True\nmissing"
 
 
-def test_tasks_mining_gets_engine_only_inside_functions():
-    source = (_ROOT / "tasks" / "mining.py").read_text(encoding="utf-8")
-    assert _toplevel_engine_calls(source) == []
+def test_tasks_have_no_engine_calls():
+    files = list((_ROOT / "tasks").rglob("*.py"))
+    assert files
+    for path in files:
+        source = path.read_text(encoding="utf-8")
+        bad_calls = _calls_named(source, ("_engines", "_E", "get_instance"))
+        assert bad_calls == [], path.name
     for bad in (
-        "_pos = _engines().pos",
-        "_M = EngineManager.get_instance()",
-        "if True:\n    x = EngineManager.get_instance().live",
+        "def f():\n    return _engines().pos",
+        "x = _E().live",
+        "x = helper.get_instance()",
     ):
-        assert _toplevel_engine_calls(bad), bad
-    assert _toplevel_engine_calls("def f():\n    return _engines().pos") == []
+        assert _calls_named(bad, ("_engines", "_E", "get_instance")), bad
 
 
-def test_tasks_count_gets_engine_only_inside_functions():
-    source = (_ROOT / "tasks" / "count.py").read_text(encoding="utf-8")
-    assert _toplevel_engine_calls(source) == []
+def test_tasks_do_not_import_bootstrap_or_engine_manager():
+    files = list((_ROOT / "tasks").rglob("*.py"))
+    assert files
+    for path in files:
+        source = path.read_text(encoding="utf-8")
+        # 相对导入按文件自己所在的包解析：tasks/system/x.py 里的 ... 才是 astral_toolkit
+        pkg = ".".join(("astral_toolkit", *path.relative_to(_ROOT).parent.parts))
+        assert _task_import_violations(source, pkg) == [], path.name
+    for bad in (
+        "from ..bootstrap import build",
+        "from astral_toolkit.bootstrap import build",
+        "from astral_toolkit.app.engines.manager import EngineManager",
+        "from astral_toolkit.app.engines import manager",
+    ):
+        assert _task_import_violations(bad), bad
+    assert _task_import_violations("from ..core import paths") == []
+    for bad in (
+        "from ... import bootstrap",
+        "from ...bootstrap import build",
+        "from ...app.engines import manager",
+    ):  # tasks/system 子包里的写法
+        assert _task_import_violations(bad, "astral_toolkit.tasks.system"), bad
+
+
+def test_tasks_dynamic_imports_stay_out_of_engines():
+    files = list((_ROOT / "tasks").rglob("*.py"))
+    assert files
+    for path in files:
+        source = path.read_text(encoding="utf-8")
+        assert _task_dynamic_import_violations(source) == [], path.name
+    for bad in (
+        "__import__('astral_toolkit.bootstrap')",
+        (
+            "import importlib\n"
+            "importlib.import_module('astral_toolkit.app.engines.manager')"
+        ),
+        (
+            "from importlib import import_module\n"
+            "import_module('astral_toolkit.app.engines')"
+        ),
+    ):
+        assert _task_dynamic_import_violations(bad), bad
+    assert (
+        _task_dynamic_import_violations(
+            "__import__('astral_toolkit.core.paths', fromlist=['x'])"
+        )
+        == []
+    )
+
+
+def test_product_has_no_engine_manager_name():
+    files = list(_ROOT.rglob("*.py"))
+    assert files
+    for path in files:
+        source = path.read_text(encoding="utf-8")
+        assert _engine_manager_names(source) == [], path.name
+    for bad in (
+        "x = EngineManager.get_instance()",
+        "from x import EngineManager",
+        "class EngineManager:\n    pass",
+        "x = manager.EngineManager",
+    ):
+        assert _engine_manager_names(bad), bad
+    assert _engine_manager_names("x = 'EngineManager'") == []
+
+
+def test_product_has_no_get_instance_calls():
+    files = list(_ROOT.rglob("*.py"))
+    assert files
+    for path in files:
+        source = path.read_text(encoding="utf-8")
+        assert _calls_named(source, ("get_instance",)) == [], path.name
+    for bad in (
+        "EngineManager.get_instance()",
+        "helper.get_instance()",
+        "get_instance()",
+    ):
+        assert _calls_named(bad, ("get_instance",)), bad
+    assert _calls_named("def get_instance():\n    pass", ("get_instance",)) == []
+
+
+def test_product_has_no_replace_true_calls():
+    files = list(_ROOT.rglob("*.py"))
+    assert files
+    for path in files:
+        source = path.read_text(encoding="utf-8")
+        assert _replace_true_calls(source) == [], path.name
+    for bad in ("x.bind(replace=True)", "x.bind(a, replace=True)"):
+        assert _replace_true_calls(bad), bad
+    assert _replace_true_calls("x.bind(replace=False)") == []
+    assert _replace_true_calls("x.bind(replace=flag)") == []
 
 
 _RUNTIME_FORBIDDEN = (

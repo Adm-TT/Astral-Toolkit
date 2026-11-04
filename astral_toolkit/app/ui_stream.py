@@ -42,6 +42,18 @@ _switches = {}
 _switch_read_mono = None
 _switch_revision = 0  # 仅保护锁外采样提交，不进入展示协议
 _shutting_down = False
+_SOURCES = None
+
+
+class _SwitchSources:
+    """bind_switches 注入的三个对象；保留 .live / .nav / .pos 的读法。"""
+
+    __slots__ = ("live", "nav", "pos")
+
+    def __init__(self, live, nav, pos):
+        self.live = live
+        self.nav = nav
+        self.pos = pos
 
 
 class _Sub:
@@ -505,6 +517,16 @@ def set_switches(switches, read_mono=None, expected_revision=None):
         return _seq
 
 
+def bind_switches(live, nav, pos, *, replace=False):
+    """bootstrap 装配时注入 live / nav / pos；测试可 replace=True 重新绑。"""
+    global _SOURCES
+    if _SOURCES is not None and not replace:
+        raise RuntimeError(
+            "app.ui_stream 已绑定：生产只绑一次；测试用 replace=True 并在用完后恢复"
+        )
+    _SOURCES = _SwitchSources(live, nav, pos)
+
+
 def _call_running(obj):
     value = getattr(obj, "running", None)
     if value is None:
@@ -552,11 +574,9 @@ def _read_nav_state(loop):
 def read_switches():
     """在锁外读现有开关状态；读不到的项目不放进来，也不生成对应磁贴"""
     out = {}
-    engines = live = loop = None
+    engines = _SOURCES
+    live = loop = None
     try:
-        from ..tasks.system.common import _engines
-
-        engines = _engines()
         live = getattr(engines, "live", None)
         loop = getattr(live, "loop", None)
     except Exception:

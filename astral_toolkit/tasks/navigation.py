@@ -108,7 +108,7 @@ DI_HELP = "未检测到右上角位置信息：在游戏中按 ~ 打开控制台
 
 
 # ---------------------------------------------------------------- 依赖与辅助
-# 2026-10-30 重构阶段 2：悬浮窗从 app.hud_state 拿，引擎和最近结果（ResultStore）从 EngineManager 拿，
+# 2026-10-30 重构阶段 2：悬浮窗从 app.hud_state 拿，引擎和最近结果（ResultStore）由 bootstrap 启动时 bind 进来（RT-B7），
 # 不再经 services 转发、出错也不再回头找 services 兜底。接口由 app/api/navigation.py 的 ROUTES 注册，不再用 api 装饰器。
 from ..app.hud_state import _hud, _note_hud  # noqa: E402
 from ..runtime.results import MINING_SCAN  # noqa: E402
@@ -118,9 +118,7 @@ _pos: _PosLike | None = None
 _game_events: _GameEventsLike | None = None
 _results: _ResultsLike | None = None
 
-_UNBOUND = (
-    "tasks.navigation 未绑定引擎：先调用 bind(nav, positions, game_events, results)"
-)
+_UNBOUND = "tasks.navigation 未绑定：先调用 bind(nav, positions, game_events, results)"
 
 
 def bind(
@@ -128,9 +126,15 @@ def bind(
     positions: _PosLike,
     game_events: _GameEventsLike,
     results: _ResultsLike,
+    *,
+    replace: bool = False,
 ) -> None:
-    """组装处调用一次（B5b 过渡；B7 移到 bootstrap）。导入本模块不再取引擎、不再有副作用"""
+    """组装处调用一次（B7 由 bootstrap 完成）。导入本模块不再取引擎、不再有副作用"""
     global _nav, _pos, _game_events, _results
+    if _nav is not None and not replace:
+        raise RuntimeError(
+            "tasks.navigation 已绑定：生产只绑一次；测试用 replace=True 并在用完后恢复"
+        )
     _nav, _pos, _game_events, _results = nav, positions, game_events, results
 
 
@@ -172,52 +176,9 @@ def _need() -> tuple[_NavLike, _PosLike, _GameEventsLike, _ResultsLike]:
     return nav, pos, events, results
 
 
-def _engines() -> tuple[_NavLike, _PosLike, _GameEventsLike, _ResultsLike]:
-    """旧名字兼容：统一走 _need()，保证返回的四个对象都不是 None"""
+def _deps() -> tuple[_NavLike, _PosLike, _GameEventsLike, _ResultsLike]:
+    """兼容旧调用名：统一走 _need()，保证返回的四个对象都不是 None"""
     return _need()
-
-
-class _ManagerCompat:
-    """B7 之前旧测试 / 旧调用方的过渡口；正式代码只用 bind()。"""
-
-    @property
-    def nav(self) -> _NavLike | None:
-        return _nav
-
-    @nav.setter
-    def nav(self, value: _NavLike | None) -> None:
-        global _nav
-        _nav = value
-
-    @property
-    def pos(self) -> _PosLike | None:
-        return _pos
-
-    @pos.setter
-    def pos(self, value: _PosLike | None) -> None:
-        global _pos
-        _pos = value
-
-    @property
-    def game_events(self) -> _GameEventsLike | None:
-        return _game_events
-
-    @game_events.setter
-    def game_events(self, value: _GameEventsLike | None) -> None:
-        global _game_events
-        _game_events = value
-
-    @property
-    def results(self) -> _ResultsLike | None:
-        return _results
-
-    @results.setter
-    def results(self, value: _ResultsLike | None) -> None:
-        global _results
-        _results = value
-
-
-_M = _ManagerCompat()
 
 
 def _start_error(result: Any) -> dict[str, str] | None:

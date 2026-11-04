@@ -229,23 +229,25 @@ def test_marker_draws_under_marker_lock_after_commit(monkeypatch):
 
 def test_navigation_bind_required():
     from astral_toolkit.tasks import navigation as nt
+    from tests.bootstrap_helpers import restore_bindings, snapshot_bindings
 
-    old = nt._nav, nt._pos, nt._game_events, nt._results
+    saved = snapshot_bindings()
     try:
         nt._nav = nt._pos = nt._game_events = nt._results = None
         try:
-            nt._engines()
+            nt._deps()
         except RuntimeError as exc:
             assert "未绑定" in str(exc)
         else:
             raise AssertionError("未绑定时应抛 RuntimeError")
     finally:
-        nt._nav, nt._pos, nt._game_events, nt._results = old
+        restore_bindings(saved)
 
 
 def test_nav_start_does_not_record_when_start_rejected(monkeypatch):
     from astral_toolkit.core import run_records
     from astral_toolkit.tasks import navigation as nt
+    from tests.bootstrap_helpers import bind_for_test
 
     records = []
 
@@ -256,35 +258,30 @@ def test_nav_start_does_not_record_when_start_rejected(monkeypatch):
         def start(self, target, target_row=None, space_mode=None):
             return navmod.NavStart(None, "busy_stopping")
 
-    monkeypatch.setattr(nt, "_nav", N())
-    monkeypatch.setattr(nt, "_pos", object())
-    monkeypatch.setattr(nt, "_game_events", object())
-    monkeypatch.setattr(nt, "_results", object())
     monkeypatch.setattr(nt, "_place_row", lambda p: {"key": "k"})
     monkeypatch.setattr(run_records, "record", lambda *a, **k: records.append(a))
     nt._places["k"] = {"b": "Daymar", "t": "Planet", "n": "X", "qt": 0}
-    assert nt.nav_start("k") == {"error": "导航正在停止，请稍候"}
-    assert records == []
+    with bind_for_test(nt, N(), object(), object(), object()):
+        assert nt.nav_start("k") == {"error": "导航正在停止，请稍候"}
+        assert records == []
 
 
 def test_nav_stop_timeout_message(monkeypatch):
     from astral_toolkit.core import run_records
     from astral_toolkit.tasks import navigation as nt
+    from tests.bootstrap_helpers import bind_for_test
 
     class N:
         def stop(self):
             return StopAttempt(1, False, True)
 
-    monkeypatch.setattr(nt, "_nav", N())
-    monkeypatch.setattr(nt, "_pos", object())
-    monkeypatch.setattr(nt, "_game_events", object())
-    monkeypatch.setattr(nt, "_results", object())
     monkeypatch.setattr(run_records, "record", lambda *a, **k: None)
-    assert nt.nav_stop() == {
-        "ok": True,
-        "stopping": True,
-        "message": "正在停止导航，旧线程还没退出",
-    }
+    with bind_for_test(nt, N(), object(), object(), object()):
+        assert nt.nav_stop() == {
+            "ok": True,
+            "stopping": True,
+            "message": "正在停止导航，旧线程还没退出",
+        }
 
 
 def _fix_worker():

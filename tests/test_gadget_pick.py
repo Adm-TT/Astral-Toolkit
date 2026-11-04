@@ -52,31 +52,35 @@ def test_set_mining_gadgets_saves_and_summary(monkeypatch):
 
     from astral_toolkit.core import settings
     from astral_toolkit.tasks import mining as t
+    from tests.bootstrap_helpers import bind_for_test
 
     cur = {}
     monkeypatch.setattr(settings, "load", lambda: dict(cur))
     monkeypatch.setattr(settings, "update", lambda **kw: cur.update(kw))
     changed = []
-    monkeypatch.setattr(
-        t,
-        "_engines",
-        lambda: SimpleNamespace(
-            live=SimpleNamespace(config_changed=lambda: changed.append(1))
-        ),
+    live = SimpleNamespace(
+        running=lambda: False,
+        config_changed=lambda: changed.append(1),
     )
-    g = t.set_mining_gadgets(keys=["optimax", "sabir"])
-    assert cur["mining_gadgets"] == ["sabir", "optimax"] and changed
-    on = {x["key"] for x in g["gadgets"] if x["on"]}
-    assert on == {"sabir", "optimax"}
-    assert all(x["name"] and x["desc"] for x in g["gadgets"])
-    ship = next(s for s in g["ships"] if s["key"] == g["ship"])
-    assert ship["summary"]["gadget"] and ship["summary"]["mass_gadget"]
-    g = t.set_mining_gadgets(keys=[])
-    ship = next(s for s in g["ships"] if s["key"] == g["ship"])
-    assert ship["summary"]["gadget"] == "" and ship["summary"]["mass_gadget"] is None
-    for bad in ("sabir", ["没有这种"]):
-        try:
-            t.set_mining_gadgets(keys=bad)
-        except ValueError:
-            continue
-        raise AssertionError(bad)
+    positions = SimpleNamespace(
+        snapshot=lambda: SimpleNamespace(current=(0.0, None, None))
+    )
+    with bind_for_test(t, live, positions):
+        g = t.set_mining_gadgets(keys=["optimax", "sabir"])
+        assert cur["mining_gadgets"] == ["sabir", "optimax"] and changed
+        on = {x["key"] for x in g["gadgets"] if x["on"]}
+        assert on == {"sabir", "optimax"}
+        assert all(x["name"] and x["desc"] for x in g["gadgets"])
+        ship = next(s for s in g["ships"] if s["key"] == g["ship"])
+        assert ship["summary"]["gadget"] and ship["summary"]["mass_gadget"]
+        g = t.set_mining_gadgets(keys=[])
+        ship = next(s for s in g["ships"] if s["key"] == g["ship"])
+        assert (
+            ship["summary"]["gadget"] == "" and ship["summary"]["mass_gadget"] is None
+        )
+        for bad in ("sabir", ["没有这种"]):
+            try:
+                t.set_mining_gadgets(keys=bad)
+            except ValueError:
+                continue
+            raise AssertionError(bad)

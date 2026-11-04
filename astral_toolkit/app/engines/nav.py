@@ -50,13 +50,6 @@ def _H() -> Any:
     return hud_state
 
 
-def _E() -> Any:
-    """后台引擎（EngineManager 单例：.live、.nav、.pos、.cam_filter …）"""
-    from .manager import EngineManager
-
-    return EngineManager.get_instance()
-
-
 def nav_tip(on, last_ok, now, has_shown, di_help):
     """导航时右上角读位置的说法 → (窗口状态, 悬浮窗末尾那行)。窗口和悬浮窗说法一致（审查 2026-10-30）：
     读得到：实时；8–30 秒前读到过而且有上次结果：标「暂停更新」，不冒充实时；刚开始还没结果：等待；

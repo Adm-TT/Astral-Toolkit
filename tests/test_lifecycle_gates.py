@@ -3,43 +3,26 @@
 from __future__ import annotations
 
 import socket
-from typing import Any
 import threading
 import time
 
 
-def _install_manager(monkeypatch, closing=True):
-    from astral_toolkit.app.engines.manager import EngineManager
+def _closing_gate(closing=True):
+    from contextlib import contextmanager
 
-    class _Lifecycle:
-        def is_closing(self):
-            return bool(closing)
+    from astral_toolkit.app import lifecycle_gate
+    from tests.bootstrap_helpers import restore_bindings, snapshot_bindings
 
-    class _Live:
-        def __init__(self):
-            self.is_running = False
+    @contextmanager
+    def _bound():
+        saved = snapshot_bindings()
+        lifecycle_gate.bind_closing(lambda: bool(closing), replace=True)
+        try:
+            yield
+        finally:
+            restore_bindings(saved)
 
-        def running(self):
-            return self.is_running
-
-    class _Count:
-        def __init__(self):
-            self.is_running = False
-
-        def running(self):
-            return self.is_running
-
-    class _Manager:
-        lifecycle: Any = None
-        live: Any = None
-        count: Any = None
-
-    manager = _Manager()
-    manager.lifecycle = _Lifecycle()
-    manager.live = _Live()
-    manager.count = _Count()
-    monkeypatch.setattr(EngineManager, "_instance", manager)
-    return manager
+    return _bound()
 
 
 def _read_all(sock):
@@ -70,74 +53,96 @@ class _FakeImage:
 
 
 def test_closing_gate_f5_f6(monkeypatch):
+    from types import SimpleNamespace
+
     from astral_toolkit.app import hud_state
     from astral_toolkit.app.engines import hover
     from astral_toolkit.tasks import count as count_task
     from astral_toolkit.tasks import mining, navigation
+    from tests.bootstrap_helpers import bind_for_test
 
-    manager = _install_manager(monkeypatch, True)
+    class _Toggle:
+        prev_stop_pending = False
 
-    refused = mining.live_start()
-    assert isinstance(refused, dict) and refused.get("error") == "正在退出"
+        def __init__(self):
+            self.is_running = False
 
-    old_count = count_task._count
-    count_task.bind(manager.count)
-    try:
-        refused = count_task.count_toggle()
-        assert isinstance(refused, dict) and refused.get("error") == "正在退出"
-    finally:
-        count_task._count = old_count
+        def running(self):
+            return self.is_running
 
-    notes = []
-    monkeypatch.setattr(
-        hud_state,
-        "_note_hud",
-        lambda title, text, *a, **k: notes.append((title, text)),
+        def config_changed(self):
+            pass
+
+    live = _Toggle()
+    count = _Toggle()
+    positions = SimpleNamespace(
+        snapshot=lambda: SimpleNamespace(current=(0.0, None, None))
     )
-    monkeypatch.setattr(navigation, "settings_key", lambda key, default=None: default)
+    with _closing_gate(True):
+        with bind_for_test(mining, live, positions):
+            refused = mining.live_start()
+            assert isinstance(refused, dict) and refused.get("error") == "正在退出"
 
-    calls = []
-    monkeypatch.setattr(
-        mining, "live_start", lambda: calls.append("start") or {"ok": True}
-    )
-    monkeypatch.setattr(mining, "live_stop", lambda: calls.append("stop"))
-    monkeypatch.setattr(
-        count_task, "count_toggle", lambda: calls.append("count") or {"ok": True}
-    )
+        with bind_for_test(count_task, count):
+            refused = count_task.count_toggle()
+            assert isinstance(refused, dict) and refused.get("error") == "正在退出"
 
-    h = hover._Hover()
-    h._toggle_live()
-    assert calls == []
-    assert notes[-1] == ("采矿助手", "正在退出")
+        notes = []
+        monkeypatch.setattr(
+            hud_state,
+            "_note_hud",
+            lambda title, text, *a, **k: notes.append((title, text)),
+        )
+        monkeypatch.setattr(
+            navigation, "settings_key", lambda key, default=None: default
+        )
 
-    manager.live.is_running = True
-    h._toggle_live()
-    assert calls[-1] == "stop"
+        calls = []
+        monkeypatch.setattr(
+            mining, "live_start", lambda: calls.append("start") or {"ok": True}
+        )
+        monkeypatch.setattr(mining, "live_stop", lambda: calls.append("stop"))
+        monkeypatch.setattr(
+            count_task, "count_toggle", lambda: calls.append("count") or {"ok": True}
+        )
 
-    manager.count.is_running = False
-    h._toggle_count()
-    assert "count" not in calls
-    assert notes[-1] == ("盘点", "正在退出")
+        h = hover._Hover(live=live, count=count)
+        h._toggle_live()
+        assert calls == []
+        assert notes[-1] == ("采矿助手", "正在退出")
 
-    manager.count.is_running = True
-    h._toggle_count()
-    assert calls[-1] == "count"
+        live.is_running = True
+        h._toggle_live()
+        assert calls[-1] == "stop"
+
+        count.is_running = False
+        h._toggle_count()
+        assert "count" not in calls
+        assert notes[-1] == ("盘点", "正在退出")
+
+        count.is_running = True
+        h._toggle_count()
+        assert calls[-1] == "count"
 
 
 def test_closing_gate_navigation_and_writes(monkeypatch):
+    from types import SimpleNamespace
+
     from astral_toolkit.app.engines.hover import _Hover
     from astral_toolkit.tasks import navigation
 
-    _install_manager(monkeypatch, True)
+    with _closing_gate(True):
+        assert navigation.nav_start("x").get("error") == "正在退出"
+        assert navigation.nav_near("mine").get("error") == "正在退出"
+        assert navigation.mark_here().get("error") == "正在退出"
 
-    assert navigation.nav_start("x").get("error") == "正在退出"
-    assert navigation.nav_near("mine").get("error") == "正在退出"
-    assert navigation.mark_here().get("error") == "正在退出"
-
-    h = _Hover()
-    assert h._mark().get("error") == "正在退出"
-    assert h._fix().get("error") == "正在退出"
-    assert h._ore().get("error") == "正在退出"
+        h = _Hover(
+            live=SimpleNamespace(running=lambda: False),
+            count=SimpleNamespace(running=lambda: False),
+        )
+        assert h._mark().get("error") == "正在退出"
+        assert h._fix().get("error") == "正在退出"
+        assert h._ore().get("error") == "正在退出"
 
 
 def test_http_closing_post_and_get():

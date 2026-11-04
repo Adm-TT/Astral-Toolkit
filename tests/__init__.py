@@ -15,4 +15,4 @@ os.environ["AT_FEEDBACK_OFF"] = (
 )
 
 # 2026-10-30 重构阶段 4：services.py 删了，patch_services 也删了。测试直接换名字所在的模块
-# （tasks/*、app/hud_state.py，引擎换 EngineManager.get_instance() 上的）；一个名字被几个模块 import 了的，几个一起换。
+# （tasks/*、app/hud_state.py；引擎用 bootstrap.build("test") 造出来的 app 上的；一个名字被几个模块 import 了的，几个一起换）。

@@ -2,7 +2,7 @@
 
 2026-10-28 从 app/services.py 原样剪出来（逻辑没改）。2026-10-30 重构阶段 4 删了 services.py，
 用到的函数 / 变量直接到它们所在的模块取，运行时才取，避免互相 import：
-_T("mining").xxx = tasks/mining.py，_H().xxx = app/hud_state.py，_E().live / .nav / .pos / .cam_filter = 引擎实例。
+_T("mining").xxx = tasks/mining.py，_H().xxx = app/hud_state.py。
 用到：WIN, _nav, status
 """
 
@@ -32,13 +32,6 @@ def _zone_base(info):
 def _T(name):
     """astral_toolkit.tasks 里的模块（运行时才取，避免互相 import）"""
     return importlib.import_module(f"astral_toolkit.tasks.{name}")
-
-
-def _E():
-    """后台引擎（EngineManager 单例：.live、.nav、.pos、.cam_filter …）"""
-    from .manager import EngineManager
-
-    return EngineManager.get_instance()
 
 
 @dataclass(frozen=True)

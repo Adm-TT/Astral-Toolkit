@@ -273,12 +273,13 @@ class _Count:
         closing=None,
         foreground=None,
         cursor_pos=None,
+        worker=None,
         join_timeout=3.0,
         _loop_factory=None,
     ):
         self._start_lock = threading.Lock()
         self._last_place = ""
-        self._worker = _CountWorker(cursor_pos)
+        self._worker = worker if worker is not None else _CountWorker(cursor_pos)
         factory = _loop_factory or SessionLoop
         self.loop = factory(
             self._worker,

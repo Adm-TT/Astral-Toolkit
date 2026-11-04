@@ -73,7 +73,10 @@ class TestOcrDeviceSwitch(unittest.TestCase):
             mock_update.assert_called_with(ocr_device="gpu", always_use_gpu=True)
 
     def test_set_settings_integration(self):
-        # status() / set_settings 经 astral_toolkit.ocr 包出口导入，补丁打在包上
+        from tests.bootstrap_helpers import app_for_test
+
+        # status() / set_settings 经 astral_toolkit.ocr 包出口导入，补丁打在包上；
+        # RT-B7：set_settings 会推一次 status()，tasks.system 要先绑定（app_for_test 放最后，补丁都打好了再装配）
         with (
             patch.object(OCR, "set_ocr_device", return_value="显卡") as mock_set,
             patch.object(OCR, "ocr_device", return_value="显卡"),
@@ -83,6 +86,7 @@ class TestOcrDeviceSwitch(unittest.TestCase):
                 settings, "update", side_effect=lambda **kw: {**settings.DEFAULTS, **kw}
             ),
             patch.object(settings, "load", return_value=dict(settings.DEFAULTS)),
+            app_for_test(),
         ):
             set_settings(ocr_device="gpu")
             mock_set.assert_called_with("gpu")

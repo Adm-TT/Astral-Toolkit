@@ -2,7 +2,7 @@
 
 2026-10-28 从 app/services.py 原样剪出来（逻辑没改）。2026-10-30 重构阶段 4 删了 services.py，
 用到的函数 / 变量直接到它们所在的模块取，运行时才取，避免互相 import：
-_T("mining").xxx = tasks/mining.py，_H().xxx = app/hud_state.py，_E().live / .nav / .pos / .cam_filter = 引擎实例。
+_T("mining").xxx = tasks/mining.py，_H().xxx = app/hud_state.py，self._live / self._count = 构造时注入的引擎。
 用到：WIN, _hotkey_values, _live, _note_hud, count_toggle, feedback_report, fix_here, hover_once, item_key_pressed, live_start, live_stop, mark_here, ore_record, settings_key
 """
 
@@ -27,17 +27,12 @@ def _H():
     return hud_state
 
 
-def _E():
-    """后台引擎（EngineManager 单例：.live、.nav、.pos、.cam_filter …）"""
-    from .manager import EngineManager
-
-    return EngineManager.get_instance()
-
-
 class _Hover:
     GAME_ONLY = ("trade_capture_key", "count_key")  # 只在星际公民在最前面时才响应的热键
 
-    def __init__(self):
+    def __init__(self, *, live, count):
+        self._live = live
+        self._count = count
         self.thread = None
         self.busy = False
         self.label = {}  # 热键名 → 当前绑定的键（如 trade_capture_key → F8）
@@ -135,7 +130,7 @@ class _Hover:
                             f"不在游戏里，{label[name]} {'识别' if name == 'trade_capture_key' else '盘点'}没响应：回到游戏再按"
                             + (
                                 "，或在窗口点「结束盘点」"
-                                if name == "count_key" and _E().count.running()
+                                if name == "count_key" and self._count.running()
                                 else ""
                             ),
                             tag="HOVER" if name == "trade_capture_key" else "COUNT",
@@ -168,7 +163,7 @@ class _Hover:
         """采矿助手开关键：开着就关，关着就开；悬浮窗上按实际结果显示（正在停止时说清楚）"""
         try:
             k = _T("navigation").settings_key("live_key", "F5")
-            if _E().live.running():
+            if self._live.running():
                 _T("mining").live_stop()
                 _H()._note_hud("采矿助手", f"采矿助手已关闭｜按 {k} 开启")
             else:
@@ -185,7 +180,7 @@ class _Hover:
             bus.publish("log", {"task": "live", "line": f"采矿助手开关失败：{e}"})
 
     def _toggle_count(self):
-        if not _E().count.running() and is_closing():
+        if not self._count.running() and is_closing():
             _H()._note_hud("盘点", "正在退出")
             return {"error": "正在退出"}
         return _T("count").count_toggle()

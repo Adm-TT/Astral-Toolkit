@@ -1310,51 +1310,55 @@ def test_crafted_head_quality(tmp_path, monkeypatch):
         "prospector", {"heads": [["helix_i", []]], "craft": [{}]}
     )["craft"] == [{"Emitter": 500, "Bus Bars": 500}]
     # 自造的功率更高 → 满功率能破更重的；方案、悬浮窗里标出「自造 +X%」
-    t_mining.set_mining_gear("prospector", {"heads": [["helix_i", []]], "crew": 1})
-    plain = laser.evaluate(laser.loadout(), None, 9000, 30, 10)
-    g = t_mining.set_mining_gear(
-        "prospector",
-        {
-            "heads": [["helix_i", []]],
-            "crew": 1,
-            "craft": [{"Emitter": 971, "Bus Bars": 958}],
-        },
-    )
-    made = laser.evaluate(laser.loadout(), None, 9000, 30, 10)
-    assert abs(made.max_mass / plain.max_mass - (1 + 0.1884 + 0.1832)) < 1e-6
-    assert "自造 +37%" in laser.recommend(9000, 30, 10)[0].short()
-    assert "自造 +37%" in t_mining.manual_scan(9000, 30, 10)[0]["heads"]
-    for bad in (
-        (0, 30, 10),
-        ("", 30, 10),
-        (9000, 130, 10),
-        (9000, 30, -1),
-    ):  # 空的 / 0 质量以前返回 Infinity，前端只报「连不上」
-        with pytest.raises(ValueError):
-            t_mining.manual_scan(*bad)
-    ship = next(s for s in g["ships"] if s["key"] == "prospector")
-    assert ship["power"][0] == {
-        "base": 3900,
-        "now": round(3900 * 1.3716),
-        "pct": 37.2,
-        "craft": True,
-    }
-    assert not ship["is_default"] and ship["loadout"]["craft"] == [
-        {"Emitter": 971, "Bus Bars": 958}
-    ]
-    head = next(h for h in g["heads"] if h["key"] == "helix_i")
-    assert [x["slot"] for x in head["craft"]] == ["Emitter", "Bus Bars"] and head[
-        "craft"
-    ][0]["tiers"][0] == ["商店标准", 500]
-    assert (
-        head["craft"][1]["tiers"][-1] == ["完美", 1000]
-        and head["craft"][1]["mat_zh"] == "铜"
-    )
-    # 换回商店买的：功率回到原样
-    t_mining.set_mining_gear(
-        "prospector", {"heads": [["helix_i", []]], "crew": 1, "craft": [None]}
-    )
-    assert laser.loadout()[0].max_power() == 3900
+    from tests.bootstrap_helpers import app_for_test
+
+    # RT-B7：改配装会通知采矿助手重算，tasks.mining 要先绑定
+    with app_for_test():
+        t_mining.set_mining_gear("prospector", {"heads": [["helix_i", []]], "crew": 1})
+        plain = laser.evaluate(laser.loadout(), None, 9000, 30, 10)
+        g = t_mining.set_mining_gear(
+            "prospector",
+            {
+                "heads": [["helix_i", []]],
+                "crew": 1,
+                "craft": [{"Emitter": 971, "Bus Bars": 958}],
+            },
+        )
+        made = laser.evaluate(laser.loadout(), None, 9000, 30, 10)
+        assert abs(made.max_mass / plain.max_mass - (1 + 0.1884 + 0.1832)) < 1e-6
+        assert "自造 +37%" in laser.recommend(9000, 30, 10)[0].short()
+        assert "自造 +37%" in t_mining.manual_scan(9000, 30, 10)[0]["heads"]
+        for bad in (
+            (0, 30, 10),
+            ("", 30, 10),
+            (9000, 130, 10),
+            (9000, 30, -1),
+        ):  # 空的 / 0 质量以前返回 Infinity，前端只报「连不上」
+            with pytest.raises(ValueError):
+                t_mining.manual_scan(*bad)
+        ship = next(s for s in g["ships"] if s["key"] == "prospector")
+        assert ship["power"][0] == {
+            "base": 3900,
+            "now": round(3900 * 1.3716),
+            "pct": 37.2,
+            "craft": True,
+        }
+        assert not ship["is_default"] and ship["loadout"]["craft"] == [
+            {"Emitter": 971, "Bus Bars": 958}
+        ]
+        head = next(h for h in g["heads"] if h["key"] == "helix_i")
+        assert [x["slot"] for x in head["craft"]] == ["Emitter", "Bus Bars"] and head[
+            "craft"
+        ][0]["tiers"][0] == ["商店标准", 500]
+        assert (
+            head["craft"][1]["tiers"][-1] == ["完美", 1000]
+            and head["craft"][1]["mat_zh"] == "铜"
+        )
+        # 换回商店买的：功率回到原样
+        t_mining.set_mining_gear(
+            "prospector", {"heads": [["helix_i", []]], "crew": 1, "craft": [None]}
+        )
+        assert laser.loadout()[0].max_power() == 3900
 
 
 def test_laser_power_naming_on_craft_page():
@@ -1601,33 +1605,39 @@ def test_gear_view_has_cards_and_summary(monkeypatch, tmp_path):
     from astral_toolkit.mining.data import AUTHOR_MOLE
 
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
-    g = t_mining.set_mining_gear(ship="mole")
-    mole = next(x for x in g["ships"] if x["key"] == "mole")
-    assert (
-        mole["is_default"]
-        and len(mole["cards"]) == 3
-        and {p["key"] for p in mole["presets"]} == {"factory", "author"}
-    )
-    base = mole["summary"]
-    g = t_mining.set_mining_gear(ship="mole", loadout=AUTHOR_MOLE)
-    mole = next(x for x in g["ships"] if x["key"] == "mole")
-    c0 = mole["cards"][0]
-    assert (
-        c0["power"] == 7318 and c0["stats"]["power"] == 48 and c0["stats"]["res"] == -30
-    )  # Helix II + Rieger-C3 ×2 + Focus III
-    assert (
-        mole["summary"]["crew"] == 2
-        and mole["summary"]["power"] > base["power"]
-        and mole["summary"]["mass"] > base["mass"]
-    )
-    assert (
-        mole["summary"]["mass_gadget"] > mole["summary"]["mass"]
-        and mole["summary"]["gadget"] == "萨比尔 Sabir"
-    )
-    assert (
-        all(m["group"] != "其他" for m in g["modules"])
-        and g["heads"][0]["name"] == "螺旋 Helix II"
-    )
+    from tests.bootstrap_helpers import app_for_test
+
+    # RT-B7：改配装会通知采矿助手重算，tasks.mining 要先绑定
+    with app_for_test():
+        g = t_mining.set_mining_gear(ship="mole")
+        mole = next(x for x in g["ships"] if x["key"] == "mole")
+        assert (
+            mole["is_default"]
+            and len(mole["cards"]) == 3
+            and {p["key"] for p in mole["presets"]} == {"factory", "author"}
+        )
+        base = mole["summary"]
+        g = t_mining.set_mining_gear(ship="mole", loadout=AUTHOR_MOLE)
+        mole = next(x for x in g["ships"] if x["key"] == "mole")
+        c0 = mole["cards"][0]
+        assert (
+            c0["power"] == 7318
+            and c0["stats"]["power"] == 48
+            and c0["stats"]["res"] == -30
+        )  # Helix II + Rieger-C3 ×2 + Focus III
+        assert (
+            mole["summary"]["crew"] == 2
+            and mole["summary"]["power"] > base["power"]
+            and mole["summary"]["mass"] > base["mass"]
+        )
+        assert (
+            mole["summary"]["mass_gadget"] > mole["summary"]["mass"]
+            and mole["summary"]["gadget"] == "萨比尔 Sabir"
+        )
+        assert (
+            all(m["group"] != "其他" for m in g["modules"])
+            and g["heads"][0]["name"] == "螺旋 Helix II"
+        )
 
 
 def test_mining_area_from_position():
