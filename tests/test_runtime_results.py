@@ -71,6 +71,48 @@ def test_late_end_of_old_session_keeps_newer_session_writing():
     assert _put(s, "新 2", session=2, seq=2)
 
 
+def test_end_is_per_owner():
+    """采矿 / 导航 / 盘点的会话号各数各的：一个循环结束的会话，不能把别的循环的会话也拦掉（2026-11-04）"""
+    s = ResultStore()
+    s.end(3, owner="nav")
+    assert _put(s, "采矿第 1 个会话", session=1, owner="live")
+    s.end(1, owner="live")
+    assert not _put(s, "采矿迟到", session=1, seq=2, owner="live")
+    assert _put(s, "采矿第 2 个会话", session=2, seq=1, owner="live")
+
+
+def test_loops_sharing_one_store_do_not_block_each_other():
+    """真会话循环：导航那个循环开停 3 次后，共用同一个 ResultStore 的采矿循环第 1 个会话照样能提交（2026-11-04 复现）"""
+    import time
+
+    from astral_toolkit.runtime.session import StopInfo
+    from tests.runtime_fakes import FakeWorker, make_loop
+
+    shared = ResultStore()
+    nav_loop, nav_w, _ = make_loop(FakeWorker(name="nav"), results=shared)
+    for _ in range(3):
+        sid = nav_loop.start("目标")
+        assert sid is not None and nav_w.started.wait(2)
+        nav_w.started.clear()
+        nav_loop.request_stop_current(StopInfo("user"))
+        assert nav_loop.join(2.0, session_id=sid)
+    live_loop, live_w, _ = make_loop(FakeWorker(name="live"), results=shared)
+    try:
+        sid = live_loop.start(None)
+        assert sid == 1 and live_w.ticked.wait(2)
+        session = live_w.session
+        stamp = live_loop.stamp(session, time.time())
+        assert stamp is not None
+        assert live_loop.commit(
+            session, ("bus", "scan", {}), slot=MINING_SCAN, value={"v": 1}, stamp=stamp
+        )
+        e = shared.get(MINING_SCAN)
+        assert e is not None and e.value == {"v": 1} and e.session_id == 1
+    finally:
+        live_loop.request_shutdown()
+        live_loop.join_all(2.0)
+
+
 def test_values_are_snapshots():
     s = ResultStore()
     src = {"lots": [{"q": 1}]}

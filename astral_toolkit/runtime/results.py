@@ -1,6 +1,9 @@
 """最近接受的功能结果（架构稿 §7.1、§7.3）：全程序只有这里保存，别的模块读快照，不改字典
 
 旧会话、旧 epoch、序号不增的结果一律拒收。自带一把小锁，锁内只做字典操作。
+
+「旧会话」按会话循环（owner：live / nav / count…）分开算：各循环的会话号各数各的，
+一个循环结束的会话不能把别的循环的会话也拦掉（2026-11-04：导航停一次后采矿结果全被拒收）。
 """
 
 import copy
@@ -29,7 +32,8 @@ class ResultStore:
     def __init__(self):
         self._lock = threading.Lock()
         self._entries: dict[str, Entry] = {}
-        self._floor = -1  # 结束到哪个会话：这个会话及更早的不再收
+        # 每个会话循环各自结束到哪个会话：那个循环的这个会话及更早的不再收
+        self._floors: dict[str, int] = {}
 
     def accept(
         self,
@@ -41,6 +45,7 @@ class ResultStore:
         captured_mono,
         captured_wall,
         quality="complete",
+        owner="",
     ) -> bool:
         entry = Entry(
             copy.deepcopy(value),
@@ -52,7 +57,7 @@ class ResultStore:
             quality,
         )
         with self._lock:
-            if session <= self._floor:
+            if session <= self._floors.get(owner, -1):
                 return False
             old = self._entries.get(slot)
             if old is not None and (
@@ -73,7 +78,7 @@ class ResultStore:
             return None
         return replace(entry, value=copy.deepcopy(entry.value))
 
-    def end(self, session):
-        """会话结束：这个会话及更早的不再收新结果。已经收的留着，读方照常读最后一份（§7.1、§7.4：新鲜度和会话状态分开管）"""
+    def end(self, session, owner=""):
+        """会话结束：owner 这个循环的这个会话及更早的不再收新结果。已经收的留着，读方照常读最后一份（§7.1、§7.4：新鲜度和会话状态分开管）"""
         with self._lock:
-            self._floor = max(self._floor, session)
+            self._floors[owner] = max(self._floors.get(owner, -1), session)
