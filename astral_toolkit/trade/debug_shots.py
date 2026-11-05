@@ -82,13 +82,6 @@ class Session:
             )
         )
 
-    def mark_used(self, label: str) -> None:
-        for a in self.attempts:
-            a.used = a.label == label
-        if label == "整屏" and self.attempts:
-            # 整屏兜底可能不在 attempts 里（另记）；有则标
-            pass
-
     def add_extra(
         self,
         label: str,

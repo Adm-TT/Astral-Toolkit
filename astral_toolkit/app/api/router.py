@@ -1,6 +1,6 @@
 """接口路由（2026-10-30 重构阶段 0）
 
-routes()：收集 astral_toolkit/app/api/ 下每个 Controller 模块的 ROUTES（阶段 4 起不再拿 services.API 兜底，services.py 已删）。
+routes()：收集 astral_toolkit/app/api/ 下每个 Controller 模块的 ROUTES。
 HTTP（server.do_POST）走 call()，统一返回 {"ok", "data" / "error"}。
 
 Controller 写法（阶段 1–3）：astral_toolkit/app/api/<领域>.py 里写接口函数，文件末尾

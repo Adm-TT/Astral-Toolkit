@@ -1,4 +1,4 @@
-"""游戏窗口相关的小工具：找游戏窗口、游戏在不在最前面、管理员身份、当前按着哪些键
+"""游戏窗口相关的小工具：找游戏窗口、游戏在不在最前面、管理员身份
 
 自定义路标只用 /showlocation 的坐标：玩家自己在聊天框输入 /showlocation，游戏把坐标复制到剪贴板，AT 读剪贴板。
 比 OCR 右上角调试信息可靠（不会认错数字）。AT 不模拟任何键盘 / 鼠标输入（负责人定，1.1.2 起；整改第 4 批）。
@@ -11,7 +11,6 @@ import time
 from pathlib import Path  # noqa: F401
 
 GAME_EXE = "starcitizen.exe"
-_MOUSE_VK = (0x01, 0x02, 0x04, 0x05, 0x06)
 
 WIN = sys.platform == "win32"
 if WIN:
@@ -207,11 +206,6 @@ def game_elevated():
         return None
 
 
-def blocked_by_admin():
-    """游戏是管理员权限、助手不是 → 按键会被 Windows 挡掉"""
-    return bool(game_elevated()) and not is_admin()
-
-
 def relaunch_as_admin(entry="nav"):
     """用管理员身份另开一个窗口直接进某个功能（会弹出 Windows 的确认框）"""
     from ..core.paths import FROZEN, ROOT
@@ -229,24 +223,3 @@ def relaunch_as_admin(entry="nav"):
         None, "runas", sys.executable, params, root, 1
     )
     return r > 32
-
-
-# ---------------------------------------------------------------- 键盘状态
-
-
-def _down(vk):
-    return bool(_u32.GetAsyncKeyState(vk) & 0x8000)
-
-
-def held_keys():
-    """当前按着的键（虚拟键码列表），排查用"""
-    if not WIN:
-        return []
-    return [vk for vk in list(_MOUSE_VK) + list(range(0x08, 0xFF)) if _down(vk)]
-
-
-def keys_idle():
-    """没有按着任何键盘键和鼠标键（按着的话聊天框会被打进多余的字）"""
-    if not WIN:
-        return False
-    return not any(_down(vk) for vk in list(_MOUSE_VK) + list(range(0x08, 0xFF)))

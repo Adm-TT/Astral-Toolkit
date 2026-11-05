@@ -178,13 +178,6 @@ def _fetch_all(sources, timeout, limit=64 * 1024):
     return out
 
 
-def _rev(v):
-    try:
-        return max(0, int(v))
-    except (TypeError, ValueError):
-        return 0
-
-
 def fetch(timeout=TIMEOUT):
     """到网上读版本说明。几处都问，取版本最新的一份。
     返回 (info, 哪里读到的)；都读不到返回 (None, 原因)。"""

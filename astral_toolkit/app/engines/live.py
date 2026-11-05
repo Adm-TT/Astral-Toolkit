@@ -1,6 +1,5 @@
 """采矿助手：扫描面板识别、雷达信号、破碎方案、袋子（_Live）
 
-2026-10-28 从 app/services.py 原样剪出来（逻辑没改）。2026-10-30 重构阶段 4 删了 services.py，
 用到的函数 / 变量直接到它们所在的模块取，运行时才取，避免互相 import：
 _T("mining").xxx = tasks/mining.py，_H().xxx = app/hud_state.py。
 用到：_area_now, _game_front, _hud, _mark_goal_lines, _note_hud, _where_now, scan_view, settings_key

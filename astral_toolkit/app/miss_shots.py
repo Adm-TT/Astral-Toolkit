@@ -38,11 +38,6 @@ class MissShotsService:
     def thread(self) -> threading.Thread | None:
         return self._thread
 
-    @property
-    def queue_size(self) -> int:
-        with self._cond:
-            return len(self._pending)
-
     def start(self) -> None:
         return None
 

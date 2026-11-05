@@ -1,6 +1,6 @@
 """制造与目标规划任务模块（Task: Goals, Crafting & Wikelo Exchanges）
 
-从 app/services.py 中解耦提取，专职处理：
+专职处理：
 1. 蓝图制造查询、分类检索、槽位结构化解析、属性计算与混料算法；
 2. 目标规划（联动库存、计算材料缺口、市价估算、目标材料扣减及直接入库）；
 3. Wikelo 特殊兑换搜索与材料需求解析；
@@ -627,25 +627,6 @@ def craft_mix(need=0, target=0, margin=2, boxes=()):
     return mix_plan(float(need or 0), float(target or 0), rows, float(margin or 0))
 
 
-# 导出的外部 Web API 函数列表（供 app/services.py 统一注册至 API 路由表）
-API_FUNCTIONS = [
-    goal_finish_preview,
-    goal_finish,
-    wikelo_search,
-    wikelo_detail,
-    goals,
-    goal_add,
-    goal_update,
-    goal_stock_add,
-    craft_effect,
-    goal_prices,
-    craft_search,
-    craft_browse,
-    craft_detail,
-    craft_stats,
-    craft_mix,
-]
-
 __all__ = [
     # 状态与缓存
     "_wk_cache",
@@ -679,6 +660,4 @@ __all__ = [
     # 维科洛兑换
     "wikelo_search",
     "wikelo_detail",
-    # API 集合
-    "API_FUNCTIONS",
 ]

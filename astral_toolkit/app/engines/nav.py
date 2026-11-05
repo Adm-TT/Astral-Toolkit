@@ -1,6 +1,5 @@
 """导航引擎：实时方位 / 路标 / 站内导航（_Nav）、读数平滑（_Steady）、摄像头过滤（_CamFilter）、游戏事件（_GameEvents）
 
-2026-10-28 从 app/services.py 原样剪出来（逻辑没改）。2026-10-30 重构阶段 4 删了 services.py，
 NV-B3 / NV-B4（2026-11-05）：HUD 记号（_NavMarker）、三个视图和导航日志都搬进本模块；以前经 _T 动态去 tasks/mining、
 tasks/navigation 取的东西，现在由 bootstrap 造对象时传进来（_NavMarker 的依赖、NavLinks），本模块不再动态导入 tasks。
 

@@ -5,24 +5,7 @@
   "astral_toolkit/app/ui_stream.py::reset_for_tests": "专门给测试的口子（名字写明了）：测试之间清展示流状态",
   "astral_toolkit/runtime/session.py::SessionLoop.lock_held_by_me": "专门给测试的口子：断言「这一步在锁里 / 锁外」"
  },
- "dead": [
-  "astral_toolkit/app/http_writes.py::HttpWritesService.active_routes",
-  "astral_toolkit/app/miss_shots.py::MissShotsService.queue_size",
-  "astral_toolkit/app/server.py::RESTART",
-  "astral_toolkit/app/ui_stream.py::bye_all",
-  "astral_toolkit/app/ui_stream.py::connection_info",
-  "astral_toolkit/mining/mining_area.py::filter_text",
-  "astral_toolkit/mining/screen.py::REGIONS",
-  "astral_toolkit/navigation/gridtext.py::NEEDED_LINE",
-  "astral_toolkit/navigation/gridtext.py::_cell_ink",
-  "astral_toolkit/run.py::_has_directml",
-  "astral_toolkit/system/showloc.py::blocked_by_admin",
-  "astral_toolkit/system/showloc.py::held_keys",
-  "astral_toolkit/system/showloc.py::keys_idle",
-  "astral_toolkit/trade/debug_shots.py::Session.mark_used",
-  "astral_toolkit/trade/providers/base.py::Provider",
-  "astral_toolkit/update/update_check.py::_rev"
- ],
+ "dead": [],
  "test_only": [
   "astral_toolkit/app/http_server.py::Handler._drain",
   "astral_toolkit/app/http_writes.py::HttpWritesService.active_count",
@@ -47,10 +30,8 @@
   "astral_toolkit/trade/pricing.py::aggregate"
  ],
  "dup": [
-  "astral_toolkit/app/bus.py::encode | astral_toolkit/app/ui_stream.py::encode",
   "astral_toolkit/app/engines/count.py::_T | astral_toolkit/app/engines/hover.py::_T | astral_toolkit/app/engines/live.py::_T | astral_toolkit/app/engines/pos.py::_T",
   "astral_toolkit/crafting/loot.py::_fold | astral_toolkit/crafting/wikelo.py::_fold",
-  "astral_toolkit/tasks/navigation.py::_hotkey_values | astral_toolkit/tasks/system/settings.py::_hotkey_values",
   "astral_toolkit/trade/debug_shots.py::_debug_on | astral_toolkit/trade/inspector.py::_debug_on"
  ],
  "facade": [
@@ -102,13 +83,7 @@
   "astral_toolkit/navigation/navigate.py::calibration",
   "astral_toolkit/navigation/navigate.py::city_targets",
   "astral_toolkit/navigation/navigate.py::orbital_markers",
-  "astral_toolkit/navigation/navigate.py::qt_points",
-  "astral_toolkit/tasks/system/__init__.py::DATA_SOURCES",
-  "astral_toolkit/tasks/system/__init__.py::REFERRAL_URL",
-  "astral_toolkit/tasks/system/__init__.py::_online_public",
-  "astral_toolkit/tasks/system/__init__.py::_system_info",
-  "astral_toolkit/tasks/system/__init__.py::_task_print",
-  "astral_toolkit/tasks/system/__init__.py::_vpk_rollback_task"
+  "astral_toolkit/navigation/navigate.py::qt_points"
  ],
  "noqa_f401": {
   "astral_toolkit/app/server.py": 12,
@@ -136,26 +111,5 @@
   "astral_toolkit/trade/providers/uex.py": 1,
   "astral_toolkit/update/uex.py": 1
  },
- "stale": {
-  "astral_toolkit/app/api/__init__.py": 1,
-  "astral_toolkit/app/api/router.py": 1,
-  "astral_toolkit/app/api/system.py": 1,
-  "astral_toolkit/app/api/vision.py": 1,
-  "astral_toolkit/app/engines/__init__.py": 1,
-  "astral_toolkit/app/engines/count.py": 1,
-  "astral_toolkit/app/engines/hover.py": 2,
-  "astral_toolkit/app/engines/live.py": 2,
-  "astral_toolkit/app/engines/nav.py": 2,
-  "astral_toolkit/app/engines/pos.py": 2,
-  "astral_toolkit/app/http_server.py": 1,
-  "astral_toolkit/app/hud_state.py": 2,
-  "astral_toolkit/tasks/__init__.py": 1,
-  "astral_toolkit/tasks/count.py": 1,
-  "astral_toolkit/tasks/goals.py": 2,
-  "astral_toolkit/tasks/hover.py": 1,
-  "astral_toolkit/tasks/mining.py": 1,
-  "astral_toolkit/tasks/navigation.py": 1,
-  "astral_toolkit/tasks/stock.py": 1,
-  "astral_toolkit/tasks/trade.py": 1
- }
+ "stale": {}
 }

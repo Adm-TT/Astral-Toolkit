@@ -4412,6 +4412,28 @@ def test_showlocation_keys_freed(monkeypatch, tmp_path):
     assert t_nav.fix_key_hint() == ("", "在聊天框输入 /showlocation 定位")
 
 
+def test_fix_key_hint_uses_shared_hotkey_table(monkeypatch):
+    """一键定位的撞键提示和设置页用同一张热键表。"""
+    from astral_toolkit.core import settings
+    from astral_toolkit.tasks import navigation as t_nav
+    from astral_toolkit.tasks.system import settings as t_set
+
+    assert t_nav.hotkey_conflicts is t_set.hotkey_conflicts
+    assert not hasattr(t_nav, "HOTKEYS")
+    assert not hasattr(t_nav, "_hotkey_values")
+
+    monkeypatch.setattr(
+        settings, "load", lambda: {**settings.DEFAULTS, "fix_key": "F8"}
+    )
+    assert t_nav.fix_key_hint() == (
+        "F8",
+        (
+            "F8 同时用于「物品识别」和「一键定位」，按下只执行「物品识别」："
+            "需在设置页更换「一键定位」的按键，或在聊天框输入 /showlocation"
+        ),
+    )
+
+
 def test_nav_marker_projection():
     """导航记号（2026-10-27）：目标投到屏幕上的位置；画面外贴边画箭头；不盖右上角调试信息；记号和瞄准环能画出来"""
     import math

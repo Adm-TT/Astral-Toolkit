@@ -33,8 +33,6 @@ from .launcher import (
 from .instance import _call_old, _try_lock, release_instance, _single_instance  # noqa: F401
 from ..runtime.lifecycle import Phase
 
-RESTART = threading.Event()
-
 
 def _relaunch():
     """托盘「重新启动」：开一个新的 AT（它会等这个退出），这个退出"""
