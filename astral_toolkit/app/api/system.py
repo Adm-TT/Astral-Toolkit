@@ -2,7 +2,7 @@
 
 运行状态、设置、在线更新与回滚、日志导出、问题反馈、关于页、窗口显示与退出的接口：
 收关键字参数，原样转给 tasks/system.py 里同名函数。只做转发，不加校验（校验留在 tasks 里，改行为要 NGU 定）。
-runtime_capture_now、runtime_clear_logs（实时监控页的手动截图、清日志）原来写在 services.py，原样挪到这里。
+runtime_capture_now、runtime_clear_logs（实时监控页的手动截图、清日志）例外：实现直接写在本文件。
 router 自动收集文件末尾的 ROUTES。
 """
 

@@ -6,9 +6,6 @@
 import sys
 
 from .about import (
-    AGREE_TEXT,
-    DATA_SOURCES,
-    REFERRAL_URL,
     _data_versions,
     _version,
     about_info,
@@ -28,7 +25,6 @@ from .feedback import (
     feedback_report,
 )
 from .settings import (
-    HOTKEYS,
     _hotkey_values,
     hotkey_conflicts,
     overlay_move,
@@ -38,16 +34,13 @@ from .settings import (
     start_background,
     update_data,
 )
-from .status import _desktop, _gridtext_status, _system_info, export_logs, status
+from .status import _desktop, _gridtext_status, export_logs, status
 from .upgrade import (
     VPK_PREV,
     _online,
     _online_info,
     _online_loop,
-    _online_public,
     _online_task,
-    _task_print,
-    _vpk_rollback_task,
     upgrade_check,
     upgrade_online,
     upgrade_rollback,
@@ -78,8 +71,6 @@ __all__ = [
     "quit",
     "start_background",
     "hotkey_conflicts",
-    "HOTKEYS",
-    "DATA_SOURCES",
     "VPK_PREV",
 ]
 

@@ -410,12 +410,6 @@ def is_connected(q):
         return bool(sub and sub.alive)
 
 
-def connection_info(q):
-    with _lock:
-        sub = _queues.get(id(q))
-        return (sub.conn if sub else None), _seq
-
-
 def mark_dequeued(q):
     """SSE 从队列取走一条后调用，让退出排空能及时结束等待"""
     with _lock:
@@ -689,11 +683,6 @@ def _bye_all_locked():
         _remove_sub_locked(sub)
     _idle.notify_all()
     return sent
-
-
-def bye_all():
-    with _idle:
-        return _bye_all_locked()
 
 
 def drain_and_bye(timeout=1.0):

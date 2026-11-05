@@ -3,7 +3,7 @@
 会话循环只管线程、暂停、计时、停止和输出通道；这里只写盘点的「一轮」：
 读光标、认物品、记格子、出新格 HUD、收尾时算对账。
 
-2026-10-30 重构阶段 4 删了 services.py，用到的任务模块运行时才取，避免互相 import：
+用到的任务模块运行时才取，避免互相 import：
 _T("mining").xxx = tasks/mining.py，_H().xxx = app/hud_state.py，
 _T("count")._read_item / _count_review = tasks/count.py。
 """

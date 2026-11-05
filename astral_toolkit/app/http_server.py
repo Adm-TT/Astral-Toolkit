@@ -17,9 +17,6 @@ from . import bus
 from . import ui_stream
 from .http_writes import WRITES
 
-# 2026-10-30 阶段 4：services.py 删了。import tasks 这一层会把全部任务模块加载好（tasks/__init__.py），
-# tasks.goals / tasks.navigation 在 import 时登记数据包清缓存函数，和原来 import services 时顺带做的一样早
-
 WEB = Path(__file__).resolve().parent / "web"
 mimetypes.add_type(
     "font/woff2", ".woff2"
@@ -195,7 +192,7 @@ class Handler(BaseHTTPRequestHandler):
             while True:
                 try:
                     msg = q.get(timeout=5)
-                    self.wfile.write(bus.encode(msg).encode("utf-8"))
+                    self.wfile.write(ui_stream.encode(msg).encode("utf-8"))
                 except queue.Empty:
                     self.wfile.write(b": ping\n\n")
                 self.wfile.flush()

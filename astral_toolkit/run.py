@@ -117,17 +117,6 @@ def _pip_uninstall(*pkgs):
     )
 
 
-def _has_directml():
-    """现在装着显卡版识别组件 onnxruntime-directml"""
-    try:
-        from importlib import metadata
-
-        metadata.version("onnxruntime-directml")
-        return True
-    except Exception:
-        return False
-
-
 def use_directml():
     """识别组件换成显卡版（onnxruntime-directml）：先装显卡版，装上了再卸 CPU 版 onnxruntime，
     再强制重装一遍显卡版（两个包装在同一个 onnxruntime 目录里，卸 CPU 版会把显卡版的文件一起删掉）。

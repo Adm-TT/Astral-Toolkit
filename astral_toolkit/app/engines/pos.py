@@ -1,6 +1,5 @@
 """实时位置读取（右上角调试信息，_Pos）和日志位置跟踪（_LogWatch）
 
-2026-10-28 从 app/services.py 原样剪出来（逻辑没改）。2026-10-30 重构阶段 4 删了 services.py，
 用到的函数 / 变量直接到它们所在的模块取，运行时才取，避免互相 import：
 _T("mining").xxx = tasks/mining.py，_H().xxx = app/hud_state.py。
 用到：WIN, _nav, status

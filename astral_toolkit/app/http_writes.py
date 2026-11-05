@@ -64,11 +64,6 @@ class HttpWritesService:
         with self._cond:
             return sum(self._active.values())
 
-    @property
-    def active_routes(self) -> dict[str, int]:
-        with self._cond:
-            return dict(self._active)
-
     def _format_error(self) -> str:
         parts = [f"{name}×{count}" for name, count in sorted(self._active.items())]
         return "在途写未结束：" + "，".join(parts)

@@ -1,6 +1,6 @@
 """路标、折跃光环与导航业务任务模块（Task: Navigation & Halo）
 
-从 app/services.py 中解耦出来，专职处理：
+专职处理：
 1. 地点搜索、最近地点推荐、站点识别与导航路线规划；
 2. 实时/手动定位模式切换、雷达信号重命名；
 3. 路标增删改查、剪贴板坐标导入与 /showlocation 实时抓取；
@@ -16,6 +16,7 @@ import time
 from typing import Any, Protocol
 
 from ..app import bus
+from .system.settings import hotkey_conflicts
 
 
 class _NavLike(Protocol):
@@ -80,17 +81,6 @@ _HERE = {"name": None, "until": 0.0, "thread": None}
 _MARKING = {
     "on": False
 }  # 热键记路标正在等 /showlocation（只有它会用「新建」填的名字；一键定位、原矿记录不会）
-
-# 游戏里的热键：(设置名, 默认键, 名字)。撞键时排在前面的生效（顺序和以前一样：物品识别 > 记路标 > 一键定位 > 问题反馈 > 采矿助手 > 盘点）
-HOTKEYS = [
-    ("trade_capture_key", "F8", "物品识别"),
-    ("mark_key", "", "记录路标"),
-    ("fix_key", "", "一键定位"),
-    ("report_key", "F10", "问题反馈"),
-    ("live_key", "F5", "采矿助手开关"),
-    ("count_key", "F6", "盘点"),
-    ("ore_key", "", "原矿记录"),
-]
 
 _HALO = {
     "plan": None,
@@ -749,37 +739,7 @@ def _area_now():
     return v
 
 
-# ---------------------------------------------------------------- 热键与冲突检测
-def _hotkey_values(cfg):
-    """→ [(键, 名字, 设置名)]，按生效顺序；没设的键是空字符串"""
-    return [
-        (str(cfg.get(n, d) or "").strip().upper(), lab, n) for n, d, lab in HOTKEYS
-    ]  # 设成空 = 不绑（不回到默认键）
-
-
-def hotkey_conflicts(cfg=None):
-    """热键撞了（settings.json 手改的、旧版本留下的）：只有排在前面的生效，要明确告诉玩家哪个失效"""
-    if cfg is None:
-        try:
-            from ..core import settings
-
-            cfg = settings.load()
-        except Exception:
-            cfg = {}
-    out, seen = [], {}
-    for key, lab, name in _hotkey_values(cfg):
-        if not key:
-            continue
-        if key in seen:
-            tail = "，或在聊天框输入 /showlocation" if name == "fix_key" else ""
-            out.append(
-                f"{key} 同时用于「{seen[key]}」和「{lab}」，按下只执行「{seen[key]}」：需在设置页更换「{lab}」的按键{tail}"
-            )
-        else:
-            seen[key] = lab
-    return out
-
-
+# ---------------------------------------------------------------- 热键提示
 def fix_key_hint():
     """导航面板上的定位提示：热键能用就说按哪个键，被占用了就说自己输 /showlocation"""
     key = settings_key("fix_key", "")
@@ -1269,7 +1229,6 @@ __all__ = [
     "AREA_MAX_AGE",
     "HERE_WAIT",
     "_HERE",
-    "HOTKEYS",
     "_HALO",
     "QT_SPEED",
     # 核心函数
@@ -1291,8 +1250,6 @@ __all__ = [
     "waypoint_from_text",
     "_where_now",
     "_area_now",
-    "_hotkey_values",
-    "hotkey_conflicts",
     "fix_key_hint",
     "settings_key",
     "_wp_log",

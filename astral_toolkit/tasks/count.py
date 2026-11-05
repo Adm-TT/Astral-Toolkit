@@ -1,6 +1,6 @@
 """F6 仓库物品盘点任务模块（Task: Inventory Count & Audit）
 
-从 app/services.py 中解耦出来，专职处理：
+专职处理：
 1. 鼠标悬停网格物品快速读取与解析（_read_item）；
 2. 盘点记录与账面库存比对生成对账单（_count_review）；
 3. 盘点状态控制与自动化流程（count_toggle, count_state）；

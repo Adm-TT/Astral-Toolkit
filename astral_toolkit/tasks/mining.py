@@ -1,6 +1,6 @@
 """采矿助手、实时读屏与扫描破碎方案业务任务模块（Task: Mining & Scanner）
 
-从 app/services.py 中解耦提取，专职处理：
+专职处理：
 1. 采矿助手主循环启停控制与配置同步；
 2. 实时扫描面板：装配输入，计算在 mining/analysis.py，排版在 app/presenters/mining.py；
 3. 采矿激光头与模组配置、自造加成计算与预设管理；

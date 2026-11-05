@@ -243,10 +243,6 @@ def _inks(cells):
     return (mid > INK).sum(axis=(1, 2)) * real
 
 
-def _cell_ink(cell):
-    return int(_inks(cell[None])[0])
-
-
 def _corr(a, b):
     a = a.reshape(-1) - a.mean()
     b = b.reshape(-1) - b.mean()
@@ -736,7 +732,6 @@ class Glyphs:
 
 # ---------------------------------------------------------------- 校准（从文字识别的结果里学）和对外接口
 
-NEEDED_LINE = re.compile(r"Zone|player\s*location|CamDir|FPS|Planet", re.I)
 _state = {"glyphs": None, "h": None, "tried_load": False, "font_at": 0.0, "fails": 0}
 
 

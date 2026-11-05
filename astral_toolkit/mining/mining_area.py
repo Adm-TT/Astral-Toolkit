@@ -296,8 +296,3 @@ def area_for_spot(spot, g):
         return (rocks_table().get("areas") or {}).get(name)
     a = area(g, spot.get("sys"))
     return (a or {}).get("rocks") or None
-
-
-def filter_text(a):
-    """悬浮窗上的地点小注：（基格带）"""
-    return f"（{a['zh']}）" if a and a.get("zh") else ""

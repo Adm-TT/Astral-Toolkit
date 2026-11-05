@@ -7,7 +7,6 @@
 
 import collections
 import io
-import json
 import queue
 import sys
 import threading
@@ -159,10 +158,6 @@ def unsubscribe(q):
 def clients():
     with _lock:
         return len(_subs)
-
-
-def encode(msg):
-    return "data: " + json.dumps(msg, ensure_ascii=False, default=str) + "\n\n"
 
 
 # ---------------------------------------------------------------- print() → 窗口日志
