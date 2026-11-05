@@ -44,7 +44,8 @@ SOURCE_ORDER = ("shop", "loot", "wiki", "loc")
 
 
 # ---------------------------------------------------------------- 调用适配
-# 以后几批拆代码只改这一节：现在全部直接调 tasks.trade / tasks.hover。
+# IQ-B5 起物品查询三项调窗口接口（app/api/trade → tasks/catalog + app/presenters/catalog）；
+# 全局搜索、商店导航、市场、F8 照旧调 tasks.trade / tasks.hover（全局搜索和 F8 经 tasks/trade 的旧壳）。
 def call_search(q=""):
     from astral_toolkit.tasks import trade
 
@@ -52,21 +53,21 @@ def call_search(q=""):
 
 
 def call_item_search(q=""):
-    from astral_toolkit.tasks import trade
+    from astral_toolkit.app.api import trade as api
 
-    return trade.item_search(q)
+    return api.item_search(q=q)
 
 
 def call_item_info(name="", zh="", id=None, loot=True, exact=False):
-    from astral_toolkit.tasks import trade
+    from astral_toolkit.app.api import trade as api
 
-    return trade.item_info(name, zh, id, loot, exact)
+    return api.item_info(name=name, zh=zh, id=id, loot=loot, exact=exact)
 
 
 def call_item_loot(name="", zh=""):
-    from astral_toolkit.tasks import trade
+    from astral_toolkit.app.api import trade as api
 
-    return trade.item_loot(name, zh)
+    return api.item_loot(name=name, zh=zh)
 
 
 def call_nav_shop(shop="", place=""):
@@ -950,9 +951,9 @@ def _collect_f8(items, box, tmp, rows):
         shop_zh = shop.get("zh") or ""
         if not _has_cjk(shop_zh):
             try:
-                from astral_toolkit.tasks import trade as trade_mod
+                from astral_toolkit.tasks import catalog as catalog_mod
 
-                shop_zh = trade_mod._zh_of(shop_en) or shop_zh
+                shop_zh = catalog_mod._zh_of(shop_en) or shop_zh
             except Exception:
                 pass
 

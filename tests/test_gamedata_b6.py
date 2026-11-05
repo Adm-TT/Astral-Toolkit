@@ -679,16 +679,16 @@ def test_trade_names_module_has_no_toplevel_gamedata_import():
             assert not any("gamedata" in m for m in mods), (name, mods)
 
 
-def test_tasks_trade_zh_of_refreshes_with_table(monkeypatch, tmp_path):
+def test_tasks_catalog_zh_of_refreshes_with_table(monkeypatch, tmp_path):
     import astral_toolkit.gamedata as G
-    from astral_toolkit.tasks import trade as T
+    from astral_toolkit.tasks import catalog as C
 
     _b6(monkeypatch, tmp_path)
-    assert T._zh_of("Medpen") == "医疗笔"
-    assert T._zh_of("LAWSON MINING LASER") == "劳森"
+    assert C._zh_of("Medpen") == "医疗笔"
+    assert C._zh_of("LAWSON MINING LASER") == "劳森"
     _write_min_sources(
         tmp_path, **{**_B6_SOURCES, "zh_names.json": {"新医疗笔": "Medpen"}}
     )
     G.rebuild()  # 更新数据后：以前反查表挂在函数属性上永不失效（矩阵 §9 第 4 条）
-    assert T._zh_of("Medpen") == "新医疗笔"
-    assert T._zh_of("LAWSON MINING LASER") == ""
+    assert C._zh_of("Medpen") == "新医疗笔"
+    assert C._zh_of("LAWSON MINING LASER") == ""

@@ -698,6 +698,110 @@ def test_nav_presenter_imports():
         assert _nav_presenter_violations(bad), bad
 
 
+_CATALOG_PRESENTER_FORBIDDEN = (
+    "astral_toolkit.gamedata",
+    "astral_toolkit.tasks",
+    "astral_toolkit.runtime",
+    "astral_toolkit.bootstrap",
+    "astral_toolkit.crafting",
+    "astral_toolkit.trade",
+    "astral_toolkit.mining",
+    "astral_toolkit.navigation",
+    "astral_toolkit.infrastructure",
+    "astral_toolkit.app.engines",
+    "astral_toolkit.app.overlay",
+    "astral_toolkit.app.hud_state",
+    "astral_toolkit.core.settings",
+    "astral_toolkit.core.paths",
+    "sqlite3",
+    "urllib",
+    "threading",
+)
+_CATALOG_USE_CASE_FORBIDDEN = (
+    "astral_toolkit.app",
+    "astral_toolkit.runtime",
+    "astral_toolkit.bootstrap",
+)
+_CATALOG_PRESENTER_MODULE = "astral_toolkit.app.presenters.catalog"
+
+
+def _catalog_presenter_violations(source):
+    mods = list(_imports_in_source(source, "astral_toolkit.app.presenters"))
+    return _forbidden(mods, _CATALOG_PRESENTER_FORBIDDEN) + _dynamic_imports(source)
+
+
+def _catalog_use_case_violations(source):
+    mods = list(_imports_in_source(source, "astral_toolkit.tasks"))
+    return _forbidden(mods, _CATALOG_USE_CASE_FORBIDDEN) + _dynamic_imports(source)
+
+
+def _catalog_presenter_imports(source, pkg):
+    return [
+        mod
+        for mod in _imports_in_source(source, pkg)
+        if mod == _CATALOG_PRESENTER_MODULE
+        or mod.startswith(_CATALOG_PRESENTER_MODULE + ".")
+    ]
+
+
+def test_catalog_presenter_imports():
+    """物品查询展示层只排版：不取数据，不碰任务 / 运行环境 / 设置，也不动态导入。"""
+    path = _ROOT / "app" / "presenters" / "catalog.py"
+    source = path.read_text(encoding="utf-8")
+    assert _catalog_presenter_violations(source) == [], path.name
+    for bad in (
+        "from ...gamedata import items",
+        "from ...tasks import catalog",
+        "from ...crafting import acquire",
+        "from ...trade.names import table",
+        "def f():\n    from ...runtime.session import Tick\n",
+        "import sqlite3",
+        "import threading",
+        "import importlib\nimportlib.import_module('astral_toolkit.tasks.catalog')",
+    ):
+        assert _catalog_presenter_violations(bad), bad
+
+
+def test_catalog_use_cases_stay_below_app():
+    """物品查询用例不反向拿 app / runtime / bootstrap，也不动态导入。"""
+    path = _ROOT / "tasks" / "catalog.py"
+    source = path.read_text(encoding="utf-8")
+    assert _catalog_use_case_violations(source) == [], path.name
+    for bad in (
+        "from ..app.presenters import catalog",
+        "from ..app import bus",
+        "def f():\n    from ..runtime import session\n",
+        "from ..bootstrap import build",
+        "import importlib\nimportlib.import_module('astral_toolkit.gamedata')",
+    ):
+        assert _catalog_use_case_violations(bad), bad
+
+
+def test_only_trade_shell_imports_catalog_presenter():
+    """IQ-B5 过渡：tasks 里只有 tasks/trade.py 旧壳能 import 展示层；IQ-B6/B7 删壳后收紧成一个都不许。"""
+    files = list((_ROOT / "tasks").rglob("*.py"))
+    assert files
+    bad = []
+    for path in files:
+        source = path.read_text(encoding="utf-8")
+        # 相对导入按文件自己所在的包解析：tasks/system/x.py 里的 ... 才是 astral_toolkit
+        pkg = ".".join(("astral_toolkit", *path.relative_to(_ROOT).parent.parts))
+        if _catalog_presenter_imports(source, pkg):
+            rel = path.relative_to(_ROOT).as_posix()
+            if rel != "tasks/trade.py":
+                bad.append(rel)
+    assert bad == [], bad
+    assert _catalog_presenter_imports(
+        "from ..app.presenters import catalog as p", "astral_toolkit.tasks"
+    )
+    assert (
+        _catalog_presenter_imports(
+            "from ..app.presenters import mining", "astral_toolkit.tasks"
+        )
+        == []
+    )
+
+
 _MUTABLE = (
     ast.Dict,
     ast.List,
