@@ -7,7 +7,6 @@ from types import SimpleNamespace
 
 from astral_toolkit.app.engines import nav as navmod
 from astral_toolkit.navigation import navigate as N
-from astral_toolkit.tasks import mining as M
 
 
 class _Clock:
@@ -140,7 +139,7 @@ def test_nav_view_far_city_and_plain(monkeypatch):
         "city": True,
         "city_zh": "目标城",
     }
-    assert M._nav_view(here, city_target, {}) == {
+    assert navmod._nav_view(here, city_target, {}) == {
         "text": "这里",
         "inside": True,
         "body": "本星",
@@ -149,7 +148,7 @@ def test_nav_view_far_city_and_plain(monkeypatch):
     }
 
     plain_target = {"b": "B2"}
-    assert M._nav_view(here, plain_target, {}) == {
+    assert navmod._nav_view(here, plain_target, {}) == {
         "text": "这里",
         "inside": True,
         "body": "本星",
@@ -177,7 +176,7 @@ def test_nav_view_same_body_steady_and_arrived(monkeypatch):
         "lon": 2.0,
     }
     target = {"b": "B1", "p": (4.0, 5.0, 6.0)}
-    assert M._nav_view(here, target, {}) == {
+    assert navmod._nav_view(here, target, {}) == {
         "text": "这里",
         "inside": True,
         "body": "本星",
@@ -194,7 +193,7 @@ def test_nav_view_same_body_steady_and_arrived(monkeypatch):
         "arrived": False,
         "near": None,
     }
-    assert M._nav_view(here, target, {}, steady=lambda brg: brg - 20.0) == {
+    assert navmod._nav_view(here, target, {}, steady=lambda brg: brg - 20.0) == {
         "text": "这里",
         "inside": True,
         "body": "本星",
@@ -217,7 +216,7 @@ def test_nav_view_same_body_steady_and_arrived(monkeypatch):
         surface_km=lambda a, t, r: 0.5,
         compass=lambda brg: "东",
     )
-    assert M._nav_view(here, target, {}) == {
+    assert navmod._nav_view(here, target, {}) == {
         "text": "这里",
         "inside": True,
         "body": "本星",
@@ -254,7 +253,7 @@ def test_nav_view_city_uses_prev(monkeypatch):
     }
     target = {"b": "B1", "city": True, "up": (0.0, 1.0, 0.0)}
     prev = {"city": True, "arrived": True}
-    assert M._nav_view(here, target, {}, prev=prev) == {
+    assert navmod._nav_view(here, target, {}, prev=prev) == {
         "text": "这里",
         "inside": True,
         "body": "本星",
@@ -298,7 +297,7 @@ def test_nav_view_hint_boundary(monkeypatch):
         deg_text=lambda brg: "88.8",
         nearby=lambda here, data: (3.2, {"n": "附近点"}),
     )
-    out = M._nav_view(here, target, {})
+    out = navmod._nav_view(here, target, {})
     assert out["near"] == {"name": "附近点", "km": 3.2}
     assert (
         out["hint"]
@@ -312,7 +311,7 @@ def test_nav_view_hint_boundary(monkeypatch):
         label=lambda p: p["n"],
         deg_text=lambda brg: "88.8",
     )
-    assert "hint" not in M._nav_view(here, target, {})
+    assert "hint" not in navmod._nav_view(here, target, {})
 
     _install_nav(
         monkeypatch,
@@ -321,7 +320,7 @@ def test_nav_view_hint_boundary(monkeypatch):
         label=lambda p: p["n"],
         deg_text=lambda brg: "88.8",
     )
-    assert "hint" not in M._nav_view(here, target, {})
+    assert "hint" not in navmod._nav_view(here, target, {})
 
 
 def test_space_view_same_and_other_system(monkeypatch):
@@ -338,7 +337,7 @@ def test_space_view_same_and_other_system(monkeypatch):
         space_text=lambda g, target, data: "同一星系",
         SYS_ZH={"S1": "一号"},
     )
-    assert M._space_view((0.0, 0.0, 0.0), {"b": "@S1"}, {}) == {
+    assert navmod._space_view((0.0, 0.0, 0.0), {"b": "@S1"}, {}) == {
         "space": True,
         "same_body": False,
         "inside": False,
@@ -358,7 +357,7 @@ def test_space_view_same_and_other_system(monkeypatch):
         space_text=lambda g, target, data: "另一星系",
         SYS_ZH={"S1": "一号"},
     )
-    assert M._space_view((0.0, 0.0, 0.0), {"b": "@S1"}, {}) == {
+    assert navmod._space_view((0.0, 0.0, 0.0), {"b": "@S1"}, {}) == {
         "space": True,
         "same_body": False,
         "inside": False,
@@ -372,7 +371,7 @@ def test_space_view_same_and_other_system(monkeypatch):
         space_text=lambda g, target, data: "另一星系",
         SYS_ZH={},
     )
-    assert M._space_view((0.0, 0.0, 0.0), {"b": "@S1"}, {})["far"] == (
+    assert navmod._space_view((0.0, 0.0, 0.0), {"b": "@S1"}, {})["far"] == (
         "目标位于 S1星系，需先跃迁到该星系"
     )
 
@@ -393,7 +392,7 @@ def test_station_view_branches(monkeypatch):
         station_text=lambda g, target, data, when, arrived: "到站",
         CITY_NEAR_M=500.0,
     )
-    assert M._station_view(g, target_same, {}) == {
+    assert navmod._station_view(g, target_same, {}) == {
         "space": True,
         "city": True,
         "station": True,
@@ -413,7 +412,7 @@ def test_station_view_branches(monkeypatch):
         target_global=lambda target, data, when=None, ref=None: (999999.0, 0.0, 0.0),
         SYS_ZH={"S2": "二号"},
     )
-    assert M._station_view(g, target_other, {}) == {
+    assert navmod._station_view(g, target_other, {}) == {
         "space": True,
         "city": True,
         "station": True,
@@ -427,7 +426,7 @@ def test_station_view_branches(monkeypatch):
         system_info=lambda g, data, **kw: ("S1", True),
         target_global=lambda target, data, when=None, ref=None: (60000.0, 0.0, 0.0),
     )
-    assert M._station_view(g, {"city_zh": "远站"}, {}) == {
+    assert navmod._station_view(g, {"city_zh": "远站"}, {}) == {
         "space": True,
         "city": True,
         "station": True,
@@ -446,7 +445,7 @@ def test_station_view_branches(monkeypatch):
         station_text=lambda g, target, data, when, arrived: f"到了 {arrived}",
         CITY_NEAR_M=20000.0,
     )
-    assert M._station_view(g, target_same, {}) == {
+    assert navmod._station_view(g, target_same, {}) == {
         "space": True,
         "city": True,
         "station": True,
@@ -468,7 +467,7 @@ def test_station_view_branches(monkeypatch):
         station_text=lambda g, target, data, when, arrived: f"到了 {arrived}",
         CITY_NEAR_M=20000.0,
     )
-    assert M._station_view(g, target_same, {}) == {
+    assert navmod._station_view(g, target_same, {}) == {
         "space": True,
         "city": True,
         "station": True,
@@ -490,7 +489,7 @@ def test_station_view_branches(monkeypatch):
         station_text=lambda g, target, data, when, arrived: "没到",
         CITY_NEAR_M=1000.0,
     )
-    assert M._station_view(g, {"b": "@S1"}, {}) == {
+    assert navmod._station_view(g, {"b": "@S1"}, {}) == {
         "space": True,
         "city": True,
         "station": True,
@@ -915,12 +914,12 @@ def test_marker_clear_missing_hud_or_marker_does_not_raise():
 
 def test_nav_log_line_with_and_without_local(monkeypatch, tmp_path):
     clock = _Clock(1234.5)
-    monkeypatch.setattr(M, "time", clock)
+    monkeypatch.setattr(navmod, "time", clock)
     monkeypatch.setattr("astral_toolkit.core.paths.log", lambda name: tmp_path / name)
     here = {"src": "ocr", "x": 1.25, "y": 2.5, "z": -3.75}
     view = {"raw_bearing": 12.34, "bearing": 45.6, "surface": 1.239}
-    M._nav_log(here, {"local_ok": True, "local": [1.23456, 2.34567, 3.0]}, view)
-    M._nav_log(here, {"local_ok": False, "local": None}, view)
+    navmod.nav_log(here, {"local_ok": True, "local": [1.23456, 2.34567, 3.0]}, view)
+    navmod.nav_log(here, {"local_ok": False, "local": None}, view)
     assert (tmp_path / "nav_log.txt").read_text(encoding="utf-8").splitlines() == [
         "12:00:00 来源=ocr 核对=True 游戏局部=(1.2346, 2.3457, 3.0) "
         "用的=(1.2500, 2.5000, -3.7500) 方位=12.3° 显示=46° 距离=1.24km",
@@ -931,7 +930,7 @@ def test_nav_log_line_with_and_without_local(monkeypatch, tmp_path):
 
 def test_nav_log_trims_to_last_thousand_lines_before_append(monkeypatch, tmp_path):
     clock = _Clock(1700000000.125)
-    monkeypatch.setattr(M, "time", clock)
+    monkeypatch.setattr(navmod, "time", clock)
     monkeypatch.setattr("astral_toolkit.core.paths.log", lambda name: tmp_path / name)
     log = tmp_path / "nav_log.txt"
     old = [f"old-{i:04d}-" + "x" * 400 for i in range(1, 1101)]
@@ -939,7 +938,7 @@ def test_nav_log_trims_to_last_thousand_lines_before_append(monkeypatch, tmp_pat
     assert log.stat().st_size > 300_000
     here = {"src": "ocr", "x": 1.25, "y": 2.5, "z": -3.75}
     view = {"raw_bearing": 12.34, "bearing": 45.6, "surface": 1.239}
-    M._nav_log(here, {"local_ok": True, "local": None}, view)
+    navmod.nav_log(here, {"local_ok": True, "local": None}, view)
     lines = log.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 1001
     assert lines[0] == old[100]
@@ -981,7 +980,7 @@ def test_nav_view_hint_needs_more_than_30_km(monkeypatch):
         label=lambda p: p["n"],
         deg_text=lambda brg: "88.8",
     )
-    assert M._nav_view(here, target, {})["hint"] == (
+    assert navmod._nav_view(here, target, {})["hint"] == (
         "距离过远：先量子跳跃到 量子点（距目标 1.0 km），再朝 88.8° 飞行"
     )
 
@@ -998,7 +997,7 @@ def test_station_view_50_km_boundary(monkeypatch):
             station_text=lambda g, target, data, when, arrived: "到站",
             CITY_NEAR_M=500.0,
         )
-        out = M._station_view(g, {"city_zh": "远站", "sys": "S1"}, {})
+        out = navmod._station_view(g, {"city_zh": "远站", "sys": "S1"}, {})
         assert ("far" in out) is far, d
         assert out["direct_m"] == d
 
@@ -1006,7 +1005,7 @@ def test_station_view_50_km_boundary(monkeypatch):
 def test_nav_log_trims_only_above_300000_bytes(monkeypatch, tmp_path):
     """边界：正好 300000 字节不截；多 1 字节就只留最后 1000 行再追加"""
     clock = _Clock(1700000000.125)
-    monkeypatch.setattr(M, "time", clock)
+    monkeypatch.setattr(navmod, "time", clock)
     monkeypatch.setattr("astral_toolkit.core.paths.log", lambda name: tmp_path / name)
     log = tmp_path / "nav_log.txt"
     here = {"src": "ocr", "x": 1.25, "y": 2.5, "z": -3.75}
@@ -1015,7 +1014,7 @@ def test_nav_log_trims_only_above_300000_bytes(monkeypatch, tmp_path):
     for extra, want in ((0, 1501), (1, 1001)):
         log.write_bytes((("z" if extra else "") + body).encode("utf-8"))
         assert log.stat().st_size == 300_000 + extra
-        M._nav_log(here, {"local_ok": True, "local": None}, view)
+        navmod.nav_log(here, {"local_ok": True, "local": None}, view)
         assert len(log.read_text(encoding="utf-8").splitlines()) == want, extra
 
 
@@ -1029,7 +1028,9 @@ def test_station_view_updown_sign(monkeypatch):
         station_text=lambda g, target, data, when, arrived: "到站",
         CITY_NEAR_M=500.0,
     )
-    out = M._station_view((0.0, 0.0, 0.0), {"sys": "S1", "up": (0.0, 1.0, 0.0)}, {})
+    out = navmod._station_view(
+        (0.0, 0.0, 0.0), {"sys": "S1", "up": (0.0, 1.0, 0.0)}, {}
+    )
     assert out["updown"] == 300.0
 
 
@@ -1046,4 +1047,17 @@ def test_nav_view_arrived_needs_less_than_1_km(monkeypatch):
     }
     for surface, arrived in ((1.0, False), (0.999, True), (1.5, False)):
         _install_nav(monkeypatch, surface_km=lambda a, t, r, s=surface: s)
-        assert M._nav_view(here, target, {})["arrived"] is arrived, surface
+        assert navmod._nav_view(here, target, {})["arrived"] is arrived, surface
+
+
+def test_station_view_passes_reading_time_to_target_global(monkeypatch):
+    """站内视图把读数时间传给 target_global（站跟着星球转，算目标坐标要用读数那一刻）"""
+    seen = []
+    _install_nav(
+        monkeypatch,
+        target_global=lambda target, data, when=None, ref=None: (
+            seen.append(when) or (0.0, 0.0, 0.0)
+        ),
+    )
+    navmod._station_view((0.0, 0.0, 0.0), {"sys": "S1"}, {}, when=123.0)
+    assert seen == [123.0]

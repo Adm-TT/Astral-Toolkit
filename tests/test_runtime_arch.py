@@ -457,6 +457,108 @@ def test_infrastructure_stays_below_app():
         assert _forbidden(mods, _INFRA_FORBIDDEN), source
 
 
+_NAV_PURE_FORBIDDEN = (
+    "astral_toolkit.app",
+    "astral_toolkit.tasks",
+    "astral_toolkit.runtime",
+    "astral_toolkit.bootstrap",
+    "astral_toolkit.infrastructure",
+    "astral_toolkit.core.settings",
+    "astral_toolkit.core.capture",
+    "astral_toolkit.core.paths",
+    "astral_toolkit.system",
+)
+_NAV_PRESENTER_FORBIDDEN = (
+    "astral_toolkit.runtime",
+    "astral_toolkit.infrastructure",
+    "astral_toolkit.tasks",
+    "astral_toolkit.app.engines",
+    "astral_toolkit.app.overlay",
+    "astral_toolkit.app.hud_state",
+    "astral_toolkit.core.settings",
+    "astral_toolkit.core.capture",
+    "astral_toolkit.system",
+)
+
+
+def _nav_engine_violations(source):
+    mods = list(_imports_in_source(source, "astral_toolkit.app.engines"))
+    dynamic = [d for d in _dynamic_imports(source) if d != "open"]
+    calls = _calls_named(source, ("_T", "_H"))
+    defs = [
+        node.name
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name in ("_T", "_H")
+    ]
+    return _forbidden(mods, ("astral_toolkit.tasks",)) + dynamic + calls + defs
+
+
+def _pure_navigation_violations(source):
+    mods = list(_imports_in_source(source, "astral_toolkit.navigation"))
+    dynamic = [d for d in _dynamic_imports(source) if d != "open"]
+    return _forbidden(mods, _NAV_PURE_FORBIDDEN) + dynamic
+
+
+def _nav_presenter_violations(source):
+    mods = list(_imports_in_source(source, "astral_toolkit.app.presenters"))
+    dynamic = [d for d in _dynamic_imports(source) if d != "open"]
+    return _forbidden(mods, _NAV_PRESENTER_FORBIDDEN) + dynamic
+
+
+def test_nav_engine_does_not_reach_into_tasks():
+    """导航引擎只在 bootstrap 接好的依赖上跑：不再静态 / 动态导入 tasks，也不再留 _T / _H。"""
+    path = _ROOT / "app/engines/nav.py"
+    source = path.read_text(encoding="utf-8")
+    assert _nav_engine_violations(source) == [], path.name
+    for bad in (
+        "from ...tasks import navigation",
+        "import importlib\nimportlib.import_module('astral_toolkit.tasks.navigation')",
+        "def _T(name):\n    return name",
+        "x = _T('navigation')",
+        "x = _H()",
+    ):
+        assert _nav_engine_violations(bad), bad
+
+
+def test_navigation_views_and_marker_stay_pure():
+    """视图和记号只算数：不反向拿 app / tasks / runtime / 设置；记号还不读时间。"""
+    for name in ("views.py", "marker.py"):
+        path = _ROOT / "navigation" / name
+        source = path.read_text(encoding="utf-8")
+        assert _pure_navigation_violations(source) == [], name
+    marker = (_ROOT / "navigation" / "marker.py").read_text(encoding="utf-8")
+    marker_mods = list(_imports_in_source(marker, "astral_toolkit.navigation"))
+    assert _forbidden(marker_mods, ("time",)) == []
+    for bad in (
+        "from ..app import bus",
+        "from astral_toolkit.tasks import mining",
+        "from ..runtime.session import Tick",
+        "import importlib\nimportlib.import_module('astral_toolkit.app')",
+    ):
+        assert _pure_navigation_violations(bad), bad
+    for bad_time in ("import time", "from time import monotonic"):
+        mods = list(_imports_in_source(bad_time, "astral_toolkit.navigation"))
+        assert _forbidden(mods, ("time",)), bad_time
+
+
+def test_nav_presenter_imports():
+    """导航展示层只读展示模型和 navigation 纯计算，不回头拿运行环境 / 任务 / 引擎。"""
+    path = _ROOT / "app/presenters/nav.py"
+    source = path.read_text(encoding="utf-8")
+    assert _nav_presenter_violations(source) == [], path.name
+    for bad in (
+        "from ...runtime.session import Tick",
+        "from ...tasks import navigation",
+        "from ..engines import nav",
+        "from ..overlay import Overlay",
+        "from ..hud_state import _hud",
+        "from ...core.settings import load",
+        "import importlib\nimportlib.import_module('astral_toolkit.tasks.navigation')",
+    ):
+        assert _nav_presenter_violations(bad), bad
+
+
 _MUTABLE = (
     ast.Dict,
     ast.List,

@@ -4,7 +4,6 @@
 1. 采矿助手主循环启停控制与配置同步；
 2. 实时扫描面板：装配输入，计算在 mining/analysis.py，排版在 app/presenters/mining.py；
 3. 采矿激光头与模组配置、自造加成计算与预设管理；
-4. 导航视图薄壳与导航日志（HUD 记号 NV-B3 已搬进 app/engines/nav.py；这些 NV-B4 搬走）。
 """
 
 import sys  # noqa: F401
@@ -63,62 +62,6 @@ def _goal_for(*args, **kwargs):
 
 def _goal_text(*args, **kwargs):
     return _t_goals._goal_text(*args, **kwargs)
-
-
-# ---------------------------------------------------------------- 导航视图薄壳与导航日志（NV-B4 搬进导航引擎）
-def _nav_log(here, info, view):
-    """导航时每次算出新位置记一行（logs/nav_log.txt），方向不对时用来查是哪一步的问题"""
-    try:
-        from ..core import paths
-
-        p = paths.log("nav_log.txt")
-        if p.exists() and p.stat().st_size > 300_000:
-            p.write_text(
-                "\n".join(p.read_text(encoding="utf-8").splitlines()[-1000:]) + "\n",
-                encoding="utf-8",
-            )
-        loc = info.get("local")
-        line = (
-            f"{time.strftime('%H:%M:%S')} 来源={here.get('src', '?')} 核对={info.get('local_ok')} "
-            f"游戏局部={tuple(round(v, 4) for v in loc) if loc else None} "
-            f"用的=({here['x']:.4f}, {here['y']:.4f}, {here['z']:.4f}) "
-            f"方位={view.get('raw_bearing', 0):.1f}° 显示={view.get('bearing', 0):.0f}° 距离={view.get('surface', 0):.2f}km"
-        )
-        with open(p, "a", encoding="utf-8") as f:
-            f.write(line + "\n")
-    except Exception:
-        pass
-
-
-def _space_view(g, target, data):
-    """导航去太空路标：没有南北，给直线距离、先量子跳到哪、对准哪个标记偏几度"""
-    from ..navigation import views as _views
-    from ..app.presenters import nav as _present_nav
-
-    return _present_nav.space_view(_views.space_facts(g, target, data), g, target, data)
-
-
-def _station_view(g, target, data, when=None, prev=None, info=None):
-    """拉格朗日点 / 跳跃点空间站里走路：距离按米、按站自己的朝向分上下；转向靠机头那一行和屏幕记号"""
-    from ..navigation import views as _views
-    from ..app.presenters import nav as _present_nav
-
-    return _present_nav.station_view(
-        _views.station_facts(g, target, data, when, prev, info),
-        g,
-        target,
-        data,
-        when,
-    )
-
-
-def _nav_view(here, target, data, steady=None, prev=None):
-    from ..navigation import views as _views
-    from ..app.presenters import nav as _present_nav
-
-    return _present_nav.ground_view(
-        _views.ground_facts(here, target, data, prev), here, target, data, steady
-    )
 
 
 # ---------------------------------------------------------------- 实时读屏与扫描面板解析
@@ -497,11 +440,6 @@ __all__ = [
     # 常量与状态
     "MOD_GROUPS",
     "STAT_ZH",
-    # 依赖与辅助
-    "_nav_log",
-    "_space_view",
-    "_station_view",
-    "_nav_view",
     # 读屏与扫描
     "_game_front",
     "scan_view",

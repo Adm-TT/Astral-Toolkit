@@ -89,21 +89,21 @@ STATION_NAMES = [
 
 # ---------------------------------------------------------------- 调用适配
 def call_nav_view(here, target, data, steady=None, prev=None):
-    from astral_toolkit.tasks import mining
+    from astral_toolkit.app.engines import nav
 
-    return mining._nav_view(here, target, data, steady=steady, prev=prev)
+    return nav._nav_view(here, target, data, steady=steady, prev=prev)
 
 
 def call_station_view(g, target, data, when=None, prev=None, info=None):
-    from astral_toolkit.tasks import mining
+    from astral_toolkit.app.engines import nav
 
-    return mining._station_view(g, target, data, when=when, prev=prev, info=info)
+    return nav._station_view(g, target, data, when=when, prev=prev, info=info)
 
 
 def call_space_view(g, target, data):
-    from astral_toolkit.tasks import mining
+    from astral_toolkit.app.engines import nav
 
-    return mining._space_view(g, target, data)
+    return nav._space_view(g, target, data)
 
 
 def make_marker(positions, live):
@@ -117,9 +117,9 @@ def call_marker_tick(marker, target, data, state, shown, ref=None):
 
 
 def call_nav_log(here, info, view):
-    from astral_toolkit.tasks import mining
+    from astral_toolkit.app.engines import nav
 
-    return mining._nav_log(here, info, view)
+    return nav.nav_log(here, info, view)
 
 
 def call_mark_diag(why):
@@ -184,7 +184,6 @@ class _Sandbox:
         self.geometry = dict(GEOM_A)
         self.last_fov = None
         self.fg_mode = "true"
-        self.M = None
         self._saved: list[tuple[Any, str, Any]] = []
 
     def __enter__(self):
@@ -193,11 +192,7 @@ class _Sandbox:
         from astral_toolkit.core import capture, paths, settings as settings_mod
         from astral_toolkit.navigation import displayinfo
         from astral_toolkit.system import showloc
-        from astral_toolkit.tasks import mining as M
 
-        self.M = M
-
-        self._patch(M, "time", self.clock)
         self._patch(nav_mod, "time", self.clock)
         self._patch(settings_mod, "load", self._load_settings)
         self._patch(paths, "log", self._log)

@@ -20,6 +20,7 @@ from .app.engines.nav import (
     _Nav,
     _NavMarker,
     _Steady,
+    NavLinks,
     marker_diag,
 )
 from .app.engines.pos import _LogWatch, _Pos
@@ -150,6 +151,18 @@ def _nav_marker(pos: Any, live: Any, mode: str) -> _NavMarker:
     )
 
 
+def _nav_links() -> NavLinks:
+    """导航引擎要用的导航任务函数（NV-B4）：以前经 `_T("navigation")` 动态取，现在在这里接。"""
+    from .tasks import navigation as navigation_tasks
+
+    return NavLinks(
+        log=navigation_tasks._wp_log,
+        fix_key_hint=navigation_tasks.fix_key_hint,
+        place_row=navigation_tasks._place_row,
+        setting=navigation_tasks.settings_key,
+    )
+
+
 def build(
     mode: str = "desktop", *, overrides: Mapping[str, Any] | None = None
 ) -> DesktopApp:
@@ -181,7 +194,8 @@ def build(
         output = BusOutput()
 
     pos = _Pos()
-    cam_filter = _CamFilter()
+    links = _nav_links()
+    cam_filter = _CamFilter(log=links.log)
     steady = _Steady()
     game_events = _GameEvents(on_qt_arrived=pos.request_read_now)
     live = _Live(
@@ -201,6 +215,7 @@ def build(
         clock=options.get("clock"),
         closing=lifecycle.is_closing,
         marker=_nav_marker(pos, live, mode),
+        links=links,
     )
     count = _Count(
         results,

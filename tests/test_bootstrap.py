@@ -192,6 +192,20 @@ def test_nav_marker_is_wired_by_bootstrap():
     assert marker._diag is navmod.marker_diag
 
 
+def test_nav_links_are_wired_by_bootstrap():
+    app = bootstrap.build("test")
+    try:
+        links = app.nav._links
+        assert links is app.nav._worker._links
+        assert links.log is nav_tasks._wp_log
+        assert links.fix_key_hint is nav_tasks.fix_key_hint
+        assert links.place_row is nav_tasks._place_row
+        assert links.setting is nav_tasks.settings_key
+        assert app.cam_filter._log is links.log
+    finally:
+        bootstrap.shutdown(app, budget=0.2)
+
+
 def test_build_rejects_bad_mode_and_unknown_overrides():
     _assert_error(ValueError, "mode", lambda: bootstrap.build("prod"))
     _assert_error(

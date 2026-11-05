@@ -1570,7 +1570,6 @@ def test_displayinfo_local_cross_checked_with_campos():
 def test_nav_bearing_is_steady_when_standing_still(monkeypatch, tmp_path):
     """站着不动：右上角那行有时认不出，位置也不在「游戏给的」和「推算的」之间来回跳，显示的方位不变"""
     from astral_toolkit.navigation import navigate as n
-    from astral_toolkit.tasks import mining as t_mining
     import astral_toolkit.app.engines.nav as nav_mod
 
     if not n.CACHE.exists():
@@ -1608,7 +1607,7 @@ def test_nav_bearing_is_steady_when_standing_still(monkeypatch, tmp_path):
                 local_ok=True if local else None,
             )
             shown.add(
-                n.deg_text(t_mining._nav_view(h, target, n.load(), steady)["bearing"])
+                n.deg_text(nav_mod._nav_view(h, target, n.load(), steady)["bearing"])
             )
         assert len(shown) == 1
     finally:
@@ -4507,8 +4506,8 @@ def test_game_events_from_log(tmp_path):
 def test_city_nav(monkeypatch, tmp_path):
     """城内导航：读 city_places.json（坏行跳过、改了文件重读），按米显示、8 米内到达、上下楼层提示"""
     import json  # noqa: F811
+    import astral_toolkit.app.engines.nav as nav_mod
     from astral_toolkit.navigation import navigate as n
-    from astral_toolkit.tasks import mining as t_mining
 
     rows = [
         {
@@ -4576,11 +4575,11 @@ def test_city_nav(monkeypatch, tmp_path):
     assert n._short(dict(here, body="Hurston"), t).startswith("先量子跳到")
 
     monkeypatch.setattr(n, "here_text", lambda h, data: "")
-    v = t_mining._nav_view(here, t, {})
+    v = nav_mod._nav_view(here, t, {})
     assert (
         v["city"] and not v["arrived"] and 45 < v["direct_m"] < 60 and v["updown"] > 10
     )
-    assert t_mining._nav_view(near, t, {})["arrived"]
+    assert nav_mod._nav_view(near, t, {})["arrived"]
 
 
 def test_city_nav_review(monkeypatch, tmp_path):

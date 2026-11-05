@@ -123,7 +123,7 @@ class _FakeLoop:
             assert not self.assert_not_fix_locked.locked()
 
 
-def _make_nav(monkeypatch, marker=None):
+def _make_nav(monkeypatch, marker=None, links=None):
     pos = _FakePos()
     loop_holder = {}
     nav = navmod._Nav(
@@ -133,6 +133,7 @@ def _make_nav(monkeypatch, marker=None):
         None,
         output=object(),
         marker=marker,
+        links=links,
         _loop_factory=lambda worker, **kw: loop_holder.setdefault(
             "loop", _FakeLoop(worker, **kw)
         ),
@@ -342,6 +343,105 @@ def _fix_worker():
     return worker, session, ctx
 
 
+class _RecordingLinks:
+    def __init__(self):
+        self.logs = []
+        self.hints = 0
+        self.placed = []
+        self.settings = []
+
+    def log(self, msg):
+        self.logs.append(msg)
+
+    def fix_key_hint(self):
+        self.hints += 1
+        return "F9", "一键定位：按 F9"
+
+    def place_row(self, target):
+        self.placed.append(target)
+        return {"key": "x", "label": "目标A"}
+
+    def setting(self, key, default):
+        self.settings.append((key, default))
+        return default
+
+
+class _CommitLoop:
+    def __init__(self):
+        self.commits = []
+
+    def commit(self, session, *ops):
+        self.commits.append((session, ops))
+        return True
+
+
+def test_worker_uses_injected_links(monkeypatch):
+    links = _RecordingLinks()
+    wired = navmod.NavLinks(
+        log=links.log,
+        fix_key_hint=links.fix_key_hint,
+        place_row=links.place_row,
+        setting=links.setting,
+    )
+    nav, _pos, _loop = _make_nav(monkeypatch, links=wired)
+    target = {"n": "X", "b": "Daymar", "t": "Planet", "qt": 0}
+    result = nav.start(target)
+    assert result.status == "started"
+    assert links.placed == [target]
+    assert links.settings == [("nav_mode", "auto")]
+
+    from astral_toolkit.navigation import navigate as n
+
+    worker = navmod._NavWorker(_FakePos(), _FakeCam(), threading.Lock(), links=wired)
+    commit_loop = _CommitLoop()
+    worker.loop = commit_loop
+    payload = navmod.NavPayload(target, {"key": "x", "label": "目标A"}, True)
+    session = Session(2, threading.Event(), payload)
+    ctx = navmod._NavCtx(2, payload)
+    monkeypatch.setattr(n, "label", lambda value: "目标A")
+    monkeypatch.setattr(
+        n,
+        "fix_guide",
+        lambda fixes, tgt, prev_arrived=False: {
+            "same_system": True,
+            "direct": 123,
+            "arrived": False,
+            "city": None,
+            "close": False,
+            "deviation": None,
+            "delta": None,
+            "eta": None,
+            "qt": None,
+            "aim": None,
+        },
+    )
+    monkeypatch.setattr(n, "fix_text", lambda f, key: f"按 {key} 定位")
+    fixed = worker._apply_fix(session, ctx, (1000.0, 2000.0, 3000.0), "clip")
+    assert fixed is not None
+    assert commit_loop.commits
+    assert links.hints == 1
+    assert any("太空导航定位" in msg for msg in links.logs)
+
+    worker.on_error(session, ctx, ValueError("坏了"))
+    assert any("导航出错" in msg for msg in links.logs)
+
+
+def test_cam_filter_logs_through_injected_log():
+    messages = []
+    cam_filter = navmod._CamFilter(log=messages.append)
+    assert cam_filter.check((30, 0, 90), fast=True) == (30, 0, 90)
+    assert cam_filter.check((-30, 0, 90), fast=True) is None
+    assert cam_filter.check((-30, 0, 90), fast=True) is None
+    assert cam_filter.check((-30, 0, 90), fast=True) == (-30, 0, 90)
+    assert messages and "连着 3 帧字模读数一致" in messages[-1]
+
+    quiet = navmod._CamFilter()
+    assert quiet.check((30, 0, 90), fast=True) == (30, 0, 90)
+    assert quiet.check((-30, 0, 90), fast=True) is None
+    assert quiet.check((-30, 0, 90), fast=True) is None
+    assert quiet.check((-30, 0, 90), fast=True) == (-30, 0, 90)
+
+
 def test_fix_request_error_does_not_kill_nav():
     """一次 F9 定位抛异常：只算这次无效，tick 不往外抛（不触发导航重试 / 出错关闭）"""
     worker, session, ctx = _fix_worker()
@@ -373,13 +473,12 @@ def test_fix_request_cancelled_is_not_applied():
 def test_space_steer_follows_camera_while_hovering(monkeypatch):
     """停着不动（坐标没变）转机头：转向提示要跟着新一帧的镜头方向重算，不能冻在上一帧（负责人 2026-11-03 截图：右转 43° 实际该左转 14°）"""
     from astral_toolkit.navigation import navigate as n
-    from astral_toolkit.tasks import mining as t_mining
 
     monkeypatch.setattr(n, "load", lambda: {"bodies": {}, "pois": [], "points": []})
     monkeypatch.setattr(n, "locate", lambda *a, **k: {"inside": False, "body": None})
     monkeypatch.setattr(n, "read_clipboard", lambda: "")
     monkeypatch.setattr(
-        t_mining, "_space_view", lambda g, t, d: {"space": True, "arrived": False}
+        navmod, "_space_view", lambda g, t, d: {"space": True, "arrived": False}
     )
     monkeypatch.setattr(n, "space_text", lambda g, t, d: "直线 13.8 km")
     huds = []
@@ -424,3 +523,126 @@ def test_space_steer_follows_camera_while_hovering(monkeypatch):
     n_before = len(huds)
     worker.tick(session, ctx, later + 0.1)  # 同一帧不重复处理
     assert len(huds) == n_before + 1 and huds[-1] == huds[-2]
+
+
+def _ground_worker(pos):
+    class Loop:
+        def __init__(self):
+            self.ops = []
+
+        def commit(self, session, *ops):
+            self.ops.append(ops)
+            return True
+
+    worker = navmod._NavWorker(pos, _FakeCam(), threading.Lock())
+    worker.loop = Loop()
+    payload = navmod.NavPayload({"n": "X", "b": "B"}, {"key": "x"}, False)
+    session = Session(1, threading.Event(), payload)
+    ctx = navmod._NavCtx(1, payload)
+    return worker, session, ctx
+
+
+def test_ground_first_tick_and_status_use_di_help(monkeypatch):
+    """地面导航：第一圈的帮助文字、一直读不到时的状态都用 DI_HELP（NV-B4 常量搬进引擎后锁住文字）"""
+    from astral_toolkit.navigation import navigate as n
+
+    assert navmod.DI_HELP == (
+        "未检测到右上角位置信息：在游戏中按 ~ 打开控制台，输入 r_DisplayInfo 2 后回车"
+    )
+    for name, value in (
+        ("label", lambda t: "目标"),
+        ("load", lambda: {}),
+        ("read_clipboard", lambda: ""),
+        ("parse_clip", lambda clip: None),
+    ):
+        monkeypatch.setattr(n, name, value)
+    worker, session, ctx = _ground_worker(_FakePos())
+    assert worker._first_tick(session, ctx) is True
+    first = [op for op in worker.loop.ops[0] if op[0] == "bus"][0][2]
+    assert first["help"] == navmod.DI_HELP
+
+    ctx.first = False
+    worker._ground_tick(session, ctx, time.time())
+    assert ctx.state["status"] == navmod.DI_HELP + "（或在聊天框输入 /showlocation）"
+
+
+def test_ground_tick_uses_current_frame_only_within_live_stale(monkeypatch):
+    """刚开导航时用位置服务的「当前一帧」：3 秒以内的才用，旧了就等新读数（NV-B4 LIVE_STALE 搬进引擎后锁住）"""
+    from astral_toolkit.navigation import navigate as n
+
+    class _Located(Exception):
+        pass
+
+    located = []
+
+    def locate(*a, **k):
+        located.append(a)
+        raise _Located
+
+    for name, value in (
+        ("locate", locate),
+        ("label", lambda t: "目标"),
+        ("read_clipboard", lambda: ""),
+        ("parse_clip", lambda clip: None),
+    ):
+        monkeypatch.setattr(n, name, value)
+    assert navmod.LIVE_STALE == 3.0
+    for age, used in ((2.5, True), (5.0, False)):
+        located.clear()
+        now = time.time()
+        pos = _FakePos()
+        pos.current = (now - age, (1.0, 2.0, 3.0), {"t": now - age})
+        worker, session, ctx = _ground_worker(pos)
+        ctx.data = {}
+        ctx.first = False
+        ctx.seen_cur = pos.current[0]  # 同一坐标的新一帧那条已经处理过
+        try:
+            worker._ground_tick(session, ctx, now)
+        except _Located:
+            pass
+        assert bool(located) is used, age
+
+
+def test_ground_tick_logs_nav_line_only_when_position_changes(monkeypatch):
+    """地面导航：坐标变了才记一行导航日志；停着只转镜头（同一坐标的新一帧）不记（NV-B4 nav_log 搬进引擎后锁住）"""
+    from astral_toolkit.navigation import navigate as n
+
+    logs = []
+    monkeypatch.setattr(navmod, "nav_log", lambda here, info, view: logs.append(here))
+    monkeypatch.setattr(
+        navmod,
+        "_nav_view",
+        lambda here, goal, data, steady=None, prev=None: {
+            "bearing": 10.0,
+            "arrived": False,
+        },
+    )
+    for name, value in (
+        ("locate", lambda g, **k: {"x": g[0], "y": g[1], "z": g[2], "body": "B"}),
+        ("is_city", lambda t: False),
+        ("is_space", lambda t: False),
+        ("near_text", lambda here, data: ""),
+        ("_short", lambda *a: "短"),
+        ("label", lambda t: "目标"),
+        ("read_clipboard", lambda: ""),
+        ("parse_clip", lambda clip: None),
+    ):
+        monkeypatch.setattr(n, name, value)
+    now = time.time()
+    pos = _FakePos()
+    g = (1.0, 2.0, 3.0)
+    pos.latest = (now, g, {"t": now})
+    pos.current = pos.latest
+    worker, session, ctx = _ground_worker(pos)
+    ctx.data = {}
+    ctx.first = False
+    ctx.state["here"] = {}  # 不走「刚开始用 current」那条
+    worker._ground_tick(session, ctx, now)
+    assert len(logs) == 1
+    pos.current = (now + 1.0, g, {"t": now + 1.0})  # 坐标没变，读到了新一帧
+    worker._ground_tick(session, ctx, now + 1.0)
+    assert len(logs) == 1
+    pos.latest = (now + 2.0, (4.0, 5.0, 6.0), {"t": now + 2.0})  # 坐标变了
+    pos.current = pos.latest
+    worker._ground_tick(session, ctx, now + 2.0)
+    assert len(logs) == 2
