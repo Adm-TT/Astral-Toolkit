@@ -12,30 +12,16 @@
   同一档里基础款排在涂装 / 限定版（名字带引号的）前面，有商店或掉落数据的排在前面，短的在前
 - 英文：完全一样 > 开头对得上 > 包含 > 每个词都有（顺序不限）
 
-纯匹配、排序、建索引在 catalog/search.py；本文件只留 gamedata 取数、缓存、锁和对外旧名字。
+纯匹配、排序、建索引在 catalog/search.py；本文件只留 gamedata 取数、缓存、锁。
 """
 
 from ..catalog import search as _catalog_search
-from ..contracts import textkeys as _textkeys
 from ..gamedata._cache import VersionCache
-
-en_key = _textkeys.en_key
-zh_key = _textkeys.zh_key
 
 _cache = VersionCache()  # 索引按库的内容版本缓存一份
 _build_lock = __import__(
     "threading"
 ).Lock()  # 启动时后台先建索引；玩家这时搜索就等它建完，不重复建
-
-# 搬进 catalog.search 的纯函数，旧私有名继续指同一个对象（gamedata/_import 和测试还在用）
-_has_cjk = _catalog_search.has_cjk
-_variant = _catalog_search.variant
-_trigrams = _catalog_search.trigrams
-_wiki_noise = _catalog_search.wiki_noise
-_subseq = _catalog_search.subseq
-_rank_zh = _catalog_search.rank_zh
-_rank_en = _catalog_search.rank_en
-_empty_index = _catalog_search.empty_index
 
 
 def _build():
@@ -69,7 +55,7 @@ def _build_locked():
             return _cache.get(snap, _index_from)
     except gamedata.GamedataError:
         return (
-            _empty_index()
+            _catalog_search.empty_index()
         )  # 库建不出来：和以前没有数据文件一样，搜不到东西，不报错（不缓存，下次再试）
 
 

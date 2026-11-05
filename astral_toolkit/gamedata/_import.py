@@ -59,9 +59,8 @@ def _known_en(sources: dict[str, SourceBytes]) -> set[str]:
 
 def _names_table(sources: dict[str, SourceBytes]) -> dict[str, str]:
     """中英对照表的组装规则（唯一一份；迁移前在 trade/names.table()，107a760 之前）：去假英文名；zh_only_names 只补中文 ≥3 字且还没有的。
-    用到的 trade/names._junk / contracts.textkeys.norm_zh / contracts.textkeys.fold_en / _CODE 改了要升 gamedata/_schema.IMPORTER_VERSION"""
-    from ..contracts.textkeys import norm_zh as _norm_zh
-    from ..trade.names import _junk
+    用到的 contracts.textkeys.junk_en / norm_zh / fold_en / CODE_NAME 改了要升 gamedata/_schema.IMPORTER_VERSION"""
+    from ..contracts.textkeys import junk_en as _junk, norm_zh as _norm_zh
 
     zh_names = _d(sources, "zh_names.json", None)
     if zh_names is None:
@@ -121,9 +120,13 @@ def import_wiki_rows(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) 
 
 
 def import_items(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> None:
+    from ..catalog.search import (
+        has_cjk as _has_cjk,
+        variant as _variant,
+        wiki_noise as _wiki_noise,
+    )
     from ..contracts.textkeys import en_key, zh_key
     from ..core.i18n import gear_zh_of_item
-    from ..crafting.itemsearch import _has_cjk, _variant, _wiki_noise
 
     by_en: dict[str, dict] = {}
     rows: list[dict] = []

@@ -596,6 +596,211 @@ def test_catalog_imports_stdlib_or_contracts_only():
         assert bad == [], f"{path.name}: {bad}"
 
 
+_GAMEDATA_REVERSE_ROOTS = ("astral_toolkit.crafting", "astral_toolkit.trade")
+_GAMEDATA_REVERSE_ALLOWED = {
+    "astral_toolkit.crafting.crafting": {"_fold_name", "_search_norm", "assign_keys"}
+}
+
+
+def _module_under(module, root):
+    return module == root or module.startswith(root + ".")
+
+
+def _gamedata_reverse_imports(source, package):
+    """gamedata 里对 crafting / trade 的 import：只剩 crafting.crafting 的三个规则名。"""
+    bad = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.ImportFrom):
+            module = _textkeys_resolve_from(node, package)
+            if not any(_module_under(module, root) for root in _GAMEDATA_REVERSE_ROOTS):
+                continue
+            allowed = _GAMEDATA_REVERSE_ALLOWED.get(module, set())
+            for alias in node.names:
+                if alias.name not in allowed:
+                    bad.append(f"{module}: {alias.name}")
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if any(
+                    _module_under(alias.name, root) for root in _GAMEDATA_REVERSE_ROOTS
+                ):
+                    bad.append(f"{alias.name}: <module>")
+    return bad
+
+
+def test_gamedata_reverse_imports_only_crafting_rules_left():
+    """gamedata 只还许拿 crafting.crafting 的制造规则，别的 crafting / trade 都不许。"""
+    assert _gamedata_reverse_imports(
+        "def f():\n    from ..crafting.itemsearch import _has_cjk\n",
+        "astral_toolkit.gamedata",
+    )
+    assert (
+        _gamedata_reverse_imports(
+            "def f():\n    from ..crafting.crafting import assign_keys\n",
+            "astral_toolkit.gamedata",
+        )
+        == []
+    )
+    assert _gamedata_reverse_imports(
+        "from ..trade.names import _junk\n", "astral_toolkit.gamedata"
+    )
+    files = list((_ROOT / "gamedata").rglob("*.py"))
+    assert files
+    bad = []
+    for path in files:
+        source = path.read_text(encoding="utf-8")
+        for hit in _gamedata_reverse_imports(source, _textkeys_package_for(path)):
+            bad.append(f"{path.relative_to(_ROOT).as_posix()}: {hit}")
+    assert bad == [], bad
+
+
+_PRODUCT_CODE_KEY_MODULES = {
+    "astral_toolkit.crafting.shops": {"_fold"},
+    "astral_toolkit.crafting.loot": {"_fold"},
+    "astral_toolkit.crafting.wikelo": {"_fold"},
+    "astral_toolkit.trade.gamekey": {"_fold"},
+    "astral_toolkit.trade.names": {"_fold_en", "_norm_zh"},
+}
+_PRODUCT_CODE_KEY_DEFINERS = {
+    "crafting/shops.py",
+    "crafting/loot.py",
+    "crafting/wikelo.py",
+    "trade/gamekey.py",
+    "trade/names.py",
+}
+
+
+def _product_code_module_aliases(tree, package):
+    aliases = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            base = _textkeys_resolve_from(node, package)
+            for alias in node.names:
+                full = f"{base}.{alias.name}" if base else alias.name
+                if full in _PRODUCT_CODE_KEY_MODULES:
+                    aliases[alias.asname or alias.name] = full
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.asname and alias.name in _PRODUCT_CODE_KEY_MODULES:
+                    aliases[alias.asname] = alias.name
+    return aliases
+
+
+def _attr_expr(node):
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        base = _attr_expr(node.value)
+        if base:
+            return f"{base}.{node.attr}"
+    return None
+
+
+def _product_code_key_imports(source, package):
+    tree = ast.parse(source)
+    bad = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        module = _textkeys_resolve_from(node, package)
+        banned = _PRODUCT_CODE_KEY_MODULES.get(module, set())
+        for alias in node.names:
+            if alias.name in banned:
+                bad.append(f"{module}: {alias.name}")
+    aliases = _product_code_module_aliases(tree, package)
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Attribute):
+            continue
+        expr = _attr_expr(node.value)
+        if not expr:
+            continue
+        if expr in aliases:
+            module = aliases[expr]
+        elif expr in _PRODUCT_CODE_KEY_MODULES:
+            module = expr
+        else:
+            head, _, tail = expr.partition(".")
+            base = aliases.get(head)
+            module = f"{base}.{tail}" if base and tail else (base or expr)
+        banned = _PRODUCT_CODE_KEY_MODULES.get(module, set())
+        if node.attr in banned:
+            bad.append(f"{module}: {node.attr}")
+    return bad
+
+
+def test_product_code_takes_name_keys_from_contracts():
+    """产品代码要拿 contracts.textkeys 的名字键，不拿 crafting / trade 里的私有别名。"""
+    assert _product_code_key_imports(
+        "from ..crafting import shops\nshops._fold('a')\n",
+        "astral_toolkit.crafting",
+    )
+    assert (
+        _product_code_key_imports(
+            "from ..contracts.textkeys import fold_en_loose\n",
+            "astral_toolkit.crafting",
+        )
+        == []
+    )
+    files = list(_ROOT.rglob("*.py"))
+    assert files
+    bad = []
+    for path in files:
+        rel = path.relative_to(_ROOT).as_posix()
+        if rel in _PRODUCT_CODE_KEY_DEFINERS:
+            continue
+        for hit in _product_code_key_imports(
+            path.read_text(encoding="utf-8"), _textkeys_package_for(path)
+        ):
+            bad.append(f"{rel}: {hit}")
+    assert bad == [], bad
+
+
+def _trade_shell_uses(source, package):
+    bad = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.ImportFrom):
+            module = _textkeys_resolve_from(node, package)
+            if module == "astral_toolkit.tasks.trade":
+                for alias in node.names:
+                    if alias.name == "item_search":
+                        bad.append("astral_toolkit.tasks.trade: item_search")
+        elif isinstance(node, ast.Attribute) and node.attr == "item_search":
+            call = node.value
+            if (
+                isinstance(call, ast.Call)
+                and isinstance(call.func, ast.Name)
+                and call.func.id == "_T"
+                and call.args
+                and isinstance(call.args[0], ast.Constant)
+                and call.args[0].value == "trade"
+            ):
+                bad.append('_T("trade").item_search')
+    return bad
+
+
+def test_item_search_shell_only_for_stock_and_global_search():
+    """tasks.trade.item_search 旧壳只给库存（新库存做完删），别处拿就是又长回去了。"""
+    assert _trade_shell_uses("from .trade import item_search\n", "astral_toolkit.tasks")
+    assert (
+        _trade_shell_uses(
+            "from .trade import trade, mineral_search\n", "astral_toolkit.tasks"
+        )
+        == []
+    )
+    assert _trade_shell_uses('_T("trade").item_search("x")\n', "astral_toolkit.tasks")
+    files = list(_ROOT.rglob("*.py"))
+    assert files
+    bad = []
+    for path in files:
+        rel = path.relative_to(_ROOT).as_posix()
+        if rel in ("tasks/trade.py", "tasks/stock.py"):
+            continue
+        for hit in _trade_shell_uses(
+            path.read_text(encoding="utf-8"), _textkeys_package_for(path)
+        ):
+            bad.append(f"{rel}: {hit}")
+    assert bad == [], bad
+
+
 _NAV_PURE_FORBIDDEN = (
     "astral_toolkit.app",
     "astral_toolkit.tasks",

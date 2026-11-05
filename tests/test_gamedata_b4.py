@@ -240,7 +240,8 @@ def _legacy_find(tmp_path, name_en="", name_zh=""):
     """迁移前 crafting/loot.py 的 find + _folded_rows + _wiki_classes（行号 L92-159），只在测试里存在：直接读最小源的 JSON"""
     import json
 
-    from astral_toolkit.crafting.loot import _VARIANT, _fold
+    from astral_toolkit.catalog.loot import VARIANT as _VARIANT
+    from astral_toolkit.crafting.loot import _fold
 
     f = tmp_path / "loot_index.json"
     idx = json.loads(f.read_text(encoding="utf-8")) if f.exists() else None
@@ -703,6 +704,7 @@ _DETAILS = {
 def test_info_and_text_equal_legacy_on_sample(monkeypatch, tmp_path):
     import json
 
+    from astral_toolkit.catalog.loot import PLACED
     from astral_toolkit.crafting import loot
 
     _find_setup(monkeypatch, tmp_path)
@@ -749,7 +751,7 @@ def test_info_and_text_equal_legacy_on_sample(monkeypatch, tmp_path):
     loot.close_bundle()
     assert new == old
     texts = "\n".join(t for t in new[1::2] if t)
-    assert "等 8 类" in texts and "…还有" in texts and loot.PLACED in texts
+    assert "等 8 类" in texts and "…还有" in texts and PLACED in texts
     assert (
         new[4] == {"pending": True} and "暂时取不到" in new[5]
     )  # 明细本机没有：离线挂起、在线断网报错

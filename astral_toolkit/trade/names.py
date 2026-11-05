@@ -38,19 +38,6 @@ def table() -> dict[str, str]:
     return _cache("table").get_for(pairs, lambda: {p.zh: p.en for p in pairs})
 
 
-# 汉化包里物品「简称」带出来的假英文名（1.6.41）：简称后面跟的是尺寸、型号代码，不是英文名，
-# 比如「视差步枪HD」拆成 视差步枪 → HD、「制空-3 Omnisky-3 S1」→ S1、导弹简称「[红外]灾星 XII-IR」、「刀轴Arbor S00」。
-# 以前的对照表里有两百多条这种，「视差步枪」搜出来是 HD。真有这个名字的物品（锡 Tin、墨水 INK）照留。
-# _CODE / _junk / _fold_en / _norm_zh 被 gamedata/_import.py 复用（库里存的是过滤后的结果）：改这里要升 gamedata/_schema.IMPORTER_VERSION
-_CODE = re.compile(r"(?:[GIVX]+-[A-Z]{1,3}|\d+\s?SCU|.+\sS\d{1,2})")
-
-
-def _junk(en, known):
-    if _fold_en(en) in known:
-        return False
-    return len(_fold_en(en)) <= 3 or bool(_CODE.fullmatch(en.strip()))
-
-
 def has_chinese(text: str) -> bool:
     return bool(CJK.search(text or ""))
 

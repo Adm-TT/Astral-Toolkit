@@ -248,7 +248,7 @@ DDL: list[str] = [
     # crafting.json blueprints：标量列原样（源里是 null 的存 NULL，不存 ''——消费方 GEAR_ZH[(g, None)] 这类键靠它）；slots（含每槽的改装列表）、src 整段存 JSON——消费方吃嵌套树，拆表无查询收益；
     # u（实体 uuid）真实数据里有重复和空值，不作主键，用自增 id。bp_key = crafting.assign_keys 的「名字#序号」规则；
     # norm_n / norm_z = crafting._fold_name（for_item 规则），search_n / search_z = crafting._search_norm（search 规则）；
-    # item_id = itemsearch.en_key(n) 且在 items 表里才填（批 1 物品身份）
+    # item_id = contracts.textkeys.en_key(n) 且在 items 表里才填（批 1 物品身份）
     """CREATE TABLE blueprints (
         id INTEGER PRIMARY KEY,
         u TEXT,

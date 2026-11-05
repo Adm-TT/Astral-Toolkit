@@ -281,9 +281,6 @@ def nearest(item_id, here, n=3):
     return _catalog.nearest(out, n)
 
 
-base_names = _catalog.base_names
-
-
 def buyable(item_id):
     """有没有商店卖；库建不出来当没有"""
     from ..gamedata import GamedataError
@@ -301,7 +298,7 @@ def variants(name, limit=3):
     """同系列能在商店买到的物品：[(id, 名字, 类别)]，原型排前面"""
     cat = _folded_items()
     out, seen = [], set()
-    for b in base_names(name):
+    for b in _catalog.base_names(name):
         for iid, n, c in _catalog.variant_candidates(cat, b, name):
             if iid in seen:
                 continue

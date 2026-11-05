@@ -1,11 +1,9 @@
 """catalog/shops 的纯规则测试（乙：商店）。"""
 
-import inspect
 from types import SimpleNamespace
 
 from astral_toolkit.catalog import shops as catalog_shops
 from astral_toolkit.contracts.textkeys import fold_en_loose
-from astral_toolkit.crafting import shops as old_shops
 
 
 def _item(iid, name, cat="物品"):
@@ -102,17 +100,6 @@ def test_variant_candidates_require_all_words():
     ]
     got = catalog_shops.variant_candidates(rows, "Drake Cutlass", "Other")
     assert {iid for iid, _n, _c in got} == {1, 2}
-
-
-def test_old_shops_names_and_signatures():
-    assert str(inspect.signature(old_shops.find)) == "(query, limit=12)"
-    assert str(inspect.signature(old_shops.find_close)) == "(name, cutoff=0.88)"
-    assert str(inspect.signature(old_shops.where)) == "(item_id)"
-    assert str(inspect.signature(old_shops.nearest)) == "(item_id, here, n=3)"
-    assert str(inspect.signature(old_shops.variants)) == "(name, limit=3)"
-    assert str(inspect.signature(old_shops.base_names)) == "(name)"
-    assert old_shops.base_names is catalog_shops.base_names
-    assert old_shops._fold is fold_en_loose
 
 
 def test_find_partial_matches_shorter_names_first():
