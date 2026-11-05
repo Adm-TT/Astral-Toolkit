@@ -55,6 +55,9 @@ rem 单元测试（没装 pytest；新测试文件要加进 tests\run_all.py 的
 set "AT_FEEDBACK_OFF=1"
 .venv\Scripts\python.exe -X utf8 -m tests.run_all
 
+rem 垃圾代码检查（CI 每个 PR 都跑，全量测试也带着它）：和 tools\junk_baseline.json 登记的老问题比，只许减不许加；清掉老问题后按提示加 --write-baseline 收紧
+.venv\Scripts\python.exe -X utf8 tools\junk_check.py
+
 rem 构建（PyInstaller + ATShell；需打包依赖和 .NET SDK）
 .venv\Scripts\python.exe -m pip install --no-deps -r requirements-build.lock.txt
 .venv\Scripts\python.exe -X utf8 tools\build_standalone.py

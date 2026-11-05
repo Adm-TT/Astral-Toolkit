@@ -55,3 +55,8 @@ jobs:
       # 万一哪次 basedpyright 改写了基线，在这里红，别让它悄悄进分支
       - name: 确认基线没被改写
         run: git diff --exit-code -- .basedpyright/baseline.json
+
+      # 垃圾代码（没人用的函数、只剩测试在用的产品代码、复制粘贴、门面再导出没人用、新加的 noqa F401、过时说法）：
+      # 和 tools/junk_baseline.json 登记的老问题比，只许减不许加（2026-11-05 老大定每个 PR 都查）。只用标准库，不要游戏数据
+      - name: 垃圾代码检查
+        run: ./.venv/Scripts/python.exe -X utf8 tools/junk_check.py
