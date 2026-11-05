@@ -182,6 +182,24 @@ def load():
         return []
 
 
+# 矿石的写法差别：维科洛要「杰金矿石 / Jaclium (Ore)」，汉化包里物品叫「杰金 / Jaclium」
+_ORE = re.compile(r"\s*(?:[（(]\s*(?:ore|raw)\s*[）)]|矿石|原矿)\s*$", re.I)
+
+
+def _ore_base(name):
+    return _fold(_ORE.sub("", name or ""))
+
+
+def _full_name(name_en, name_zh):
+    """汉化包 / 矿物表里精确对得上的全名（F8 认准了的、物品查询页点开的），不是 OCR 截断的半截名字"""
+    from ..trade.names import canonical_exact
+
+    try:
+        return canonical_exact(name_zh or "", name_en or "") is not None
+    except Exception:
+        return False
+
+
 def _same(a, b):
     fa, fb = _fold(a), _fold(b)
     return bool(fa and fb) and (
@@ -206,6 +224,17 @@ def uses(name_en="", name_zh=""):
         if (name_en and _fold(r["n"]) == fe)
         or (name_zh and r["z"] and _fold(r["z"]) == fz)
     ]
+    if not hits and _full_name(name_en, name_zh):
+        # 全名不放宽成包含：「极地」Polar 会配上「Polaris 点数」、「岩层 臂甲 琥珀」配上「岩层 臂甲」、
+        # 弹匣配上枪（2026-11-06 老大问「维科洛兑换为啥要极地冷却器」）；只认矿石 / 原矿后缀这一种差别
+        be, bz = _ore_base(name_en), _ore_base(name_zh)
+        for c in load():
+            for r in c["req"]:
+                if (name_en and be and _ore_base(r["n"]) == be) or (
+                    name_zh and bz and r["z"] and _ore_base(r["z"]) == bz
+                ):
+                    hits.append((c, r["q"], r["u"]))
+        return hits
     if not hits:  # 名字被 OCR 截断时放宽成包含
         for c in load():
             for r in c["req"]:
