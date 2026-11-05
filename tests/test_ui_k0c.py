@@ -89,47 +89,7 @@ class _FakeCam:
         return cam
 
 
-class _FakeNavModule:
-    DI_HELP = "di help"
-    LIVE_STALE = 30.0
-
-    @staticmethod
-    def fix_key_hint():
-        return "X", "一键定位：按 X"
-
-    @staticmethod
-    def _wp_log(msg):
-        pass
-
-    @staticmethod
-    def settings_key(key, default=None):
-        return default
-
-    @staticmethod
-    def _place_row(target):
-        return {"key": "x", "label": "目标A"}
-
-
-class _FakeMiningModule:
-    @staticmethod
-    def _mark_hud(value):
-        pass
-
-    @staticmethod
-    def _marker_tick(*args, **kwargs):
-        return None
-
-
-def _fake_T(name):
-    if name == "navigation":
-        return _FakeNavModule
-    if name == "mining":
-        return _FakeMiningModule
-    raise ImportError(name)
-
-
 def _patch_nav(monkeypatch, arrived=False):
-    monkeypatch.setattr(navmod, "_T", _fake_T)
     monkeypatch.setattr(navigate, "label", lambda target: "目标A")
     monkeypatch.setattr(navigate, "read_clipboard", lambda: "")
     monkeypatch.setattr(navigate, "parse_clip", lambda clip: None)
@@ -166,6 +126,12 @@ def _new_nav(monkeypatch, arrived=False, retries=None, join_timeout=0.5):
         results=ResultStore(),
         output=BusOutput(),
         join_timeout=join_timeout,
+        links=navmod.NavLinks(
+            log=lambda msg: None,
+            fix_key_hint=lambda: ("X", "一键定位：按 X"),
+            place_row=lambda target: {"key": "x", "label": "目标A"},
+            setting=lambda key, default: default,
+        ),
     )
     if retries is not None:
         nav._worker.retries = retries

@@ -4,7 +4,6 @@
 1. 采矿助手主循环启停控制与配置同步；
 2. 实时扫描面板：装配输入，计算在 mining/analysis.py，排版在 app/presenters/mining.py；
 3. 采矿激光头与模组配置、自造加成计算与预设管理；
-4. 导航记号（Marker Tick）计算与投射、3D 空间站/太空指引与导览日志。
 """
 
 import sys  # noqa: F401
@@ -15,7 +14,6 @@ from types import MappingProxyType
 from typing import Any, Protocol
 
 # ---------------------------------------------------------------- 依赖（2026-10-30 重构阶段 3：不再经 services 转发）
-from ..app.hud_state import _hud
 from .. import gamedata
 from ..app.presenters import mining as _present
 from ..mining import analysis as _analysis
@@ -37,25 +35,18 @@ class _LiveLike(Protocol):
     def prev_stop_pending(self) -> bool: ...
 
 
-class _PositionsLike(Protocol):
-    """位置只用到 snapshot().current"""
-
-    def snapshot(self) -> Any: ...
-
-
 _live: _LiveLike | None = None
-_positions: _PositionsLike | None = None
-_UNBOUND = "tasks.mining 未绑定：先调用 bind(live, positions)"
+_UNBOUND = "tasks.mining 未绑定：先调用 bind(live)"
 
 
-def bind(live: _LiveLike, positions: _PositionsLike, *, replace: bool = False) -> None:
+def bind(live: _LiveLike, *, replace: bool = False) -> None:
     """组装处调用一次（B7 由 bootstrap 完成）；导入本模块不再取引擎、不再有副作用"""
-    global _live, _positions
-    if (_live is not None or _positions is not None) and not replace:
+    global _live
+    if _live is not None and not replace:
         raise RuntimeError(
             "tasks.mining 已绑定：生产只绑一次；测试用 replace=True 并在用完后恢复"
         )
-    _live, _positions = live, positions
+    _live = live
 
 
 def _need_live() -> _LiveLike:
@@ -65,188 +56,12 @@ def _need_live() -> _LiveLike:
     return live
 
 
-def _need_positions() -> _PositionsLike:
-    positions = _positions
-    if positions is None:
-        raise RuntimeError(_UNBOUND)
-    return positions
-
-
-def settings_key(k, default=None):
-    try:
-        from ..core import settings
-
-        return settings.load().get(k, default)
-    except Exception:
-        return default
-
-
 def _goal_for(*args, **kwargs):
     return _t_goals._goal_for(*args, **kwargs)
 
 
 def _goal_text(*args, **kwargs):
     return _t_goals._goal_text(*args, **kwargs)
-
-
-# ---------------------------------------------------------------- 导航记号与 3D HUD 投射
-def _mark_hud(data):
-    try:
-        _hud().marker(data)
-    except Exception:  # 测试里的假悬浮窗没有这个接口
-        pass
-
-
-_MK_CFG = {"on": True, "at": 0.0}
-
-
-def _marker_on():
-    """设置里的 nav_marker（两秒读一次，导航每 0.1 秒问一次）"""
-    if time.time() - _MK_CFG["at"] > 2:
-        _MK_CFG["at"] = time.time()
-        try:
-            from ..core import settings
-
-            _MK_CFG["on"] = settings.load().get("nav_marker", True) is not False
-        except Exception:
-            _MK_CFG["on"] = True
-    return _MK_CFG["on"]
-
-
-MARKER_STALE = 4.0  # 右上角多少秒没读到就收起导航记号（城里偶尔几次读不到，1.5 秒就收会一直闪，2026-10-27 实测）
-CAM_HOLD = 1.0  # 这一帧坐标有、镜头方向没读出：这么久以内读到的镜头方向接着用（按它自己的读取时间算，不当成新的）
-_CAM_LAST: dict[str, Any] = {"t": 0.0, "cam": None}
-_MK_WHY: dict[str, Any] = {"why": None}
-
-
-def _marker_tick(target, data, state, shown, ref=None):
-    """导航记号（2026-10-27）：每圈先判断该不该显示（还没算出位置、到了、跨星系、1.5 秒没读到、切出游戏、玩家关了、
-    采矿助手开着——记号窗口读屏时会被涂黑，会挡住扫描面板和雷达信号），不该显示就收起；
-    该显示且右上角有新截图（停着只转镜头也算）就按镜头朝向和视角重算位置。返回这次画的截图时间，收起了返回 None"""
-    from ..navigation import marker as _marker
-    from ..navigation import navigate as n
-    from ..system.showloc import game_foreground
-
-    t, g, info = _need_positions().snapshot().current
-    h = state.get("here")
-    cam = _marker.camera_hold((info or {}).get("camdir"), t, _CAM_LAST, CAM_HOLD)
-    try:
-        fg = game_foreground()
-    except Exception:
-        fg = True
-    why = _marker.hidden_reason(
-        h,
-        g,
-        cam,
-        t,
-        now=time.time,
-        stale=MARKER_STALE,
-        foreground=fg,
-        mining_running=lambda: _need_live().running(),
-        enabled=_marker_on,
-    )
-    if why != _MK_WHY["why"]:
-        _MK_WHY["why"] = why
-        _mark_diag(why)
-    if why:
-        if shown is not None:
-            _mark_hud(None)
-        return None
-    if t == shown:
-        return shown
-    try:
-        from ..navigation.displayinfo import last_fov
-        from ..core.capture import game_area
-        from ..app.presenters import nav as _present_nav
-
-        a = game_area()
-        fov = _marker.pick_fov(info.get("fov"), last_fov)
-        tg = n.target_global(target, data, info.get("t"), ref)
-        pr = n.project(
-            g,
-            cam,
-            fov,
-            tg,
-            a["width"],
-            a["height"],
-            vertical=settings_key("fov_axis", "v") != "h",
-        )
-        label = _present_nav.marker_label(pr["dist"])
-        model = _present_nav.marker_model(a, pr, label)
-        _mark_hud(model)
-        return t
-    except Exception:
-        _mark_hud(None)
-        return None
-
-
-def _mark_diag(why):
-    """导航记号收起 / 重新出来时记一行进 logs/di_log.txt（和读右上角的诊断放一起对时间，老大 11-03 实测「记号还会消失」）"""
-    try:
-        from ..core import paths
-
-        with paths.log("di_log.txt").open("a", encoding="utf-8") as f:
-            f.write(
-                f"{time.strftime('%H:%M:%S')}.{int(time.time() * 1000) % 1000:03d} "
-                f"记号 {'收起：' + why if why else '显示'}\n"
-            )
-    except Exception:
-        pass
-
-
-def _nav_log(here, info, view):
-    """导航时每次算出新位置记一行（logs/nav_log.txt），方向不对时用来查是哪一步的问题"""
-    try:
-        from ..core import paths
-
-        p = paths.log("nav_log.txt")
-        if p.exists() and p.stat().st_size > 300_000:
-            p.write_text(
-                "\n".join(p.read_text(encoding="utf-8").splitlines()[-1000:]) + "\n",
-                encoding="utf-8",
-            )
-        loc = info.get("local")
-        line = (
-            f"{time.strftime('%H:%M:%S')} 来源={here.get('src', '?')} 核对={info.get('local_ok')} "
-            f"游戏局部={tuple(round(v, 4) for v in loc) if loc else None} "
-            f"用的=({here['x']:.4f}, {here['y']:.4f}, {here['z']:.4f}) "
-            f"方位={view.get('raw_bearing', 0):.1f}° 显示={view.get('bearing', 0):.0f}° 距离={view.get('surface', 0):.2f}km"
-        )
-        with open(p, "a", encoding="utf-8") as f:
-            f.write(line + "\n")
-    except Exception:
-        pass
-
-
-def _space_view(g, target, data):
-    """导航去太空路标：没有南北，给直线距离、先量子跳到哪、对准哪个标记偏几度"""
-    from ..navigation import views as _views
-    from ..app.presenters import nav as _present_nav
-
-    return _present_nav.space_view(_views.space_facts(g, target, data), g, target, data)
-
-
-def _station_view(g, target, data, when=None, prev=None, info=None):
-    """拉格朗日点 / 跳跃点空间站里走路：距离按米、按站自己的朝向分上下；转向靠机头那一行和屏幕记号"""
-    from ..navigation import views as _views
-    from ..app.presenters import nav as _present_nav
-
-    return _present_nav.station_view(
-        _views.station_facts(g, target, data, when, prev, info),
-        g,
-        target,
-        data,
-        when,
-    )
-
-
-def _nav_view(here, target, data, steady=None, prev=None):
-    from ..navigation import views as _views
-    from ..app.presenters import nav as _present_nav
-
-    return _present_nav.ground_view(
-        _views.ground_facts(here, target, data, prev), here, target, data, steady
-    )
 
 
 # ---------------------------------------------------------------- 实时读屏与扫描面板解析
@@ -623,18 +438,8 @@ def manual_scan(mass=0, resistance=0, instability=0):
 
 __all__ = [
     # 常量与状态
-    "MARKER_STALE",
-    "_MK_CFG",
     "MOD_GROUPS",
     "STAT_ZH",
-    # 依赖与辅助
-    "_mark_hud",
-    "_marker_on",
-    "_marker_tick",
-    "_nav_log",
-    "_space_view",
-    "_station_view",
-    "_nav_view",
     # 读屏与扫描
     "_game_front",
     "scan_view",

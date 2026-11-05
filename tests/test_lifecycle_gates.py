@@ -53,8 +53,6 @@ class _FakeImage:
 
 
 def test_closing_gate_f5_f6(monkeypatch):
-    from types import SimpleNamespace
-
     from astral_toolkit.app import hud_state
     from astral_toolkit.app.engines import hover
     from astral_toolkit.tasks import count as count_task
@@ -75,11 +73,8 @@ def test_closing_gate_f5_f6(monkeypatch):
 
     live = _Toggle()
     count = _Toggle()
-    positions = SimpleNamespace(
-        snapshot=lambda: SimpleNamespace(current=(0.0, None, None))
-    )
     with _closing_gate(True):
-        with bind_for_test(mining, live, positions):
+        with bind_for_test(mining, live):
             refused = mining.live_start()
             assert isinstance(refused, dict) and refused.get("error") == "正在退出"
 

@@ -89,39 +89,43 @@ STATION_NAMES = [
 
 # ---------------------------------------------------------------- 调用适配
 def call_nav_view(here, target, data, steady=None, prev=None):
-    from astral_toolkit.tasks import mining
+    from astral_toolkit.app.engines import nav
 
-    return mining._nav_view(here, target, data, steady=steady, prev=prev)
+    return nav._nav_view(here, target, data, steady=steady, prev=prev)
 
 
 def call_station_view(g, target, data, when=None, prev=None, info=None):
-    from astral_toolkit.tasks import mining
+    from astral_toolkit.app.engines import nav
 
-    return mining._station_view(g, target, data, when=when, prev=prev, info=info)
+    return nav._station_view(g, target, data, when=when, prev=prev, info=info)
 
 
 def call_space_view(g, target, data):
-    from astral_toolkit.tasks import mining
+    from astral_toolkit.app.engines import nav
 
-    return mining._space_view(g, target, data)
+    return nav._space_view(g, target, data)
 
 
-def call_marker_tick(target, data, state, shown, ref=None):
-    from astral_toolkit.tasks import mining
+def make_marker(positions, live):
+    from astral_toolkit import bootstrap
 
-    return mining._marker_tick(target, data, state, shown, ref=ref)
+    return bootstrap._nav_marker(positions, live, "desktop")
+
+
+def call_marker_tick(marker, target, data, state, shown, ref=None):
+    return marker.tick(target, data, state, shown, ref=ref)
 
 
 def call_nav_log(here, info, view):
-    from astral_toolkit.tasks import mining
+    from astral_toolkit.app.engines import nav
 
-    return mining._nav_log(here, info, view)
+    return nav.nav_log(here, info, view)
 
 
 def call_mark_diag(why):
-    from astral_toolkit.tasks import mining
+    from astral_toolkit.app.engines import nav
 
-    return mining._mark_diag(why)
+    return nav.marker_diag(why)
 
 
 # ---------------------------------------------------------------- 假时钟与替身
@@ -180,28 +184,16 @@ class _Sandbox:
         self.geometry = dict(GEOM_A)
         self.last_fov = None
         self.fg_mode = "true"
-        self.M = None
         self._saved: list[tuple[Any, str, Any]] = []
-        self._mk_cfg0: dict[str, Any] = {}
-        self._cam_last0: dict[str, Any] = {}
-        self._mk_why0: dict[str, Any] = {}
 
     def __enter__(self):
         from astral_toolkit.app import hud_state
+        from astral_toolkit.app.engines import nav as nav_mod
         from astral_toolkit.core import capture, paths, settings as settings_mod
         from astral_toolkit.navigation import displayinfo
         from astral_toolkit.system import showloc
-        from astral_toolkit.tasks import mining as M
 
-        self.M = M
-        self._mk_cfg0 = dict(M._MK_CFG)
-        self._cam_last0 = dict(M._CAM_LAST)
-        self._mk_why0 = dict(M._MK_WHY)
-
-        self._patch(M, "time", self.clock)
-        self._patch(M, "_live", self.live)
-        self._patch(M, "_positions", self.positions)
-        self._patch(M, "_hud", self._hud)
+        self._patch(nav_mod, "time", self.clock)
         self._patch(settings_mod, "load", self._load_settings)
         self._patch(paths, "log", self._log)
         self._patch(capture, "game_area", self._game_area)
@@ -213,13 +205,6 @@ class _Sandbox:
     def __exit__(self, _exc_type, _exc, _tb):
         for obj, name, old in reversed(self._saved):
             setattr(obj, name, old)
-        if self.M is not None:
-            self.M._MK_CFG.clear()
-            self.M._MK_CFG.update(self._mk_cfg0)
-            self.M._CAM_LAST.clear()
-            self.M._CAM_LAST.update(self._cam_last0)
-            self.M._MK_WHY.clear()
-            self.M._MK_WHY.update(self._mk_why0)
         return False
 
     def _patch(self, obj, name, value):
@@ -817,19 +802,9 @@ def _collect_station(items, nav, data) -> None:
 
 
 # ---------------------------------------------------------------- 记号矩阵
-def _reset_marker_state(M) -> None:
-    M._MK_CFG.clear()
-    M._MK_CFG.update({"on": True, "at": 0.0})
-    M._CAM_LAST.clear()
-    M._CAM_LAST.update({"t": 0.0, "cam": None})
-    M._MK_WHY.clear()
-    M._MK_WHY.update({"why": None})
-
-
 def _marker_once(box, nav, tmp: Path, name: str) -> dict[str, Any]:
-    M = box.M
-    _reset_marker_state(M)
     box.reset()
+    marker = make_marker(box.positions, box.live)
     t0 = box.clock.now
     info = {"camdir": MARKER_CAM, "t": t0}
     here = {}
@@ -841,10 +816,10 @@ def _marker_once(box, nav, tmp: Path, name: str) -> dict[str, Any]:
         info = {"t": t0}
     elif name == "cam_hold_0_5s":
         info = {"t": t0}
-        M._CAM_LAST.update(t=t0 - 0.5, cam=MARKER_CAM)
+        marker.cam_last.update(t=t0 - 0.5, cam=MARKER_CAM)
     elif name == "cam_hold_1_5s":
         info = {"t": t0}
-        M._CAM_LAST.update(t=t0 - 1.5, cam=MARKER_CAM)
+        marker.cam_last.update(t=t0 - 1.5, cam=MARKER_CAM)
     elif name == "stale":
         box.clock.now = t0 + 4.0
     elif name == "arrived":
@@ -890,17 +865,17 @@ def _marker_once(box, nav, tmp: Path, name: str) -> dict[str, Any]:
 
         nav.project = boom
         try:
-            ret = call_marker_tick(MARKER_TARGET, {}, state, shown)
+            ret = call_marker_tick(marker, MARKER_TARGET, {}, state, shown)
         finally:
             nav.project = old_project
     else:
-        ret = call_marker_tick(MARKER_TARGET, {}, state, shown)
+        ret = call_marker_tick(marker, MARKER_TARGET, {}, state, shown)
 
     return {
         "return": ret,
         "calls": list(box.hud.calls),
         "di_log": diag_path.read_text(encoding="utf-8") if diag_path.exists() else "",
-        "why": M._MK_WHY["why"],
+        "why": marker.why,
     }
 
 

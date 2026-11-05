@@ -11,7 +11,7 @@ from astral_toolkit.tasks import count, mining, navigation
 from astral_toolkit.tasks.system import common as system_common
 
 _BINDINGS = (
-    (mining, ("_live", "_positions")),
+    (mining, ("_live",)),
     (navigation, ("_nav", "_pos", "_game_events", "_results")),
     (count, ("_count",)),
     (system_common, ("_status", "_start")),

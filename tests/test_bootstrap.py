@@ -13,6 +13,7 @@ from astral_toolkit import bootstrap
 from astral_toolkit.app import lifecycle_gate
 from astral_toolkit.app.engines import count as count_engine
 from astral_toolkit.app.engines import live as live_engine
+from astral_toolkit.app.engines import nav as navmod
 from astral_toolkit.crafting import stockplaces
 from astral_toolkit.mining import screen as mining_screen
 from astral_toolkit.mining import signals as mining_signals
@@ -133,7 +134,6 @@ def test_build_desktop_binds_everything_to_this_app(monkeypatch):
         app = bootstrap.build("desktop")
         try:
             assert mining_tasks._live is app.live
-            assert mining_tasks._positions is app.pos
             assert nav_tasks._nav is app.nav and nav_tasks._pos is app.pos
             assert nav_tasks._game_events is app.game_events
             assert nav_tasks._results is app.results
@@ -158,6 +158,54 @@ def test_build_desktop_binds_everything_to_this_app(monkeypatch):
         restore_bindings(saved)
 
 
+def test_nav_marker_is_wired_by_bootstrap():
+    from astral_toolkit.app import hud_state
+    from astral_toolkit.core import settings
+    from astral_toolkit.infrastructure.platform import window
+    from astral_toolkit.navigation import displayinfo
+
+    app = bootstrap.build("test")
+    try:
+        marker = app.nav._marker
+        assert isinstance(marker, navmod._NavMarker)
+        assert app.nav._worker._marker is marker
+        assert marker._pos is app.pos
+        assert marker._mining_running == app.live.running
+        assert marker._hud() is None
+        assert marker._hud is not hud_state._hud
+    finally:
+        try:
+            bootstrap.shutdown(app, budget=0.2)
+        except Exception:
+            pass
+
+    pos = SimpleNamespace()
+    live = SimpleNamespace(running=lambda: False)
+    marker = bootstrap._nav_marker(pos, live, "desktop")
+    assert marker._pos is pos
+    assert marker._mining_running is live.running
+    assert marker._hud is hud_state._hud
+    assert marker._foreground is window.foreground
+    assert marker._game_area is window.game_area
+    assert marker._last_fov is displayinfo.last_fov
+    assert marker._settings is settings.load
+    assert marker._diag is navmod.marker_diag
+
+
+def test_nav_links_are_wired_by_bootstrap():
+    app = bootstrap.build("test")
+    try:
+        links = app.nav._links
+        assert links is app.nav._worker._links
+        assert links.log is nav_tasks._wp_log
+        assert links.fix_key_hint is nav_tasks.fix_key_hint
+        assert links.place_row is nav_tasks._place_row
+        assert links.setting is nav_tasks.settings_key
+        assert app.cam_filter._log is links.log
+    finally:
+        bootstrap.shutdown(app, budget=0.2)
+
+
 def test_build_rejects_bad_mode_and_unknown_overrides():
     _assert_error(ValueError, "mode", lambda: bootstrap.build("prod"))
     _assert_error(
@@ -174,7 +222,7 @@ def test_bind_all_and_task_binds_refuse_second_binding():
         _assert_error(
             RuntimeError,
             "已绑定",
-            lambda: mining_tasks.bind(app.live, app.pos),
+            lambda: mining_tasks.bind(app.live),
         )
         _assert_error(RuntimeError, "已绑定", lambda: count_tasks.bind(app.count))
         _assert_error(
@@ -194,7 +242,6 @@ def test_unbound_modules_raise_and_gate_stays_open():
     saved = snapshot_bindings()
     try:
         mining_tasks._live = None
-        mining_tasks._positions = None
         _assert_error(RuntimeError, "未绑定", mining_tasks.live_start)
 
         count_tasks._count = None
@@ -297,25 +344,19 @@ def test_test_app_restores_previous_bindings():
     saved = snapshot_bindings()
     try:
         mining_tasks._live = None
-        mining_tasks._positions = None
         before = snapshot_bindings()
         with app_for_test() as app:
             assert mining_tasks._live is app.live
-            assert mining_tasks._positions is app.pos
         assert snapshot_bindings() == before
         assert mining_tasks._live is None
-        assert mining_tasks._positions is None
 
         # 只看绑定是不是原样恢复，用不着真引擎
         a_live: Any = SimpleNamespace(name="A-live")
-        a_pos: Any = SimpleNamespace(name="A-pos")
-        mining_tasks.bind(a_live, a_pos, replace=True)
+        mining_tasks.bind(a_live, replace=True)
         with_a = snapshot_bindings()
         with app_for_test() as app:
             assert mining_tasks._live is app.live
-            assert mining_tasks._positions is app.pos
         assert snapshot_bindings() == with_a
         assert mining_tasks._live is a_live
-        assert mining_tasks._positions is a_pos
     finally:
         restore_bindings(saved)
