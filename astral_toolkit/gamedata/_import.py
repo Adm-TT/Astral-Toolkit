@@ -635,19 +635,19 @@ def import_mining_spots(
 
 
 # ---------------------------------------------------------------- schema 4：制造 / 维科洛 / 物品属性（批 3 公共层，2026-11-02）
-# 规则直接 import 复用：crafting.assign_keys（「名字#序号」编号）、crafting._fold_name / _search_norm、contracts.textkeys.fold_mixed_loose、contracts.textkeys.en_key
+# 规则直接 import 复用：contracts.blueprints.assign_keys（「名字#序号」编号）、contracts.textkeys 的 blueprint_norm / blueprint_search_norm / fold_mixed_loose / en_key
 # 都是可选源：缺了空表；坏一条跳一条（_rows）
 
 
 def import_crafting(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> None:
     """blueprints + blueprint_materials + meta 三键。
-    编号用 crafting.assign_keys 在「n 是字符串的 dict 条目」上算：消费方 crafting._keys() 在全部条目上算，
+    编号用 contracts.blueprints.assign_keys 在「n 是字符串的 dict 条目」上算：消费方 crafting._keys() 在全部条目上算，
     但 n 不是字符串的条目不会和字符串名字共用计数键，所以存进库的每份蓝图编号与消费方一致（n 为 None / 数字的条目库里没有这一行）。
     id / source_order 用源下标（和别的表一致）。编号撞车（源里真有叫「X#1」的名字）后出现的那份跳过。"""
     import json
 
-    from ..contracts.textkeys import en_key
-    from ..crafting.crafting import _fold_name, _search_norm, assign_keys
+    from ..contracts.blueprints import assign_keys
+    from ..contracts.textkeys import blueprint_norm, blueprint_search_norm, en_key
 
     raw = _d(sources, "crafting.json", {}) or {}
     all_bps = _lst(raw.get("blueprints")) if isinstance(raw, dict) else []
@@ -686,10 +686,10 @@ def import_crafting(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -
                 1 if b.get("d") else 0,
                 _int(b.get("nsrc")),
                 key,
-                _fold_name(b["n"]),
-                _fold_name(_s(b.get("z"))),
-                _search_norm(b["n"]),
-                _search_norm(_s(b.get("z"))),
+                blueprint_norm(b["n"]),
+                blueprint_norm(_s(b.get("z"))),
+                blueprint_search_norm(b["n"]),
+                blueprint_search_norm(_s(b.get("z"))),
                 ek if ek in known else None,
                 slots_json,
                 src_json,

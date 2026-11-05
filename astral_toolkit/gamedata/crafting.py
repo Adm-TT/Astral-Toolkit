@@ -4,7 +4,7 @@
 逐字一致的 dict，缓存一份：crafting.json 和导入规则没变就一直是同一批对象（crafting.bp_key 靠 id(bp) 查编号，
 目标清单等处还会长期拿着这些对象）。别的源文件更新（矿价、商店）换了库版本也不换蓝图对象；建的时候持锁，
 两个线程同时第一次取也只建一份。
-编号用导入时算好的 bp_key 列（规则在 crafting.assign_keys）。传 snap 时用调用方的快照，不传就自己开一个。"""
+编号用导入时算好的 bp_key 列（规则在 contracts.blueprints.assign_keys）。传 snap 时用调用方的快照，不传就自己开一个。"""
 
 import json
 import threading
@@ -107,7 +107,7 @@ def _clear() -> None:
 
 
 def for_item(norm_en: str, norm_zh: str, snap=None) -> dict | None:
-    """英文名比较键（crafting._fold_name）对上的第一份；没有再按中文名比较键找第一份。键是空串不比"""
+    """英文名比较键（contracts.textkeys.blueprint_norm）对上的第一份；没有再按中文名比较键找第一份。键是空串不比"""
     with use(snap) as s:
         c = catalog(s)
         for col, key in (("norm_n", norm_en), ("norm_z", norm_zh)):
@@ -123,7 +123,7 @@ def for_item(norm_en: str, norm_zh: str, snap=None) -> dict | None:
 
 
 def containing(q: str, snap=None) -> list[dict]:
-    """英文名或中文名的搜索键（crafting._search_norm）里含 q 的蓝图，按源顺序；精确 / 包含的分法和排序由调用方做"""
+    """英文名或中文名的搜索键（contracts.textkeys.blueprint_search_norm）里含 q 的蓝图，按源顺序；精确 / 包含的分法和排序由调用方做"""
     if not q:
         return []
     with use(snap) as s:
