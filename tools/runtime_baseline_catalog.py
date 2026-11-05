@@ -45,7 +45,8 @@ SOURCE_ORDER = ("shop", "loot", "wiki", "loc")
 
 # ---------------------------------------------------------------- 调用适配
 # IQ-B5 起物品查询三项调窗口接口（app/api/trade → tasks/catalog + app/presenters/catalog）；
-# 全局搜索、商店导航、市场、F8 照旧调 tasks.trade / tasks.hover（全局搜索和 F8 经 tasks/trade 的旧壳）。
+# 全局搜索、商店导航、市场照旧调 tasks.trade；F8 照旧调 tasks.hover。
+# IQ-B6 起 F8 的物品卡片、掉落、玩家市场经 bootstrap._hover_links 接（和桌面版同一份）。
 def call_search(q=""):
     from astral_toolkit.tasks import trade
 
@@ -89,8 +90,12 @@ def call_market_prices(id="", quality="q0", op="sell"):
 
 
 def call_f8(img=None):
+    from astral_toolkit import bootstrap
     from astral_toolkit.tasks import hover
 
+    hover.bind(
+        bootstrap._hover_links(), replace=True
+    )  # IQ-B6：F8 的物品查询由 bootstrap 接，和桌面版同一份
     return hover.hover_once(img)
 
 

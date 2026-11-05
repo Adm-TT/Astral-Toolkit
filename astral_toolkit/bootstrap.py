@@ -36,6 +36,7 @@ from .runtime.lifecycle import (
 from .runtime.results import ResultStore
 
 if TYPE_CHECKING:
+    from .tasks.hover import HoverLinks
     from .tasks.system.common import StatusSources
 
 
@@ -199,6 +200,27 @@ def _nav_links(view: Any) -> NavLinks:
     )
 
 
+def _hover_links() -> HoverLinks:
+    """F8 要用的物品查询（IQ-B6）：物品卡片和窗口物品查询页同一份（tasks/catalog 用例 + app/presenters/catalog 排版）；
+    掉落、玩家市场经 tasks/catalog（Trade 只在那里的市场会话里用，第一次用才造，和以前一样）"""
+    from .app.presenters import catalog as present_catalog
+    from .tasks import catalog as catalog_tasks
+    from .tasks.hover import HoverLinks
+
+    def item_card(name="", zh="", id=None, loot=True, exact=False):
+        return present_catalog.present_item_info(
+            catalog_tasks.get_item_info(name, zh, id, loot, exact)
+        )
+
+    return HoverLinks(
+        item_card=item_card,
+        loot=catalog_tasks.get_item_loot,
+        market=catalog_tasks.open_market,
+        market_rows=catalog_tasks.market_rows,
+        hud_market=catalog_tasks.market_hud_text,
+    )
+
+
 def build(
     mode: str = "desktop", *, overrides: Mapping[str, Any] | None = None
 ) -> DesktopApp:
@@ -296,6 +318,7 @@ def bind_all(app: DesktopApp, *, replace: bool = False) -> None:
     from .app import lifecycle_gate, ui_stream
     from .navigation import navigate as navigate_data
     from .tasks import count as count_tasks
+    from .tasks import hover as hover_tasks
     from .tasks import mining as mining_tasks
     from .tasks import navigation as navigation_tasks
     from .tasks import system as system_tasks
@@ -306,6 +329,7 @@ def bind_all(app: DesktopApp, *, replace: bool = False) -> None:
     )
     count_tasks.bind(app.count, replace=replace)
     mining_tasks.bind(app.live, replace=replace)
+    hover_tasks.bind(_hover_links(), replace=replace)
     system_tasks.bind(status_sources(app), lambda: start(app), replace=replace)
     lifecycle_gate.bind_closing(app.lifecycle.is_closing, replace=replace)
     ui_stream.bind_switches(app.live, app.nav, app.pos, replace=replace)

@@ -16,7 +16,7 @@ import threading
 # 别的任务在函数里 import（任务之间互相引用，顶层 import 会循环），取模块属性，测试换掉的名字能打中。
 from ..app.hud_state import _item_hud
 
-# IQ 过渡：下面 item_search / item_info 旧壳排版用，IQ-B6/B7 删壳时一起删
+# IQ 过渡：下面 item_search 旧壳排版用（库存联想、全局搜索还在调），删壳时一起删
 from ..app.presenters import catalog as _present_catalog
 from . import catalog as _catalog
 
@@ -60,7 +60,7 @@ def _nav_objects():
 def _get_last_hover():
     from . import hover
 
-    return hover._last_hover
+    return hover.last_hover()
 
 
 nav_search = _nav_search
@@ -106,13 +106,6 @@ def search(q=""):
 def item_search(q=""):
     """旧壳（IQ-B5）：库存联想（tasks/stock）、上面的全局搜索还在调。窗口物品查询页走 app/api/trade → tasks/catalog + app/presenters/catalog"""
     return _present_catalog.present_search_results(_catalog.search_items(q))
-
-
-def item_info(name="", zh="", id=None, loot=True, exact=False):
-    """旧壳（IQ-B5）：F8（tasks/hover）还在调，IQ-B6 换接口后删"""
-    return _present_catalog.present_item_info(
-        _catalog.get_item_info(name, zh, id, loot, exact)
-    )
 
 
 def nav_shop(shop="", place=""):
@@ -416,7 +409,6 @@ def mineral_info(name=""):
 __all__ = [
     "search",
     "item_search",
-    "item_info",
     "nav_shop",
     "trade",
     "market_lookup",

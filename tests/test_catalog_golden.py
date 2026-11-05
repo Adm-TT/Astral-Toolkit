@@ -1,4 +1,4 @@
-"""物品查询接口黄金测试：不读本机数据，锁住窗口接口（app/api/trade）和 tasks/trade 旧壳现在的组合与排版。
+"""物品查询接口黄金测试：不读本机数据，锁住窗口接口（app/api/trade）和 tasks/trade 的 item_search 旧壳现在的组合与排版。
 
 物品查询链 IQ-B1～B7 拆代码时，这些字面量应当一个字都不变。
 """
@@ -233,30 +233,6 @@ def test_item_info_calls_and_enriches(monkeypatch):
     assert out["zh"] == "霍夫斯泰德"
     assert out["category"] == "采矿激光器"
     assert out["goal"] == "目标文本"
-
-    assert (
-        T.item_info("Hofstede-S2 Mining Laser", "旧中文", id=7, loot=False, exact=exact)
-        == out
-    )
-    assert calls == [
-        ("Hofstede-S2 Mining Laser", "旧中文", 7, False, True, False),
-        ("Hofstede-S2 Mining Laser", "旧中文", 7, False, True, False),
-    ]
-    assert goal_calls == [
-        (
-            "Hofstede-S2 Mining Laser",
-            "Hofstede-S2 Mining Laser",
-            "旧中文",
-            "霍夫斯泰德",
-        ),
-        (
-            "Hofstede-S2 Mining Laser",
-            "Hofstede-S2 Mining Laser",
-            "旧中文",
-            "霍夫斯泰德",
-        ),
-    ]
-    assert text_calls == [token, token]
 
 
 def test_item_info_keeps_original_zh_and_empty_goal(monkeypatch):

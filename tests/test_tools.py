@@ -1318,12 +1318,14 @@ def test_hover_overlay_updates_before_network(monkeypatch, tmp_path):
     """F8：名字和本机数据先上悬浮窗，联网的（市场匹配、查价、掉落）在后台；后台慢也不耽误悬浮窗"""
     import threading, time  # noqa: E401
     from PIL import Image
+    from astral_toolkit import bootstrap
     from astral_toolkit.tasks import (
         hover as t_hover,
         navigation as t_nav,
         system as t_sys,
     )
     from astral_toolkit.app import hud_state
+    from astral_toolkit.tasks import trade as t_trade
     from astral_toolkit.trade import console as C
     from astral_toolkit.ocr import OcrToken
 
@@ -1349,8 +1351,10 @@ def test_hover_overlay_updates_before_network(monkeypatch, tmp_path):
         C, "_cursor_on_image", lambda img: (1280, 720)
     )  # 不看真鼠标在哪
     monkeypatch.setattr(
-        t_hover, "trade", lambda: C.Trade(tmp_path, [])
+        t_trade, "trade", lambda: C.Trade(tmp_path, [])
     )  # 后台线程不开真实库存库、没有联网的价格源
+    # 照生产接法：市场会话、报价、掉落走 tasks/catalog
+    monkeypatch.setattr(t_hover, "_links", bootstrap._hover_links())
     monkeypatch.setattr(
         "astral_toolkit.crafting.loot.info", lambda *a, **k: {}
     )  # 掉落查询也不联网
@@ -3230,6 +3234,7 @@ def test_item_search_finds_everything():
     """物品查询搜索（1.6.41）：商店、掉落、汉化包一起搜，每件东西用完整的中文名、英文名都搜得到；
     视差步枪 → 视差 能量突击步枪（基础款在前，2026-10-23 用户报搜不到）；汉化包简称带出来的假英文名（视差步枪 → HD）不再有；
     商店和掉落数据里都没有的也搜得到，点开写明「商店和掉落数据里都没有」，能造的带上蓝图"""
+    from astral_toolkit.app.api import trade as t_api
     from astral_toolkit.crafting import itemsearch as I
     from astral_toolkit import crafting
     from astral_toolkit.trade import names
@@ -3285,7 +3290,7 @@ def test_item_search_finds_everything():
         x for x in t_trade.item_search(e["zh"]) if I.en_key(x["name"]) == e["ek"]
     )
     assert hit["src"] == "loc" and hit["id"] is None
-    d = t_trade.item_info(name=hit["name"], zh=hit["zh"], exact=True)
+    d = t_api.item_info(name=hit["name"], zh=hit["zh"], exact=True)
     assert (
         d["nowhere"]
         and d["loot"] is None
@@ -3294,11 +3299,11 @@ def test_item_search_finds_everything():
     )
     made = next((x for x in loc if crafting.for_item(x["en"], x["zh"])), None)
     if made:
-        d = t_trade.item_info(name=made["en"], zh=made["zh"], exact=True)
+        d = t_api.item_info(name=made["en"], zh=made["zh"], exact=True)
         assert d["nowhere"] and d["craft"]["key"] and d["craft"]["name"]
     # 有数据的：不算「都没有」；顶上搜索框也是这一套
     shop = next(x for x in rows if x["shop"] is not None)
-    assert not t_trade.item_info(name=shop["en"], exact=True, loot=False)["nowhere"]
+    assert not t_api.item_info(name=shop["en"], exact=True, loot=False)["nowhere"]
     assert t_trade.search(q=shop["en"])["items"][0]["name"] == shop["en"]
 
 
@@ -3569,7 +3574,7 @@ def test_goal_shortage_marked_everywhere(monkeypatch):
         G, "plan", lambda t=None, goals=None: {"goals": [], "shortfall": [gold, tung]}
     )
     _v = lambda: None  # noqa: E731
-    for _m in (t_count, t_goals, t_hover, t_stock, t_trade):
+    for _m in (t_count, t_goals, t_stock, t_trade):
         monkeypatch.setattr(_m, "trade", _v)
     t_goals._SHORT["t"] = 0.0
     assert t_goals._gkey("Gold (Ore)") == t_goals._gkey("gold") and t_goals._gkey(
@@ -3882,7 +3887,6 @@ def test_scan_view_lots_by_quality(monkeypatch):
     from astral_toolkit.tasks import (
         count as t_count,
         goals as t_goals,
-        hover as t_hover,
         mining as t_mining,
         stock as t_stock,
         trade as t_trade,
@@ -3903,7 +3907,7 @@ def test_scan_view_lots_by_quality(monkeypatch):
         G, "plan", lambda t=None, goals=None: {"goals": [], "shortfall": [tung]}
     )
     _v = lambda: None  # noqa: E731
-    for _m in (t_count, t_goals, t_hover, t_stock, t_trade):
+    for _m in (t_count, t_goals, t_stock, t_trade):
         monkeypatch.setattr(_m, "trade", _v)
     t_goals._SHORT["t"] = 0.0
     s = parse_scan(
@@ -4114,6 +4118,7 @@ def test_item_desc_and_alias_from_wiki(monkeypatch, tmp_path):
     """物品描述和英文名对齐（1.6.49）：①描述来自 wiki 的游戏官方中文说明（data/wiki_items.json 的 d），物品页显示；
     ②汉化包的英文名按游戏内部类名（item_Name_<类名>）对到 wiki 正名，写错 / 过时的（Bulldog → Badger、Monolith Arms → Monolith Armor Arms）
       记进 name_aliases.json，搜旧写法也能找到正名；③wiki 清单带类名 cls"""
+    from astral_toolkit.app.api import trade as t_api
     from astral_toolkit.update import localization as L
     from astral_toolkit.crafting import itemsearch as I
     from astral_toolkit.core import paths
@@ -4121,7 +4126,7 @@ def test_item_desc_and_alias_from_wiki(monkeypatch, tmp_path):
 
     if not (paths.DATA / "wiki_items.json").exists():
         pytest.skip("没有 wiki 物品数据")
-    d = t_trade.item_info(name="Helix II Mining Laser", exact=True)
+    d = t_api.item_info(name="Helix II Mining Laser", exact=True)
     assert "采矿激光" in d["desc"] and "铝热" in d["desc"]
     t = L.zh2en_items(
         {
@@ -4156,7 +4161,7 @@ def test_item_desc_and_alias_from_wiki(monkeypatch, tmp_path):
         assert hit and hit[0]["name"] == "Helix II Mining Laser"
         assert (
             "Helix 2 Old Name"
-            in t_trade.item_info(name="Helix II Mining Laser", exact=True)["aka"]
+            in t_api.item_info(name="Helix II Mining Laser", exact=True)["aka"]
         )
     finally:
         monkeypatch.setattr(I, "_cache", _VC())

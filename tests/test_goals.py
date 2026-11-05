@@ -170,7 +170,6 @@ def test_goal_quality_effect_and_stock_quality(monkeypatch, tmp_path):
     from astral_toolkit.tasks import (
         count as t_count,
         goals as t_goals,
-        hover as t_hover,
         stock as t_stock,
         trade as t_trade,
     )
@@ -178,7 +177,7 @@ def test_goal_quality_effect_and_stock_quality(monkeypatch, tmp_path):
     G = _setup(monkeypatch, tmp_path)
     t = Trade(tmp_path / "db", providers=[])
     _v = lambda: t  # noqa: E731
-    for _m in (t_count, t_goals, t_hover, t_stock, t_trade):
+    for _m in (t_count, t_goals, t_stock, t_trade):
         monkeypatch.setattr(_m, "trade", _v)
     bp = next(
         b
@@ -254,7 +253,6 @@ def test_units_uscu_and_migration(monkeypatch, tmp_path):
     from astral_toolkit.tasks import (
         count as t_count,
         goals as t_goals,
-        hover as t_hover,
         stock as t_stock,
         trade as t_trade,
     )
@@ -262,7 +260,7 @@ def test_units_uscu_and_migration(monkeypatch, tmp_path):
     G = _setup(monkeypatch, tmp_path)
     t = Trade(tmp_path / "db", providers=[])
     _v = lambda: t  # noqa: E731
-    for _m in (t_count, t_goals, t_hover, t_stock, t_trade):
+    for _m in (t_count, t_goals, t_stock, t_trade):
         monkeypatch.setattr(_m, "trade", _v)
     G.add_stock(t, "Taranite", "塔兰导电石", "0.495", "SCU", "925", "新巴贝奇")
     G.add_stock(t, "Taranite", "塔兰导电石", "5000", "uSCU", "925", "新巴贝奇")
@@ -306,7 +304,6 @@ def test_stock_suggest_and_named_add(monkeypatch, tmp_path):
     from astral_toolkit.tasks import (
         count as t_count,
         goals as t_goals,
-        hover as t_hover,
         stock as t_stock,
         trade as t_trade,
     )
@@ -315,7 +312,7 @@ def test_stock_suggest_and_named_add(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path)
     t = Trade(tmp_path / "db", providers=[])
     _v = lambda: t  # noqa: E731
-    for _m in (t_count, t_goals, t_hover, t_stock, t_trade):
+    for _m in (t_count, t_goals, t_stock, t_trade):
         monkeypatch.setattr(_m, "trade", _v)
     monkeypatch.setattr(
         names,
@@ -405,7 +402,6 @@ def test_stock_out_set_move_and_places(monkeypatch, tmp_path):
     from astral_toolkit.tasks import (
         count as t_count,
         goals as t_goals,
-        hover as t_hover,
         stock as t_stock,
         trade as t_trade,
     )
@@ -414,7 +410,7 @@ def test_stock_out_set_move_and_places(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path)
     t = Trade(tmp_path / "db", providers=[])
     _v = lambda: t  # noqa: E731
-    for _m in (t_count, t_goals, t_hover, t_stock, t_trade):
+    for _m in (t_count, t_goals, t_stock, t_trade):
         monkeypatch.setattr(_m, "trade", _v)
     monkeypatch.setattr(
         "astral_toolkit.crafting.stockplaces.current_place", lambda: None
@@ -429,7 +425,7 @@ def test_stock_out_set_move_and_places(monkeypatch, tmp_path):
     t.inventory.commit(t.inventory.prepare(old, "add"), allow_duplicate=True)
     t = Trade(tmp_path / "db", providers=[])  # 升级后第一次打开：能对上的自动归位
     _v = lambda: t  # noqa: E731
-    for _m in (t_count, t_goals, t_hover, t_stock, t_trade):
+    for _m in (t_count, t_goals, t_stock, t_trade):
         monkeypatch.setattr(_m, "trade", _v)
     assert list((tmp_path / "db").glob("inventory_地点归位前备份_*.db"))
     d = t_stock.stock()
@@ -652,7 +648,6 @@ def test_stock_bins_reserve_ledger_and_values(monkeypatch, tmp_path):
     from astral_toolkit.tasks import (
         count as t_count,
         goals as t_goals,
-        hover as t_hover,
         stock as t_stock,
         trade as t_trade,
     )
@@ -660,7 +655,7 @@ def test_stock_bins_reserve_ledger_and_values(monkeypatch, tmp_path):
     G = _setup(monkeypatch, tmp_path)
     t = Trade(tmp_path / "db", providers=[])
     _v = lambda: t  # noqa: E731
-    for _m in (t_count, t_goals, t_hover, t_stock, t_trade):
+    for _m in (t_count, t_goals, t_stock, t_trade):
         monkeypatch.setattr(_m, "trade", _v)
     monkeypatch.setattr(
         "astral_toolkit.crafting.stockplaces.current_place", lambda: None
@@ -807,7 +802,6 @@ def test_goal_finish_deducts_stock(monkeypatch, tmp_path):
     from astral_toolkit.tasks import (
         count as t_count,
         goals as t_goals,
-        hover as t_hover,
         stock as t_stock,
         trade as t_trade,
     )
@@ -816,7 +810,7 @@ def test_goal_finish_deducts_stock(monkeypatch, tmp_path):
     G = _setup(monkeypatch, tmp_path)
     t = Trade(tmp_path / "db", providers=[])
     _v = lambda: t  # noqa: E731
-    for _m in (t_count, t_goals, t_hover, t_stock, t_trade):
+    for _m in (t_count, t_goals, t_stock, t_trade):
         monkeypatch.setattr(_m, "trade", _v)
     bp = next(
         b
@@ -865,7 +859,6 @@ def test_crafted_item_qualities_from_bonus(monkeypatch, tmp_path):
     from astral_toolkit.tasks import (
         count as t_count,
         goals as t_goals,
-        hover as t_hover,
         stock as t_stock,
         trade as t_trade,
     )
@@ -902,7 +895,7 @@ def test_crafted_item_qualities_from_bonus(monkeypatch, tmp_path):
     G = _setup(monkeypatch, tmp_path)  # noqa: F841
     t = Trade(tmp_path / "db", providers=[])
     _v = lambda: t  # noqa: E731
-    for _m in (t_count, t_goals, t_hover, t_stock, t_trade):
+    for _m in (t_count, t_goals, t_stock, t_trade):
         monkeypatch.setattr(_m, "trade", _v)
     out = t_stock.stock_add_named(
         name="视差 “血红” 能量突击步枪",
