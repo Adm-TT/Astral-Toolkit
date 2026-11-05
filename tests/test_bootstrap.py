@@ -181,15 +181,42 @@ def test_nav_marker_is_wired_by_bootstrap():
 
     pos = SimpleNamespace()
     live = SimpleNamespace(running=lambda: False)
-    marker = bootstrap._nav_marker(pos, live, "desktop")
+    view = settings.View()
+    marker = bootstrap._nav_marker(pos, live, "desktop", view)
     assert marker._pos is pos
     assert marker._mining_running is live.running
     assert marker._hud is hud_state._hud
     assert marker._foreground is window.foreground
     assert marker._game_area is window.game_area
     assert marker._last_fov is displayinfo.last_fov
-    assert marker._settings is settings.load
-    assert marker._diag is navmod.marker_diag
+    assert marker._settings == view.all
+
+
+def test_debug_mode_gates_nav_diagnostics(monkeypatch, tmp_path):
+    from astral_toolkit.core import paths, settings
+
+    monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
+    monkeypatch.setattr(paths, "log", lambda name: tmp_path / name)
+    app = bootstrap.build("test")
+    try:
+        app.nav._marker._diag("读数过期")
+        assert not (tmp_path / "di_log.txt").exists()
+        assert app.pos.reader._diag_on() is False
+
+        settings.update(debug_mode=True)
+        app.nav._marker._diag("读数过期")
+        text = (tmp_path / "di_log.txt").read_text(encoding="utf-8")
+        assert text.count("\n") == 1
+        assert "记号 收起：读数过期" in text
+        assert app.pos.reader._diag_on() is True
+
+        settings.update(debug_mode=False)
+        app.nav._marker._diag("读数过期")
+        text = (tmp_path / "di_log.txt").read_text(encoding="utf-8")
+        assert text.count("\n") == 1
+        assert app.pos.reader._diag_on() is False
+    finally:
+        bootstrap.shutdown(app, budget=0.2)
 
 
 def test_nav_links_are_wired_by_bootstrap():

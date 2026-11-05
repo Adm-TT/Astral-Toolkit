@@ -88,3 +88,11 @@ def test_game_events_shell_and_callback():
     assert ev.on_qt_arrived is not None
     ev.request_stop()
     assert ev.join(0.0) is True
+
+
+def test_position_service_passes_debug_switch_to_reader():
+    def on():
+        return True
+
+    assert posmod._Pos(debug=on).reader.debug is on
+    assert posmod._Pos().reader.debug is None

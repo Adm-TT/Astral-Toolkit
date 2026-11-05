@@ -132,10 +132,29 @@ def _no_hud() -> None:
     return None
 
 
-def _nav_marker(pos: Any, live: Any, mode: str) -> _NavMarker:
-    """导航 HUD 记号要的东西（NV-B3）：以前 tasks/mining 自己去找，现在在这里一次接好。"""
+def _debug_on(view: Any) -> Callable[[], bool]:
+    """调试模式开没开（NV-B5）：问内存里的设置（core.settings.View），不读盘；设置页一改，下一次问就是新的"""
+
+    def on() -> bool:
+        return bool(view.get("debug_mode", False))
+
+    return on
+
+
+def _debug_only(fn: Callable[..., Any], on: Callable[[], bool]) -> Callable[..., None]:
+    """调试模式开着才调 fn（NV-B5：诊断日志只在调试模式写；关着时连字符串都不拼）"""
+
+    def call(*args: Any) -> None:
+        if on():
+            fn(*args)
+
+    return call
+
+
+def _nav_marker(pos: Any, live: Any, mode: str, view: Any) -> _NavMarker:
+    """导航 HUD 记号要的东西（NV-B3）：以前 tasks/mining 自己去找，现在在这里一次接好。
+    view：core.settings.View，设置从内存取；记号收起原因只在调试模式写（NV-B5）"""
     from .app import hud_state
-    from .core import settings
     from .infrastructure.platform import window
     from .navigation import displayinfo
 
@@ -145,9 +164,9 @@ def _nav_marker(pos: Any, live: Any, mode: str) -> _NavMarker:
         foreground=window.foreground,
         game_area=window.game_area,
         last_fov=displayinfo.last_fov,
-        settings=settings.load,
+        settings=view.all,
         hud=hud_state._hud if mode == "desktop" else _no_hud,
-        diag=marker_diag,
+        diag=_debug_only(marker_diag, _debug_on(view)),
     )
 
 
@@ -193,7 +212,12 @@ def build(
     if output is None:
         output = BusOutput()
 
-    pos = _Pos()
+    from .core import settings
+
+    # 常看的设置（调试模式、记号）：一份内存里的，存设置后自动重读（NV-B5）
+    view = settings.View()
+
+    pos = _Pos(debug=_debug_on(view))
     links = _nav_links()
     cam_filter = _CamFilter(log=links.log)
     steady = _Steady()
@@ -214,7 +238,7 @@ def build(
         output=output,
         clock=options.get("clock"),
         closing=lifecycle.is_closing,
-        marker=_nav_marker(pos, live, mode),
+        marker=_nav_marker(pos, live, mode, view),
         links=links,
     )
     count = _Count(

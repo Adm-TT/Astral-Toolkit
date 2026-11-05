@@ -2779,7 +2779,7 @@ PAGES.settings = () => {
       </p></div>
       ${segH("ocr-device", [["gpu", "显卡 (GPU)"], ["cpu", "处理器 (CPU)"]], (c.ocr_device || (c.always_use_gpu !== false ? "gpu" : "cpu")), "文字识别硬件")}</div>
     <div class="set"><div>调试模式
-      <p>开启后，每次 F8 物品识别与 F6 盘点会把裁切阶段、停因写入运行日志，并在 userdata/shots/debug/ 落下识别区域调试图（仅本机，不上传），便于排查认错、偏慢或裁切区域不对。日志和磁盘占用会明显增加；平时请保持关闭。</p></div>
+      <p>开启后，F8 物品识别与 F6 盘点会把裁切阶段、停因写入运行日志，并在 userdata/shots/debug/ 落下识别区域调试图；导航读游戏右上角时每读一次在 userdata/logs/di_log.txt 记一行（导航记号收起的原因也记在这里），没读出的画面存到 userdata/shots/di_fail/。都只在本机，不上传，便于排查认错、偏慢、裁切区域不对或导航记号消失。日志和磁盘占用会明显增加；平时请保持关闭。</p></div>
       <button class="switch ${c.debug_mode ? "on" : ""}" id="debug-sw" aria-label="调试模式"></button></div>
     <div class="set" style="border:0;padding:0"><div>导出日志
       <p>将运行日志、设置和系统信息打包到桌面，发给作者用于排查问题。不含聊天记录、浏览数据等个人信息。识别类问题（扫描、F8、导航）建议附上出现问题时的游戏截图。</p></div>

@@ -1,6 +1,7 @@
 """用户设置（settings.json，放在程序外层，更新程序不会覆盖）"""
 
 import json
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -29,7 +30,7 @@ DEFAULTS = {
     "update_online": True,  # 启动时到网上检查新版本（只读一个小文件；下载要玩家点）
     "ocr_device": "gpu",  # 文字识别设备：gpu (显卡 DirectML 加速) / cpu (处理器)
     "always_use_gpu": True,  # 兼容旧配置项
-    "debug_mode": False,  # 调试模式：开着时 F8/盘点把裁切阶段与停因打进运行日志，并在 userdata/shots/debug/ 落下识别区域调试图（仅本机，不上传；默认关）
+    "debug_mode": False,  # 调试模式：开着时 F8/盘点把裁切阶段与停因打进运行日志、在 userdata/shots/debug/ 落识别区域调试图；导航读右上角的诊断（logs/di_log.txt、shots/di_fail、记号收起原因）也只在开着时写（NV-B5）。仅本机，不上传；默认关
     "train_upload": True,  # 帮助改进识别：认字的错题（一行字的小截图 + 正确答案）发给作者训练（2026-10-27 负责人定）
     "feedback_upload": True,  # 问题反馈存好后自动发给作者（2026-10-27 负责人定，设置页能关）
     "nav_marker": True,  # 导航时在游戏画面上画目标记号（画面外贴边画箭头）和瞄准环（2026-10-27）
@@ -93,11 +94,16 @@ _LOCK = (
 )  # 窗口线程、日志线程、识别线程都会改设置：读-改-写要连在一起（2026-10-28 整体审查）
 
 
+# 本进程存过几次设置（save 每存一次加 1）：View 看它变了才重读文件（NV-B5）
+_SAVED = [0]
+
+
 def save(cfg):
     from .paths import write_json
 
     with _LOCK:
         write_json(FILE, cfg, indent=1)
+        _SAVED[0] += 1
 
 
 _unread = __import__("threading").local()
@@ -115,3 +121,43 @@ def update(**kw):
             return cfg
         save(cfg)
         return cfg
+
+
+class View:
+    """每帧都要看的设置（调试模式、导航记号……）：内存里留一份，平时不读盘（NV-B5）。
+
+    本进程存过设置以后，下一次取才重读文件：设置页保存、settings.update 都走 save，所以一改马上生效。
+    这次没读到真实设置（文件被别的程序占着）：先用读到的默认值，RETRY 秒后再读。
+    手改 settings.json 不会马上生效：重开 AT，或在设置页随便改一项。
+    取到的字典是大家共用的，只读，别改它。"""
+
+    RETRY = 1.0
+
+    def __init__(self):
+        # 上次读文件时的 _SAVED[0]；None = 还没读过 / 上次没读到真实设置
+        self._seen = None
+        self._retry_at = 0.0
+        self._cfg = dict(DEFAULTS)
+
+    def all(self):
+        """整份设置（共用的字典，只读）"""
+        if _SAVED[0] == self._seen:
+            return self._cfg
+        now = time.monotonic()
+        if self._seen is None and now < self._retry_at:
+            return self._cfg
+        with _LOCK:
+            saved = _SAVED[0]
+            _unread.flag = False
+            cfg = load()
+            unread = getattr(_unread, "flag", False)
+        self._cfg = cfg
+        if unread:
+            self._seen = None
+            self._retry_at = now + self.RETRY
+        else:
+            self._seen = saved
+        return cfg
+
+    def get(self, key, default=None):
+        return self.all().get(key, default)

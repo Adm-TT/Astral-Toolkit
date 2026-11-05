@@ -41,6 +41,83 @@ def test_grid_miss_retries_grid_instead_of_ocr(monkeypatch):
     D._GRID_OK["at"] = 0.0
 
 
+def test_reader_writes_diagnostics_only_in_debug_mode(monkeypatch):
+    from astral_toolkit.navigation import displayinfo
+
+    monkeypatch.setattr("astral_toolkit.system.showloc.game_foreground", lambda: True)
+    calls = []
+
+    def fake_read(*, allow_yield=True, diag=False):
+        calls.append(diag)
+        return {"global": None, "fast": True}
+
+    monkeypatch.setattr(displayinfo, "read", fake_read)
+    flag = [False]
+    reader = displayinfo.Reader(every=0.2, debug=lambda: flag[0])
+    reader.poll(force=True)
+    assert calls[-1] is False
+    flag[0] = True
+    reader.poll(force=True)
+    assert calls[-1] is True
+
+    no_debug = displayinfo.Reader(every=0.2, debug=None)
+    no_debug.poll(force=True)
+    assert calls[-1] is False
+
+    def boom():
+        raise RuntimeError("boom")
+
+    broken = displayinfo.Reader(every=0.2, debug=boom)
+    broken.poll(force=True)
+    assert calls[-1] is False
+
+
+def test_read_calls_diag_only_when_asked(monkeypatch):
+    from astral_toolkit.navigation import displayinfo
+
+    monkeypatch.setattr(
+        displayinfo, "_GRID_OK", {"at": 0.0}
+    )  # read 会改它：换成新字典，测完还原
+    monkeypatch.setattr(
+        "astral_toolkit.core.capture.grab_region",
+        lambda region: Image.new("RGB", (400, 100)),
+    )
+    monkeypatch.setattr(
+        "astral_toolkit.core.capture.game_area",
+        lambda: {"left": 0, "top": 0, "width": 1920, "height": 1080},
+    )
+    monkeypatch.setattr("astral_toolkit.navigation.gridtext.ready", lambda h: True)
+    monkeypatch.setattr("astral_toolkit.navigation.gridtext.note", lambda ok: None)
+    calls = []
+    monkeypatch.setattr(displayinfo, "_diag", lambda *args, **kwargs: calls.append(1))
+    mode = {"miss": False}
+    good = {**displayinfo.parse([]), "global": (1.0, 2.0, 3.0)}
+
+    def grid_read(piece, screen_h):
+        return None if mode["miss"] else dict(good)
+
+    monkeypatch.setattr(displayinfo, "_grid_read", grid_read)
+
+    assert "grid_miss" not in displayinfo.read()
+    assert calls == []
+    info = displayinfo.read(diag=True)
+    assert calls == [1]
+    assert info["global"] == (1.0, 2.0, 3.0)
+
+    mode["miss"] = True
+    displayinfo._GRID_OK["at"] = time.time()
+    assert displayinfo.read()["grid_miss"] is True
+    assert calls == [1]
+    info = displayinfo.read(diag=True)
+    assert calls == [1, 1]
+    assert info["grid_miss"] is True
+
+    mode["miss"] = False
+    before = len(calls)
+    displayinfo.read(img=Image.new("RGB", (1920, 1080)), diag=True)
+    assert len(calls) == before
+
+
 def test_grid_miss_reader_retries_fast(monkeypatch):
     """Reader 拿到字模没读出的那一帧：按快速读的间隔（0.2 秒）再试，不按识别引擎的 2 秒"""
     from astral_toolkit.navigation import displayinfo as D
@@ -48,7 +125,11 @@ def test_grid_miss_reader_retries_fast(monkeypatch):
     monkeypatch.setattr(
         D,
         "read",
-        lambda allow_yield=True: {**D.parse([]), "fast": True, "grid_miss": True},
+        lambda allow_yield=True, diag=False: {
+            **D.parse([]),
+            "fast": True,
+            "grid_miss": True,
+        },
     )
     monkeypatch.setattr("astral_toolkit.system.showloc.game_foreground", lambda: True)
     r = D.Reader(every=0.2)

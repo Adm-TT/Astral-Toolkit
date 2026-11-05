@@ -61,15 +61,16 @@ class PositionRead:
 class _Pos:
     """一直在后台读游戏右上角的调试信息（r_DisplayInfo 2）：有就随时知道你在哪，导航、路标、「离你最近的买点」都用它。
     2026-10-26 起：字模识别（gridtext）几毫秒认一次，游戏在最前面就每 0.2 秒读一次，顶栏位置是实时的；
-    字模还没学好时（第一次用、换了分辨率）用识别引擎认，每 2 秒一次来校准，导航时 1 秒一次"""
+    字模还没学好时（第一次用、换了分辨率）用识别引擎认，每 2 秒一次来校准，导航时 1 秒一次
+    debug：调试模式开没开（无参函数），交给读右上角的 Reader，开着才写 di_log / di_fail（NV-B5）"""
 
     FAST_EVERY = 0.2
     CALIB_EVERY = 2.0  # 字模还没校准好：每 2 秒用识别引擎认一次来学（一般 3～5 次就好，好了就停）；读不到会自己放慢
 
-    def __init__(self):
+    def __init__(self, *, debug=None):
         from ...navigation.displayinfo import Reader
 
-        self.reader: Any = Reader(every=1.0)
+        self.reader: Any = Reader(every=1.0, debug=debug)
         self.latest: Any = (
             0.0,
             None,
