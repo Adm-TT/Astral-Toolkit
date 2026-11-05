@@ -123,7 +123,7 @@ class _FakeLoop:
             assert not self.assert_not_fix_locked.locked()
 
 
-def _make_nav(monkeypatch):
+def _make_nav(monkeypatch, marker=None):
     pos = _FakePos()
     loop_holder = {}
     nav = navmod._Nav(
@@ -132,6 +132,7 @@ def _make_nav(monkeypatch):
         None,
         None,
         output=object(),
+        marker=marker,
         _loop_factory=lambda worker, **kw: loop_holder.setdefault(
             "loop", _FakeLoop(worker, **kw)
         ),
@@ -205,26 +206,70 @@ def test_add_fix_rejects_old_session(monkeypatch):
     assert nav.add_fix((1, 2, 3), "clip", session=4) is None
 
 
-def test_marker_draws_under_marker_lock_after_commit(monkeypatch):
+def test_marker_draws_under_marker_lock_after_commit():
     pos = _FakePos()
     lock = threading.Lock()
-    worker = navmod._NavWorker(pos, _FakeCam(), lock)
-    session = Session(
-        1, threading.Event(), navmod.NavPayload({"n": "X"}, {"key": "x"}, True)
-    )
     seen = {}
 
-    class M:
-        @staticmethod
-        def _marker_tick(target, data, state, mk_seen, ref):
+    class Marker:
+        def tick(self, target, data, state, mk_seen, ref):
             seen["locked"] = lock.locked()
             return 42
 
-    monkeypatch.setattr(navmod, "_T", lambda name: M)
+        def clear(self):
+            return None
+
+    worker = navmod._NavWorker(pos, _FakeCam(), lock, marker=Marker())
+    session = Session(
+        1, threading.Event(), navmod.NavPayload({"n": "X"}, {"key": "x"}, True)
+    )
     ctx = SimpleNamespace(mk_seen=None)
     got = worker._marker_after_commit(session, ctx, "t", {}, {}, None)
     assert got == 42
     assert seen["locked"] is True
+
+
+def test_stop_clears_marker_under_marker_lock(monkeypatch):
+    class Marker:
+        def __init__(self):
+            self.clears = []
+            self.ticks = 0
+            self.lock: Any = None
+
+        def tick(self, target, data, state, shown, ref=None):
+            self.ticks += 1
+            return None
+
+        def clear(self):
+            self.clears.append(self.lock.locked())
+
+    marker = Marker()
+    nav, _pos, _loop = _make_nav(monkeypatch, marker=marker)
+    marker.lock = nav.marker_lock
+    nav.stop()
+    assert marker.clears == [True]
+    assert marker.ticks == 0
+
+
+def test_nav_without_marker_never_touches_hud(monkeypatch):
+    from astral_toolkit.app import hud_state
+
+    calls = []
+
+    def fake_hud():
+        calls.append(True)
+        return None
+
+    monkeypatch.setattr(hud_state, "_hud", fake_hud)
+    nav, _pos, _loop = _make_nav(monkeypatch)
+    nav.start(
+        {"n": "X", "b": "Daymar", "t": "Planet", "qt": 0},
+        target_row={"key": "x"},
+        space_mode=False,
+    )
+    nav.stop()
+    assert calls == []
+    assert isinstance(nav._marker, navmod._NoMarker)
 
 
 def test_navigation_bind_required():
@@ -337,7 +382,6 @@ def test_space_steer_follows_camera_while_hovering(monkeypatch):
         t_mining, "_space_view", lambda g, t, d: {"space": True, "arrived": False}
     )
     monkeypatch.setattr(n, "space_text", lambda g, t, d: "直线 13.8 km")
-    monkeypatch.setattr(t_mining, "_marker_tick", lambda *a, **k: None)
     huds = []
 
     class Loop:

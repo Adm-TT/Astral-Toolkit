@@ -272,7 +272,7 @@ def test_tasks_mining_import_creates_no_engine():
         "from astral_toolkit.tasks.system import common\n"
         "from astral_toolkit.app import lifecycle_gate, ui_stream\n"
         "values = [\n"
-        "    mining._live, mining._positions,\n"
+        "    mining._live,\n"
         "    navigation._nav, navigation._pos,\n"
         "    navigation._game_events, navigation._results,\n"
         "    count._count, common._status, common._start,\n"
@@ -425,6 +425,36 @@ def test_runtime_layer_stays_below_app():
         "import importlib\nimportlib.import_module('astral_toolkit.app')",
     ):
         assert _runtime_violations(bad), bad
+
+
+_INFRA_FORBIDDEN = (
+    "astral_toolkit.app",
+    "astral_toolkit.tasks",
+    "astral_toolkit.runtime",
+    "astral_toolkit.bootstrap",
+)
+
+
+def test_infrastructure_stays_below_app():
+    """infrastructure/ 只读平台状态、读写文件 / 网络，不反向依赖界面、业务、runtime 和装配入口"""
+    files = list((_ROOT / "infrastructure").rglob("*.py"))
+    assert files
+    for f in files:
+        source = f.read_text(encoding="utf-8")
+        mods = list(_imports_in(f))
+        assert _forbidden(mods, _INFRA_FORBIDDEN) == [], f.name
+        dynamic = [d for d in _dynamic_imports(source) if d != "open"]
+        assert dynamic == [], f.name
+    for source in (
+        "from ...app import hud_state",
+        "from ...tasks import mining",
+        "from ...runtime.session import Tick",
+        "from ... import bootstrap",
+    ):
+        mods = list(
+            _imports_in_source(source, "astral_toolkit.infrastructure.platform")
+        )
+        assert _forbidden(mods, _INFRA_FORBIDDEN), source
 
 
 _MUTABLE = (

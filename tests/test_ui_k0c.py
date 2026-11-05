@@ -110,21 +110,9 @@ class _FakeNavModule:
         return {"key": "x", "label": "目标A"}
 
 
-class _FakeMiningModule:
-    @staticmethod
-    def _mark_hud(value):
-        pass
-
-    @staticmethod
-    def _marker_tick(*args, **kwargs):
-        return None
-
-
 def _fake_T(name):
     if name == "navigation":
         return _FakeNavModule
-    if name == "mining":
-        return _FakeMiningModule
     raise ImportError(name)
 
 

@@ -62,10 +62,7 @@ def test_set_mining_gadgets_saves_and_summary(monkeypatch):
         running=lambda: False,
         config_changed=lambda: changed.append(1),
     )
-    positions = SimpleNamespace(
-        snapshot=lambda: SimpleNamespace(current=(0.0, None, None))
-    )
-    with bind_for_test(t, live, positions):
+    with bind_for_test(t, live):
         g = t.set_mining_gadgets(keys=["optimax", "sabir"])
         assert cur["mining_gadgets"] == ["sabir", "optimax"] and changed
         on = {x["key"] for x in g["gadgets"] if x["on"]}

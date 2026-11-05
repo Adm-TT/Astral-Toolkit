@@ -5,6 +5,7 @@ NV-B1～B4 拆走 `tasks/mining.py` 里的导航函数时，这些字面量应�
 
 from types import SimpleNamespace
 
+from astral_toolkit.app.engines import nav as navmod
 from astral_toolkit.navigation import navigate as N
 from astral_toolkit.tasks import mining as M
 
@@ -58,12 +59,6 @@ def _install_nav(monkeypatch, **over):
     assert not over
 
 
-def _reset_marker_state(monkeypatch):
-    monkeypatch.setattr(M, "_MK_CFG", {"on": True, "at": 0.0})
-    monkeypatch.setattr(M, "_CAM_LAST", {"t": 0.0, "cam": None})
-    monkeypatch.setattr(M, "_MK_WHY", {"why": None})
-
-
 # 记号测试的录制：放模块级对象上（挂在函数上 basedpyright 不认）
 _REC = SimpleNamespace(hud=[], diag=[])
 
@@ -80,51 +75,6 @@ def _install_marker(
     last_fov=lambda: 70.0,
     area=None,
 ):
-    _reset_marker_state(monkeypatch)
-    monkeypatch.setattr(M, "time", clock)
-    ctl = {
-        "current": current,
-        "running": running,
-        "marker_on": marker_on,
-        "foreground": foreground,
-    }
-    monkeypatch.setattr(
-        M,
-        "_positions",
-        SimpleNamespace(snapshot=lambda: SimpleNamespace(current=ctl["current"])),
-    )
-    monkeypatch.setattr(
-        M,
-        "_live",
-        SimpleNamespace(running=lambda: ctl["running"]),
-    )
-    monkeypatch.setattr(M, "_marker_on", lambda: ctl["marker_on"])
-    monkeypatch.setattr(
-        M,
-        "_mark_hud",
-        lambda data: _REC.hud.append(data),
-    )
-    monkeypatch.setattr(
-        M,
-        "_mark_diag",
-        lambda why: _REC.diag.append(why),
-    )
-    _REC.hud = []
-    _REC.diag = []
-
-    def foreground_func():
-        if ctl["foreground"] == "raise":
-            raise RuntimeError("foreground")
-        return ctl["foreground"]
-
-    monkeypatch.setattr(
-        "astral_toolkit.system.showloc.game_foreground", foreground_func
-    )
-    monkeypatch.setattr("astral_toolkit.navigation.displayinfo.last_fov", last_fov)
-    monkeypatch.setattr(
-        "astral_toolkit.core.capture.game_area",
-        lambda: area or {"left": 0, "top": 0, "width": 2560, "height": 1440},
-    )
     if settings is None:
         settings = {
             "nav_marker": True,
@@ -132,8 +82,47 @@ def _install_marker(
             "nav_mode": "auto",
             "debug_mode": False,
         }
-    monkeypatch.setattr("astral_toolkit.core.settings.load", lambda: settings)
-    return ctl
+    ctl = {
+        "current": current,
+        "running": running,
+        "marker_on": marker_on,
+        "foreground": foreground,
+    }
+
+    def foreground_func():
+        if ctl["foreground"] == "raise":
+            raise RuntimeError("foreground")
+        return ctl["foreground"]
+
+    _REC.hud = []
+    _REC.diag = []
+    marker = navmod._NavMarker(
+        SimpleNamespace(snapshot=lambda: SimpleNamespace(current=ctl["current"])),
+        mining_running=lambda: ctl["running"],
+        foreground=foreground_func,
+        game_area=lambda: area or {"left": 0, "top": 0, "width": 2560, "height": 1440},
+        last_fov=last_fov,
+        settings=lambda: settings,
+        hud=lambda: SimpleNamespace(marker=lambda data: _REC.hud.append(data)),
+        diag=lambda why: _REC.diag.append(why),
+        clock=clock.time,
+    )
+    monkeypatch.setattr(marker, "enabled", lambda: ctl["marker_on"])
+    return marker, ctl
+
+
+def _blank_marker(*, settings, clock=None, hud=lambda: None):
+    return navmod._NavMarker(
+        SimpleNamespace(snapshot=lambda: SimpleNamespace(current=(0.0, None, None))),
+        mining_running=lambda: False,
+        foreground=lambda: True,
+        game_area=lambda: {"left": 0, "top": 0, "width": 2560, "height": 1440},
+        last_fov=lambda: None,
+        settings=settings,
+        hud=hud,
+        diag=lambda _why: None,
+        clock=clock,
+    )
 
 
 def test_nav_view_far_city_and_plain(monkeypatch):
@@ -518,7 +507,7 @@ def test_station_view_branches(monkeypatch):
 
 def test_marker_hide_reasons_and_precedence(monkeypatch):
     clock = _Clock(100.0)
-    ctl = _install_marker(
+    marker, ctl = _install_marker(
         monkeypatch,
         current=(
             100.0,
@@ -622,10 +611,9 @@ def test_marker_hide_reasons_and_precedence(monkeypatch):
         ),
     ]
     for name, case, reason in scenarios:
-        M._MK_WHY.clear()
-        M._MK_WHY["why"] = None
-        M._CAM_LAST.clear()
-        M._CAM_LAST.update(t=0.0, cam=None)
+        marker.why = None
+        marker.cam_last.clear()
+        marker.cam_last.update(t=0.0, cam=None)
         clock.now = case.get("now", 100.0)
         ctl["current"] = (
             case.get("t", 100.0),
@@ -637,33 +625,33 @@ def test_marker_hide_reasons_and_precedence(monkeypatch):
         ctl["marker_on"] = case.get("marker_on", True)
         _REC.hud = []
         _REC.diag = []
-        assert M._marker_tick({"b": "@S1"}, {}, {"here": case["h"]}, 7.0) is None, name
+        assert marker.tick({"b": "@S1"}, {}, {"here": case["h"]}, 7.0) is None, name
         assert _REC.hud == [None], name
         assert _REC.diag == [reason], name
-        assert M._MK_WHY["why"] == reason, name
+        assert marker.why == reason, name
 
 
 def test_marker_reason_not_repeated_and_hidden_only_when_shown(monkeypatch):
     clock = _Clock(100.5)
-    ctl = _install_marker(
+    marker, ctl = _install_marker(
         monkeypatch,
         current=(100.0, (0.0, 0.0, 0.0), {"t": 100.0}),
         clock=clock,
     )
     ctl["foreground"] = True
-    assert M._marker_tick({}, {}, {"here": {}}, None) is None
-    assert M._marker_tick({}, {}, {"here": {}}, None) is None
+    assert marker.tick({}, {}, {"here": {}}, None) is None
+    assert marker.tick({}, {}, {"here": {}}, None) is None
     assert _REC.hud == []
     assert _REC.diag == ["没有镜头方向"]
 
-    assert M._marker_tick({}, {}, {"here": {}}, 12.0) is None
+    assert marker.tick({}, {}, {"here": {}}, 12.0) is None
     assert _REC.hud == [None]
     assert _REC.diag == ["没有镜头方向"]
 
 
 def test_marker_camera_hold_within_and_over_one_second(monkeypatch):
     clock = _Clock(100.1)
-    ctl = _install_marker(
+    marker, ctl = _install_marker(
         monkeypatch,
         current=(
             100.0,
@@ -686,7 +674,7 @@ def test_marker_camera_hold_within_and_over_one_second(monkeypatch):
     monkeypatch.setattr(N, "dist_text", lambda dist: f"{dist} km")
     ctl["foreground"] = True
 
-    shown = M._marker_tick({"b": "@S1"}, {}, {"here": {}}, None)
+    shown = marker.tick({"b": "@S1"}, {}, {"here": {}}, None)
     assert shown == 100.0
     assert calls[-1] == (
         (1.0, 2.0, 3.0),
@@ -707,20 +695,20 @@ def test_marker_camera_hold_within_and_over_one_second(monkeypatch):
 
     clock.now = 100.6
     ctl["current"] = (100.5, (1.0, 2.0, 3.0), {"t": 100.5})
-    shown = M._marker_tick({"b": "@S1"}, {}, {"here": {}}, shown)
+    shown = marker.tick({"b": "@S1"}, {}, {"here": {}}, shown)
     assert shown == 100.5
     assert calls[-1][1] == (0.0, 0.0, -90.0)
 
     clock.now = 101.2
     ctl["current"] = (101.1, (1.0, 2.0, 3.0), {"t": 101.1})
-    assert M._marker_tick({"b": "@S1"}, {}, {"here": {}}, shown) is None
+    assert marker.tick({"b": "@S1"}, {}, {"here": {}}, shown) is None
     assert _REC.hud[-1] is None
     assert _REC.diag == ["没有镜头方向"]
 
 
 def test_marker_visible_projection_uses_info_fov_and_vertical(monkeypatch):
     clock = _Clock(100.5)
-    _install_marker(
+    marker, _ = _install_marker(
         monkeypatch,
         current=(
             100.0,
@@ -760,7 +748,7 @@ def test_marker_visible_projection_uses_info_fov_and_vertical(monkeypatch):
 
     target = {"b": "@S1"}
     data = {"k": "v"}
-    assert M._marker_tick(target, data, {"here": {"x": 1}}, None, ref="REF") == 100.0
+    assert marker.tick(target, data, {"here": {"x": 1}}, None, ref="REF") == 100.0
     assert seen == [
         ("tg", target, data, 11.0, "REF"),
         ("pr", (1.0, 2.0, 3.0), (0.1, 0.2, -0.3), 80.0, ("TARGET",), 2560, 1440, True),
@@ -777,7 +765,7 @@ def test_marker_visible_projection_uses_info_fov_and_vertical(monkeypatch):
 
 def test_marker_visible_projection_falls_back_to_last_fov_and_horizontal(monkeypatch):
     clock = _Clock(200.2)
-    _install_marker(
+    marker, _ = _install_marker(
         monkeypatch,
         current=(200.0, (1.0, 2.0, 3.0), {"camdir": (0.0, 0.0, -90.0), "t": 200.0}),
         clock=clock,
@@ -803,14 +791,14 @@ def test_marker_visible_projection_falls_back_to_last_fov_and_horizontal(monkeyp
         ),
     )
     monkeypatch.setattr(N, "dist_text", lambda dist: "1.0 km")
-    assert M._marker_tick({"b": "@S1"}, {}, {"here": {}}, None) == 200.0
+    assert marker.tick({"b": "@S1"}, {}, {"here": {}}, None) == 200.0
     assert got == [(66.0, 1920, 1080, False)]
     assert _REC.hud[-1]["area"] == (100, 50, 1920, 1080)
 
 
 def test_marker_visible_projection_defaults_to_70(monkeypatch):
     clock = _Clock(300.2)
-    _install_marker(
+    marker, _ = _install_marker(
         monkeypatch,
         current=(300.0, (1.0, 2.0, 3.0), {"camdir": (0.0, 0.0, -90.0), "t": 300.0}),
         clock=clock,
@@ -829,13 +817,13 @@ def test_marker_visible_projection_defaults_to_70(monkeypatch):
         ),
     )
     monkeypatch.setattr(N, "dist_text", lambda dist: "2.0 km")
-    assert M._marker_tick({"b": "@S1"}, {}, {"here": {}}, None) == 300.0
+    assert marker.tick({"b": "@S1"}, {}, {"here": {}}, None) == 300.0
     assert got == [(70.0, 2560, 1440, True)]
 
 
 def test_marker_project_raises_clears_and_returns_none(monkeypatch):
     clock = _Clock(400.3)
-    _install_marker(
+    marker, _ = _install_marker(
         monkeypatch,
         current=(400.0, (1.0, 2.0, 3.0), {"camdir": (0.0, 0.0, -90.0), "t": 400.0}),
         clock=clock,
@@ -849,14 +837,14 @@ def test_marker_project_raises_clears_and_returns_none(monkeypatch):
         "project",
         lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("project")),
     )
-    assert M._marker_tick({"b": "@S1"}, {}, {"here": {}}, None) is None
+    assert marker.tick({"b": "@S1"}, {}, {"here": {}}, None) is None
     assert _REC.hud == [None]
     assert _REC.diag == []
 
 
 def test_marker_shown_equal_t_does_not_redraw(monkeypatch):
     clock = _Clock(500.1)
-    _install_marker(
+    marker, _ = _install_marker(
         monkeypatch,
         current=(500.0, (1.0, 2.0, 3.0), {"camdir": (0.0, 0.0, -90.0), "t": 500.0}),
         clock=clock,
@@ -867,59 +855,62 @@ def test_marker_shown_equal_t_does_not_redraw(monkeypatch):
         "target_global",
         lambda *a, **kw: (_ for _ in ()).throw(AssertionError("should not project")),
     )
-    assert M._marker_tick({"b": "@S1"}, {}, {"here": {}}, 500.0) == 500.0
+    assert marker.tick({"b": "@S1"}, {}, {"here": {}}, 500.0) == 500.0
     assert _REC.hud == []
     assert _REC.diag == []
 
 
-def test_marker_on_reads_every_two_seconds_and_only_false_is_off(monkeypatch):
+def test_marker_on_reads_every_two_seconds_and_only_false_is_off():
     clock = _Clock(10.0)
-    _reset_marker_state(monkeypatch)
-    monkeypatch.setattr(M, "time", clock)
     reads = []
+    readers = {"load": lambda: {"nav_marker": True}}
+    marker = _blank_marker(
+        settings=lambda: readers["load"](),
+        clock=clock.time,
+    )
 
     def load():
         reads.append(clock.now)
         return {"nav_marker": [False, True][len(reads) - 1]}
 
-    monkeypatch.setattr("astral_toolkit.core.settings.load", load)
-    assert M._marker_on() is False
-    assert M._marker_on() is False
+    readers["load"] = load
+    assert marker.enabled() is False
+    assert marker.enabled() is False
     assert reads == [10.0]
     clock.now = 12.0
-    assert M._marker_on() is False
+    assert marker.enabled() is False
     assert reads == [10.0]
     clock.now = 12.1
-    assert M._marker_on() is True
+    assert marker.enabled() is True
     assert reads == [10.0, 12.1]
 
     for value, expected in [(0, True), (None, True), (False, False)]:
         clock.now += 3.0
-        M._MK_CFG.update(on=not expected, at=0.0)
-        monkeypatch.setattr(
-            "astral_toolkit.core.settings.load",
-            lambda v=value: {"nav_marker": v},
-        )
-        assert M._marker_on() is expected
+        marker.cfg.update(on=not expected, at=0.0)
+        readers["load"] = lambda v=value: {"nav_marker": v}
+        assert marker.enabled() is expected
 
 
-def test_marker_on_settings_error_is_on(monkeypatch):
+def test_marker_on_settings_error_is_on():
     clock = _Clock(20.0)
-    _reset_marker_state(monkeypatch)
-    monkeypatch.setattr(M, "time", clock)
-    monkeypatch.setattr(
-        "astral_toolkit.core.settings.load",
-        lambda: (_ for _ in ()).throw(RuntimeError("settings")),
+
+    def settings():
+        raise RuntimeError("settings")
+
+    marker = _blank_marker(settings=settings, clock=clock.time)
+    assert marker.enabled() is True
+    assert marker.cfg == {"on": True, "at": 20.0}
+
+
+def test_marker_clear_missing_hud_or_marker_does_not_raise():
+    assert _blank_marker(settings=lambda: {}, hud=lambda: None).clear() is None
+    assert (
+        _blank_marker(
+            settings=lambda: {},
+            hud=lambda: SimpleNamespace(),
+        ).clear()
+        is None
     )
-    assert M._marker_on() is True
-    assert M._MK_CFG == {"on": True, "at": 20.0}
-
-
-def test_mark_hud_missing_hud_or_marker_does_not_raise(monkeypatch):
-    monkeypatch.setattr(M, "_hud", lambda: None)
-    assert M._mark_hud({"x": 1}) is None
-    monkeypatch.setattr(M, "_hud", lambda: SimpleNamespace())
-    assert M._mark_hud({"x": 1}) is None
 
 
 def test_nav_log_line_with_and_without_local(monkeypatch, tmp_path):
@@ -961,10 +952,10 @@ def test_nav_log_trims_to_last_thousand_lines_before_append(monkeypatch, tmp_pat
 
 def test_mark_diag_two_lines(monkeypatch, tmp_path):
     clock = _Clock(1234.5)
-    monkeypatch.setattr(M, "time", clock)
+    monkeypatch.setattr(navmod, "time", clock)
     monkeypatch.setattr("astral_toolkit.core.paths.log", lambda name: tmp_path / name)
-    M._mark_diag("读数过期")
-    M._mark_diag(None)
+    navmod.marker_diag("读数过期")
+    navmod.marker_diag(None)
     assert (tmp_path / "di_log.txt").read_text(encoding="utf-8").splitlines() == [
         "12:00:00.500 记号 收起：读数过期",
         "12:00:00.500 记号 显示",

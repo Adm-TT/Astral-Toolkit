@@ -3,7 +3,8 @@
 2026-10-28 从 app/services.py 原样剪出来（逻辑没改）。2026-10-30 重构阶段 4 删了 services.py，
 用到的函数 / 变量直接到它们所在的模块取，运行时才取，避免互相 import：
 _T("mining").xxx = tasks/mining.py，_H().xxx = app/hud_state.py。
-用到：DI_HELP, LIVE_STALE, WIN, _mark_hud, _marker_tick, _nav_view, _place_row, _space_view, _station_view, _wp_log, fix_key_hint, settings_key, status
+用到：DI_HELP, LIVE_STALE, WIN, _nav_view, _place_row, _space_view, _station_view, _wp_log, fix_key_hint, settings_key, status
+NV-B3：HUD 记号搬进本模块的 _NavMarker；位置、采矿助手在不在跑、前台、游戏画面区域、视角、设置、悬浮窗、诊断日志由 bootstrap 造它时传进来。
 
 RT-B5b：导航线程 / 停止 / 提交边界 / 重试全部交给 runtime/session.py 的 SessionLoop；
 _Nav 只保留对外兼容外壳，_NavWorker 只写一轮业务，会话可变状态放在 _NavCtx。
@@ -25,7 +26,9 @@ from typing import Any, Callable
 
 from .. import bus
 from ..output import BusOutput
+from ..presenters import nav as _present_nav
 from ..presenters.nav import activity as _nav_activity
+from ...navigation import marker as _marker
 from ...runtime.results import ResultStore
 from ...runtime.session import (
     RunState,
@@ -126,6 +129,146 @@ class _CamFilter:
         return cam
 
 
+MARKER_STALE = 4.0  # 右上角多少秒没读到就收起导航记号（城里偶尔几次读不到，1.5 秒就收会一直闪，2026-10-27 实测）
+CAM_HOLD = 1.0  # 这一帧坐标有、镜头方向没读出：这么久以内读到的镜头方向接着用（按它自己的读取时间算，不当成新的）
+
+
+def marker_diag(why):
+    """导航记号收起 / 重新出来时记一行进 logs/di_log.txt（和读右上角的诊断放一起对时间，老大 11-03 实测「记号还会消失」）"""
+    try:
+        from ...core import paths
+
+        with paths.log("di_log.txt").open("a", encoding="utf-8") as f:
+            f.write(
+                f"{time.strftime('%H:%M:%S')}.{int(time.time() * 1000) % 1000:03d} "
+                f"记号 {'收起：' + why if why else '显示'}\n"
+            )
+    except Exception:
+        pass
+
+
+class _NavMarker:
+    """导航 HUD 记号（NV-B3 从 tasks/mining 搬来，逻辑没改）：按位置、镜头和设置决定画不画，画时把投影交给悬浮窗。"""
+
+    def __init__(
+        self,
+        positions: Any,
+        *,
+        mining_running: Callable[[], bool],
+        foreground: Callable[[], bool],
+        game_area: Callable[[], dict[str, Any]],
+        last_fov: Callable[[], Any],
+        settings: Callable[[], dict[str, Any]],
+        hud: Callable[[], Any],
+        diag: Callable[[Any], None],
+        clock: Callable[[], float] | None = None,
+    ) -> None:
+        self._pos = positions
+        self._mining_running = mining_running
+        self._foreground = foreground
+        self._game_area = game_area
+        self._last_fov = last_fov
+        self._settings = settings
+        self._hud = hud
+        self._diag = diag
+        self._clock = clock if clock is not None else time.time
+        self.cfg: dict[str, Any] = {"on": True, "at": 0.0}
+        self.cam_last: dict[str, Any] = {"t": 0.0, "cam": None}
+        self.why: Any = None
+
+    def enabled(self):
+        """设置里的 nav_marker（两秒读一次，导航每 0.1 秒问一次）"""
+        if self._clock() - self.cfg["at"] > 2:
+            self.cfg["at"] = self._clock()
+            try:
+                self.cfg["on"] = self._settings().get("nav_marker", True) is not False
+            except Exception:
+                self.cfg["on"] = True
+        return self.cfg["on"]
+
+    def tick(self, target, data, state, shown, ref=None):
+        """导航记号（2026-10-27）：每圈先判断该不该显示（还没算出位置、到了、跨星系、1.5 秒没读到、切出游戏、玩家关了、
+        采矿助手开着——记号窗口读屏时会被涂黑，会挡住扫描面板和雷达信号），不该显示就收起；
+        该显示且右上角有新截图（停着只转镜头也算）就按镜头朝向和视角重算位置。返回这次画的截图时间，收起了返回 None"""
+        from ...navigation import navigate as n
+
+        t, g, info = self._pos.snapshot().current
+        h = state.get("here")
+        # 镜头方向来自读屏，没有类型；走到投影那一步时一定有值
+        cam: Any = _marker.camera_hold(
+            (info or {}).get("camdir"), t, self.cam_last, CAM_HOLD
+        )
+        try:
+            fg = self._foreground()
+        except Exception:
+            fg = True
+        why = _marker.hidden_reason(
+            h,
+            g,
+            cam,
+            t,
+            now=self._clock,
+            stale=MARKER_STALE,
+            foreground=fg,
+            mining_running=self._mining_running,
+            enabled=self.enabled,
+        )
+        if why != self.why:
+            self.why = why
+            self._diag(why)
+        if why:
+            if shown is not None:
+                self._draw(None)
+            return None
+        if t == shown:
+            return shown
+        try:
+            a = self._game_area()
+            fov = _marker.pick_fov(info.get("fov"), self._last_fov)
+            tg = n.target_global(target, data, info.get("t"), ref)
+            pr = n.project(
+                g,
+                cam,
+                fov,
+                tg,
+                a["width"],
+                a["height"],
+                vertical=self._setting("fov_axis", "v") != "h",
+            )
+            label = _present_nav.marker_label(pr["dist"])
+            model = _present_nav.marker_model(a, pr, label)
+            self._draw(model)
+            return t
+        except Exception:
+            self._draw(None)
+            return None
+
+    def _setting(self, key, default=None):
+        try:
+            return self._settings().get(key, default)
+        except Exception:
+            return default
+
+    def _draw(self, data):
+        try:
+            self._hud().marker(data)
+        except Exception:  # 测试里的假悬浮窗没有这个接口
+            pass
+
+    def clear(self):
+        self._draw(None)
+
+
+class _NoMarker:
+    """没传记号（只有测试直接造 _Nav / _NavWorker）：不画、不碰悬浮窗"""
+
+    def tick(self, target, data, state, shown, ref=None):
+        return None
+
+    def clear(self):
+        return None
+
+
 @dataclass(frozen=True)
 class NavPayload:
     """开导航那一刻定死的东西：目标、目标行、实时/手动模式。整个会话不变"""
@@ -223,11 +366,13 @@ class _NavWorker:
         cam_filter: Any,
         marker_lock: Any,
         results: ResultStore | None = None,
+        marker: Any = None,
     ) -> None:
         self._pos = positions
         self._cam_filter = cam_filter
         self._marker_lock = marker_lock
         self._results = results if results is not None else ResultStore()
+        self._marker = marker if marker is not None else _NoMarker()
         self._fixq: list[_FixRequest] = []
         self._fixq_lock = threading.Lock()
         self._ctx_lock = threading.Lock()
@@ -764,7 +909,7 @@ class _NavWorker:
             if not session.alive():
                 return ctx.mk_seen
             try:
-                return _T("mining")._marker_tick(target, data, state, ctx.mk_seen, ref)
+                return self._marker.tick(target, data, state, ctx.mk_seen, ref)
             except Exception:
                 return ctx.mk_seen
 
@@ -845,6 +990,7 @@ class _Nav:
         clock: Callable[[], float] | None = None,
         closing: Callable[[], bool] | None = None,
         join_timeout: float = 2.0,
+        marker: Any = None,
         _loop_factory: Callable[..., Any] | None = None,
     ) -> None:
         self.fix_lock = threading.Lock()
@@ -852,10 +998,13 @@ class _Nav:
         self.target: Any = None
         self.space_mode: bool = False
         self._positions = positions
+        self._marker = marker if marker is not None else _NoMarker()
         self._stop_ev_override: Any = None
         self._closing = closing if closing is not None else (lambda: False)
         results = results if results is not None else ResultStore()
-        self._worker = _NavWorker(positions, cam_filter, self.marker_lock, results)
+        self._worker = _NavWorker(
+            positions, cam_filter, self.marker_lock, results, self._marker
+        )
         factory = _loop_factory if _loop_factory is not None else SessionLoop
         self.loop: Any = factory(
             self._worker,
@@ -966,7 +1115,7 @@ class _Nav:
     def _clear_marker(self) -> None:
         with self.marker_lock:
             try:
-                _T("mining")._mark_hud(None)
+                self._marker.clear()
             except Exception:
                 pass
 

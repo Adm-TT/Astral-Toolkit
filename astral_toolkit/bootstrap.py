@@ -14,7 +14,14 @@ from typing import TYPE_CHECKING, Any, Callable
 from .app.engines.count import _Count
 from .app.engines.hover import _Hover
 from .app.engines.live import _Live
-from .app.engines.nav import _CamFilter, _GameEvents, _Nav, _Steady
+from .app.engines.nav import (
+    _CamFilter,
+    _GameEvents,
+    _Nav,
+    _NavMarker,
+    _Steady,
+    marker_diag,
+)
 from .app.engines.pos import _LogWatch, _Pos
 from .app.output import BusOutput
 from .runtime.lifecycle import (
@@ -119,6 +126,30 @@ class _DirectService:
         return not thread.is_alive()
 
 
+def _no_hud() -> None:
+    """test 模式的导航记号不接真悬浮窗（测试不许碰屏幕上的窗口）"""
+    return None
+
+
+def _nav_marker(pos: Any, live: Any, mode: str) -> _NavMarker:
+    """导航 HUD 记号要的东西（NV-B3）：以前 tasks/mining 自己去找，现在在这里一次接好。"""
+    from .app import hud_state
+    from .core import settings
+    from .infrastructure.platform import window
+    from .navigation import displayinfo
+
+    return _NavMarker(
+        pos,
+        mining_running=live.running,
+        foreground=window.foreground,
+        game_area=window.game_area,
+        last_fov=displayinfo.last_fov,
+        settings=settings.load,
+        hud=hud_state._hud if mode == "desktop" else _no_hud,
+        diag=marker_diag,
+    )
+
+
 def build(
     mode: str = "desktop", *, overrides: Mapping[str, Any] | None = None
 ) -> DesktopApp:
@@ -153,6 +184,14 @@ def build(
     cam_filter = _CamFilter()
     steady = _Steady()
     game_events = _GameEvents(on_qt_arrived=pos.request_read_now)
+    live = _Live(
+        results,
+        output=output,
+        clock=options.get("clock"),
+        closing=lifecycle.is_closing,
+        foreground=options.get("foreground"),
+        grab=options.get("grab"),
+    )
     nav = _Nav(
         pos,
         cam_filter,
@@ -161,14 +200,7 @@ def build(
         output=output,
         clock=options.get("clock"),
         closing=lifecycle.is_closing,
-    )
-    live = _Live(
-        results,
-        output=output,
-        clock=options.get("clock"),
-        closing=lifecycle.is_closing,
-        foreground=options.get("foreground"),
-        grab=options.get("grab"),
+        marker=_nav_marker(pos, live, mode),
     )
     count = _Count(
         results,
@@ -217,7 +249,7 @@ def bind_all(app: DesktopApp, *, replace: bool = False) -> None:
         app.nav, app.pos, app.game_events, app.results, replace=replace
     )
     count_tasks.bind(app.count, replace=replace)
-    mining_tasks.bind(app.live, app.pos, replace=replace)
+    mining_tasks.bind(app.live, replace=replace)
     system_tasks.bind(status_sources(app), lambda: start(app), replace=replace)
     lifecycle_gate.bind_closing(app.lifecycle.is_closing, replace=replace)
     ui_stream.bind_switches(app.live, app.nav, app.pos, replace=replace)

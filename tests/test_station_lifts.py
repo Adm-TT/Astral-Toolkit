@@ -499,7 +499,7 @@ def test_nav_engine_station_branch(monkeypatch, tmp_path):
     from types import SimpleNamespace
 
     n, ps = _station(tmp_path, monkeypatch)
-    from astral_toolkit.tasks import mining as t_mining, navigation as t_nav
+    from astral_toolkit.tasks import navigation as t_nav
     from astral_toolkit.app import bus
     from astral_toolkit.app.engines import nav as nav_mod
     from astral_toolkit.runtime.session import Session
@@ -519,9 +519,7 @@ def test_nav_engine_station_branch(monkeypatch, tmp_path):
             pass
 
     _v = lambda: Hud()  # noqa: E731
-    for _m in (t_mining, t_nav):
-        monkeypatch.setattr(_m, "_hud", _v)
-    monkeypatch.setattr(t_mining, "_marker_tick", lambda *a, **k: None)
+    monkeypatch.setattr(t_nav, "_hud", _v)
     monkeypatch.setattr(bus, "publish", lambda topic, data: pubs.append((topic, data)))
 
     now = time.time()

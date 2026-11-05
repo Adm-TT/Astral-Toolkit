@@ -1064,7 +1064,7 @@ def test_live_scan_updates_when_read_gets_more_complete(monkeypatch, tmp_path):
     _v = lambda: type(  # noqa: E731
         "H", (), {"set": lambda *a: None, "clear": lambda *a: None}
     )()  # 不弹真悬浮窗  # noqa: E731
-    for _m in (t_mining, t_nav, t_sys, hud_state):
+    for _m in (t_nav, t_sys, hud_state):
         monkeypatch.setattr(_m, "_hud", _v)
     q = bus.subscribe()
     live = live_mod._Live()
@@ -1320,7 +1320,6 @@ def test_hover_overlay_updates_before_network(monkeypatch, tmp_path):
     from PIL import Image
     from astral_toolkit.tasks import (
         hover as t_hover,
-        mining as t_mining,
         navigation as t_nav,
         system as t_sys,
     )
@@ -1362,7 +1361,7 @@ def test_hover_overlay_updates_before_network(monkeypatch, tmp_path):
             shown.append((time.time(), text))
 
     _v = lambda: Hud()  # noqa: E731
-    for _m in (t_mining, t_nav, t_sys, hud_state):
+    for _m in (t_nav, t_sys, hud_state):
         monkeypatch.setattr(_m, "_hud", _v)
     t0 = time.time()
     try:
@@ -1756,7 +1755,6 @@ def test_space_waypoint(monkeypatch, tmp_path):
     import time, math  # noqa: E401, F401
     from astral_toolkit.navigation import navigate as n
     from astral_toolkit.tasks import (
-        mining as t_mining,
         navigation as t_nav,
         system as t_sys,
     )
@@ -1780,7 +1778,7 @@ def test_space_waypoint(monkeypatch, tmp_path):
     clip = {"t": "随便什么"}
     monkeypatch.setattr(n, "read_clipboard", lambda: clip["t"])
     _v = lambda: type("H", (), {"set": lambda *a: None, "clear": lambda *a: None})()  # noqa: E731
-    for _m in (t_mining, t_nav, t_sys, hud_state):
+    for _m in (t_nav, t_sys, hud_state):
         monkeypatch.setattr(_m, "_hud", _v)
     import threading
 
@@ -1872,7 +1870,6 @@ def test_mark_here_hotkey(monkeypatch, tmp_path):
     from astral_toolkit.navigation import navigate as n
     from astral_toolkit.system import showloc
     from astral_toolkit.tasks import (
-        mining as t_mining,
         navigation as t_nav,
         system as t_sys,
     )
@@ -1911,7 +1908,7 @@ def test_mark_here_hotkey(monkeypatch, tmp_path):
             shown.pop(k, None)
 
     _v = lambda: H()  # noqa: E731
-    for _m in (t_mining, t_nav, t_sys, hud_state):
+    for _m in (t_nav, t_sys, hud_state):
         monkeypatch.setattr(_m, "_hud", _v)
     monkeypatch.setattr(
         threading,
@@ -2232,7 +2229,7 @@ def _live_run(
             "clear": lambda self, k: hud.append(("clear", k)),
         },
     )()
-    for _m in (t_mining, t_nav, t_sys, hud_state):
+    for _m in (t_nav, t_sys, hud_state):
         monkeypatch.setattr(_m, "_hud", _v)
     monkeypatch.setattr(screen, "grab", grab)
     monkeypatch.setattr(screen, "analyse", analyse)
@@ -2716,7 +2713,7 @@ def test_space_fix_navigation(monkeypatch, tmp_path):
         clip = {"t": "旧东西"}
         monkeypatch.setattr(n, "read_clipboard", lambda: clip["t"])
         hud = {}
-        from astral_toolkit.tasks import mining as t_mining, system as t_sys
+        from astral_toolkit.tasks import system as t_sys
         from astral_toolkit.app import hud_state
 
         _v = lambda: type(  # noqa: E731
@@ -2727,7 +2724,7 @@ def test_space_fix_navigation(monkeypatch, tmp_path):
                 "clear": lambda self, k: hud.pop(k, None),
             },
         )()
-        for _m in (t_mining, t_nav, t_sys, hud_state):
+        for _m in (t_nav, t_sys, hud_state):
             monkeypatch.setattr(_m, "_hud", _v)
         q = bus.subscribe()
         try:
@@ -2763,7 +2760,6 @@ def test_space_fix_dedupe_and_session(monkeypatch, tmp_path):
     from astral_toolkit.core import paths, settings
     from astral_toolkit.navigation import navigate as n
     from astral_toolkit.tasks import (
-        mining as t_mining,
         navigation as t_nav,
         system as t_sys,
     )
@@ -2783,7 +2779,7 @@ def test_space_fix_dedupe_and_session(monkeypatch, tmp_path):
     )  # 手动定位
     monkeypatch.setattr(n, "read_clipboard", lambda: "")
     _v = lambda: type("H", (), {"set": lambda *a: None, "clear": lambda *a: None})()  # noqa: E731
-    for _m in (t_mining, t_nav, t_sys, hud_state):
+    for _m in (t_nav, t_sys, hud_state):
         monkeypatch.setattr(_m, "_hud", _v)
     lp = next(
         p
@@ -2897,7 +2893,6 @@ def test_nav_mode_switch(monkeypatch, tmp_path):
     from astral_toolkit.core import settings, paths
     from astral_toolkit.navigation import navigate as n
     from astral_toolkit.tasks import (
-        mining as t_mining,
         navigation as t_nav,
         system as t_sys,
     )
@@ -2924,7 +2919,7 @@ def test_nav_mode_switch(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(settings, "update", lambda **kw: store.update(kw))
     _v = lambda: type("H", (), {"set": lambda *a: None, "clear": lambda *a: None})()  # noqa: E731
-    for _m in (t_mining, t_nav, t_sys, hud_state):
+    for _m in (t_nav, t_sys, hud_state):
         monkeypatch.setattr(_m, "_hud", _v)
     ground = {
         "n": "地面点",
@@ -3051,7 +3046,7 @@ def test_halo_services(monkeypatch, tmp_path):
     }  # 挂上之前就在剪贴板里的旧坐标：不算
     monkeypatch.setattr(n, "read_clipboard", lambda: clip["t"])
     hud = {}
-    from astral_toolkit.tasks import mining as t_mining, system as t_sys
+    from astral_toolkit.tasks import system as t_sys
     from astral_toolkit.app import hud_state
 
     _v = lambda: type(  # noqa: E731
@@ -3062,7 +3057,7 @@ def test_halo_services(monkeypatch, tmp_path):
             "clear": lambda self, k: hud.pop(k, None),
         },
     )()
-    for _m in (t_mining, t_nav, t_sys, hud_state):
+    for _m in (t_nav, t_sys, hud_state):
         monkeypatch.setattr(_m, "_hud", _v)
     with app_for_test() as app:
         o = t_nav.halo_options()
@@ -3409,7 +3404,6 @@ def test_craft_filter_by_mineral_and_item_hud_expires(monkeypatch):
     # 物品悬浮窗定时收起；中途又写了新内容就按新内容重新计时
     hud = {}
     from astral_toolkit.tasks import (
-        mining as t_mining,
         navigation as t_nav,
         system as t_sys,
     )
@@ -3422,7 +3416,7 @@ def test_craft_filter_by_mineral_and_item_hud_expires(monkeypatch):
             "clear": lambda self, k: hud.pop(k, None),
         },
     )()
-    for _m in (t_mining, t_nav, t_sys, hud_state):
+    for _m in (t_nav, t_sys, hud_state):
         monkeypatch.setattr(_m, "_hud", _v)
     hud_state._item_hud("A", 0.2)
     _t.sleep(0.4)
@@ -3692,7 +3686,6 @@ def test_waypoint_from_pasted_showlocation(monkeypatch, tmp_path):
     from astral_toolkit.navigation import navigate as n
     from astral_toolkit.core import paths
     from astral_toolkit.tasks import (
-        mining as t_mining,
         navigation as t_nav,
         system as t_sys,
     )
@@ -3718,7 +3711,7 @@ def test_waypoint_from_pasted_showlocation(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(t_nav, "waypoints", lambda: [])
     _v = lambda: type("H", (), {"set": lambda *a: None, "clear": lambda *a: None})()  # noqa: E731
-    for _m in (t_mining, t_nav, t_sys, hud_state):
+    for _m in (t_nav, t_sys, hud_state):
         monkeypatch.setattr(_m, "_hud", _v)
     b = data["bodies"]["Daymar"]  # noqa: F841
     g = (
@@ -3771,7 +3764,6 @@ def test_feedback_report_bundle(monkeypatch, tmp_path):
     from astral_toolkit.mining import screen
     from astral_toolkit.tasks import (
         hover as t_hover,
-        mining as t_mining,
         navigation as t_nav,
         system as t_sys,
     )
@@ -3800,7 +3792,7 @@ def test_feedback_report_bundle(monkeypatch, tmp_path):
         (),
         {"sections": {"信号": "x"}, "set": lambda *a: None, "clear": lambda *a: None},
     )()  # noqa: E731
-    for _m in (t_mining, t_nav, t_sys, hud_state):
+    for _m in (t_nav, t_sys, hud_state):
         monkeypatch.setattr(_m, "_hud", _v)
     import threading
 
