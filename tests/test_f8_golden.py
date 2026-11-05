@@ -1,15 +1,21 @@
-"""F8 悬停识别黄金测试：锁住 tasks/hover.py 当前输出。"""
+"""F8 悬停识别黄金测试：锁住 tasks/hover.py 当前输出。
+
+IQ-B6 起市场、报价、掉落经 bootstrap 接的 HoverLinks → tasks/catalog；
+测试照生产接法接，替身换在 Trade / console / crafting 那一层。
+"""
 
 import copy
 import itertools
 from types import SimpleNamespace
 from typing import Any
 
+from astral_toolkit import bootstrap
 from astral_toolkit.core import run_records
 from astral_toolkit.crafting import crafting as crafting_mod
 from astral_toolkit.crafting import loot as loot_mod
 from astral_toolkit.crafting import wikelo as wikelo_mod
 from astral_toolkit.tasks import hover as Hv
+from astral_toolkit.tasks import trade as T
 from astral_toolkit.system import train_data
 from astral_toolkit.tasks.system import about
 from astral_toolkit.trade import console as C
@@ -204,8 +210,10 @@ def _install(
         lambda img, cur: copy.deepcopy(res) if res is not None else None,
     )
     monkeypatch.setattr(Hv, "item_info", fake_item_info)
-    monkeypatch.setattr(Hv, "trade", lambda: fake_trade)
-    monkeypatch.setattr(Hv, "_market_rows", fake_market_rows)
+    monkeypatch.setattr(T, "trade", lambda: fake_trade)
+    monkeypatch.setattr(T, "_market_rows", fake_market_rows)
+    # 照生产接法：市场会话、报价、掉落走 tasks/catalog
+    monkeypatch.setattr(Hv, "_links", bootstrap._hover_links())
     monkeypatch.setattr(Hv, "_goal_for", goal_for or default_goal_for)
     monkeypatch.setattr(Hv, "_goal_text", goal_text or default_goal_text)
     monkeypatch.setattr(Hv, "_item_hud", fake_item_hud)

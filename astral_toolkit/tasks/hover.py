@@ -3,7 +3,7 @@
 专职处理：
 1. 鼠标悬停位置物品说明框（Tooltip）与格子角标的 OCR 图像裁剪与文字识别；
 2. 物品名称汉化纠错、品质与堆叠数量提取；
-3. 本机数据匹配、悬浮窗展示以及后台 UEX 市场价格异步查询。
+3. 本机数据匹配、悬浮窗展示以及后台 UEX 市场价格异步查询；本机数据、掉落、玩家市场经 bootstrap 接的 HoverLinks（IQ-B6）。
 """
 
 import itertools
@@ -11,6 +11,8 @@ import re
 import sys
 import threading
 import time
+from dataclasses import dataclass
+from typing import Any, Callable
 
 from ..app import bus
 from ..trade.inspector import inspect_item, _read_tooltip, HOVER_REGION  # noqa: F401
@@ -24,21 +26,60 @@ _seq = itertools.count(
 
 
 # ---------------------------------------------------------------- 依赖（2026-10-30 重构阶段 3：不再经 services 转发）
+# IQ-B6：物品卡片、掉落、玩家市场经 bootstrap 接的 HoverLinks（tasks/catalog），不再直接拿 tasks/trade 和 Trade
 from ..app.hud_state import _item_hud  # noqa: E402
 from . import goals as _t_goals  # noqa: E402
-from . import trade as _t_trade  # noqa: E402
+
+
+@dataclass(frozen=True)
+class HoverLinks:
+    """F8 要用的物品查询（IQ-B6，bootstrap._hover_links 接）：
+    item_card(name, zh, id=None, loot=True, exact=False)：物品卡片字典，和窗口物品查询页同一份；
+    loot(name, zh)：掉落 → LootLookup（loot / error）；
+    market()：开一个玩家市场会话（match / remember_alias / label），Trade 第一次用才造；
+    market_rows(item_id, tier)：报价表 (prices, results)；hud_market(results)：悬浮窗「市场」那一行"""
+
+    item_card: Callable[..., dict]
+    loot: Callable[[str, str], Any]
+    market: Callable[[], Any]
+    market_rows: Callable[[Any, str], Any]
+    hud_market: Callable[[Any], str]
+
+
+_links: HoverLinks | None = None
+_UNBOUND = (
+    "tasks.hover 未绑定：生产由 bootstrap.bind_all 接；测试先 bind(..., replace=True)"
+)
+
+
+def bind(links: HoverLinks, *, replace: bool = False) -> None:
+    """组装处调用一次（bootstrap.bind_all）"""
+    global _links
+    if _links is not None and not replace:
+        raise RuntimeError(
+            "tasks.hover 已绑定：生产只绑一次；测试用 replace=True 并在用完后恢复"
+        )
+    _links = links
+
+
+def _need_links() -> HoverLinks:
+    links = _links
+    if links is None:
+        raise RuntimeError(_UNBOUND)
+    return links
 
 
 def item_info(*args, **kwargs):
-    return _t_trade.item_info(*args, **kwargs)
+    """物品卡片（和窗口物品查询页同一份）：F8 首屏、市场名纠正后重查都用它"""
+    return _need_links().item_card(*args, **kwargs)
 
 
-def trade():
-    return _t_trade.trade()
-
-
-def _market_rows(item_id, tier):
-    return _t_trade._market_rows(item_id, tier)
+def last_hover():
+    """最近一次 F8 的状态（at、seq、id、lines）的快照，给查价、问题反馈读（IQ-B6）：拿到的是副本，改了不影响 F8"""
+    snap = dict(_last_hover)
+    if "lines" in snap:
+        snap["lines"] = list(snap["lines"])
+    return snap
 
 
 def _goal_for(*names):
@@ -140,12 +181,13 @@ def _hover_lines(info, en, zh):
 
 def _hover_more(seq, at, zh, en, info, quality=None, canon=True):
     """后台：对上玩家市场里的物品、查价、查掉落，查到一样补一样（悬浮窗和窗口都更新）"""
-    from ..trade import console as C
+    from ..trade import console as C  # 只拿名字小工具 has_chinese / _fold，不碰 Trade
 
+    links = _need_links()
     out = {"at": at, "seq": seq}
-    t = trade()
+    m = links.market()  # 以前 Trade 造不出来这次后台补价整个不做，现在一样
     try:
-        item, items = C.match_tooltip(t, zh, en)
+        item, items = m.match(zh, en)
     except Exception:
         item, items = None, []
     if _last_hover.get("seq") != seq:  # 已经又按了一次 F8：这次的结果不要了
@@ -154,12 +196,12 @@ def _hover_more(seq, at, zh, en, info, quality=None, canon=True):
         item is not None and zh and C.has_chinese(zh) and canon
     ):  # 只记汉化包里的标准名（认错的字不记，免得库存里显示错名）
         try:
-            t.catalog.add_alias(item.id, zh)
+            m.remember_alias(item.id, zh)
         except Exception:
             pass
-    out["market"] = {"id": item.id, "label": t.label(item.id)} if item else None
+    out["market"] = {"id": item.id, "label": m.label(item.id)} if item else None
     out["candidates"] = (
-        [{"id": i.id, "label": t.label(i.id)} for i in items[:8]]
+        [{"id": i.id, "label": m.label(i.id)} for i in items[:8]]
         if item is None
         else []
     )
@@ -194,12 +236,11 @@ def _hover_more(seq, at, zh, en, info, quality=None, canon=True):
         bus.publish("hover_more", dict(out))
         try:
             tier = _tier(quality)  # 认出了品质：按那一档查价（925 → q6 900–949）
-            prices, results = _market_rows(item.id, tier)
+            prices, results = links.market_rows(item.id, tier)
             if _last_hover.get("seq") != seq:
                 return
-            from ..trade.console import hud_market
 
-            market = hud_market(results) if results is not None else ""
+            market = links.hud_market(results) if results is not None else ""
             if market:
                 _item_hud("\n".join(_last_hover["lines"] + [market]))
             out["prices"] = dict(prices, quality=tier, op="sell")
@@ -210,9 +251,10 @@ def _hover_more(seq, at, zh, en, info, quality=None, canon=True):
                 "op": "sell",
             }
     try:
-        from ..crafting.loot import info as loot_info
-
-        out["loot"] = loot_info(info.get("name") or en, zh)
+        r = links.loot(info.get("name") or en, zh)
+        out["loot"] = (
+            r.loot if r.error is None else {"error": f"掉落数据查询失败：{r.error}"}
+        )
     except Exception as e:
         out["loot"] = {"error": f"掉落数据查询失败：{e}"}
     if _last_hover.get("seq") == seq:

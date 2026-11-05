@@ -3,8 +3,9 @@
 - search_items：搜索列表（crafting.itemsearch.find 的行原样，最多 30 条）
 - get_item_info：一件物品的详情（acquire.info + 中文名 + 目标提示）→ ItemInfo
 - get_item_loot：掉落（crafting.loot.info，会上网）→ LootLookup，出错不抛
+- MarketSession / open_market / market_rows / market_hud_text：玩家市场（IQ-B6：F8 用 Trade 只经这里，报价留 F 段）
 详情一次查询钉一个游戏数据快照（_pinned）；掉落不另钉（见 get_item_loot）。窗口物品查询页经 app/api/trade.py 调这里；
-tasks/trade.py 的 item_search / item_info 是旧壳（F8、库存联想、全局搜索还在调），也转到这里。
+tasks/trade.py 的 item_search 是旧壳（库存联想、全局搜索还在调），也转到这里。
 不 import app / runtime / bootstrap。"""
 
 from contextlib import ExitStack, contextmanager
@@ -90,3 +91,49 @@ def get_item_loot(name="", zh=""):
         return LootLookup(loot=loot_info(name, zh))
     except Exception as e:
         return LootLookup(error=e)
+
+
+# ---------------------------------------------------------------- 玩家市场（IQ-B6：F8 用 Trade 只经这里；报价本身留 F 段）
+
+
+class MarketSession:
+    """一次 F8 后台补价用的玩家市场会话：开的时候取一次 Trade，对名字、记中文别名、显示名都用这一个
+    （和以前 _hover_more 里 t = trade() 之后一样）"""
+
+    def __init__(self, trade):
+        self._t = trade
+
+    def match(self, zh, en):
+        """说明框里的名字 → (物品或 None, 候选列表)：trade.console.match_tooltip 原样（先本机目录，没有才联网搜）"""
+        from ..trade import console
+
+        return console.match_tooltip(self._t, zh, en)
+
+    def remember_alias(self, item_id, zh):
+        """把汉化包里的标准中文名记成这件物品的别名（写玩家库）"""
+        self._t.catalog.add_alias(item_id, zh)
+
+    def label(self, item_id):
+        """物品的显示名：Trade.label 原样"""
+        return self._t.label(item_id)
+
+
+def open_market():
+    """开一个玩家市场会话：取 tasks/trade 的 Trade（第一次用才造，和以前一样；造不出来照旧抛出去）"""
+    from . import trade as trade_tasks
+
+    return MarketSession(trade_tasks.trade())
+
+
+def market_rows(item_id, tier):
+    """玩家市场报价表 (prices, results)：tasks/trade._market_rows 原样"""
+    from . import trade as trade_tasks
+
+    return trade_tasks._market_rows(item_id, tier)
+
+
+def market_hud_text(results):
+    """报价写成悬浮窗「市场」那一行：trade.console.hud_market 原样"""
+    from ..trade.console import hud_market
+
+    return hud_market(results)

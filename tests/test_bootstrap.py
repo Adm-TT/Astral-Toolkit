@@ -19,7 +19,9 @@ from astral_toolkit.mining import screen as mining_screen
 from astral_toolkit.mining import signals as mining_signals
 from astral_toolkit.mining.parse import Scan
 from astral_toolkit.runtime.session import RunFlag, RunState
+from astral_toolkit.tasks import catalog as catalog_tasks
 from astral_toolkit.tasks import count as count_tasks
+from astral_toolkit.tasks import hover as hover_tasks
 from astral_toolkit.tasks import mining as mining_tasks
 from astral_toolkit.tasks import navigation as nav_tasks
 from astral_toolkit.tasks import system as system_tasks
@@ -138,6 +140,8 @@ def test_build_desktop_binds_everything_to_this_app(monkeypatch):
             assert nav_tasks._game_events is app.game_events
             assert nav_tasks._results is app.results
             assert count_tasks._count is app.count
+            assert hover_tasks._links is not None
+            assert hover_tasks._links.loot is catalog_tasks.get_item_loot
             status = system_common._status
             assert status is not None and status.results is app.results
             assert callable(system_common._start)
@@ -233,6 +237,37 @@ def test_nav_links_are_wired_by_bootstrap():
         bootstrap.shutdown(app, budget=0.2)
 
 
+def test_hover_links_are_wired_by_bootstrap(monkeypatch):
+    """IQ-B6：bootstrap 把 F8 的物品卡片、掉落、玩家市场接到 tasks/catalog。"""
+    from astral_toolkit.catalog.results import ItemInfo
+    from astral_toolkit.core import i18n
+
+    links = bootstrap._hover_links()
+    assert links.loot is catalog_tasks.get_item_loot
+    assert links.market is catalog_tasks.open_market
+    assert links.market_rows is catalog_tasks.market_rows
+    assert links.hud_market is catalog_tasks.market_hud_text
+
+    calls = []
+
+    def fake_item_info(name="", zh="", item_id=None, loot=True, exact=False):
+        calls.append((name, zh, item_id, loot, exact))
+        return ItemInfo(
+            facts={"name": "N", "zh": "", "category": "Helmets"},
+            zh="中",
+            goal="",
+        )
+
+    monkeypatch.setattr(catalog_tasks, "get_item_info", fake_item_info)
+    monkeypatch.setattr(i18n, "SHOP_CAT_ZH", {"Helmets": "头盔"})
+    expected = {"name": "N", "zh": "中", "category": "头盔", "goal": ""}
+    # loot、exact 给不一样的值，接反了测得出
+    out = links.item_card("N", "中", loot=False, exact=True)
+    assert out == expected
+    assert list(out) == list(expected)
+    assert calls == [("N", "中", None, False, True)]
+
+
 def test_nav_fps_follows_settings_page(monkeypatch, tmp_path):
     from astral_toolkit.core import settings
     from astral_toolkit.infrastructure.platform import timer
@@ -276,6 +311,11 @@ def test_bind_all_and_task_binds_refuse_second_binding():
         _assert_error(
             RuntimeError,
             "已绑定",
+            lambda: hover_tasks.bind(bootstrap._hover_links()),
+        )
+        _assert_error(
+            RuntimeError,
+            "已绑定",
             lambda: nav_tasks.bind(app.nav, app.pos, app.game_events, app.results),
         )
         _assert_error(
@@ -294,6 +334,13 @@ def test_unbound_modules_raise_and_gate_stays_open():
 
         count_tasks._count = None
         _assert_error(RuntimeError, "未绑定", count_tasks.count_state)
+
+        hover_tasks._links = None
+        _assert_error(
+            RuntimeError,
+            "未绑定",
+            lambda: hover_tasks.item_info("MedPen", "医疗笔", loot=False),
+        )
 
         nav_tasks._nav = None
         nav_tasks._pos = None

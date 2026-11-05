@@ -128,6 +128,7 @@ MODULES = [
     "tests.test_catalog_loot",
     "tests.test_catalog_presenter",
     "tests.test_catalog_usecases",
+    "tests.test_catalog_market",
     "tests.test_pos_service",
     "tests.test_nav_fps",
     "tests.test_count_session",

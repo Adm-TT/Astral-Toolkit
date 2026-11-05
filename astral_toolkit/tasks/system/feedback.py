@@ -134,7 +134,7 @@ def feedback_report(kind="auto", note="", img=None):
     from .. import hover as _hv, navigation as _nv
 
     src = _need_status()
-    last_hover = _hv._last_hover
+    last_hover = _hv.last_hover()
     live_running = src.live_running()
     live_paused = src.live_paused()
     where_now = _nv._WHERE.get("v")

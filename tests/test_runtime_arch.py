@@ -802,6 +802,43 @@ def test_only_trade_shell_imports_catalog_presenter():
     )
 
 
+_F8_FORBIDDEN_IMPORTS = (
+    "astral_toolkit.tasks.trade",
+    "astral_toolkit.crafting.loot",
+    "astral_toolkit.trade.console.match_tooltip",
+    "astral_toolkit.trade.console.hud_market",
+)
+_F8_FORBIDDEN_CALLS = ("trade", "match_tooltip", "add_alias", "_market_rows")
+
+
+def _f8_link_violations(source):
+    """F8 直接拿 tasks/trade、Trade、掉落、console 报价函数的地方（函数里的 import 也算）"""
+    mods = list(_imports_in_source(source, "astral_toolkit.tasks"))
+    return _forbidden(mods, _F8_FORBIDDEN_IMPORTS) + _calls_named(
+        source, _F8_FORBIDDEN_CALLS
+    )
+
+
+def test_f8_reaches_item_query_through_links():
+    """IQ-B6：F8 不再直接拿 tasks/trade 和 Trade，物品查询和玩家市场经 bootstrap 接的 HoverLinks。"""
+    path = _ROOT / "tasks" / "hover.py"
+    source = path.read_text(encoding="utf-8")
+    assert _f8_link_violations(source) == [], path.name
+    for bad in (
+        "from . import trade as _t_trade",
+        "def f():\n    from ..crafting.loot import info\n",
+        "def f():\n    from ..trade.console import hud_market\n",
+        "from ..trade.console import match_tooltip",
+        "t = trade()",
+        "C.match_tooltip(t, zh, en)",
+        't.catalog.add_alias(1, "甲")',
+        '_market_rows(1, "q6")',
+    ):
+        assert _f8_link_violations(bad), bad
+    ok = "m = links.market()\nm.match(zh, en)\nm.remember_alias(1, zh)\nlinks.hud_market([])\n"
+    assert _f8_link_violations(ok) == []
+
+
 _MUTABLE = (
     ast.Dict,
     ast.List,
