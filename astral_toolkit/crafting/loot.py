@@ -10,9 +10,22 @@ import re
 import urllib.request
 from pathlib import Path
 
+from ..catalog.loot import (
+    PLACED as _PLACED,
+    VARIANT,
+    exact_candidates,
+    group_info,
+    mine_groups,
+    partial,
+    partial_hits,
+    pick_exact,
+    ship_groups,
+    summary,
+)
+from ..contracts.textkeys import fold_mixed_loose as _fold
+from ..core.paths import DATA
+
 HERE = Path(__file__).resolve().parent
-from ..contracts.textkeys import fold_mixed_loose as _fold  # noqa: E402
-from ..core.paths import DATA  # noqa: E402
 
 INDEX = DATA / "loot_index.json"
 CACHE_DIR = DATA / "loot"
@@ -96,10 +109,7 @@ def _index_meta(snap=None):
 
 # 同名的「变体」：NPC 专用、不显示的、测试 / 枪械游戏模式、低模、模板……玩家拿不到，掉落不算它的（2026-10-24 全量核对：
 # 「Citadel 胸甲」对到了 _ai_exclusive、「FSK-8 战斗刀」对到了 _gungame）
-_VARIANT = re.compile(
-    r"(_ai_exclusive|^nodraw_|_gungame|_debug|_lowpoly|_template|_dummy|_atls|_securitynetwork|"
-    r"_hair_extension|_salvation_|_active$)"
-)
+_VARIANT = VARIANT
 
 
 def _wiki_classes(name_en):
@@ -112,13 +122,7 @@ def _wiki_classes(name_en):
         return set()
 
 
-def _partial(ke, kz, r):
-    """名字只是开头像 / 包含：英文 ≥6 前缀、≥5 子串，中文 ≥3 子串"""
-    return (
-        (ke and len(ke) >= 6 and r.norm_en.startswith(ke))
-        or (ke and len(ke) >= 5 and ke in r.norm_en)
-        or (kz and len(kz) >= 3 and kz in r.norm_zh)
-    )
+_partial = partial
 
 
 def find(name_en="", name_zh=""):
@@ -133,28 +137,13 @@ def find(name_en="", name_zh=""):
     try:
         gamedata.ensure()
         with gamedata.snapshot() as s:  # 精确、wiki 类名、部分匹配钉在同一个版本上
-            exact = [
-                (r.uuid, r.en, r.zh, r.rarity, r.cls_lower, r.n)
-                for r in gd_loot.exact(ke, kz, s)
-            ]
+            exact = exact_candidates(gd_loot.exact(ke, kz, s))
             if exact:
                 good = _wiki_classes(name_en or exact[0][1])  # 源顺序第一个，排序前取
-                pick = (
-                    [h for h in exact if h[4] in good]
-                    or [h for h in exact if not _VARIANT.search(h[4])]
-                    or exact
-                )
-                pick.sort(key=lambda h: -h[5])
-                return [h[:4] for h in pick]
+                return pick_exact(exact, good)
             if name_en and _wiki_classes(name_en):
                 return []
-            part = []
-            for r in gd_loot.rows(s):
-                if _partial(ke, kz, r) and not _VARIANT.search(r.cls_lower):
-                    part.append((r.uuid, r.en, r.zh, r.rarity))
-                    if len(part) == 5:
-                        break
-            return part
+            return partial_hits(gd_loot.rows(s), ke, kz)
     except gamedata.GamedataError:
         return []
 
@@ -322,41 +311,7 @@ def detail(uuid, online=True):
     return d
 
 
-PLACED = "直接刷在场景里（不在箱子里）"
-
-
-def summary(d, top=5):
-    """掉落详情 → [(地区, 最高单箱概率, 箱子/位置说明)]，按概率排"""
-    out = []
-    for r in d.get("regions") or []:
-        best = r.get("best") or 0
-        cs = sorted(
-            r.get("containers") or [],
-            key=lambda c: c.get("openp") or c.get("p") or 0,
-            reverse=True,
-        )
-        where = ""
-        if cs:
-            c = cs[0]
-            where = c.get("loc") or ""
-            raw = (d.get("raw") or "").split(".")[-1].lower()
-            name = (c.get("name") or "").split(" · ")[0].strip()
-            if (
-                raw and name.lower() == raw
-            ):  # 「容器」就是物品自己：直接刷在场景里（奖励室架子上、地上），不在箱子里
-                box = PLACED
-            else:
-                box = (
-                    re.sub(
-                        r"^Lootable_(Generated_)?Container_?", "", c.get("name") or ""
-                    )
-                    .replace("_", " ")
-                    .strip()
-                )
-            where = "｜".join(x for x in (where, box) if x)
-        out.append((r.get("name") or r.get("id"), best, where))
-    out.sort(key=lambda x: x[1], reverse=True)
-    return out[:top]
+PLACED = _PLACED
 
 
 # 副本专属矿：不会从箱子里开出来，只能在副本里开采（用户 2026-10-24 告知；掉落站把手采物品挂在挖矿宝石掉落表上，
@@ -432,14 +387,7 @@ def mine_info(key, top=5, online=True):
             loc = where.split("｜")[0] if where else ""
             if region not in best or p > best[region][0]:
                 best[region] = (p, loc)
-    groups = {}
-    for region, (p, loc) in best.items():
-        groups.setdefault((round(p, 6), loc), []).append(region)
-    rows = [
-        {"p": p, "box": loc, "regions": regions}
-        for (p, loc), regions in sorted(groups.items(), key=lambda kv: -kv[0][0])[:top]
-    ]
-    shown = sum(len(r["regions"]) for r in rows)
+    rows, more = mine_groups(best, top)
     from ..core.i18n import mineral_zh
 
     en = {"carinitepure": "Carinite (Pure)"}.get(key, key.capitalize())
@@ -451,7 +399,7 @@ def mine_info(key, top=5, online=True):
         "src": "scl.miao.network 开采点出现概率",
         "note": "副本专属矿：不会从箱子里开出来，只能开采",
         "groups": rows,
-        "more": max(0, len(best) - shown),
+        "more": more,
     }
 
 
@@ -479,15 +427,8 @@ def ship_info(mineral, top=5):
     from ..core.i18n import mineral_zh
     from ..mining.locations import where, zh_name
 
-    groups = {}
-    for pct, loc in where(mineral):
-        groups.setdefault(round(pct / 100, 6), []).append(zh_name(loc))
-    rows = [
-        {"p": p, "box": "", "regions": regions}
-        for p, regions in sorted(groups.items(), key=lambda kv: -kv[0])[:top]
-    ]
-    shown = sum(len(r["regions"]) for r in rows)
-    total = sum(len(v) for v in groups.values())
+    pairs = [(pct, zh_name(loc)) for pct, loc in where(mineral)]
+    rows, more = ship_groups(pairs, top)
     zh = {"Pressurized Ice": "高压冰"}.get(mineral) or mineral_zh(mineral)
     return {
         "name": zh,
@@ -497,7 +438,7 @@ def ship_info(mineral, top=5):
         "note": "船挖矿物：太大进不了战利品箱，只能用船开采"
         + ("" if rows else "（暂无地点数据）"),
         "groups": rows,
-        "more": max(0, total - shown),
+        "more": more,
     }
 
 
@@ -521,23 +462,16 @@ def info(name_en="", name_zh="", top=5, online=True):
         return {"pending": True}
     except Exception as e:
         return {"error": f"掉落数据暂时取不到（{e}）"}
-    groups = {}  # 概率和箱子一样的地点合成一行
-    for region, p, where in summary(d, top=99):
-        box = where.split("｜")[-1] if where else ""
-        groups.setdefault((round(p, 6), box), []).append(region)
-    if not groups:
+    grouped = group_info(d, top)  # 概率和箱子一样的地点合成一行
+    if grouped is None:
         return None
-    rows = [
-        {"p": p, "box": box, "regions": regions, "placed": box == PLACED}
-        for (p, box), regions in sorted(groups.items(), key=lambda kv: -kv[0][0])[:top]
-    ]
-    shown = sum(len(r["regions"]) for r in rows)
+    rows, more = grouped
     return {
         "name": zh or en,
         "en": en,
         "uuid": u,
         "groups": rows,
-        "more": max(0, len(d.get("regions") or []) - shown),
+        "more": more,
     }
 
 
