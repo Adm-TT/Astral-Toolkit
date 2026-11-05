@@ -261,9 +261,10 @@ def test_stamp_refused_after_the_session_ended():
     loop, worker, out = make_loop()
     try:
         _started(loop, worker)
+        assert worker.ticked.wait(WAIT), "第一次 tick 还没记下会话"
         session = worker.session
         assert loop.stamp(session, 1.0) is not None
-        _stop(loop, _current_id(loop))
+        assert _stop(loop, _current_id(loop)) is True
         out.clear()
         assert loop.stamp(session, 2.0) is None
         assert out.ops == []

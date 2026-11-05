@@ -6,7 +6,13 @@
 import threading
 import time
 
-from tests.runtime_fakes import FakeClock, FakeWorker, Gate, make_loop
+from tests.runtime_fakes import (
+    FakeClock,
+    FakeWorker,
+    Gate,
+    hold_after_finish,
+    make_loop,
+)
 from astral_toolkit.runtime.results import MINING_SCAN, ResultStore
 from astral_toolkit.runtime.session import (
     Freshness,
@@ -213,11 +219,18 @@ def test_restart_only_after_join_timeout():
 
 
 def test_r2_stop_timeout_and_each_pending_session_has_its_own_watchdog():
-    """v4：A 停止超时留在「当前」；开 B 才把 A 移进 pending（superseded）；
-    B 停止超时也只标 stop_timeout、不标 FAILED；每条记录一个看门狗"""
+    """v5：A/B 各自停止超时；同一会话重复 join 不换看门狗、不多记超时；
+    旧线程还在收尾时不许再取代，A 退出后 C 才能取代 B"""
     gate_a, gate_b = Gate(), Gate()
     worker = FakeWorker(restart_while_stopping=True)
     loop, _, out = make_loop(worker, join_timeout=0.02)
+
+    def timeout_records():
+        return [op for op in out.records() if "停止超时" in op[2]]
+
+    def replaced_records():
+        return [op for op in out.records() if "已被新会话取代" in op[2]]
+
     try:
         worker.gate = gate_a
         sid_a = _start(loop, worker)
@@ -236,24 +249,47 @@ def test_r2_stop_timeout_and_each_pending_session_has_its_own_watchdog():
         assert not loop.join(session_id=sid_b)
         assert loop.state().state is RunState.STOPPING
         assert _wait_until(lambda: loop.state().stop_timeout, 5)
-        # A 一直不退：A 那条被自己的看门狗标 stop_timeout，只记一条 record
-        assert _wait_until(lambda: loop._pending[sid_a].stop_timeout, 5)  # type: ignore[union-attr]
-        assert _wait_until(lambda: any("停止超时" in op[2] for op in out.records()), 5)
+        # A 一直不退：A、B 各由自己的看门狗标 stop_timeout，各记一条 record。
+        # record 是锁外发的：看到 stop_timeout 时 record 不一定已经发出，所以先等两条都到。
+        assert _wait_until(
+            lambda: loop._pending[sid_a].stop_timeout,  # type: ignore[union-attr]
+            5,
+        )
+        assert _wait_until(lambda: len(timeout_records()) == 2, 5)
+        before = len(timeout_records())
+        assert before == 2
         assert loop.state().state is not RunState.FAILED
+
         # 同一会话连续两次 join 超时：看门狗只有一个、不会多记超时 record
-        before = len([op for op in out.records() if "停止超时" in op[2]])
+        watchdog = loop._pending[sid_a].watchdog
+        assert watchdog is not None
         assert not loop.join(session_id=sid_a)
+        assert loop._pending[sid_a].watchdog is watchdog
         assert not loop.join(session_id=sid_a)
-        gate_b.release.set()
-        assert _wait_state(loop, RunState.STOPPED)
-        assert len([op for op in out.records() if "停止超时" in op[2]]) <= before + 1
-        # A 退出后 pending 清空，C 能开（B 停止超时已在当前，不会再积一个活线程）
+        assert loop._pending[sid_a].watchdog is watchdog
+        assert len(timeout_records()) == before
+
+        # B 停止超时时开 C：A 还在 pending 收尾，不许再取代
+        assert loop.start() is None
         gate_a.release.set()
-        assert _wait_until(lambda: not loop.state().pending, 5)
+        assert _wait_until(lambda: sid_a not in loop._pending, 5)
+
         worker.gate = None
         sid_c = loop.start()
         assert sid_c is not None and _wait_state(loop, RunState.RUNNING)
         assert sid_c not in (sid_a, sid_b)
+        assert [p.session_id for p in loop.state().pending] == [sid_b]
+
+        gate_b.release.set()
+        assert _wait_until(lambda: not loop.state().pending, 5)
+        assert loop.state().session_id == sid_c
+        assert loop.running()
+        assert worker.calls.count(("stop_ops", sid_b, "user")) == 1
+        # A、B 都是按停止后 join 超时：那时已经发过「已停止」确认（confirm_sent），
+        # 之后被取代不再记「已被新会话取代」（v4.2 确认次数表）；A 的 stop_ops 也只一次
+        assert replaced_records() == []
+        assert worker.calls.count(("stop_ops", sid_a, "user")) == 1
+
         loop.request_stop_current(StopInfo("user"))
         assert loop.join(session_id=sid_c)
     finally:
@@ -268,19 +304,38 @@ def test_r3_watchdog_rechecks_alive_under_lock():
     worker = FakeWorker()
     worker.gate = gate
     loop, _, out = make_loop(worker, join_timeout=0.02)
+    wd_window = threading.Event()
+    wd_gate = threading.Event()
+    held_thread = None
     try:
         sid = _start(loop, worker)
         assert gate.entered.wait(WAIT)
+        held_thread = loop._current.thread  # type: ignore[union-attr]
+        original_join = held_thread.join
+
+        def gated_join(timeout=None):
+            joined = original_join(timeout)
+            if threading.current_thread().name.endswith("-watchdog"):
+                wd_window.set()
+                assert wd_gate.wait(WAIT)
+            return joined
+
+        held_thread.join = gated_join
         loop.request_stop_current(StopInfo("user"))
         assert not loop.join(session_id=sid), "线程卡着，join 应该超时"
         assert loop.state().stop_timeout is False
+        assert wd_window.wait(WAIT), "看门狗没卡在 join 返回之后、拿锁之前"
         gate.release.set()  # 线程在看门狗复查前退出
-        assert _wait_until(lambda: not loop.state().worker_alive, 5)
+        assert _wait_until(lambda: not held_thread.is_alive(), 5)
+        wd_gate.set()
+        assert _wait_state(loop, RunState.STOPPED)
         assert loop.state().stop_timeout is False, "线程已经退了，不能标停止超时"
         assert not any("停止超时" in op[2] for op in out.records())
-        assert _wait_state(loop, RunState.STOPPED)
     finally:
         gate.release.set()
+        wd_gate.set()
+        if held_thread is not None:
+            held_thread.__dict__.pop("join", None)
         loop.join(session_id=loop.state().session_id)
 
 
@@ -368,8 +423,8 @@ def test_r5_old_tick_does_not_touch_new_session_timers():
         loop.join(session_id=loop.state().session_id)
 
 
-def test_r6_error_text_belongs_to_its_session():
-    """A、B 先后出错（v4 里 A 出错用尽必须等它退出才能开 B，所以不是交错）：
+def test_r6_sequential_errors_keep_their_own_text():
+    """先后出错（A 出错用尽必须等它退出才能开 B，不是交错）：
     B 的 live 事件里 error 是 B 的、A 的错误恰好发一次"""
     worker = _ErrorWorker(retries=1, wait=0.01)
     loop, _, out = make_loop(worker)
@@ -438,6 +493,72 @@ def test_r7_run_flag_never_written_backwards():
         gate.release.set()
         loop.request_stop_current(StopInfo("user"))
         loop.join(session_id=loop.state().session_id)
+
+
+def test_r7b_late_false_does_not_overwrite_newer_true():
+    """A 停止时写 False 卡在写盘里；B 的 True 被同一把 flag 锁挡住：
+    迟到的 False 不覆盖 True"""
+    tick_gate, write_gate = Gate(), Gate()
+    saved = []
+
+    def write(key, value):
+        if value is False:
+            write_gate.hold()
+        saved.append(value)
+
+    worker = FakeWorker(wait=0.01, restart_while_stopping=True)
+    loop, _, _ = make_loop(
+        worker, run_flag=RunFlag("live_on", write), join_timeout=0.02
+    )
+    stopper = None
+    starter = None
+    try:
+        worker.gate = tick_gate
+        sid_a = _start(loop, worker)
+        assert tick_gate.entered.wait(WAIT)
+        stopped = threading.Event()
+        holder = {}
+
+        def stop_a():
+            holder["stop"] = loop.request_stop_current(StopInfo("user"))
+            stopped.set()
+
+        stopper = threading.Thread(target=stop_a, daemon=True)
+        stopper.start()
+        assert write_gate.entered.wait(WAIT)
+        assert not loop.join(session_id=sid_a)
+        worker.gate = None
+        started = threading.Event()
+
+        def start_b():
+            holder["sid"] = loop.start()
+            started.set()
+
+        starter = threading.Thread(target=start_b, daemon=True)
+        starter.start()
+        assert _wait_until(lambda: loop.state().state is RunState.RUNNING, 5)
+        assert not started.is_set(), (
+            "start() 应该被 flag 锁挡在写盘那一步（不能先写完再被覆盖）"
+        )
+        write_gate.release.set()
+        assert started.wait(WAIT) and stopped.wait(WAIT)
+        assert loop._flag_want is True
+        assert saved == [True, False, True], saved
+        sid_b = holder["sid"]
+        assert sid_b is not None and sid_b != sid_a
+        assert loop.state().session_id == sid_b
+        assert loop.running()
+        tick_gate.release.set()
+        assert _wait_until(lambda: not loop.state().pending, 5)
+    finally:
+        tick_gate.release.set()
+        write_gate.release.set()
+        loop.request_stop_current(StopInfo("user"))
+        loop.join_all(timeout=WAIT)
+        if starter is not None:
+            starter.join(WAIT)
+        if stopper is not None:
+            stopper.join(WAIT)
 
 
 def test_r8_stopped_confirmation_once_per_session():
@@ -974,8 +1095,7 @@ def test_start_after_stopped_thread_is_not_superseded():
     gate = Gate()
     worker = FakeWorker(wait=0.01)
     loop, _, out = make_loop(worker, join_timeout=0.02)
-    old_hook = loop._finish_hook
-    loop._finish_hook = gate.hold
+    restore = hold_after_finish(loop, gate)
     try:
         sid_a = _start(loop, worker)
         loop.request_stop_current(StopInfo("user"))
@@ -997,8 +1117,8 @@ def test_start_after_stopped_thread_is_not_superseded():
         loop.request_stop_current(StopInfo("user"))
         assert loop.join(session_id=sid_b)
     finally:
-        loop._finish_hook = old_hook
         gate.release.set()
+        restore()
         loop.request_stop_current(StopInfo("user"))
         loop.join(session_id=loop.state().session_id)
 

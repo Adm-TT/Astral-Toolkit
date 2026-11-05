@@ -193,6 +193,8 @@ class _Live:
 
     # ---- 会话循环要的类属性（设计稿 v3 §2.2）
     name = "live"
+    log_tag = "MINING"
+    display_name = "采矿助手"
     activity_kind = "mining"
     retries = 3
     idle_close: float | None = 120.0  # 所有通道最近一次「看到」都超过这么久：自动关闭
