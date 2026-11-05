@@ -129,6 +129,10 @@ class _CountWorker:
         return []
 
     def setup(self, session: Any) -> _CountCtx:
+        from ...trade import debug_shots
+
+        # 调试图：这次盘点的识别都放进同一个时间戳目录（线程本地，setup / teardown 都在会话线程上跑）
+        debug_shots.bind_count_run()
         return _CountCtx()
 
     def tick(self, session: Any, ctx: _CountCtx, now: float) -> Tick:
@@ -257,7 +261,9 @@ class _CountWorker:
         return ops
 
     def teardown(self, session: Any, ctx: _CountCtx | None) -> None:
-        return None
+        from ...trade import debug_shots
+
+        debug_shots.unbind_count_run()
 
 
 class _Count:

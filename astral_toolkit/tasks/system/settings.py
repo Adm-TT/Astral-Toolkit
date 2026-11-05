@@ -72,6 +72,7 @@ def set_settings(**kw):
         "feedback_upload",
         "train_upload",
         "always_use_gpu",
+        "debug_mode",
     ):
         if k in kw:
             kw[k] = bool(kw[k])

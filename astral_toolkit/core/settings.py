@@ -29,6 +29,7 @@ DEFAULTS = {
     "update_online": True,  # 启动时到网上检查新版本（只读一个小文件；下载要玩家点）
     "ocr_device": "gpu",  # 文字识别设备：gpu (显卡 DirectML 加速) / cpu (处理器)
     "always_use_gpu": True,  # 兼容旧配置项
+    "debug_mode": False,  # 调试模式：开着时 F8/盘点把裁切阶段与停因打进运行日志，并在 userdata/shots/debug/ 落下识别区域调试图（仅本机，不上传；默认关）
     "train_upload": True,  # 帮助改进识别：认字的错题（一行字的小截图 + 正确答案）发给作者训练（2026-10-27 负责人定）
     "feedback_upload": True,  # 问题反馈存好后自动发给作者（2026-10-27 负责人定，设置页能关）
     "nav_marker": True,  # 导航时在游戏画面上画目标记号（画面外贴边画箭头）和瞄准环（2026-10-27）

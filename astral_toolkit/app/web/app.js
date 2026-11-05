@@ -1767,7 +1767,7 @@ function drawItem() {
     : state.candidates?.length ? `<h3>玩家市场</h3><p class="muted" style="margin:0 0 6px">市场中没有同名物品，选择一个查询价格：</p><div class="list" id="cands">${state.candidates.map((c) => `<button data-id="${esc(c.id)}"><span>${esc(c.label)}</span></button>`).join("")}</div>` : "";
 
   box.innerHTML = `<div class="panel">
-    <div class="item-head"><span class="name">${esc(it.zh || it.name)}</span>${it.zh ? `<span class="muted">${esc(it.name)}</span>` : ""}${it.category ? `<span class="tag">${esc(it.category)}</span>` : ""}${state.itemFrom ? `<span class="tag qt">${esc(state.itemFrom)} 识别 ${esc(state.hover?.at || "")}</span>` : ""}${state.itemFrom === "F8" && state.hover?.sure === false ? `<span class="tag" style="color:var(--warn,#d9822b)" title="名字没在汉化包里对上，是照字认的">识别结果不确定</span>` : ""}${state.itemFrom === "F8" && state.hover?.quality != null ? `<span class="tag">品质 ${state.hover.quality}</span>` : ""}${state.itemFrom === "F8" && state.hover?.qty ? `<span class="tag">${esc(qtyText(state.hover.qty, state.hover.unit))}</span>` : ""}<span style="margin-left:auto" class="row"><button class="btn small" id="to-stock" title="带上名称、单位、品质和数量，在库存页入库">入库</button>${fbBtn("item", "报告问题")}</span></div>
+    <div class="item-head"><span class="name">${esc(it.zh || it.name)}</span>${it.zh ? `<span class="muted">${esc(it.name)}</span>` : ""}${it.category ? `<span class="tag">${esc(it.category)}</span>` : ""}${state.itemFrom ? `<span class="tag qt">${esc(state.itemFrom)} 识别 ${esc(state.hover?.at || "")}</span>` : ""}${state.itemFrom === "F8" && state.hover?.sure === false ? (state.hover?.library_ready === false ? `<a class="tag" href="#settings" style="color:var(--warn,#d9822b);text-decoration:none" title="本机数据包或汉化包未下载，请到设置里更新数据后再识别">本地数据不完整</a>` : `<span class="tag" style="color:var(--warn,#d9822b)" title="名字没在汉化包里对上，是照字认的">识别结果不确定</span>`) : ""}${state.itemFrom === "F8" && state.hover?.quality != null ? `<span class="tag">品质 ${state.hover.quality}</span>` : ""}${state.itemFrom === "F8" && state.hover?.qty ? `<span class="tag">${esc(qtyText(state.hover.qty, state.hover.unit))}</span>` : ""}<span style="margin-left:auto" class="row"><button class="btn small" id="to-stock" title="带上名称、单位、品质和数量，在库存页入库">入库</button>${fbBtn("item", "报告问题")}</span></div>
     ${goalBox([it.goal])}
     ${it.aka && it.aka.length ? `<p class="faint" style="margin:0 0 6px;font-size:12.5px">别名：${esc(it.aka.join("、"))}（汉化包旧译名）</p>` : ""}
     ${it.desc ? `<details class="desc" style="margin:0 0 10px" open><summary class="muted" style="cursor:pointer">描述<span class="faint" style="font-size:12px"> · 游戏内说明</span></summary><div class="desc-body">${esc(it.desc)}</div></details>` : ""}
@@ -2778,6 +2778,9 @@ PAGES.settings = () => {
       <span id="ocr-state">${ocrStateHtml(s, c)}</span>
       </p></div>
       ${segH("ocr-device", [["gpu", "显卡 (GPU)"], ["cpu", "处理器 (CPU)"]], (c.ocr_device || (c.always_use_gpu !== false ? "gpu" : "cpu")), "文字识别硬件")}</div>
+    <div class="set"><div>调试模式
+      <p>开启后，每次 F8 物品识别与 F6 盘点会把裁切阶段、停因写入运行日志，并在 userdata/shots/debug/ 落下识别区域调试图（仅本机，不上传），便于排查认错、偏慢或裁切区域不对。日志和磁盘占用会明显增加；平时请保持关闭。</p></div>
+      <button class="switch ${c.debug_mode ? "on" : ""}" id="debug-sw" aria-label="调试模式"></button></div>
     <div class="set" style="border:0;padding:0"><div>导出日志
       <p>将运行日志、设置和系统信息打包到桌面，发给作者用于排查问题。不含聊天记录、浏览数据等个人信息。识别类问题（扫描、F8、导航）建议附上出现问题时的游戏截图。</p></div>
       <button class="btn" id="export-logs">导出日志</button></div></div>
@@ -2894,6 +2897,11 @@ PAGES.settings = () => {
     const on = !e.currentTarget.classList.contains("on");
     e.currentTarget.classList.toggle("on", on);
     try { state.status.settings = await api("set_settings", { train_upload: on }); } catch (err) { toast(err.message); }
+  };
+  $("#debug-sw").onclick = async (e) => {
+    const on = !e.currentTarget.classList.contains("on");
+    e.currentTarget.classList.toggle("on", on);
+    try { state.status.settings = await api("set_settings", { debug_mode: on }); } catch (err) { toast(err.message); }
   };
   $("#upd-sw").onclick = async (e) => {
     const on = !e.currentTarget.classList.contains("on");

@@ -275,13 +275,22 @@ def hover_once(img=None):
     at = time.strftime("%H:%M:%S")  # 给人看的时间
     seq = next(_seq)  # 区分每一次 F8（同一秒按两次 at 一样）
     info = item_info(en, zh, loot=False)  # 只用本机数据，很快
+    from .system.about import data_names_ready
+
+    library_ready = data_names_ready()
     head = (
         (zh or en)
         + (f"｜品质 {quality}" if quality is not None else "")
         + (f"｜{qty_text(qty, unit)}" if qty else "")
     )
-    if not canon:  # 汉化包里没对上：名字只是照字认的，不硬猜成别的东西
-        head += "｜识别结果不确定"
+    if not canon:
+        # 库没下全时优先提示更新数据，避免误当成 OCR/汉化对不上
+        # （docs/superpowers/specs/2026-11-04-f8-unsure-data-hint.md）
+        head += (
+            "｜本地数据不完整，请先更新数据"
+            if not library_ready
+            else "｜识别结果不确定"
+        )
     try:
         from ..crafting.crafting import craft_text
     except Exception:
@@ -325,12 +334,17 @@ def hover_once(img=None):
             "tier": _tier(quality),
             "craft": craft,
             "sure": bool(canon),
+            "library_ready": bool(library_ready),
         },
-    )  # sure=False：汉化包里没对上，名字是照字认的
+    )  # sure=False：名字照字认的；library_ready 供 UI 区分「没更新数据」
     note = (
         f"耗时 截图{(t1 - t0) * 1000:.0f}ms 识别({where}){(t2 - t1) * 1000:.0f}ms "
         f"本机数据{(t3 - t2) * 1000:.0f}ms 共{(t3 - t0) * 1000:.0f}ms｜品质 {quality} 数量 {qty} {unit}"
-        + ("" if canon else "｜汉化包里没对上")
+        + (
+            ""
+            if canon
+            else ("｜本地数据不完整" if not library_ready else "｜汉化包里没对上")
+        )
     )
     threading.Thread(
         target=_hover_more,

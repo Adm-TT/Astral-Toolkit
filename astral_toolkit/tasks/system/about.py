@@ -72,6 +72,19 @@ def _data_versions():
     return out
 
 
+def data_names_ready() -> bool:
+    """本机数据包与汉化包版本戳都在（首页「未下载」都不亮），认为名字库侧数据已下载。
+
+    不与服务器比新旧。F8 sure=False 时用来区分「没更新数据」和「汉化包里真没对上」
+    （docs/superpowers/specs/2026-11-04-f8-unsure-data-hint.md）。
+    """
+    try:
+        v = _data_versions()
+        return bool(v.get("pack")) and bool(v.get("loc"))
+    except Exception:
+        return False
+
+
 def about_info():
     """关于页：版权、数据来源"""
     return {

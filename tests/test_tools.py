@@ -1337,7 +1337,7 @@ def test_hover_overlay_updates_before_network(monkeypatch, tmp_path):
     calls = []
     monkeypatch.setattr(
         "astral_toolkit.ocr.recognize",
-        lambda img, urgent=False, offset=(0, 0): (
+        lambda img, urgent=False, offset=(0, 0), native=False: (
             calls.append((img.size, urgent)) or toks
         ),
     )
@@ -1371,10 +1371,8 @@ def test_hover_overlay_updates_before_network(monkeypatch, tmp_path):
             ("CQ7步枪", "CQ7 步枪")
         )  # 名字按汉化包纠正成标准写法（1.6.37）
         assert shown[-1][0] - t0 < 2.0  # 没等联网
-        assert calls[0] == (
-            (512, 1440),
-            True,
-        )  # 鼠标在 50%：先认左边 30%~50% 整高一条，插队识别（NGU 2026-10-30 改的分区）
+        # 鼠标在 50%：先认左边 30%~50% 的标题带（屏高 24%~36%、native=True），插队识别
+        assert calls[0] == ((512, 173), True)
     finally:
         gate.set()
         for th in threading.enumerate():  # 后台线程在补丁还原前跑完
@@ -3472,38 +3470,40 @@ def test_hover_ignores_chat_hud_and_markers(monkeypatch):
         ("实准枪口补偿器2", "VeraCompensator2"),
         True,
     )
-    # 新识别机制：按鼠标横向分级（首选局部 -> 备选局部 30~70% -> 全屏兜底）
+    # 新识别机制：高度阶段级联（标题带 24%~36% -> 说明框带 24%~70% -> 全高）
+    # × 宽度条带（首选局部 -> 备选局部 30~70%），最后全屏兜底
+    STAGE_CROPS = 6  # 3 个高度阶段 × 2 个宽度条带
     calls = []
 
-    def fake(img, urgent=False, offset=(0, 0)):
+    def fake(img, urgent=False, offset=(0, 0), native=False):
         calls.append(offset)
-        return [] if len(calls) <= 2 else chat + marker + hud
+        return [] if len(calls) <= STAGE_CROPS else chat + marker + hud
 
     monkeypatch.setattr(ocr, "recognize", fake)
     img = Image.new("RGB", (1920, 1080))
     toks, name, where = t_hover._read_tooltip(img, (100, 540))
-    assert name is None and where == "整屏" and len(calls) == 3
+    assert name is None and where == "整屏" and len(calls) == STAGE_CROPS + 1
     calls.clear()
+    # 标题带两个条带没认到，说明框带看到完整说明框（英文下面紧跟体积）就停，不走全高和整屏
     monkeypatch.setattr(
         ocr,
         "recognize",
-        lambda img, urgent=False, offset=(0, 0): (
+        lambda img, urgent=False, offset=(0, 0), native=False: (
             [] if not calls.append(1) and len(calls) <= 2 else chat + item
         ),
     )
     toks, name, where = t_hover._read_tooltip(img, (100, 540))
-    assert name == ("实准枪口补偿器2", "VeraCompensator2") and where == "整屏"
-    # 鼠标在中间（30%~70%）、两轮局部连说明框特征都没有：多半是驾驶位上按的 F8，不进整屏兜底（1.1.1 的驾驶位保护）
+    assert name == ("实准枪口补偿器2", "VeraCompensator2") and where == "30-50%@body"
+    # 鼠标在中间（30%~70%）、级联各档连说明框特征都没有：多半是驾驶位上按的 F8，不进整屏兜底（1.1.1 的驾驶位保护）
     calls.clear()
-    monkeypatch.setattr(
-        ocr,
-        "recognize",
-        lambda img, urgent=False, offset=(0, 0): (
-            [] if not calls.append(1) and len(calls) <= 2 else chat + item
-        ),
-    )
+
+    def fake_nothing(img, urgent=False, offset=(0, 0), native=False):
+        calls.append(offset)
+        return []
+
+    monkeypatch.setattr(ocr, "recognize", fake_nothing)
     toks, name, where = t_hover._read_tooltip(img, (960, 540))
-    assert name is None and len(calls) == 2
+    assert name is None and len(calls) == STAGE_CROPS
 
 
 def test_live_signals_pause_while_scan_panel_open(monkeypatch, tmp_path):
