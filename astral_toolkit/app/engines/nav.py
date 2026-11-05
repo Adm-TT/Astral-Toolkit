@@ -64,7 +64,7 @@ class NavLinks:
     setting: Callable[
         [str, Any], Any
     ]  # 读一项设置（tasks.navigation.settings_key：空值也按没设）
-    # 导航帧数（设置页「导航帧数」；bootstrap 传进来时已限在 5–60）
+    # 导航帧数（设置页「导航帧数」；bootstrap 传进来时已限在 5–30）
     fps: Callable[[], int] = _base_fps
 
 

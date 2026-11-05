@@ -14,7 +14,8 @@ def test_nav_fps_value_is_clamped():
     assert settings.nav_fps(3) == 5
     assert settings.nav_fps(7.6) == 8
     assert settings.nav_fps("30") == 30
-    assert settings.nav_fps(100) == 60
+    assert settings.nav_fps(100) == 30
+    assert settings.nav_fps(45) == 30
 
 
 def test_set_settings_saves_clamped_nav_fps_and_restyles(monkeypatch, tmp_path):
@@ -33,7 +34,7 @@ def test_set_settings_saves_clamped_nav_fps_and_restyles(monkeypatch, tmp_path):
     # set_settings 存完会推一次状态：换成空的，不去初始化识别引擎（显卡）
     monkeypatch.setattr("astral_toolkit.tasks.system.status.status", lambda: {})
     with app_for_test():
-        assert set_settings(nav_fps=100)["nav_fps"] == 60
+        assert set_settings(nav_fps=100)["nav_fps"] == 30
         assert set_settings(nav_fps=3)["nav_fps"] == 5
         assert restyles
         assert settings.load()["nav_fps"] == 5
@@ -45,7 +46,8 @@ def test_settings_page_has_nav_fps_control():
     js = (paths.CODE / "app" / "web" / "app.js").read_text(encoding="utf-8")
     assert 'segH("nav-fps"' in js
     assert '["#nav-fps", "nav_fps"]' in js
-    assert '["60", "60"]' in js
+    assert '["30", "30"]' in js and '["15", "15"]' in js
+    assert '["60", "60"]' not in js  # 老大 11-05 改成 5–30
 
 
 def _hud_for_tick(monkeypatch) -> Any:
@@ -84,9 +86,9 @@ def test_overlay_ticks_faster_while_marker_shown(monkeypatch):
     assert h.root.after_ms[-1] == 100
 
     h.mk_data = {"x": 1}
-    h._fps = 60
+    h._fps = 30
     h._tick()
-    assert h.root.after_ms[-1] == 8
+    assert h.root.after_ms[-1] == 16
 
     h._fps = 20
     h._tick()

@@ -80,7 +80,7 @@ def set_settings(**kw):
     if "ocr_device" in kw:
         allowed.add("ocr_device")
         kw["ocr_device"] = str(kw["ocr_device"]).lower()
-    # 导航帧数：取整、限在 5–60（设置页只给五档，直接调接口也不越界）
+    # 导航帧数：取整、限在 5–30（设置页只给五档，直接调接口也不越界）
     if "nav_fps" in kw:
         kw["nav_fps"] = settings.nav_fps(kw["nav_fps"])
     allowed.add("nav_fps")

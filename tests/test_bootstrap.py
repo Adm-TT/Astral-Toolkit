@@ -244,7 +244,7 @@ def test_nav_fps_follows_settings_page(monkeypatch, tmp_path):
         settings.update(nav_fps=30)
         assert app.nav._links.fps() == 30
         settings.update(nav_fps=999)
-        assert app.nav._links.fps() == 60
+        assert app.nav._links.fps() == 30
         assert app.pos._fine_timer is None
         assert bootstrap._fine_timer("desktop") is timer.fine
         desktop_pos = bootstrap._pos_service("desktop", settings.View())

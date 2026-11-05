@@ -186,7 +186,7 @@ def _pos_service(mode: str, view: Any) -> _Pos:
 
 def _nav_links(view: Any) -> NavLinks:
     """导航引擎要用的导航任务函数（NV-B4）：以前经 `_T("navigation")` 动态取，现在在这里接。
-    fps：设置页的导航帧数，从内存里的设置取（不读盘），已限在 5–60"""
+    fps：设置页的导航帧数，从内存里的设置取（不读盘），已限在 5–30"""
     from .core import settings
     from .tasks import navigation as navigation_tasks
 

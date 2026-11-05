@@ -102,16 +102,16 @@ def test_demand_fps_takes_highest_live_request():
     p = posmod._Pos()
     now = time.time()
     assert p.fps_wanted() == 5
-    p.set_demand("nav", now + 10, fps=30)
-    assert p.fps_wanted() == 30
+    p.set_demand("nav", now + 10, fps=20)
+    assert p.fps_wanted() == 20
     p.set_demand("halo", now + 10, fps=10)
-    assert p.fps_wanted() == 30
+    assert p.fps_wanted() == 20
     p.set_demand("x", now + 10, fps=120)
-    assert p.fps_wanted() == 60
+    assert p.fps_wanted() == 30  # 最高 30
     p.set_demand("x", 0)
-    assert p.fps_wanted() == 30
-    p.set_demand("old", now - 1, fps=50)
-    assert p.fps_wanted() == 30
+    assert p.fps_wanted() == 20
+    p.set_demand("old", now - 1, fps=25)
+    assert p.fps_wanted() == 20
     p.set_demand("nav", now + 10)
     assert p.fps_wanted() == 10
     p.set_demand("halo", now + 10, fps=0)
@@ -130,9 +130,9 @@ def test_tune_sets_read_interval_from_fps():
     assert p.reader.max_gap == 60.0
 
     now = time.time()
-    p.set_demand("nav", now + 10, fps=60)
-    assert p._tune(True, True) == 60
-    assert p.reader.every == 1 / 60
+    p.set_demand("nav", now + 10, fps=60)  # 要 60 也按 30
+    assert p._tune(True, True) == 30
+    assert p.reader.every == 1 / 30
     assert p.reader.max_gap == 5.0
 
     p._tune(False, True)

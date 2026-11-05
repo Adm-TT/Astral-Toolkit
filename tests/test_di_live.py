@@ -226,3 +226,32 @@ def test_marker_keeps_last_camdir_for_one_frame():
     pos.current = (now + 1.5, g, {"t": now + 1.5})  # 超过 1 秒还是没有
     assert marker.tick(tgt, {}, state, shown) is None
     assert hud[-1] is None and diag == ["没有镜头方向"]
+
+
+def test_fast_reads_are_scheduled_from_read_start(monkeypatch):
+    """字模读的按开始读的时间排下一次：读一次 15 毫秒、30 帧时还是每 1/30 秒一次；识别引擎照旧从读完算起
+    （老大 11-05 实测 60 档只读到约 31 次）"""
+    from astral_toolkit.navigation import displayinfo as D
+
+    clock = [100.0]
+    monkeypatch.setattr(D, "time", SimpleNamespace(time=lambda: clock[0]))
+    monkeypatch.setattr("astral_toolkit.system.showloc.game_foreground", lambda: True)
+    kind = {"fast": True, "global": True}
+
+    def fake_read(allow_yield=True, diag=False):
+        clock[0] += 0.015  # 读一次 15 毫秒
+        g = (1.0, 2.0, clock[0] * 1000) if kind["global"] else None
+        return {**D.parse([]), "global": g, "fast": kind["fast"]}
+
+    monkeypatch.setattr(D, "read", fake_read)
+    r = D.Reader(every=1 / 30)
+    r.poll(force=True)
+    assert abs(r.next_at - (100.0 + 1 / 30)) < 1e-9  # 从开始读算起
+    kind["global"] = False  # 字模这帧没读出（也是快读）
+    clock[0] = 150.0
+    r.poll(force=True)
+    assert abs(r.next_at - (150.0 + 1 / 30)) < 1e-9
+    kind["fast"] = False  # 识别引擎没读到：照旧从读完算起，至少隔 2 秒
+    clock[0] = 200.0
+    r.poll(force=True)
+    assert abs(r.next_at - (200.015 + 2.0)) < 1e-9

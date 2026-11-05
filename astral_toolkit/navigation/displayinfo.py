@@ -831,11 +831,14 @@ class Reader:
                 return None
             # 不是字模读的（识别引擎，几百毫秒一次）：成功、失败都至少隔 2 秒，不按 0.2 秒狂读
             gap = self.every if (info and info.get("fast")) else max(self.every, 2.0)
+            # 字模读的（十几毫秒）：按这次开始读的时间排下一次，帧数才是设的那个（导航 30 帧时读一次约 15 毫秒，
+            # 从读完算起只有二十来次，老大 11-05 实测）；识别引擎照旧从读完算起
+            base = now if (info and info.get("fast")) else done
             if info and info["global"]:
                 self.misses = 0
                 self.ok_at = done
                 self.info = info
-                self.next_at = done + gap
+                self.next_at = base + gap
                 g = info["global"]
                 if (
                     self.last is None
@@ -845,7 +848,7 @@ class Reader:
                     return g
                 return None
             self.misses += 1
-            self.next_at = done + (
+            self.next_at = base + (
                 gap
                 if self.misses < 3
                 else max(gap, min(self.max_gap, self.every * self.misses))
