@@ -13,7 +13,7 @@ import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-from .names import canonical, has_chinese  # noqa: F401
+from .names import canonical, has_chinese, split_bilingual  # noqa: F401
 
 # 物品说明框识别区域配置：按鼠标横向位置自适应分级识别
 # 只管左右；上下由 HEIGHT_STAGES 的高度阶段决定（旧行为 = 每个宽度条带都取全高 0.0 ~ 1.0）
@@ -171,6 +171,19 @@ _NOT_ITEM = re.compile(
     re.I,
 )
 
+# 汉化包加在物品名下面的标签行（2026-11-06）：整行一对方括号、里面带中文，
+# 「[冷却 S1 民用 D]」「[S10 红外线IR 270m/s 总伤750,000]」「[缓解脑震荡]」；
+# 聊天频道前缀被单独认成一行（「[全局]」）不算（复核 2026-11-06）
+_TAG = re.compile(r"^\s*[\[【［][^\[\]【】［］]{1,40}[\]】］]\s*$")
+
+
+def _is_tag(text: str) -> bool:
+    return (
+        bool(_TAG.match(text or ""))
+        and has_chinese(text)
+        and not _NOT_ITEM.search(text)
+    )
+
 
 def _ink(img, box):
     """一行字有多亮：框里亮的像素（字）比一般像素（底）亮多少。两个说明框叠在一起时，
@@ -298,6 +311,50 @@ def tooltip_pick(tokens, cursor=None, img=None):
         if anchored:
             dist -= 10000
         pairs.append((dist, zh, en, anchored, tuple(e.box), anch_boxes))
+    # 汉化包新格式：中英一行 + 下一行标签（2026-11-06）
+    for z in toks:
+        if not has_chinese(z.text) or _is_tag(z.text):
+            continue
+        zh, en = split_bilingual(z.text)
+        if not en:
+            continue
+        h = max(z.box[3], 12)
+        tags = [
+            k
+            for k in toks
+            if _is_tag(k.text)
+            and 0.4 * h < k.box[1] - z.box[1] < 2.6 * h
+            and abs(k.box[0] - z.box[0]) < 2.5 * h
+        ]
+        if not tags:
+            continue
+        tag = min(tags, key=lambda k: k.box[1])
+        if (
+            _ANCHOR.match(zh.replace(" ", ""))
+            or _SENTENCE.search(zh)
+            or len(zh) > 30
+            or len(en) > 60
+            or _SENTENCE.search(en.rstrip("."))
+            or _STAT.search(zh)
+            or _STAT.search(en)
+            or _NOT_ITEM.search(zh)
+            or _NOT_ITEM.search(en)
+        ):
+            continue
+        th = max(tag.box[3], 12)
+        below = [
+            k
+            for k in toks
+            if 0.4 * th < k.box[1] - tag.box[1] < 2.6 * th
+            and abs(k.box[0] - tag.box[0]) < 2.5 * th
+        ]
+        anch_boxes = tuple(tuple(k.box) for k in below if _is_anchor(k.text))
+        anchored = bool(anch_boxes)
+        cx, cy = cursor if cursor else (z.box[0], z.box[1])
+        dist = ((z.box[0] - cx) ** 2 + (z.box[1] - cy) ** 2) ** 0.5
+        if anchored:
+            dist -= 10000
+        pairs.append((dist, zh, en, anchored, tuple(z.box), anch_boxes))
     anch = [p for p in pairs if p[3]]
     if (
         anch
@@ -374,6 +431,8 @@ def _anchor_name(toks, cursor=None, img=None):
         and not _is_anchor(k.text)
         and not re.search(r"[:：]", k.text)  # 「制造商：灰猫工业」不是名字
         and not re.search(r"[。！？，,；]\s*$", k.text)  # 「越。」：说明文字的最后一截
+        and not _is_tag(k.text)
+        and (has_chinese(k.text) or len(re.sub(r"[^A-Za-z0-9]", "", k.text)) >= 3)
     ]
     if not above:
         return None
@@ -478,7 +537,7 @@ def _dbg_texts(tokens, n: int = 8) -> str:
     return " / ".join(texts)
 
 
-def _read_tooltip(img, cursor):
+def _read_tooltip(img, cursor, whole_screen=True):
     """→ (文字, (中文名, 英文名) 或 None, 认的范围)
     识别机制（2026-11-04 F8 标题带方案，见 docs/superpowers/specs/2026-11-04-f8-title-band-ocr.md §3、§4）：
     1. 先只认说明框顶部的标题窄带（屏高 24%~36%，按原尺寸认字），宽度按鼠标横向位置选
@@ -488,6 +547,7 @@ def _read_tooltip(img, cursor):
     3. 再对不上用原来的全高竖条（0%~100%）：说明框标题完整（英文名下面紧跟体积 / 物品类型…）
        就照旧当认到了——没入库的物品不再为它多跑一次整屏。
     4. 都还没有：鼠标在屏幕中间带、且从没见过说明框锚点 → 多半在驾驶位，不整屏；否则整屏兜底。
+    whole_screen=False（F8 第一遍）：不整屏兜底，认不出由调用方等一下再截一次（2026-11-06 老大验收：说明框没出完就按了）。
     """
     from ..ocr import recognize
     from . import debug_shots
@@ -571,6 +631,11 @@ def _read_tooltip(img, cursor):
                 "INFO",
             )
         _shot_stop("驾驶位保护")
+        return cand if cand is not None else last
+    if not whole_screen:
+        if dbg:
+            _dbg("第一遍不整屏｜等一下再截一次", "INFO")
+        _shot_stop("第一遍·不整屏")
         return cand if cand is not None else last
 
     # 都不行的时候全屏兜底
@@ -758,22 +823,31 @@ def _tooltip_body_tokens(img, cursor, where):
     return recognize(crop, urgent=True, offset=box[:2]) or None
 
 
-def _is_mineral(zh, en):
+def _is_mineral(zh, en, fuzzy=True):
+    """矿（按 SCU 算量、品质看说明框那一行）：英文名在采矿信号表里，或中文名是船挖矿名。
+    fuzzy=False：名字已经在汉化包里精确对上了（inspect_item 的 canon），矿名也只认精确的、不模糊兜底——
+    「刚毅」（发电机）被配成「刚玉」、「冰块」（冷却器）配成「冰」都是模糊配的（2026-11-06 老大验收 F8）"""
     try:
         from ..mining.data import SIGNATURES
         from ..core.i18n import mineral_en
 
         return (en or "").strip().lower() in {k.lower() for k in SIGNATURES} or bool(
-            zh and mineral_en(zh)
+            zh and mineral_en(zh, fuzzy=fuzzy)
         )
     except Exception:
         return False
 
 
 def inspect_item(
-    img, cursor: Tuple[int, int], tokens=None, where=None, craft_override=False
+    img,
+    cursor: Tuple[int, int],
+    tokens=None,
+    where=None,
+    craft_override=False,
+    whole_screen=True,
 ) -> Optional[Dict[str, Any]]:
     """识别鼠标悬停的物品格与说明框，返回结构化字典或 None。
+    whole_screen=False（F8 第一遍）：说明框条带都没认出时不整屏兜底，由调用方等一下再截一次。
     craft_override=True（F6 盘点用）：制造品的加成和蓝图完全对上时，用倒推出的品质和各槽品质，
     读到的品质数字也让位（和 1.1.1 盘点一样）；F8 默认只在没读到品质数字时才倒推：
     {
@@ -800,7 +874,11 @@ def inspect_item(
     result = None
     try:
         if tokens is None or where is None:
-            tokens, name, where = _read_tooltip(img, (cx, cy))
+            tokens, name, where = (
+                _read_tooltip(img, (cx, cy))
+                if whole_screen
+                else _read_tooltip(img, (cx, cy), whole_screen=False)
+            )
         else:
             name, _sure = tooltip_pick(tokens, (cx, cy), img)
 
@@ -814,7 +892,7 @@ def inspect_item(
         if canon:
             zh, en = canon
 
-        mineral = _is_mineral(zh, en)
+        mineral = _is_mineral(zh, en, fuzzy=not canon)  # 汉化包对上了就不模糊配矿名
         row_q, row_amt = tooltip_row(tokens)
         q_from_row_label = False
         if row_q is None:
