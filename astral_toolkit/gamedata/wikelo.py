@@ -65,7 +65,7 @@ def contracts(snap=None) -> list[dict]:
 def requiring(
     norm_en: str | None, norm_zh: str | None, snap=None
 ) -> list[tuple[dict, dict]]:
-    """材料英文名比较键（crafting.wikelo._fold）= norm_en、或中文名比较键 = norm_zh 的 (兑换, 材料)，按兑换源顺序、材料顺序；
+    """材料英文名比较键（contracts.textkeys.fold_mixed_loose）= norm_en、或中文名比较键 = norm_zh 的 (兑换, 材料)，按兑换源顺序、材料顺序；
     传 None 的那一边不比（空串照样比：和原来「名字非空就比折叠结果」一致）。只是相等，放宽成包含的那一步在调用方"""
     if norm_en is None and norm_zh is None:
         return []

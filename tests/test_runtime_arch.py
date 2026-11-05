@@ -457,6 +457,85 @@ def test_infrastructure_stays_below_app():
         assert _forbidden(mods, _INFRA_FORBIDDEN), source
 
 
+_GAMEDATA_TEXTKEY_FORBIDDEN = (
+    ("astral_toolkit.crafting.loot", {"_fold"}),
+    ("astral_toolkit.crafting.wikelo", {"_fold"}),
+    ("astral_toolkit.crafting.shops", {"_fold"}),
+    ("astral_toolkit.crafting.itemsearch", {"en_key", "zh_key"}),
+    ("astral_toolkit.trade.names", {"_fold_en", "_norm_zh"}),
+)
+
+
+def _textkeys_resolve_from(node, package):
+    """把 ImportFrom 的相对导入还原成绝对模块名（函数里的 import 也照算）。"""
+    module = node.module or ""
+    if not node.level:
+        return module
+    parts = package.split(".")
+    keep = len(parts) - (node.level - 1)
+    base = ".".join(parts[:keep]) if keep > 0 else ""
+    return ".".join(part for part in (base, module) if part)
+
+
+def _gamedata_textkey_imports(source, package):
+    """gamedata 里还在直接拿 crafting / trade 名字键的 import（按 (模块, 名字) 报）。"""
+    found = []
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        module = _textkeys_resolve_from(node, package)
+        names = {alias.name for alias in node.names}
+        for banned_module, banned_names in _GAMEDATA_TEXTKEY_FORBIDDEN:
+            if module == banned_module:
+                hits = sorted(names & banned_names)
+                if hits:
+                    found.append(f"{module}: {', '.join(hits)}")
+    return found
+
+
+def _textkeys_package_for(path):
+    """文件所属包名：astral_toolkit/gamedata/_import.py → astral_toolkit.gamedata。"""
+    rel = path.relative_to(_ROOT.parent).with_suffix("")
+    return ".".join(
+        rel.parts[:-1]
+    )  # 去掉模块名；__init__.py 去掉的是 __init__，剩下的就是包本身
+
+
+def test_contracts_import_stdlib_only():
+    """contracts 只依赖标准库：不回头拿项目模块，也不引第三方。"""
+    files = list((_ROOT / "contracts").rglob("*.py"))
+    assert files
+    for path in files:
+        source = path.read_text(encoding="utf-8")
+        assert [d for d in _dynamic_imports(source) if d != "open"] == [], path.name
+        for module in _imports_in(path):
+            root = module.split(".", 1)[0]
+            assert not module.startswith("astral_toolkit"), f"{path.name}: {module}"
+            assert root in sys.stdlib_module_names, f"{path.name}: {module}"
+
+
+def test_gamedata_stops_reaching_into_crafting_and_trade():
+    """gamedata 从 contracts.textkeys 拿名字键，不再直接拿 crafting / trade 的实现（函数里的 import 也算）。"""
+    # 先自检解析：普通模块和 __init__.py 都按所在的包算相对导入（审查发现过这里形同虚设）
+    assert (
+        _textkeys_package_for(_ROOT / "gamedata" / "_import.py")
+        == "astral_toolkit.gamedata"
+    )
+    assert (
+        _textkeys_package_for(_ROOT / "gamedata" / "__init__.py")
+        == "astral_toolkit.gamedata"
+    )
+    assert _gamedata_textkey_imports(
+        "def f():\n    from ..crafting.loot import _fold\n", "astral_toolkit.gamedata"
+    ) == ["astral_toolkit.crafting.loot: _fold"]
+    files = list((_ROOT / "gamedata").rglob("*.py"))
+    assert files
+    for path in files:
+        source = path.read_text(encoding="utf-8")
+        bad = _gamedata_textkey_imports(source, _textkeys_package_for(path))
+        assert bad == [], f"{path.name}: {bad}"
+
+
 _NAV_PURE_FORBIDDEN = (
     "astral_toolkit.app",
     "astral_toolkit.tasks",

@@ -9,6 +9,7 @@ import re
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+from ..contracts.textkeys import fold_mixed_loose as _fold  # noqa: E402
 from ..core.paths import DATA  # noqa: E402
 
 OUT = DATA / "wikelo.json"
@@ -179,10 +180,6 @@ def load():
         return gamedata.wikelo.contracts()
     except gamedata.GamedataError:
         return []
-
-
-def _fold(s):
-    return re.sub(r"[^a-z0-9一-鿿]", "", (s or "").lower().replace("l", "i"))
 
 
 def _same(a, b):

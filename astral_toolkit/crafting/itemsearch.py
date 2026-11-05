@@ -14,24 +14,14 @@
 """
 
 import re
-import unicodedata
 
+from ..contracts.textkeys import en_key, zh_key
 from ..gamedata._cache import VersionCache
-from . import shops
 
 _cache = VersionCache()  # 索引按库的内容版本缓存一份
 _build_lock = __import__(
     "threading"
 ).Lock()  # 启动时后台先建索引；玩家这时搜索就等它建完，不重复建
-
-
-def zh_key(s):
-    """比较中文名用：全角半角统一、去掉空格引号标点、英文小写（中文照留）"""
-    return re.sub(r"[\W_]+", "", unicodedata.normalize("NFKC", s or "").lower())
-
-
-def en_key(s):
-    return shops._fold(unicodedata.normalize("NFKC", s or ""))
 
 
 def _has_cjk(s):

@@ -43,8 +43,8 @@ _ships: VersionCache[dict] = VersionCache()
 
 
 def _load_ships(s) -> dict:
-    """部件名折叠键（trade.names._fold_en）→ 船名列表；折叠后撞名的后出现的赢（同原来的 dict 推导式）"""
-    from ..trade.names import _fold_en
+    """部件名折叠键（contracts.textkeys.fold_en）→ 船名列表；折叠后撞名的后出现的赢（同原来的 dict 推导式）"""
+    from ..contracts.textkeys import fold_en as _fold_en
 
     raw: dict[str, list[str]] = {}
     for name, ship in s.execute(
