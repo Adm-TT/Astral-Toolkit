@@ -536,6 +536,66 @@ def test_gamedata_stops_reaching_into_crafting_and_trade():
         assert bad == [], f"{path.name}: {bad}"
 
 
+_CATALOG_IMPORT_ALLOWED = ("astral_toolkit.contracts",)
+
+
+def _catalog_import_modules(source, package):
+    """catalog 文件里的 import 模块名（相对导入按包还原，函数里的也算）。"""
+    out = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            out.extend(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            out.append(_textkeys_resolve_from(node, package))
+    return out
+
+
+def _catalog_import_allowed(module):
+    """标准库，或 astral_toolkit.contracts（及其子模块）。"""
+    if module == _CATALOG_IMPORT_ALLOWED[0] or module.startswith(
+        _CATALOG_IMPORT_ALLOWED[0] + "."
+    ):
+        return True
+    root = module.split(".", 1)[0]
+    return root in sys.stdlib_module_names
+
+
+def _catalog_bad_imports(source, package):
+    """catalog 里不允许的 import 模块名。"""
+    return [
+        m
+        for m in _catalog_import_modules(source, package)
+        if not _catalog_import_allowed(m)
+    ]
+
+
+def test_catalog_imports_stdlib_or_contracts_only():
+    """catalog 只依赖标准库和 contracts（函数里的 import 也算）。"""
+    assert (
+        _textkeys_package_for(_ROOT / "catalog" / "__init__.py")
+        == "astral_toolkit.catalog"
+    )
+    assert (
+        _textkeys_package_for(_ROOT / "catalog" / "search.py")
+        == "astral_toolkit.catalog"
+    )
+    assert _catalog_import_modules(
+        "def f():\n    from ..contracts.textkeys import en_key\n",
+        "astral_toolkit.catalog",
+    ) == ["astral_toolkit.contracts.textkeys"]
+    assert _catalog_bad_imports(
+        "def f():\n    from ..gamedata import items\n",
+        "astral_toolkit.catalog",
+    ) == ["astral_toolkit.gamedata"]
+    files = list((_ROOT / "catalog").rglob("*.py"))
+    assert files
+    for path in files:
+        source = path.read_text(encoding="utf-8")
+        assert _dynamic_imports(source) == [], path.name
+        bad = _catalog_bad_imports(source, _textkeys_package_for(path))
+        assert bad == [], f"{path.name}: {bad}"
+
+
 _NAV_PURE_FORBIDDEN = (
     "astral_toolkit.app",
     "astral_toolkit.tasks",

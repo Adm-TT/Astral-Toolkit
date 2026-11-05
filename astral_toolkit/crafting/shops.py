@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+from ..catalog import shops as _catalog  # noqa: E402
 from ..contracts.textkeys import fold_en_loose as _fold  # noqa: E402
 from ..core.paths import DATA  # noqa: E402
 
@@ -177,45 +178,19 @@ def find(query, limit=12):
 
     rows = _folded_items()  # F8 / 哪买走这里：只用本机库，过期也不在这联网（细查 2026-10-28：断网时每次 F8 卡 48 秒）
     keys = to_english(query) if has_chinese(query) else [query]
-    out, seen = [], set()
-    for key in keys:
-        k = _fold(key)
-        if not k:
-            continue
-        exact = [(i, n, c) for i, n, c, f in rows if f == k]
-        part = [(i, n, c) for i, n, c, f in rows if k in f and f != k]
-        for row in exact + sorted(part, key=lambda r: len(r[1])):
-            if row[0] not in seen:
-                seen.add(row[0])
-                out.append(row)
-    return out[:limit]
+    return _catalog.find(rows, keys, limit)
 
 
 def find_close(name, cutoff=0.88):
     """OCR 把名字认错一两个字母时（Sol-lI → Sol-III）：找最像的一个，(id, 英文名, 类别) 或 None"""
-    import difflib
-
-    k = _fold(name)
-    if len(k) < 5:
+    if len(_fold(name)) < 5:  # 先折叠再判断，和以前一样不碰库
         return None
-    rows = _folded_items()
-    best = difflib.get_close_matches(k, [f for *_, f in rows], n=1, cutoff=cutoff)
-    if not best:
-        return None
-    return next((i, n, c) for i, n, c, f in rows if f == best[0])
+    return _catalog.find_close(_folded_items(), name, cutoff)
 
 
 def where(item_id):
     """这件东西在哪买/卖：(买的地方 [(价格, 商店, 位置)], 收的地方 [...])，各按价格排好"""
-    rows = _rows_for(item_id)
-    buy = sorted(
-        (r.price_buy, r.shop_name, r.place_text) for r in rows if r.price_buy > 0
-    )
-    sell = sorted(
-        ((r.price_sell, r.shop_name, r.place_text) for r in rows if r.price_sell > 0),
-        reverse=True,
-    )
-    return buy, sell
+    return _catalog.where(_rows_for(item_id))
 
 
 def _is_id(item_id):
@@ -303,27 +278,10 @@ def nearest(item_id, here, n=3):
         )  # 旧数据没有结构化位置：当成很远
         d = distance(here, p) if (here and p) else float("inf")
         out.append((d, r.price_buy, r.shop_name, r.place_text))
-    out.sort(key=lambda x: (x[0], x[1]))
-    picked, places = [], set()  # 同一个空间站/城市只留一家（最便宜的），凑 3 个不同地点
-    for row in out:
-        if row[3] not in places:
-            places.add(row[3])
-            picked.append(row)
-        if len(picked) == n:
-            break
-    return picked
+    return _catalog.nearest(out, n)
 
 
-_VARIANT = re.compile(r'\s*["“][^"”]+["”]\s*')
-
-
-def base_names(name):
-    """限定版 → 可能的原型名：去掉引号里的涂装名；再去掉 -II / Mk II 之类的型号后缀"""
-    b1 = re.sub(r"\s+", " ", _VARIANT.sub(" ", name)).strip()
-    b2 = re.sub(
-        r"(?i)(-|\s)([il]{2,3}|iv|mk\s*\w+)\b", "", b1
-    ).strip()  # OCR 常把 II 认成 ll
-    return [b for b in dict.fromkeys([b1, b2]) if b and b != name]
+base_names = _catalog.base_names
 
 
 def buyable(item_id):
@@ -344,15 +302,12 @@ def variants(name, limit=3):
     cat = _folded_items()
     out, seen = [], set()
     for b in base_names(name):
-        k = _fold(b)
-        words = [w for w in re.findall(r"[a-z0-9]+", b.lower()) if len(w) > 2]
-        for iid, n, c, f in sorted(cat, key=lambda r: len(r[1])):
-            if iid in seen or f == _fold(name):
+        for iid, n, c in _catalog.variant_candidates(cat, b, name):
+            if iid in seen:
                 continue
-            if f == k or (words and all(_fold(w) in f for w in words)):
-                if buyable(iid):
-                    seen.add(iid)
-                    out.append((iid, n, c))
+            if buyable(iid):
+                seen.add(iid)
+                out.append((iid, n, c))
         if out:
             break
     return out[:limit]
