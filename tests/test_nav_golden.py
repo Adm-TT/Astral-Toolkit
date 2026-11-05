@@ -1040,3 +1040,19 @@ def test_station_view_updown_sign(monkeypatch):
     )
     out = M._station_view((0.0, 0.0, 0.0), {"sys": "S1", "up": (0.0, 1.0, 0.0)}, {})
     assert out["updown"] == 300.0
+
+
+def test_nav_view_arrived_needs_less_than_1_km(monkeypatch):
+    """边界：表面距离正好 1 km 还没到，0.999 km 算到（变异检查：到达阈值改了要测得出）"""
+    target = {"b": "B1", "p": (4.0, 5.0, 6.0)}
+    here = {
+        "inside": True,
+        "body": "B1",
+        "radius_km": 100.0,
+        "height_m": 12.0,
+        "lat": 1.0,
+        "lon": 2.0,
+    }
+    for surface, arrived in ((1.0, False), (0.999, True), (1.5, False)):
+        _install_nav(monkeypatch, surface_km=lambda a, t, r, s=surface: s)
+        assert M._nav_view(here, target, {})["arrived"] is arrived, surface
