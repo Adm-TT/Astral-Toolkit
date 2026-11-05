@@ -640,8 +640,9 @@ def test_cursor_injection(monkeypatch):
 
 def test_bind_required_and_state():
     from astral_toolkit.tasks import count as count_task
+    from tests.bootstrap_helpers import restore_bindings, snapshot_bindings
 
-    old = count_task._count
+    saved = snapshot_bindings()
     try:
         count_task._count = None
         for fn in (
@@ -669,12 +670,13 @@ def test_bind_required_and_state():
             "review": {"ok": 1},
         }
     finally:
-        count_task._count = old
+        restore_bindings(saved)
 
 
 def test_review_shared_store_and_cancel(monkeypatch):
     from astral_toolkit.app import bus
     from astral_toolkit.tasks import count as count_task
+    from tests.bootstrap_helpers import bind_for_test
 
     count = count_mod._Count(
         output=RecordingOutput(),
@@ -696,33 +698,26 @@ def test_review_shared_store_and_cancel(monkeypatch):
     count.review = {"r": 2}
     calls = []
     monkeypatch.setattr(bus, "publish", lambda *args: calls.append(args))
-    old = count_task._count
-    try:
-        count_task.bind(count)
+    with bind_for_test(count_task, count):
         assert count_task.count_cancel() == {"ok": True}
         assert calls == [("count", {"running": False, "review": None})]
         assert loop.shared_get(count_mod.REVIEW) is None
-    finally:
-        count_task._count = old
 
 
-def test_manager_registers_count_as_session_loop_service():
-    """lifecycle 里的 count 是 SessionLoopService、在 SESSIONS 阶段、管的就是 manager.count.loop。
-    用单例（照 test_stage0）：另建 EngineManager 会改全局 WRITES 的退出判断和导航 HINTS"""
-    from astral_toolkit.app.engines import manager as manager_mod
+def test_app_registers_count_as_session_loop_service():
+    """lifecycle 里的 count 是 SessionLoopService、在 SESSIONS 阶段、管的就是 app.count.loop。"""
     from astral_toolkit.runtime.lifecycle import Phase, SessionLoopService
+    from tests.bootstrap_helpers import app_for_test
 
-    manager = manager_mod.EngineManager.get_instance()
-    manager._ensure_registered()
-    entries = [
-        (service, gate)
-        for service, gate in manager.lifecycle._services
-        if service.name == "count"
-    ]
-    assert len(entries) == 1
-    service, gate = entries[0]
-    assert gate is False
-    assert isinstance(service, SessionLoopService)
-    assert service.phase is Phase.SESSIONS
-    assert service._loop is manager.count.loop
-    assert not hasattr(manager_mod, "_CountService")
+    with app_for_test() as app:
+        entries = [
+            (service, gate)
+            for service, gate in app.lifecycle._services
+            if service.name == "count"
+        ]
+        assert len(entries) == 1
+        service, gate = entries[0]
+        assert gate is False
+        assert isinstance(service, SessionLoopService)
+        assert service.phase is Phase.SESSIONS
+        assert service._loop is app.count.loop

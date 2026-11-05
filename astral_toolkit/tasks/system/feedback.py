@@ -12,7 +12,7 @@ from pathlib import Path
 
 from ...app import bus
 from ...runtime.results import MINING_SCAN, MINING_SIGNALS
-from .common import WIN, _engines, _hud, _note_hud
+from .common import WIN, _hud, _need_status, _note_hud
 
 
 @dataclass(frozen=True)
@@ -133,15 +133,15 @@ def feedback_report(kind="auto", note="", img=None):
 
     from .. import hover as _hv, navigation as _nv
 
-    m = _engines()
+    src = _need_status()
     last_hover = _hv._last_hover
-    live_running = m.live.running()
-    live_paused = getattr(m.live, "paused", False)
+    live_running = src.live_running()
+    live_paused = src.live_paused()
     where_now = _nv._WHERE.get("v")
-    nav_label = m.nav.target_label()
-    nav_space = m.nav.space_mode
+    nav_label = src.nav_target_label()
+    nav_space = src.nav_space_mode()
 
-    shown = FeedbackContext.from_results(m.results)
+    shown = FeedbackContext.from_results(src.results)
 
     info = {
         "time": time.strftime("%Y-%m-%d %H:%M:%S"),

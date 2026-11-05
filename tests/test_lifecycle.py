@@ -147,6 +147,8 @@ def test_stop_is_idempotent_and_request_error_does_not_block_others(monkeypatch)
 
 
 def test_hover_shell_starts_and_stops(monkeypatch):
+    from types import SimpleNamespace
+
     started = threading.Event()
 
     def fake_run(self):
@@ -156,7 +158,10 @@ def test_hover_shell_starts_and_stops(monkeypatch):
     monkeypatch.setattr(hover_mod, "WIN", True)
     monkeypatch.setattr(hover_mod._Hover, "_run", fake_run)
 
-    hover = hover_mod._Hover()
+    hover = hover_mod._Hover(
+        live=SimpleNamespace(running=lambda: False),
+        count=SimpleNamespace(running=lambda: False),
+    )
     hover.start()
     assert started.wait(2.0)
     hover.request_stop()
@@ -264,13 +269,16 @@ def test_exit_closes_window_and_tray_before_stop_all():
         def remove(self):
             events.append("tray")
 
-    class _Manager:
+    class _Lifecycle:
         def stop_all(self, budget):
             events.append(("stop_all", budget))
             return None
 
+    class _App:  # RT-B7：_exit_sequence 拿的是装配出来的 app，经 bootstrap.shutdown 停 lifecycle
+        lifecycle = _Lifecycle()
+
     server_mod._exit_sequence(
-        _Manager(),
+        _App(),
         _Tray(),
         budget=5.0,
         publish=lambda topic, data: events.append(("publish", topic)),

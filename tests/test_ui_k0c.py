@@ -320,20 +320,31 @@ def test_stop_timeout_rejects_start_and_tile_shows_stopping(monkeypatch):
         rejected = nav.start({"n": "B"}, target_row={"label": "B"}, space_mode=True)
         assert rejected.status == "busy_stopping"
         assert rejected.session_id == sid
-        monkeypatch.setattr(ui_stream, "read_switches", _ORIG_READ_SWITCHES)
-        from astral_toolkit.tasks.system import common
+        from tests.bootstrap_helpers import restore_bindings, snapshot_bindings
 
-        monkeypatch.setattr(common, "_engines", lambda: SimpleNamespace(nav=nav))
-        ui.refresh_switches()
-        tile = next(t for t in ui.snapshot(1)["tiles"] if t["tile_id"] == "nav")
-        assert not tile["available"]["ok"]
-        assert tile["status_line"] == "正在停止导航，请稍候"
-        gate.set()
-        assert nav.loop.join(session_id=sid, timeout=WAIT)
-        ui.refresh_switches()
-        tile = next(t for t in ui.snapshot(1)["tiles"] if t["tile_id"] == "nav")
-        assert tile["available"]["ok"]
-        assert tile["status_line"] == "已关闭"
+        saved = snapshot_bindings()
+        live = SimpleNamespace(running=lambda: False)
+        pos = SimpleNamespace(
+            reader=SimpleNamespace(active=False),
+            reader_active=False,
+            label=(0.0, None),
+            system=(0.0, ""),
+        )
+        ui_stream.bind_switches(live, nav, pos, replace=True)
+        try:
+            monkeypatch.setattr(ui_stream, "read_switches", _ORIG_READ_SWITCHES)
+            ui.refresh_switches()
+            tile = next(t for t in ui.snapshot(1)["tiles"] if t["tile_id"] == "nav")
+            assert not tile["available"]["ok"]
+            assert tile["status_line"] == "正在停止导航，请稍候"
+            gate.set()
+            assert nav.loop.join(session_id=sid, timeout=WAIT)
+            ui.refresh_switches()
+            tile = next(t for t in ui.snapshot(1)["tiles"] if t["tile_id"] == "nav")
+            assert tile["available"]["ok"]
+            assert tile["status_line"] == "已关闭"
+        finally:
+            restore_bindings(saved)
         ends = [
             m
             for m in _drain_ui(ui, q)

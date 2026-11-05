@@ -7,7 +7,7 @@ import time
 import zipfile
 from pathlib import Path
 
-from .common import WIN, _engines
+from .common import WIN, _need_status
 
 
 def status():
@@ -18,14 +18,14 @@ def status():
     from .settings import hotkey_conflicts
 
     cfg = settings.load()
-    m = _engines()
+    src = _need_status()
 
-    live_running = m.live.running()
-    live_paused = bool(live_running and m.live.paused)
-    nav_label = m.nav.target_label()
-    nav_space = m.nav.space_mode
-    pos_reader_active = m.pos.reader.active
-    game_events_dict = {k: v for k, (_, v) in list(m.game_events.last.items())}
+    live_running = src.live_running()
+    live_paused = bool(live_running and src.live_paused())
+    nav_label = src.nav_target_label()
+    nav_space = src.nav_space_mode()
+    pos_reader_active = src.pos_reader_active()
+    game_events_dict = {k: v for k, (_, v) in list(src.game_events_last().items())}
 
     out = {
         "settings": cfg,
@@ -95,7 +95,7 @@ def status():
         pass
     # 右上角读到的具体地点：记住最后一次读到的，切屏、某一次没认出来都不换（以前会在「附近」和站名之间来回闪）。
     # 只有游戏日志里有更新的地点（比如到别的站开了库存）才换掉它
-    lab_t, lab = m.pos.label
+    lab_t, lab = src.pos_label()
     if lab and time.time() - lab_t < 3 * 3600:
         log_t = 0.0
         try:
@@ -106,7 +106,7 @@ def status():
         except Exception:
             pass
         if lab_t >= log_t:
-            sys_t, sysname = m.pos.system
+            sys_t, sysname = src.pos_system()
             out["position"] = {
                 "label": lab,
                 "minutes": int((time.time() - lab_t) // 60),

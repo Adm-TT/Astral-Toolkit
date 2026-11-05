@@ -68,16 +68,31 @@ def test_system_router_roundtrip():
     )
 
 
-def test_system_start_background_uses_engine_manager(monkeypatch):
-    """tasks.system.start_background 交给 EngineManager.start_all（以前经 services 转一道）"""
-    from astral_toolkit.app.engines.manager import EngineManager
+def test_system_start_background_uses_bound_callback():
+    """tasks.system.start_background 调用 bootstrap 绑进来的启动回调，并透传返回值"""
     from astral_toolkit.tasks import system as TY
+    from astral_toolkit.tasks.system.common import StatusSources
+    from tests.bootstrap_helpers import bind_for_test
 
     called = []
-    monkeypatch.setattr(
-        EngineManager.get_instance(), "start_all", lambda: called.append(1)
+
+    def start():
+        called.append(1)
+        return True
+
+    sources = StatusSources(
+        live_running=lambda: False,
+        live_paused=lambda: False,
+        nav_target_label=lambda: "",
+        nav_space_mode=lambda: False,
+        pos_reader_active=lambda: False,
+        pos_label=lambda: (0.0, None),
+        pos_system=lambda: (0.0, ""),
+        game_events_last=lambda: {},
+        results=object(),
     )
-    TY.start_background()
+    with bind_for_test(TY, sources, start):
+        assert TY.start_background() is True
     assert called == [1]
 
 

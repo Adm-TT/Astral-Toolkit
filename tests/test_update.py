@@ -878,9 +878,13 @@ def test_make_manifest_version_must_match_package(tmp_path):
 
 def test_zip_in_downloads_not_scanned(monkeypatch, tmp_path):
     import types
-    from astral_toolkit.core import paths
-    from astral_toolkit.tasks.system import upgrade as U
     import importlib
+
+    from astral_toolkit.core import paths
+    from astral_toolkit.tasks import system as system_task
+    from astral_toolkit.tasks.system import upgrade as U
+    from astral_toolkit.tasks.system.common import StatusSources
+    from tests.bootstrap_helpers import bind_for_test
 
     S = importlib.import_module("astral_toolkit.tasks.system.status")
     from astral_toolkit.update import vpk
@@ -902,19 +906,21 @@ def test_zip_in_downloads_not_scanned(monkeypatch, tmp_path):
     assert "found" not in r and "new_version" not in r
     assert "Dubhe_9.9.9.zip" not in json.dumps(r, ensure_ascii=False)
 
-    live = types.SimpleNamespace(running=lambda: False, paused=False)
-    nav = types.SimpleNamespace(target_label=lambda: "", space_mode=False)
-    pos = types.SimpleNamespace(
-        reader=types.SimpleNamespace(active=False),
-        label=(0.0, None),
-        system=(0.0, ""),
+    sources = StatusSources(
+        live_running=lambda: False,
+        live_paused=lambda: False,
+        nav_target_label=lambda: "",
+        nav_space_mode=lambda: False,
+        pos_reader_active=lambda: False,
+        pos_label=lambda: (0.0, None),
+        pos_system=lambda: (0.0, ""),
+        game_events_last=lambda: {},
+        results=types.SimpleNamespace(get=lambda slot: None),
     )
-    game_events = types.SimpleNamespace(last={})
-    m = types.SimpleNamespace(live=live, nav=nav, pos=pos, game_events=game_events)
-    monkeypatch.setattr(S, "_engines", lambda: m)
     monkeypatch.setattr(S, "_gridtext_status", lambda: {})
     monkeypatch.setattr(S, "WIN", False)
-    st = S.status()
+    with bind_for_test(system_task, sources, lambda: False):
+        st = S.status()
     assert "new_version" not in st
     assert "Dubhe_9.9.9.zip" not in json.dumps(st, ensure_ascii=False, default=str)
 

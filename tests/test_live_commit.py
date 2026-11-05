@@ -175,9 +175,12 @@ def test_stop_between_analyze_and_commit_publishes_nothing(monkeypatch, tmp_path
         assert not [m for m in msgs if m["kind"] == "scan"]
         assert not [c for c in hud.calls if c[0] == "set"]
         assert live.results.get(MINING_SCAN) is None
-        monkeypatch.setattr(t_nav._M, "results", live.results)
         monkeypatch.setattr(t_nav, "_note_hud", lambda *a, **k: None)
-        assert "暂无扫描结果" in t_nav.ore_record()["error"]
+        from tests.bootstrap_helpers import app_for_test
+
+        # RT-B7：结果仓库从装配入口注入（以前改 _M.results）
+        with app_for_test(results=live.results):
+            assert "暂无扫描结果" in t_nav.ore_record()["error"]
     finally:
         _finish(live, q, gate)
 

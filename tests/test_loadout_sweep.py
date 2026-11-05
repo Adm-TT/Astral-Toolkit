@@ -173,31 +173,40 @@ def test_every_loadout(monkeypatch, tmp_path):
             ):
                 problems.append(("排序不对", heads, crew, m, r))
     # 4) 通过窗口接口改配装 → 读回来一致
-    for ship in SHIPS:
-        for _ in range(20):
-            spec = SHIPS[ship]
-            pool = (
-                [spec["fixed"]]
-                if spec.get("fixed")
-                else [
-                    k
-                    for k, h in HEADS.items()
-                    if h["size"] == spec["size"] and not h.get("ship")
-                ]
-            )
-            heads = []
-            for _ in range(spec["heads"]):
-                k = random.choice(pool)
-                heads.append(
-                    [k, random.choices(mods, k=random.randint(0, HEADS[k]["slots"]))]
-                )  # noqa: E702
-            lo = {"heads": heads, "crew": random.randint(1, spec["crew_max"])}
-            g = t_mining.set_mining_gear(ship=ship, loadout=lo)
-            n_loadouts += 1  # noqa: E702
-            got = next(s for s in g["ships"] if s["key"] == ship)["loadout"]
-            if got != lo or g["ship"] != ship or not g["chosen"]:
-                problems.append(("保存读回不一致", ship, lo, got))
-            if [h.key for h in laser.loadout()] != [k for k, _ in heads]:
-                problems.append(("扫描没用上新配装", ship))
+    from tests.bootstrap_helpers import app_for_test
+
+    # RT-B7：改配装会通知采矿助手重算，tasks.mining 要先绑定
+    with app_for_test():
+        for ship in SHIPS:
+            for _ in range(20):
+                spec = SHIPS[ship]
+                pool = (
+                    [spec["fixed"]]
+                    if spec.get("fixed")
+                    else [
+                        k
+                        for k, h in HEADS.items()
+                        if h["size"] == spec["size"] and not h.get("ship")
+                    ]
+                )
+                heads = []
+                for _ in range(spec["heads"]):
+                    k = random.choice(pool)
+                    heads.append(
+                        [
+                            k,
+                            random.choices(
+                                mods, k=random.randint(0, HEADS[k]["slots"])
+                            ),
+                        ]
+                    )  # noqa: E702
+                lo = {"heads": heads, "crew": random.randint(1, spec["crew_max"])}
+                g = t_mining.set_mining_gear(ship=ship, loadout=lo)
+                n_loadouts += 1  # noqa: E702
+                got = next(s for s in g["ships"] if s["key"] == ship)["loadout"]
+                if got != lo or g["ship"] != ship or not g["chosen"]:
+                    problems.append(("保存读回不一致", ship, lo, got))
+                if [h.key for h in laser.loadout()] != [k for k, _ in heads]:
+                    problems.append(("扫描没用上新配装", ship))
     assert not problems, problems[:10]
     assert n_loadouts > 5000

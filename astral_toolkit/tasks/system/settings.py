@@ -3,7 +3,7 @@
 import re
 
 from ...app import bus
-from .common import _engines, _hud
+from .common import _hud, _need_start
 
 # 游戏里的热键：(设置名, 默认键, 名字)。撞键时排在前面的生效
 HOTKEYS = [
@@ -144,8 +144,8 @@ def update_data():
 
 
 def start_background():
-    """窗口打开时：后台监听与轮询初始化（EngineManager.start_all，没同意协议时它自己不启动）"""
-    _engines().start_all()
+    """窗口打开时：调 bootstrap 绑的启动回调（里面照旧查同意协议、查正在退出）"""
+    return _need_start()()
 
 
 def show():

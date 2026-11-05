@@ -2,7 +2,7 @@
 
 2026-10-28 从 app/services.py 原样剪出来（逻辑没改）。2026-10-30 重构阶段 4 删了 services.py，
 用到的函数 / 变量直接到它们所在的模块取，运行时才取，避免互相 import：
-_T("mining").xxx = tasks/mining.py，_H().xxx = app/hud_state.py，_E().live / .nav / .pos / .cam_filter = 引擎实例。
+_T("mining").xxx = tasks/mining.py，_H().xxx = app/hud_state.py。
 用到：_area_now, _game_front, _hud, _mark_goal_lines, _note_hud, _where_now, scan_view, settings_key
 
 RT-B4：线程 / 停止 / 提交边界 / 暂停 / 过期 / 自动关闭 / 重试都在 runtime/session.py 的 SessionLoop；
@@ -220,16 +220,28 @@ class _Live:
         ),
     }
 
-    def __init__(self, results=None, output=None, clock=None, closing=None):
+    def __init__(
+        self,
+        results=None,
+        output=None,
+        clock=None,
+        closing=None,
+        *,
+        foreground=None,
+        grab=None,
+    ):
         self.results = results if results is not None else ResultStore()
         from ..miss_shots import MissShotsService
 
         self.miss_shots = MissShotsService()
+        from ...mining import screen
+
+        self._grab = grab if grab is not None else (lambda: screen.grab())
         self.loop: Any = SessionLoop(
             self,
             results=self.results,
             output=output if output is not None else BusOutput(),
-            foreground=_foreground,
+            foreground=foreground if foreground is not None else _foreground,
             clock=clock,
             run_flag=setting_run_flag("live_on"),
             closing=closing if closing is not None else (lambda: False),
@@ -240,6 +252,11 @@ class _Live:
         from ...mining import screen
 
         return min(screen.INTERVAL, 0.25)
+
+    @property
+    def prev_stop_pending(self):
+        """停止请求已发出、上一会话还没收完；tasks 层只读这个，不碰 loop。"""
+        return bool(self.loop.state().prev_stop_pending)
 
     # ---------------------------------------------------------------- 兼容外壳（RT-B7 删）
     def start(self):  # RT-B7 删
@@ -463,7 +480,7 @@ class _Live:
 
         log = ctx.log
         wall = time.time()
-        img = screen.grab()
+        img = self._grab()
         l, t, r, b = screen.SEARCH  # noqa: E741
         W, H = img.size
         # 省电：画面几乎没变、这个画面已经出过结果（或根本没有面板）就不重复识别。

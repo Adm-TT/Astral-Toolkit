@@ -17,7 +17,7 @@ from .about import (
     open_source_site,
     third_party_licenses,
 )
-from .common import WIN, _engines, _hud, _note_hud
+from .common import WIN, StatusSources, _hud, _note_hud, bind
 from .feedback import (
     _fb_dir,
     _scrub,
@@ -54,6 +54,8 @@ from .upgrade import (
 
 __all__ = [
     "status",
+    "bind",
+    "StatusSources",
     "upgrade_check",
     "upgrade_online",
     "upgrade_rollback",

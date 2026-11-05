@@ -982,17 +982,24 @@ def test_nav_tip_texts():
 
 
 def test_first_run_agreement(monkeypatch, tmp_path):
+    from astral_toolkit.bootstrap import status_sources
     from astral_toolkit.core import settings
     from astral_toolkit.tasks import system as t_sys
+    from tests.bootstrap_helpers import bind_for_test, app_for_test
 
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
     started = []
-    monkeypatch.setattr(t_sys, "start_background", lambda: started.append("bg"))
-    assert settings.load()["agreed"] is False
-    assert "error" in t_sys.agree("本软件是免费的")  # 差一个字都不行
-    assert settings.load()["agreed"] is False and not started
-    t_sys.agree(" 本软件是免费软件 ")
-    assert settings.load()["agreed"] is True and started == ["bg"]
+    with app_for_test() as app:
+        with bind_for_test(
+            t_sys,
+            status_sources(app),
+            lambda: started.append("bg") or True,
+        ):
+            assert settings.load()["agreed"] is False
+            assert "error" in t_sys.agree("本软件是免费的")  # 差一个字都不行
+            assert settings.load()["agreed"] is False and not started
+            t_sys.agree(" 本软件是免费软件 ")
+            assert settings.load()["agreed"] is True and started == ["bg"]
 
 
 def test_live_scan_updates_when_read_gets_more_complete(monkeypatch, tmp_path):
@@ -1121,31 +1128,35 @@ def test_status_keeps_displayinfo_place_when_reader_goes_stale():
     2026-10-26 起不导航也一直读右上角（实时位置）：右上角读到的比日志新就用右上角的"""
     import time
     from astral_toolkit.tasks import system as t_sys
-    from astral_toolkit.app.engines.manager import EngineManager
+    from tests.bootstrap_helpers import app_for_test
 
-    em = EngineManager.get_instance()
-    import astral_toolkit.navigation.position as P
+    with app_for_test() as app:
+        import astral_toolkit.navigation.position as P
 
-    old = P.current, P.from_log, em.pos.label, em.nav.target
-    try:
-        em.nav.target = {"n": "测试目标"}
-        em.pos.reader.ok_at = 0  # 读取器已经不算「开着」
-        em.pos.label = (time.time() - 20, "死局空间站")
-        P.current = lambda *a, **k: {"label": "玛格达 附近", "age": 1.0, "sys": "Pyro"}
-        P.from_log = lambda *a, **k: (time.time() - 3600, "死局空间站", {})
-        assert t_sys.status()["position"]["label"] == "死局空间站"
-        P.current = lambda *a, **k: {
-            "label": "鼠巢空间站",
-            "age": 2.0,
-            "sys": "Pyro",
-        }  # 后来在别处开了库存
-        P.from_log = lambda *a, **k: (time.time() - 2, "鼠巢空间站", {})
-        assert t_sys.status()["position"]["label"] == "鼠巢空间站"
-        em.nav.target = None  # 不导航也一样：右上角刚读到的比日志新，用右上角的
-        em.pos.label = (time.time(), "死局空间站")
-        assert t_sys.status()["position"]["label"] == "死局空间站"
-    finally:
-        P.current, P.from_log, em.pos.label, em.nav.target = old
+        old = P.current, P.from_log, app.pos.label, app.nav.target
+        try:
+            app.nav.target = {"n": "测试目标"}
+            app.pos.reader.ok_at = 0  # 读取器已经不算「开着」
+            app.pos.label = (time.time() - 20, "死局空间站")
+            P.current = lambda *a, **k: {
+                "label": "玛格达 附近",
+                "age": 1.0,
+                "sys": "Pyro",
+            }
+            P.from_log = lambda *a, **k: (time.time() - 3600, "死局空间站", {})
+            assert t_sys.status()["position"]["label"] == "死局空间站"
+            P.current = lambda *a, **k: {
+                "label": "鼠巢空间站",
+                "age": 2.0,
+                "sys": "Pyro",
+            }  # 后来在别处开了库存
+            P.from_log = lambda *a, **k: (time.time() - 2, "鼠巢空间站", {})
+            assert t_sys.status()["position"]["label"] == "鼠巢空间站"
+            app.nav.target = None  # 不导航也一样：右上角刚读到的比日志新，用右上角的
+            app.pos.label = (time.time(), "死局空间站")
+            assert t_sys.status()["position"]["label"] == "死局空间站"
+        finally:
+            P.current, P.from_log, app.pos.label, app.nav.target = old
 
 
 def test_single_instance_lock_file(monkeypatch, tmp_path):
@@ -1785,35 +1796,39 @@ def test_space_waypoint(monkeypatch, tmp_path):
         "log",
         lambda name: tmp_path / name,
     )  # 真的写记录（写到临时目录），以前把记录函数换掉，没发现它和导航记录重名、一调用就报错
-    r = t_nav.waypoint_add(name="气体云矿点", here=True)
-    assert r["pending"] and "/showlocation" in r["message"]
-    time.sleep(0.3)
-    clip["t"] = f"Coordinates: x:{g[0]} y:{g[1]} z:{g[2]}"
-    for _ in range(40):
-        if any(w["n"] == "气体云矿点" for w in n.waypoints()):
-            break
-        time.sleep(0.1)
-    rows = t_nav.waypoints()
-    w = next(r for r in rows if r["name"] == "气体云矿点")
-    assert w["space"] and w["system"] == "Nyx"
-    # 搜得到，路线给最近的参照点
-    hits, _ = n.search("气体云矿点")
-    p = hits[0]
-    assert n.is_space(p)
-    plan = t_nav.nav_plan(t_nav._place_row(p)["key"])
-    assert plan["space"] and plan["routes"][0]["direct"] < 25
-    # 就在原地：到了
-    assert n.space_guide(g, p, data)["arrived"]
-    # 从参照点另一侧 300 km 飞过来：直线距离对、对准参照点（目标就在它旁边）夹角很小
-    far = (lp["x"] - 300_000, lp["y"], lp["z"])
-    s = n.space_guide(far, p, data)
-    assert abs(s["direct"] - 320) < 0.5 and s["aim"]["angle"] < 5
-    # 在别的星系：提示先跳过去
-    other = next(b for b in data["bodies"].values() if b["sys"] != "Nyx")
-    assert not n.space_guide((other["x"], other["y"], other["z"]), p, data)[
-        "same_system"
-    ]
-    t_nav._HERE["name"] = None
+    from tests.bootstrap_helpers import app_for_test
+
+    # RT-B7：tasks.* 要先绑定（存太空路标会问现在在哪个星系）
+    with app_for_test():
+        r = t_nav.waypoint_add(name="气体云矿点", here=True)
+        assert r["pending"] and "/showlocation" in r["message"]
+        time.sleep(0.3)
+        clip["t"] = f"Coordinates: x:{g[0]} y:{g[1]} z:{g[2]}"
+        for _ in range(40):
+            if any(w["n"] == "气体云矿点" for w in n.waypoints()):
+                break
+            time.sleep(0.1)
+        rows = t_nav.waypoints()
+        w = next(r for r in rows if r["name"] == "气体云矿点")
+        assert w["space"] and w["system"] == "Nyx"
+        # 搜得到，路线给最近的参照点
+        hits, _ = n.search("气体云矿点")
+        p = hits[0]
+        assert n.is_space(p)
+        plan = t_nav.nav_plan(t_nav._place_row(p)["key"])
+        assert plan["space"] and plan["routes"][0]["direct"] < 25
+        # 就在原地：到了
+        assert n.space_guide(g, p, data)["arrived"]
+        # 从参照点另一侧 300 km 飞过来：直线距离对、对准参照点（目标就在它旁边）夹角很小
+        far = (lp["x"] - 300_000, lp["y"], lp["z"])
+        s = n.space_guide(far, p, data)
+        assert abs(s["direct"] - 320) < 0.5 and s["aim"]["angle"] < 5
+        # 在别的星系：提示先跳过去
+        other = next(b for b in data["bodies"].values() if b["sys"] != "Nyx")
+        assert not n.space_guide((other["x"], other["y"], other["z"]), p, data)[
+            "same_system"
+        ]
+        t_nav._HERE["name"] = None
 
 
 def test_camdir_steering():
@@ -1863,9 +1878,8 @@ def test_mark_here_hotkey(monkeypatch, tmp_path):
         navigation as t_nav,
         system as t_sys,
     )
-    from astral_toolkit.app.engines.manager import EngineManager
+    from tests.bootstrap_helpers import app_for_test
 
-    em = EngineManager.get_instance()
     from astral_toolkit.app import hud_state
     import threading
 
@@ -1883,11 +1897,6 @@ def test_mark_here_hotkey(monkeypatch, tmp_path):
     g = (lp["x"] + 5_000, lp["y"], lp["z"])
     monkeypatch.setattr(
         showloc, "showlocation", lambda log=None: (g, "Coordinates: ...")
-    )
-    monkeypatch.setattr(
-        em.pos.reader,
-        "poll",
-        lambda force=False: (_ for _ in ()).throw(AssertionError("不该读右上角")),
     )
     monkeypatch.setattr(
         __import__("astral_toolkit.core.paths", fromlist=["log"]),
@@ -1911,25 +1920,33 @@ def test_mark_here_hotkey(monkeypatch, tmp_path):
         "Timer",
         lambda *a, **k: type("T", (), {"start": lambda self: None})(),
     )
-    out = t_nav.mark_here()
-    assert (
-        "error" not in out
-        and "斯坦顿星系" in out["where"]
-        and "已保存" in shown["路标"]
-    )
-    assert "已记下" in (tmp_path / "nav_log.txt").read_text(
-        encoding="utf-8"
-    )  # 记录真的写进去了
-    wp = n.waypoints()[-1]
-    assert n.is_space(wp) and wp["n"] == out["name"]
-    # 点过「用当前位置新建」再按 F7：用那里填的名字
-    t_nav._HERE.update(name="我的矿点", until=__import__("time").time() + 30)
-    assert t_nav.mark_here()["name"] == "我的矿点" and t_nav._HERE["name"] is None
-    # 60 秒内没等到玩家输入 /showlocation：悬浮窗说原因，不记
-    monkeypatch.setattr(
-        showloc, "showlocation", lambda log=None: (None, "60 秒内没等到 /showlocation")
-    )
-    assert "error" in t_nav.mark_here() and "没等到" in shown["路标"]
+    with app_for_test() as app:
+        monkeypatch.setattr(
+            app.pos.reader,
+            "poll",
+            lambda force=False: (_ for _ in ()).throw(AssertionError("不该读右上角")),
+        )
+        out = t_nav.mark_here()
+        assert (
+            "error" not in out
+            and "斯坦顿星系" in out["where"]
+            and "已保存" in shown["路标"]
+        )
+        assert "已记下" in (tmp_path / "nav_log.txt").read_text(
+            encoding="utf-8"
+        )  # 记录真的写进去了
+        wp = n.waypoints()[-1]
+        assert n.is_space(wp) and wp["n"] == out["name"]
+        # 点过「用当前位置新建」再按 F7：用那里填的名字
+        t_nav._HERE.update(name="我的矿点", until=__import__("time").time() + 30)
+        assert t_nav.mark_here()["name"] == "我的矿点" and t_nav._HERE["name"] is None
+        # 60 秒内没等到玩家输入 /showlocation：悬浮窗说原因，不记
+        monkeypatch.setattr(
+            showloc,
+            "showlocation",
+            lambda log=None: (None, "60 秒内没等到 /showlocation"),
+        )
+        assert "error" in t_nav.mark_here() and "没等到" in shown["路标"]
 
 
 def test_parse_showlocation_clip():
@@ -1993,77 +2010,92 @@ def test_export_logs(monkeypatch, tmp_path):
 
 def test_live_scan_resumes_after_restart(monkeypatch, tmp_path):
     """原矿扫描开着时 AT 重启 / 升级：重启后自动接着扫（以前重启后就关了，信号识别也跟着没了）"""
+    from astral_toolkit import gamedata
+    from astral_toolkit import ocr as OCR
+    from astral_toolkit.app.engines import hover as hover_engine
+    from astral_toolkit.app.engines import live as live_engine
+    from astral_toolkit.app.engines import nav as nav_engine
+    from astral_toolkit.app.engines import pos as pos_engine
     from astral_toolkit.core import settings
-    from astral_toolkit.tasks import mining as t_mining, system as t_sys
-    from astral_toolkit.app.engines.manager import EngineManager
+    from astral_toolkit.core.perfmon import monitor
+    from astral_toolkit.crafting import itemsearch
     from astral_toolkit.runtime.session import StopAttempt
+    from astral_toolkit.tasks import mining as t_mining, system as t_sys
+    from tests.bootstrap_helpers import app_for_test
 
-    em = EngineManager.get_instance()
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
     settings.update(agreed=True)
     started = []
-    monkeypatch.setattr(em.live, "start", lambda: started.append(1))
-    monkeypatch.setattr(em.live, "stop", lambda: StopAttempt(None, False, False))
-    for name in ("hover", "pos", "logwatch"):
-        monkeypatch.setattr(getattr(em, name), "start", lambda: None)
-    monkeypatch.setattr(t_sys, "_online_loop", lambda *a: None)  # 测试里不联网检查更新
-    monkeypatch.setattr(em.game_events, "start", lambda: None)  # 不读真实 Game.log
-    from astral_toolkit import ocr as OCR
-    from astral_toolkit.core.perfmon import monitor
-    from astral_toolkit.crafting import itemsearch
-
-    monkeypatch.setattr(OCR, "warmup", lambda: None)  # 不预热 OCR
-    monkeypatch.setattr(monitor, "start", lambda: None)  # 不起 perfmon 常驻线程
-    monkeypatch.setattr(itemsearch, "warm_up", lambda: None)
+    # RT-B7：服务在装配时登记，记下的是各对象当时的 start，所以要在 app_for_test() 之前按类换掉；
+    # 这样走的是真的 lifecycle.start_all 和采矿助手的 gate，只是不起真热键、读屏、读 Game.log、perfmon
+    monkeypatch.setattr(live_engine._Live, "start", lambda self: started.append(1))
     monkeypatch.setattr(
-        t_sys, "_online", {"info": None, "told": "", "fb_retry": True}
-    )  # 新的一份：不永久置 loop；不补发真实反馈
+        live_engine._Live, "stop", lambda self: StopAttempt(None, False, False)
+    )
+    for cls in (
+        hover_engine._Hover,
+        pos_engine._Pos,
+        pos_engine._LogWatch,
+        nav_engine._GameEvents,
+    ):
+        monkeypatch.setattr(cls, "start", lambda self: None)
+    monkeypatch.setattr(monitor, "start", lambda: None)  # 不起 perfmon 常驻线程
+    monkeypatch.setattr(OCR, "warmup", lambda: None)  # 不预热 OCR
+    monkeypatch.setattr(itemsearch, "warm_up", lambda: None)
+    monkeypatch.setattr(gamedata, "warm_up", lambda: None)  # 不建游戏数据库
+    monkeypatch.setattr(t_sys, "_online_loop", lambda *a: None)  # 测试里不联网检查更新
+    # 新的一份（装配时登记的更新服务也用这份，所以在装配前换）：不永久置 loop；不补发真实反馈
+    monkeypatch.setattr(t_sys, "_online", {"info": None, "told": "", "fb_retry": True})
     # live_on 只由会话循环写（RT-B4 起命令层不再写）：这里直接摆开关，测 start_background 的门控
     settings.update(live_on=True)
-    t_mining.live_start()  # 命令层只负责开会话（这里被换成记录调用）
-    started.clear()
-    t_sys.start_background()  # 模拟重启
-    assert started == [1]
+    with app_for_test():
+        t_mining.live_start()  # 命令层只负责开会话（这里被换成记录调用）
+        started.clear()
+        t_sys.start_background()  # 模拟重启：live_on 开着 → 接着扫
+        assert started == [1]
     settings.update(live_on=False)
-    t_mining.live_stop()
-    started.clear()
-    t_sys.start_background()
-    assert not started and not settings.load()["live_on"]
+    with app_for_test():  # 关着的时候重启：不自动开
+        t_mining.live_stop()
+        started.clear()
+        t_sys.start_background()
+        assert not started and not settings.load()["live_on"]
 
 
 def test_where_now_ground_or_space(monkeypatch):
     """信号表外的值要知道玩家在地面还是太空：小行星带 → 太空；贴着星球 → 地面；高空 → 太空"""
     import time
     from astral_toolkit.tasks import navigation as t_nav
-    from astral_toolkit.app.engines.manager import EngineManager
+    from tests.bootstrap_helpers import app_for_test
 
-    em = EngineManager.get_instance()
-    from astral_toolkit.navigation import navigate
+    with app_for_test() as app:
+        from astral_toolkit.navigation import navigate
 
-    monkeypatch.setattr(t_nav, "_WHERE", {"t": 0.0, "v": None, "tried": 0.0})
-    monkeypatch.setattr(
-        em.pos,
-        "latest",
-        (
-            time.time(),
-            (1.0, 2.0, 3.0),
-            {"location": "AsteroidCluster MiningBase Stanton2"},
-        ),
-    )
-    assert t_nav._where_now() == "space"
-    monkeypatch.setattr(t_nav, "_WHERE", {"t": 0.0, "v": None, "tried": 0.0})
-    monkeypatch.setattr(
-        em.pos, "latest", (time.time(), (1.0, 2.0, 3.0), {"location": "Planet Clio"})
-    )
-    monkeypatch.setattr(
-        navigate, "locate", lambda *a, **k: {"inside": True, "height_m": 2700}
-    )
-    assert t_nav._where_now() == "ground"
-    monkeypatch.setattr(t_nav, "_WHERE", {"t": 0.0, "v": None, "tried": 0.0})
-    monkeypatch.setattr(
-        navigate, "locate", lambda *a, **k: {"inside": True, "height_m": 400_000}
-    )
-    assert t_nav._where_now() == "space"
+        monkeypatch.setattr(t_nav, "_WHERE", {"t": 0.0, "v": None, "tried": 0.0})
+        monkeypatch.setattr(
+            app.pos,
+            "latest",
+            (
+                time.time(),
+                (1.0, 2.0, 3.0),
+                {"location": "AsteroidCluster MiningBase Stanton2"},
+            ),
+        )
+        assert t_nav._where_now() == "space"
+        monkeypatch.setattr(t_nav, "_WHERE", {"t": 0.0, "v": None, "tried": 0.0})
+        monkeypatch.setattr(
+            app.pos,
+            "latest",
+            (time.time(), (1.0, 2.0, 3.0), {"location": "Planet Clio"}),
+        )
+        monkeypatch.setattr(
+            navigate, "locate", lambda *a, **k: {"inside": True, "height_m": 2700}
+        )
+        assert t_nav._where_now() == "ground"
+        monkeypatch.setattr(t_nav, "_WHERE", {"t": 0.0, "v": None, "tried": 0.0})
+        monkeypatch.setattr(
+            navigate, "locate", lambda *a, **k: {"inside": True, "height_m": 400_000}
+        )
+        assert t_nav._where_now() == "space"
 
 
 def test_wikelo_detail_sticky_and_names_clean():
@@ -2209,40 +2241,45 @@ def _live_run(
     monkeypatch.setattr(screen, "INTERVAL", 0.01)
     monkeypatch.setattr(signals, "find_signatures", sig or (lambda im: []))
     monkeypatch.setattr(t_mining, "_game_front", front or (lambda: None))
-    live = live_mod._Live()
-    if stale is not None:
-        monkeypatch.setattr(live, "stale_after", {"panel": stale, "signals": stale})
-    q = bus.subscribe()
-    while not q.empty():  # 总线会补发之前保存的最后一条结果：先丢掉，只看这次跑出来的
-        q.get_nowait()
-    if ev is not None:
-        # 外部开关接上这个会话的停止开关：模拟「算到一半用户点了停止」
-        def bridge():
-            ev.wait()
-            live.stop_ev.set()
+    from tests.bootstrap_helpers import app_for_test
 
-        threading.Thread(target=bridge, daemon=True, name="test-live-stop").start()
-    try:
-        sid = live.start()
-        assert sid is not None
-        if until is not None:  # 等条件到了就停，不靠固定秒数
-            deadline = _t.monotonic() + 5
-            while not until() and _t.monotonic() < deadline:
-                _t.sleep(0.005)
-        else:
-            _t.sleep(seconds)
-        live.stop_ev.set()
-        live.loop.join(session_id=sid, timeout=2)
-        msgs = []
+    # RT-B7：tasks.* 先绑定（认出信号后会问现在在哪个产矿区）；这里照旧另建一个 _Live 跑
+    with app_for_test():
+        live = live_mod._Live()
+        if stale is not None:
+            monkeypatch.setattr(live, "stale_after", {"panel": stale, "signals": stale})
+        q = bus.subscribe()
+        # 总线会补发之前保存的最后一条结果：先丢掉，只看这次跑出来的
         while not q.empty():
-            msgs.append(q.get_nowait())
-        return msgs, hud
-    finally:
-        from astral_toolkit.runtime.session import RunState
+            q.get_nowait()
+        if ev is not None:
+            # 外部开关接上这个会话的停止开关：模拟「算到一半用户点了停止」
+            def bridge():
+                ev.wait()
+                live.stop_ev.set()
 
-        if live.loop.state().state not in (RunState.STOPPED, RunState.FAILED):
-            live.stop()  # 还有活会话才补收尾，别给已经停掉的会话再来一次确认
-        bus.unsubscribe(q)
+            threading.Thread(target=bridge, daemon=True, name="test-live-stop").start()
+        try:
+            sid = live.start()
+            assert sid is not None
+            if until is not None:  # 等条件到了就停，不靠固定秒数
+                deadline = _t.monotonic() + 5
+                while not until() and _t.monotonic() < deadline:
+                    _t.sleep(0.005)
+            else:
+                _t.sleep(seconds)
+            live.stop_ev.set()
+            live.loop.join(session_id=sid, timeout=2)
+            msgs = []
+            while not q.empty():
+                msgs.append(q.get_nowait())
+            return msgs, hud
+        finally:
+            from astral_toolkit.runtime.session import RunState
+
+            if live.loop.state().state not in (RunState.STOPPED, RunState.FAILED):
+                live.stop()  # 还有活会话才补收尾，别给已经停掉的会话再来一次确认
+            bus.unsubscribe(q)
 
 
 def _rock(mass, res, instab, scu, comp):
@@ -2594,12 +2631,11 @@ def test_enqueue_rock_keeps_votes_on_one_bad_frame():
 def test_space_fix_navigation(monkeypatch, tmp_path):
     """太空路标一键定位：两次 /showlocation 之间直线飞 → 距离、近了多少、偏离角、多久到；不读右上角（2026-10-23 用户定的方案）"""
     import time as _t
-    from astral_toolkit.navigation import navigate as n
     from astral_toolkit.core import paths
+    from astral_toolkit.navigation import navigate as n
     from astral_toolkit.tasks import navigation as t_nav
-    from astral_toolkit.app.engines.manager import EngineManager
+    from tests.bootstrap_helpers import app_for_test
 
-    em = EngineManager.get_instance()
     from astral_toolkit.app import bus
 
     if not n.CACHE.exists():
@@ -2647,64 +2683,66 @@ def test_space_fix_navigation(monkeypatch, tmp_path):
     )  # 只有一次：提示再飞一段
     back = n.fix_text(n.fix_guide([(0, g1), (5, g0)], target, data), "F9")
     assert "远了" in back and "❌" in back and "反方向" in back
-    # 导航中：剪贴板出现新的 /showlocation 坐标就更新（自己在聊天框输也行），悬浮窗显示结果
-    clip = {"t": "旧东西"}
-    monkeypatch.setattr(n, "read_clipboard", lambda: clip["t"])
-    hud = {}
-    from astral_toolkit.tasks import mining as t_mining, system as t_sys
-    from astral_toolkit.app import hud_state
+    with app_for_test() as app:
+        # 导航中：剪贴板出现新的 /showlocation 坐标就更新（自己在聊天框输也行），悬浮窗显示结果
+        clip = {"t": "旧东西"}
+        monkeypatch.setattr(n, "read_clipboard", lambda: clip["t"])
+        hud = {}
+        from astral_toolkit.tasks import mining as t_mining, system as t_sys
+        from astral_toolkit.app import hud_state
 
-    _v = lambda: type(  # noqa: E731
-        "H",
-        (),
-        {
-            "set": lambda self, k, v, *rich: hud.__setitem__(k, v),  # noqa: E731
-            "clear": lambda self, k: hud.pop(k, None),
-        },
-    )()
-    for _m in (t_mining, t_nav, t_sys, hud_state):
-        monkeypatch.setattr(_m, "_hud", _v)
-    q = bus.subscribe()
-    try:
-        em.nav.start(target)
-        _t.sleep(0.5)
-        assert "F9" in hud.get("导航", "")
-        clip["t"] = f"Coordinates: x:{g0[0]} y:{g0[1]} z:{g0[2]}"
-        _t.sleep(0.8)
-        clip["t"] = f"Coordinates: x:{g1[0]} y:{g1[1]} z:{g1[2]}"
-        _t.sleep(0.8)
-        assert (
-            "偏离" in hud["导航"] and "近了" in hud["导航"] and len(em.nav.fixes) == 2
-        )
-    finally:
-        em.nav.stop()
-        bus.unsubscribe(q)
-    # 没在导航太空路标时按 F9：提示，不打字
-    import threading
+        _v = lambda: type(  # noqa: E731
+            "H",
+            (),
+            {
+                "set": lambda self, k, v, *rich: hud.__setitem__(k, v),  # noqa: E731
+                "clear": lambda self, k: hud.pop(k, None),
+            },
+        )()
+        for _m in (t_mining, t_nav, t_sys, hud_state):
+            monkeypatch.setattr(_m, "_hud", _v)
+        q = bus.subscribe()
+        try:
+            app.nav.start(target)
+            _t.sleep(0.5)
+            assert "F9" in hud.get("导航", "")
+            clip["t"] = f"Coordinates: x:{g0[0]} y:{g0[1]} z:{g0[2]}"
+            _t.sleep(0.8)
+            clip["t"] = f"Coordinates: x:{g1[0]} y:{g1[1]} z:{g1[2]}"
+            _t.sleep(0.8)
+            assert (
+                "偏离" in hud["导航"]
+                and "近了" in hud["导航"]
+                and len(app.nav.fixes) == 2
+            )
+        finally:
+            app.nav.stop()
+            bus.unsubscribe(q)
+        # 没在导航太空路标时按 F9：提示，不打字
+        import threading
 
-    monkeypatch.setattr(
-        threading,
-        "Timer",
-        lambda *a, **k: type("T", (), {"start": lambda self: None})(),
-    )  # 「仅用于手动定位」5 秒后清提示：别在补丁还原后建真悬浮窗
-    assert "error" in t_nav.fix_here()
+        monkeypatch.setattr(
+            threading,
+            "Timer",
+            lambda *a, **k: type("T", (), {"start": lambda self: None})(),
+        )  # 「仅用于手动定位」5 秒后清提示：别在补丁还原后建真悬浮窗
+        assert "error" in t_nav.fix_here()
 
 
 def test_space_fix_dedupe_and_session(monkeypatch, tmp_path):
     """审查 1.6.23：剪贴板监听和 F9 拿到同一份坐标只算一次；导航结束 / 换目标后，旧的定位结果不再发出来"""
     import time as _t
-    from astral_toolkit.navigation import navigate as n
     from astral_toolkit.core import paths, settings
+    from astral_toolkit.navigation import navigate as n
     from astral_toolkit.tasks import (
         mining as t_mining,
         navigation as t_nav,
         system as t_sys,
     )
-    from astral_toolkit.app.engines.manager import EngineManager
+    from tests.bootstrap_helpers import app_for_test
 
-    em = EngineManager.get_instance()
-    from astral_toolkit.app import hud_state
     from astral_toolkit.app import bus
+    from astral_toolkit.app import hud_state
 
     if not n.CACHE.exists():
         pytest.skip("没有星图数据")
@@ -2739,50 +2777,53 @@ def test_space_fix_dedupe_and_session(monkeypatch, tmp_path):
     g1 = (lp["x"] + 20_000, lp["y"] + 5_000, lp["z"])
     c0 = f"Coordinates: x:{g0[0]} y:{g0[1]} z:{g0[2]}"
     c1 = f"Coordinates: x:{g1[0]} y:{g1[1]} z:{g1[2]}"
-    q = bus.subscribe()
-    try:
-        em.nav.start(target)
-        sess = em.nav.session
-        em.nav.add_fix(g0, c0, session=sess)
-        _t.sleep(
-            0.05
-        )  # 两次定位要隔开时间才算得出多久到（Windows 时钟粒度粗，连着调用可能同一时刻）
-        v = em.nav.add_fix(g1, c1, session=sess)  # 剪贴板监听先收到
-        assert v["deviation"] is not None and v["eta"]
-        again = em.nav.add_fix(g1, c1, session=sess)  # F9 返回同一份坐标
-        assert (
-            len(em.nav.fixes) == 2
-            and again["deviation"] == v["deviation"]
-            and again["eta"] == v["eta"]
-        )
-        assert (
-            em.nav.add_fix(g1, None, session=sess)["delta"] == v["delta"]
-        )  # 坐标一样也不重复记
-        em.nav.start(target)  # 换导航：旧会话的结果作废
-        assert (
-            em.nav.add_fix(g0, "别的" + c0, session=sess) is None and em.nav.fixes == []
-        )
-        sess2 = em.nav.session
-        em.nav.stop()
-        while True:  # 清掉之前的消息
-            try:
-                q.get_nowait()
-            except Exception:
-                break
-        assert em.nav.add_fix(g1, "再别的" + c1, session=sess2) is None
-        assert em.nav.add_fix(g1, "再别的" + c1) is None  # 没在导航
-        left = []
-        while True:
-            try:
-                left.append(q.get_nowait())
-            except Exception:
-                break
-        assert not any(
-            isinstance(m, dict) and (m.get("data") or {}).get("active") for m in left
-        )
-    finally:
-        em.nav.stop()
-        bus.unsubscribe(q)
+    with app_for_test() as app:
+        q = bus.subscribe()
+        try:
+            app.nav.start(target)
+            sess = app.nav.session
+            app.nav.add_fix(g0, c0, session=sess)
+            _t.sleep(
+                0.05
+            )  # 两次定位要隔开时间才算得出多久到（Windows 时钟粒度粗，连着调用可能同一时刻）
+            v = app.nav.add_fix(g1, c1, session=sess)  # 剪贴板监听先收到
+            assert v["deviation"] is not None and v["eta"]
+            again = app.nav.add_fix(g1, c1, session=sess)  # F9 返回同一份坐标
+            assert (
+                len(app.nav.fixes) == 2
+                and again["deviation"] == v["deviation"]
+                and again["eta"] == v["eta"]
+            )
+            assert (
+                app.nav.add_fix(g1, None, session=sess)["delta"] == v["delta"]
+            )  # 坐标一样也不重复记
+            app.nav.start(target)  # 换导航：旧会话的结果作废
+            assert (
+                app.nav.add_fix(g0, "别的" + c0, session=sess) is None
+                and app.nav.fixes == []
+            )
+            sess2 = app.nav.session
+            app.nav.stop()
+            while True:  # 清掉之前的消息
+                try:
+                    q.get_nowait()
+                except Exception:
+                    break
+            assert app.nav.add_fix(g1, "再别的" + c1, session=sess2) is None
+            assert app.nav.add_fix(g1, "再别的" + c1) is None  # 没在导航
+            left = []
+            while True:
+                try:
+                    left.append(q.get_nowait())
+                except Exception:
+                    break
+            assert not any(
+                isinstance(m, dict) and (m.get("data") or {}).get("active")
+                for m in left
+            )
+        finally:
+            app.nav.stop()
+            bus.unsubscribe(q)
 
 
 def test_hotkey_conflicts(monkeypatch):
@@ -2802,32 +2843,38 @@ def test_hotkey_conflicts(monkeypatch):
     )
     monkeypatch.setattr(bus, "publish", lambda *a, **k: None)
 
-    assert "一键定位" in t_sys.set_settings(trade_capture_key="F9")["error"]
-    assert "记录路标" in t_sys.set_settings(trade_capture_key="f7")["error"]
-    assert store["trade_capture_key"] == "F8"
-    assert (
-        t_sys.set_settings(trade_capture_key="f11")["trade_capture_key"] == "F11"
-    )  # F5 采矿助手、F6 盘点也占着（1.6.57）
-    assert "盘点" in t_sys.set_settings(trade_capture_key="F6")["error"]
-    assert t_sys.hotkey_conflicts(store) == []
-    w = t_sys.hotkey_conflicts({**store, "trade_capture_key": "F9"})
-    assert len(w) == 1 and "一键定位" in w[0] and "/showlocation" in w[0]
-    assert "记录路标" in t_sys.hotkey_conflicts({**store, "trade_capture_key": "F7"})[0]
+    from tests.bootstrap_helpers import app_for_test
+
+    # RT-B7：set_settings 会推一次 status()，tasks.system 要先绑定
+    with app_for_test():
+        assert "一键定位" in t_sys.set_settings(trade_capture_key="F9")["error"]
+        assert "记录路标" in t_sys.set_settings(trade_capture_key="f7")["error"]
+        assert store["trade_capture_key"] == "F8"
+        assert (
+            t_sys.set_settings(trade_capture_key="f11")["trade_capture_key"] == "F11"
+        )  # F5 采矿助手、F6 盘点也占着（1.6.57）
+        assert "盘点" in t_sys.set_settings(trade_capture_key="F6")["error"]
+        assert t_sys.hotkey_conflicts(store) == []
+        w = t_sys.hotkey_conflicts({**store, "trade_capture_key": "F9"})
+        assert len(w) == 1 and "一键定位" in w[0] and "/showlocation" in w[0]
+        assert (
+            "记录路标"
+            in t_sys.hotkey_conflicts({**store, "trade_capture_key": "F7"})[0]
+        )
 
 
 def test_nav_mode_switch(monkeypatch, tmp_path):
     """导航页的开关：星球上的路标可以切到太空导航（一键定位），太空路标只能用太空导航；正在导航就按新方式重新开始"""
     import json, time as _t  # noqa: E401, F401, F811
-    from astral_toolkit.navigation import navigate as n
     from astral_toolkit.core import settings, paths
+    from astral_toolkit.navigation import navigate as n
     from astral_toolkit.tasks import (
         mining as t_mining,
         navigation as t_nav,
         system as t_sys,
     )
-    from astral_toolkit.app.engines.manager import EngineManager
+    from tests.bootstrap_helpers import app_for_test
 
-    em = EngineManager.get_instance()
     from astral_toolkit.app import hud_state
 
     if not n.CACHE.exists():
@@ -2872,22 +2919,25 @@ def test_nav_mode_switch(monkeypatch, tmp_path):
         "y": 2.0,
         "z": 3.0,
     }
-    try:
-        assert (
-            em.nav.use_space(ground) is False and em.nav.use_space(space) is False
-        )  # 2026-10-27：太空路标默认也实时读右上角
-        em.nav.start(ground)
-        assert em.nav.space_mode is False
-        r = t_nav.nav_mode("space")
-        assert r["space"] is True and em.nav.space_mode and em.nav.target is ground
-        t_nav.nav_mode("ground")
-        assert em.nav.space_mode is False
-        em.nav.start(space)
-        t_nav.nav_mode("ground")
-        assert em.nav.space_mode is False  # 太空路标也能用实时定位
-        assert "error" in t_nav.nav_mode("别的")
-    finally:
-        em.nav.stop()
+    with app_for_test() as app:
+        try:
+            assert (
+                app.nav.use_space(ground) is False and app.nav.use_space(space) is False
+            )  # 2026-10-27：太空路标默认也实时读右上角
+            app.nav.start(ground)
+            assert app.nav.space_mode is False
+            r = t_nav.nav_mode("space")
+            assert (
+                r["space"] is True and app.nav.space_mode and app.nav.target is ground
+            )
+            t_nav.nav_mode("ground")
+            assert app.nav.space_mode is False
+            app.nav.start(space)
+            t_nav.nav_mode("ground")
+            assert app.nav.space_mode is False  # 太空路标也能用实时定位
+            assert "error" in t_nav.nav_mode("别的")
+        finally:
+            app.nav.stop()
     # 星球上的路标用一键定位：在星球自转坐标里算（目标跟着星球转，不能当成星系里的固定点）
     b = data["bodies"]["Daymar"]  # noqa: F841
     t0 = 1_800_000_000.0
@@ -2951,14 +3001,13 @@ def test_halo_routes_match_scminer():
 def test_halo_services(monkeypatch, tmp_path):
     """小行星带页的接口：选项、路线、挂到悬浮窗；挂着方案时按 F9 或自己输 /showlocation 核对在不在带里（复审 1.6.24 补的情形）"""
     import time as _t
-    from astral_toolkit.navigation import halo
     from astral_toolkit.core import paths, settings
-    from astral_toolkit.system import showloc
+    from astral_toolkit.navigation import halo
     from astral_toolkit.navigation import navigate as n
+    from astral_toolkit.system import showloc
     from astral_toolkit.tasks import navigation as t_nav
-    from astral_toolkit.app.engines.manager import EngineManager
+    from tests.bootstrap_helpers import app_for_test
 
-    em = EngineManager.get_instance()
     if not n.CACHE.exists():
         pytest.skip("没有星图数据")
     if "ARC-L1" not in halo.points():
@@ -2987,78 +3036,84 @@ def test_halo_services(monkeypatch, tmp_path):
     )()
     for _m in (t_mining, t_nav, t_sys, hud_state):
         monkeypatch.setattr(_m, "_hud", _v)
-    o = t_nav.halo_options()
-    assert (
-        len(o["bands"]) == 10
-        and o["bands"][4]["ores"][0] == "量子矿物"
-        and o["qd"] == "Atlas (S1)"
-    )
-    assert any(p["key"] == "ARC-L1" for p in o["points"])
-    r = t_nav.halo_routes(frm="ARC-L1", band=5, qd="Odyssey (S3)")
-    assert store["halo_qd"] == "Odyssey (S3)" and r["speed"] == 74 and r["rows"]
-    assert "error" in t_nav.halo_routes(
-        frm="ARC-L1", band=0
-    ) and "error" in t_nav.halo_routes(frm="没有", band=5)
-    assert "error" in t_nav.halo_pin(frm="ARC-L1", to="ARC-L1", band=5)
-    em.nav.target = None
-    try:
-        p = t_nav.halo_pin(frm="ARC-L1", to="CRU-L4", band=5)
+    with app_for_test() as app:
+        o = t_nav.halo_options()
         assert (
-            "14.3 Gm" in hud["小行星带"]
-            and "自动核对" in hud["小行星带"]
-            and t_nav._HALO["plan"] is p
+            len(o["bands"]) == 10
+            and o["bands"][4]["ores"][0] == "量子矿物"
+            and o["qd"] == "Atlas (S1)"
         )
-        _t.sleep(0.5)
-        assert "✅" not in hud["小行星带"]  # 旧坐标没被当成新定位
-        # 自己在聊天框输 /showlocation：剪贴板出现新坐标就核对
-        clip["t"] = "Coordinates: x:20000000000 y:0 z:0"
-        _t.sleep(0.8)
-        assert "第3带" in hud["小行星带"] and "往外" in hud["小行星带"]
-        # F9：拿到的还是这一份坐标（监听已经处理过）→ 不重复算，结果一样
-        monkeypatch.setattr(
-            showloc, "showlocation", lambda log=None: ((20.0e9, 0.0, 0.0), clip["t"])
-        )
-        assert t_nav.fix_here()["band"] == 3
-        monkeypatch.setattr(
-            showloc,
-            "showlocation",
-            lambda log=None: ((20.3e9, 0.0, 0.0), "Coordinates: x:20300000001 y:0 z:0"),
-        )
-        assert t_nav.fix_here()["band"] == 5 and "✅" in hud["小行星带"]
-        monkeypatch.setattr(
-            showloc, "showlocation", lambda log=None: (None, "游戏没在前台")
-        )
-        assert "error" in t_nav.fix_here() and "定位失败" in hud["小行星带"]
+        assert any(p["key"] == "ARC-L1" for p in o["points"])
+        r = t_nav.halo_routes(frm="ARC-L1", band=5, qd="Odyssey (S3)")
+        assert store["halo_qd"] == "Odyssey (S3)" and r["speed"] == 74 and r["rows"]
+        assert "error" in t_nav.halo_routes(
+            frm="ARC-L1", band=0
+        ) and "error" in t_nav.halo_routes(frm="没有", band=5)
+        assert "error" in t_nav.halo_pin(frm="ARC-L1", to="ARC-L1", band=5)
+        app.nav.target = None
+        try:
+            p = t_nav.halo_pin(frm="ARC-L1", to="CRU-L4", band=5)
+            assert (
+                "14.3 Gm" in hud["小行星带"]
+                and "自动核对" in hud["小行星带"]
+                and t_nav._HALO["plan"] is p
+            )
+            _t.sleep(0.5)
+            assert "✅" not in hud["小行星带"]  # 旧坐标没被当成新定位
+            # 自己在聊天框输 /showlocation：剪贴板出现新坐标就核对
+            clip["t"] = "Coordinates: x:20000000000 y:0 z:0"
+            _t.sleep(0.8)
+            assert "第3带" in hud["小行星带"] and "往外" in hud["小行星带"]
+            # F9：拿到的还是这一份坐标（监听已经处理过）→ 不重复算，结果一样
+            monkeypatch.setattr(
+                showloc,
+                "showlocation",
+                lambda log=None: ((20.0e9, 0.0, 0.0), clip["t"]),
+            )
+            assert t_nav.fix_here()["band"] == 3
+            monkeypatch.setattr(
+                showloc,
+                "showlocation",
+                lambda log=None: (
+                    (20.3e9, 0.0, 0.0),
+                    "Coordinates: x:20300000001 y:0 z:0",
+                ),
+            )
+            assert t_nav.fix_here()["band"] == 5 and "✅" in hud["小行星带"]
+            monkeypatch.setattr(
+                showloc, "showlocation", lambda log=None: (None, "游戏没在前台")
+            )
+            assert "error" in t_nav.fix_here() and "定位失败" in hud["小行星带"]
 
-        # F9 等坐标期间方案被取下：结果作废，不报错
-        def slow(log=None):
+            # F9 等坐标期间方案被取下：结果作废，不报错
+            def slow(log=None):
+                t_nav.halo_unpin()
+                return None, "超时"
+
+            monkeypatch.setattr(showloc, "showlocation", slow)
+            assert t_nav.fix_here() == {"error": "超时"}
+            t_nav.halo_pin(frm="ARC-L1", to="CRU-L4", band=5)
+
+            def swap(log=None):
+                t_nav.halo_pin(frm="ARC-L1", to="CRU-L3", band=5)
+                return (20.3e9, 0.0, 0.0), "Coordinates: x:20300000002 y:0 z:0"
+
+            monkeypatch.setattr(showloc, "showlocation", swap)
+            assert "error" in t_nav.fix_here()  # 换了方案：旧的这次不算
+        finally:
             t_nav.halo_unpin()
-            return None, "超时"
+        assert "小行星带" not in hud and t_nav._HALO["plan"] is None
+        clip["t"] = "Coordinates: x:20100000000 y:0 z:0"
+        _t.sleep(0.5)
+        assert "小行星带" not in hud  # 取下后监听停了
+        import threading
 
-        monkeypatch.setattr(showloc, "showlocation", slow)
-        assert t_nav.fix_here() == {"error": "超时"}
-        t_nav.halo_pin(frm="ARC-L1", to="CRU-L4", band=5)
-
-        def swap(log=None):
-            t_nav.halo_pin(frm="ARC-L1", to="CRU-L3", band=5)
-            return (20.3e9, 0.0, 0.0), "Coordinates: x:20300000002 y:0 z:0"
-
-        monkeypatch.setattr(showloc, "showlocation", swap)
-        assert "error" in t_nav.fix_here()  # 换了方案：旧的这次不算
-    finally:
-        t_nav.halo_unpin()
-    assert "小行星带" not in hud and t_nav._HALO["plan"] is None
-    clip["t"] = "Coordinates: x:20100000000 y:0 z:0"
-    _t.sleep(0.5)
-    assert "小行星带" not in hud  # 取下后监听停了
-    import threading
-
-    monkeypatch.setattr(
-        threading,
-        "Timer",
-        lambda *a, **k: type("T", (), {"start": lambda self: None})(),
-    )  # 「仅用于手动定位」5 秒后清提示：别在补丁还原后建真悬浮窗
-    assert "error" in t_nav.fix_here()  # 什么都没挂：只提示，不打字
+        monkeypatch.setattr(
+            threading,
+            "Timer",
+            lambda *a, **k: type("T", (), {"start": lambda self: None})(),
+        )  # 「仅用于手动定位」5 秒后清提示：别在补丁还原后建真悬浮窗
+        assert "error" in t_nav.fix_here()  # 什么都没挂：只提示，不打字
 
 
 def test_halo_where_edges():
@@ -3645,30 +3700,36 @@ def test_waypoint_from_pasted_showlocation(monkeypatch, tmp_path):
         if hasattr(n, "target_global")
         else None
     )
-    assert "error" in t_nav.waypoint_preview(text="随便一句话")
-    assert "error" in t_nav.waypoint_from_text(name="x", text="没有坐标")
-    assert "error" in t_nav.waypoint_from_text(name="", text="Coordinates: x:1 y:2 z:3")
-    lp = next(
-        p
-        for p in data["points"]
-        if p["sys"] == "Stanton" and p["t"] == "Lagrange Point"
-    )
-    txt = f"Coordinates: x:{lp['x'] + 5000} y:{lp['y']} z:{lp['z']}"
-    pv = t_nav.waypoint_preview(text=txt)
-    assert pv["ok"] and pv["space"] and "Stanton" in pv["body"]
-    r = t_nav.waypoint_from_text(name="太空点", text=txt)
-    assert saved[-1] == ("space", "太空点", "Stanton") and "太空" in r["desc"]
-    if g:
-        txt = f"Coordinates: x:{g[0]} y:{g[1]} z:{g[2]}"
-        pv = t_nav.waypoint_preview(text=txt)
-        assert (
-            pv["ok"]
-            and not pv["space"]
-            and pv["body"] == "Daymar"
-            and "戴玛尔" in pv["desc"]
+    from tests.bootstrap_helpers import app_for_test
+
+    # RT-B7：tasks.navigation 要先绑定（预览会看现在的位置线索）
+    with app_for_test():
+        assert "error" in t_nav.waypoint_preview(text="随便一句话")
+        assert "error" in t_nav.waypoint_from_text(name="x", text="没有坐标")
+        assert "error" in t_nav.waypoint_from_text(
+            name="", text="Coordinates: x:1 y:2 z:3"
         )
-        t_nav.waypoint_from_text(name="地面点", text=txt)
-        assert saved[-1] == ("ground", "地面点", "Daymar")
+        lp = next(
+            p
+            for p in data["points"]
+            if p["sys"] == "Stanton" and p["t"] == "Lagrange Point"
+        )
+        txt = f"Coordinates: x:{lp['x'] + 5000} y:{lp['y']} z:{lp['z']}"
+        pv = t_nav.waypoint_preview(text=txt)
+        assert pv["ok"] and pv["space"] and "Stanton" in pv["body"]
+        r = t_nav.waypoint_from_text(name="太空点", text=txt)
+        assert saved[-1] == ("space", "太空点", "Stanton") and "太空" in r["desc"]
+        if g:
+            txt = f"Coordinates: x:{g[0]} y:{g[1]} z:{g[2]}"
+            pv = t_nav.waypoint_preview(text=txt)
+            assert (
+                pv["ok"]
+                and not pv["space"]
+                and pv["body"] == "Daymar"
+                and "戴玛尔" in pv["desc"]
+            )
+            t_nav.waypoint_from_text(name="地面点", text=txt)
+            assert saved[-1] == ("ground", "地面点", "Daymar")
 
 
 def test_feedback_report_bundle(monkeypatch, tmp_path):
@@ -3685,6 +3746,7 @@ def test_feedback_report_bundle(monkeypatch, tmp_path):
         system as t_sys,
     )
     from astral_toolkit.app import hud_state
+    from tests.bootstrap_helpers import app_for_test
 
     monkeypatch.setattr(paths, "USER", tmp_path, raising=False)
     monkeypatch.setattr(paths, "LOGS", tmp_path / "logs", raising=False)
@@ -3724,66 +3786,72 @@ def test_feedback_report_bundle(monkeypatch, tmp_path):
     from astral_toolkit.runtime.results import MINING_SIGNALS, ResultStore
 
     results = ResultStore()
-    monkeypatch.setattr(t_sys._engines(), "results", results)
-    assert results.accept(
-        MINING_SIGNALS, {"view": {}, "values": [44336]}, 1, 0, 1, 0.0, 0.0
-    )
-    r = t_sys.feedback_report(
-        kind="signal", note="屏幕是 33,000", img=Image.new("RGB", (64, 32))
-    )
-    d = tmp_path / "feedback"
-    assert r["count"] == 1 and (d / r["dir"].split("\\")[-1].split("/")[-1]).is_dir()
-    folder = next(p for p in d.iterdir() if p.is_dir())
-    names = {p.name for p in folder.iterdir()}
-    assert (
-        "屏幕.png" in names
-        and "情况.json" in names
-        and "说明.txt" in names
-        and "live_log.txt" in names
-    )
-    assert any(n.startswith("runrec_") and n.endswith(".log") for n in names)
-    assert "runrec_" in (folder / "说明.txt").read_text(encoding="utf-8")
-    assert (
-        sum(n.startswith("live_") and n.endswith(".png") for n in names) == 5
-    )  # 最近 5 帧
-    info = json.loads((folder / "情况.json").read_text(encoding="utf-8"))
-    assert (
-        info["note"] == "屏幕是 33,000"
-        and info["kind"] == "signal"
-        and info["shown_signal"]["values"] == [44336]
-    )
-    assert info["ocr_scan_lines"] == ["扫描结果", "质量： 123"]
-    assert (
-        len((folder / "live_log.txt").read_text(encoding="utf-8").splitlines()) == 150
-    )
-    with zipfile.ZipFile(folder.with_suffix(".zip")) as z:
-        assert any(n.endswith("屏幕.png") for n in z.namelist())
-    t_sys.feedback_report(kind="坏类型", img=Image.new("RGB", (8, 8)))
-    rows = t_sys.feedback_list()
-    assert len(rows) == 2 and rows[0]["name"].endswith("_auto")  # 不认识的类型按 auto
-    e = t_sys.feedback_export()
-    assert (
-        e["files"] == 2
-        and (tmp_path / "desk" / e["path"].split("\\")[-1].split("/")[-1]).exists()
-    )
-    assert t_sys.feedback_clear()["removed"] >= 4 and t_sys.feedback_list() == []
-    assert "error" in t_sys.feedback_export()
-    # 热键冲突：反馈键撞了别的键要提示
-    assert any(
-        "问题反馈" in w for w in t_sys.hotkey_conflicts({"trade_capture_key": "F10"})
-    )
-    from astral_toolkit.core import settings
-    from astral_toolkit.app import bus
+    with app_for_test(results=results):
+        assert results.accept(
+            MINING_SIGNALS, {"view": {}, "values": [44336]}, 1, 0, 1, 0.0, 0.0
+        )
+        r = t_sys.feedback_report(
+            kind="signal", note="屏幕是 33,000", img=Image.new("RGB", (64, 32))
+        )
+        d = tmp_path / "feedback"
+        assert (
+            r["count"] == 1 and (d / r["dir"].split("\\")[-1].split("/")[-1]).is_dir()
+        )
+        folder = next(p for p in d.iterdir() if p.is_dir())
+        names = {p.name for p in folder.iterdir()}
+        assert (
+            "屏幕.png" in names
+            and "情况.json" in names
+            and "说明.txt" in names
+            and "live_log.txt" in names
+        )
+        assert any(n.startswith("runrec_") and n.endswith(".log") for n in names)
+        assert "runrec_" in (folder / "说明.txt").read_text(encoding="utf-8")
+        assert (
+            sum(n.startswith("live_") and n.endswith(".png") for n in names) == 5
+        )  # 最近 5 帧
+        info = json.loads((folder / "情况.json").read_text(encoding="utf-8"))
+        assert (
+            info["note"] == "屏幕是 33,000"
+            and info["kind"] == "signal"
+            and info["shown_signal"]["values"] == [44336]
+        )
+        assert info["ocr_scan_lines"] == ["扫描结果", "质量： 123"]
+        assert (
+            len((folder / "live_log.txt").read_text(encoding="utf-8").splitlines())
+            == 150
+        )
+        with zipfile.ZipFile(folder.with_suffix(".zip")) as z:
+            assert any(n.endswith("屏幕.png") for n in z.namelist())
+        t_sys.feedback_report(kind="坏类型", img=Image.new("RGB", (8, 8)))
+        rows = t_sys.feedback_list()
+        assert len(rows) == 2 and rows[0]["name"].endswith(
+            "_auto"
+        )  # 不认识的类型按 auto
+        e = t_sys.feedback_export()
+        assert (
+            e["files"] == 2
+            and (tmp_path / "desk" / e["path"].split("\\")[-1].split("/")[-1]).exists()
+        )
+        assert t_sys.feedback_clear()["removed"] >= 4 and t_sys.feedback_list() == []
+        assert "error" in t_sys.feedback_export()
+        # 热键冲突：反馈键撞了别的键要提示
+        assert any(
+            "问题反馈" in w
+            for w in t_sys.hotkey_conflicts({"trade_capture_key": "F10"})
+        )
+        from astral_toolkit.core import settings
+        from astral_toolkit.app import bus
 
-    store = dict(settings.DEFAULTS)  # 不读写真实设置
-    monkeypatch.setattr(settings, "load", lambda: dict(store))
-    monkeypatch.setattr(
-        settings, "update", lambda **kw: (store.update(kw), dict(store))[1]
-    )
-    monkeypatch.setattr(bus, "publish", lambda *a, **k: None)
-    r = t_sys.set_settings(trade_capture_key="F10")
-    assert "问题反馈" in r.get("error", ""), r
-    assert store["trade_capture_key"] == "F8"  # 冲突时不保存
+        store = dict(settings.DEFAULTS)  # 不读写真实设置
+        monkeypatch.setattr(settings, "load", lambda: dict(store))
+        monkeypatch.setattr(
+            settings, "update", lambda **kw: (store.update(kw), dict(store))[1]
+        )
+        monkeypatch.setattr(bus, "publish", lambda *a, **k: None)
+        r = t_sys.set_settings(trade_capture_key="F10")
+        assert "问题反馈" in r.get("error", ""), r
+        assert store["trade_capture_key"] == "F8"  # 冲突时不保存
 
 
 def test_scan_view_lots_by_quality(monkeypatch):
@@ -4089,84 +4157,87 @@ def test_ore_log_record_and_hotkeys(monkeypatch, tmp_path):
     from astral_toolkit.runtime.results import MINING_SCAN, ResultStore
 
     results = ResultStore()
-    monkeypatch.setattr(t_nav._M, "results", results)
-    assert "error" in t_nav.ore_record()
-    _view = {
-        "rock": "塔兰导电石",
-        "mass": 38775,
-        "resistance": 55,
-        "instability": 323.46,
-        "total_scu": 36.9,
-        "at": "16:02:06",
-        "lots": [
-            {
-                "zh": "塔兰导电石",
-                "en": "Taranite",
-                "pct": 11.55,
-                "q": 718,
-                "scu": 4.26,
-                "inert": False,
-            },
-            {
-                "zh": "惰性物质",
-                "en": "Inert Materials",
-                "pct": 30.92,
-                "q": None,
-                "scu": 11.41,
-                "inert": True,
-            },
-        ],
-        "refine": [
-            {
-                "method": "德尼克斯熔解法",
-                "station": "列夫斯基",
-                "value": 344786,
-                "scu": 12.39,
-            }
-        ],
-    }
-    assert results.accept(MINING_SCAN, _view, 1, 0, 1, 0.0, 0.0)
-    rec = t_nav.ore_record()
-    assert (
-        rec["value"] == 344786
-        and rec["lots"][0]["pct"] == 11.55
-        and "coords" not in rec
-    )
-    assert t_nav.ore_list()["rows"][0]["id"] == rec["id"]
-    gone = t_nav.ore_delete(id=rec["id"])
-    assert t_nav.ore_list()["rows"] == []
-    t_nav.ore_restore(rec=gone)
-    assert [r["id"] for r in t_nav.ore_list()["rows"]] == [rec["id"]]
-    assert "没有坐标" in t_nav.ore_go(id=rec["id"])["error"]
-    store = dict(settings.DEFAULTS)
-    monkeypatch.setattr(settings, "load", lambda: dict(store))
-    monkeypatch.setattr(
-        settings, "update", lambda **kw: (store.update(kw), dict(store))[1]
-    )
-    assert t_sys.set_settings(live_key="f4")["live_key"] == "F4"
-    assert "盘点" in t_sys.set_settings(ore_key="F6")["error"]
-    assert (
-        t_sys.set_settings(ore_key="F11")["ore_key"] == "F11"
-        and t_sys.set_settings(ore_key="")["ore_key"] == ""
-    )
-    assert "F1–F12" in t_sys.set_settings(mark_key="Q")["error"]
-    w = t_sys.hotkey_conflicts({**store, "mark_key": "F7", "ore_key": "F7"})
-    assert len(w) == 1 and "原矿记录" in w[0] and "记录路标" in w[0]
+    from tests.bootstrap_helpers import app_for_test
+
+    # RT-B7：结果仓库从装配入口注入（以前改 _M.results）
+    with app_for_test(results=results):
+        assert "error" in t_nav.ore_record()
+        _view = {
+            "rock": "塔兰导电石",
+            "mass": 38775,
+            "resistance": 55,
+            "instability": 323.46,
+            "total_scu": 36.9,
+            "at": "16:02:06",
+            "lots": [
+                {
+                    "zh": "塔兰导电石",
+                    "en": "Taranite",
+                    "pct": 11.55,
+                    "q": 718,
+                    "scu": 4.26,
+                    "inert": False,
+                },
+                {
+                    "zh": "惰性物质",
+                    "en": "Inert Materials",
+                    "pct": 30.92,
+                    "q": None,
+                    "scu": 11.41,
+                    "inert": True,
+                },
+            ],
+            "refine": [
+                {
+                    "method": "德尼克斯熔解法",
+                    "station": "列夫斯基",
+                    "value": 344786,
+                    "scu": 12.39,
+                }
+            ],
+        }
+        assert results.accept(MINING_SCAN, _view, 1, 0, 1, 0.0, 0.0)
+        rec = t_nav.ore_record()
+        assert (
+            rec["value"] == 344786
+            and rec["lots"][0]["pct"] == 11.55
+            and "coords" not in rec
+        )
+        assert t_nav.ore_list()["rows"][0]["id"] == rec["id"]
+        gone = t_nav.ore_delete(id=rec["id"])
+        assert t_nav.ore_list()["rows"] == []
+        t_nav.ore_restore(rec=gone)
+        assert [r["id"] for r in t_nav.ore_list()["rows"]] == [rec["id"]]
+        assert "没有坐标" in t_nav.ore_go(id=rec["id"])["error"]
+        store = dict(settings.DEFAULTS)
+        monkeypatch.setattr(settings, "load", lambda: dict(store))
+        monkeypatch.setattr(
+            settings, "update", lambda **kw: (store.update(kw), dict(store))[1]
+        )
+        assert t_sys.set_settings(live_key="f4")["live_key"] == "F4"
+        assert "盘点" in t_sys.set_settings(ore_key="F6")["error"]
+        assert (
+            t_sys.set_settings(ore_key="F11")["ore_key"] == "F11"
+            and t_sys.set_settings(ore_key="")["ore_key"] == ""
+        )
+        assert "F1–F12" in t_sys.set_settings(mark_key="Q")["error"]
+        w = t_sys.hotkey_conflicts({**store, "mark_key": "F7", "ore_key": "F7"})
+        assert len(w) == 1 and "原矿记录" in w[0] and "记录路标" in w[0]
 
 
 def test_gear_change_marks_live_for_recalc(monkeypatch, tmp_path):
     """改配装后，采矿助手正在显示的石头要按新配装重算：set_mining_gear 给 _live 打记号"""
     from astral_toolkit.core import settings
     from astral_toolkit.tasks import mining as t_mining
-    from astral_toolkit.app.engines.manager import EngineManager
+    from tests.bootstrap_helpers import app_for_test
 
-    em = EngineManager.get_instance()
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
-    before = em.live.loop.config_rev
-    t_mining.set_mining_gear(
-        ship="mole", loadout={"heads": [["helix_ii", []]] * 3, "crew": 2}
-    )
-    assert em.live.loop.config_rev == before + 1
+    with app_for_test() as app:
+        before = app.live.loop.config_rev
+        t_mining.set_mining_gear(
+            ship="mole", loadout={"heads": [["helix_ii", []]] * 3, "crew": 2}
+        )
+        assert app.live.loop.config_rev == before + 1
 
 
 def test_item_names_and_categories_unified():
@@ -5196,12 +5267,9 @@ def test_live_key_hint_says_stopping_when_refused(monkeypatch):
     )
     monkeypatch.setattr(hover_mod, "_H", lambda: hud)
     monkeypatch.setattr(hover_mod, "_T", lambda name: tasks)
-    monkeypatch.setattr(
-        hover_mod,
-        "_E",
-        lambda: SimpleNamespace(live=SimpleNamespace(running=lambda: False)),
-    )
     h = object.__new__(hover_mod._Hover)
+    # RT-B7：引擎构造时注入，不再找全局 _E()
+    h._live = SimpleNamespace(running=lambda: False)
     h._toggle_live()
     assert notes == ["正在停止，请稍候"], "被拒时不能说「已开启」"
     tasks.live_start = lambda: {"running": True}  # 允许开的时候照旧

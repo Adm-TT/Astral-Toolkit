@@ -13,10 +13,9 @@ import threading  # noqa: F401
 import time
 from itertools import combinations
 from types import MappingProxyType
-from typing import Any
+from typing import Any, Protocol
 
 # ---------------------------------------------------------------- 依赖（2026-10-30 重构阶段 3：不再经 services 转发）
-from ..app.engines.manager import EngineManager
 from ..app.hud_state import _hud
 from .. import gamedata
 from ..app.presenters import mining as _present
@@ -24,9 +23,54 @@ from ..mining import analysis as _analysis
 from . import goals as _t_goals
 
 
-def _engines():
-    """后台引擎用时才取：导入本模块不创建引擎（架构稿 §4.3 规则 8）"""
-    return EngineManager.get_instance()
+class _LiveLike(Protocol):
+    """采矿助手实际用到的实时读屏接口（B7 由 bootstrap 绑进来，不碰引擎单例）"""
+
+    def start(self) -> int | None: ...
+
+    def stop(self) -> Any: ...
+
+    def running(self) -> bool: ...
+
+    def config_changed(self) -> None: ...
+
+    @property
+    def prev_stop_pending(self) -> bool: ...
+
+
+class _PositionsLike(Protocol):
+    """位置只用到 snapshot().current"""
+
+    def snapshot(self) -> Any: ...
+
+
+_live: _LiveLike | None = None
+_positions: _PositionsLike | None = None
+_UNBOUND = "tasks.mining 未绑定：先调用 bind(live, positions)"
+
+
+def bind(live: _LiveLike, positions: _PositionsLike, *, replace: bool = False) -> None:
+    """组装处调用一次（B7 由 bootstrap 完成）；导入本模块不再取引擎、不再有副作用"""
+    global _live, _positions
+    if (_live is not None or _positions is not None) and not replace:
+        raise RuntimeError(
+            "tasks.mining 已绑定：生产只绑一次；测试用 replace=True 并在用完后恢复"
+        )
+    _live, _positions = live, positions
+
+
+def _need_live() -> _LiveLike:
+    live = _live
+    if live is None:
+        raise RuntimeError(_UNBOUND)
+    return live
+
+
+def _need_positions() -> _PositionsLike:
+    positions = _positions
+    if positions is None:
+        raise RuntimeError(_UNBOUND)
+    return positions
 
 
 def settings_key(k, default=None):
@@ -83,7 +127,7 @@ def _marker_tick(target, data, state, shown, ref=None):
     from ..navigation import navigate as n
     from ..system.showloc import game_foreground
 
-    t, g, info = _engines().pos.current
+    t, g, info = _need_positions().snapshot().current
     h = state.get("here")
     cam = (info or {}).get("camdir")
     if cam:
@@ -110,7 +154,7 @@ def _marker_tick(target, data, state, shown, ref=None):
         else "游戏不在前台"
         if not fg
         else "采矿助手开着"
-        if _engines().live.running()
+        if _need_live().running()
         else "设置里关了"
         if not _marker_on()
         else None
@@ -420,17 +464,16 @@ def live_start():
     refused = closing_error()
     if refused:
         return refused
-    live = _engines().live
+    live = _need_live()
     if live.start() is None:
-        view = live.loop.state()
-        if view.prev_stop_pending:  # 停止还没收尾：如实回「正在停止」
+        if live.prev_stop_pending:  # 停止还没收尾：如实回「正在停止」
             return {"running": live.running(), "error": "正在停止，请稍候"}
         return {"running": live.running(), "error": "正在结束 / 正在退出，稍后再开"}
     return {"running": live.running()}
 
 
 def live_stop():
-    live = _engines().live
+    live = _need_live()
     attempt = live.stop()
     if attempt.timed_out:
         return {"running": live.running(), "error": "正在停止，旧线程还没退出"}
@@ -646,7 +689,7 @@ def set_mining_gear(ship="mole", loadout=None, reset=False):
     elif loadout is not None:
         saved[ship] = clean_loadout(ship, loadout)
     settings.update(mining_ship=ship, mining_loadouts=saved)
-    _engines().live.config_changed()
+    _need_live().config_changed()
     return _gear()
 
 
@@ -662,7 +705,7 @@ def set_mining_gadgets(keys=None):
     if bad:
         raise ValueError(f"没有这种手持工具：{'、'.join(sorted(bad))}")
     settings.update(mining_gadgets=[k for k in GADGETS if k in want])
-    _engines().live.config_changed()
+    _need_live().config_changed()
     return _gear()
 
 
