@@ -36,11 +36,25 @@ DEFAULTS = {
     "nav_marker": True,  # 导航时在游戏画面上画目标记号（画面外贴边画箭头）和瞄准环（2026-10-27）
     "fov_axis": "v",  # 右上角 FOV 是上下（v）还是左右（h）的视角：记号位置不对时改这个
     "nav_mode": "auto",  # 导航方式：auto / ground = 实时读右上角；space = 手动定位（只用 /showlocation）
+    "nav_fps": 5,  # 导航帧数：导航时每秒读几次右上角、刷新几次记号（5–60；越高越跟手、越占 CPU；老大 11-05 定）
     "live_on": False,  # 原矿扫描开着没有：AT 重启、一键升级后自动接着扫           # 游戏里按这个键：把当前位置记成路标（要开着右上角调试信息）
     "agreed": False,  # 第一次打开时确认过「本软件是免费软件」
     "mining_ship": None,  # 原矿扫描按哪条船的配置算：mole / prospector / golem；None = 还没选（窗口会先问）
     "mining_loadouts": {},  # 自己改过的配置 {船: {"heads": [[矿头, [模组…]], …], "crew": 几人}}；没改过的用默认
 }
+
+
+NAV_FPS = (5, 60)  # 导航帧数能选的范围（老大 11-05 定）
+
+
+def nav_fps(value):
+    """导航帧数：取整、限在 5–60；不像数字（手改坏了、没设）按 5"""
+    lo, hi = NAV_FPS
+    try:
+        v = int(round(float(value)))
+    except (TypeError, ValueError, OverflowError):
+        return lo
+    return max(lo, min(hi, v))
 
 
 def load():

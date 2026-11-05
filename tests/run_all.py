@@ -121,6 +121,7 @@ MODULES = [
     "tests.test_nav_session",
     "tests.test_nav_golden",
     "tests.test_pos_service",
+    "tests.test_nav_fps",
     "tests.test_count_session",
 ]
 

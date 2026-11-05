@@ -18,6 +18,7 @@ class _FakePos:
         self.reader_ok_at = 0.0
         self.calls = []
         self.demand = []
+        self.fps = []
         self.hint = {"zone": "", "location": "", "solar_id": ""}
 
     def snapshot(self):
@@ -32,8 +33,9 @@ class _FakePos:
     def request_read_now(self):
         self.calls.append("read")
 
-    def set_demand(self, key, until):
+    def set_demand(self, key, until, fps=None):
         self.demand.append((key, until))
+        self.fps.append(fps)
 
     def hints(self, max_age=5.0):
         return dict(self.hint)
@@ -525,7 +527,7 @@ def test_space_steer_follows_camera_while_hovering(monkeypatch):
     assert len(huds) == n_before + 1 and huds[-1] == huds[-2]
 
 
-def _ground_worker(pos):
+def _ground_worker(pos, links=None):
     class Loop:
         def __init__(self):
             self.ops = []
@@ -534,7 +536,7 @@ def _ground_worker(pos):
             self.ops.append(ops)
             return True
 
-    worker = navmod._NavWorker(pos, _FakeCam(), threading.Lock())
+    worker = navmod._NavWorker(pos, _FakeCam(), threading.Lock(), links=links)
     worker.loop = Loop()
     payload = navmod.NavPayload({"n": "X", "b": "B"}, {"key": "x"}, False)
     session = Session(1, threading.Event(), payload)
@@ -646,3 +648,147 @@ def test_ground_tick_logs_nav_line_only_when_position_changes(monkeypatch):
     pos.current = pos.latest
     worker._ground_tick(session, ctx, now + 2.0)
     assert len(logs) == 2
+
+
+def _fps_links(fps):
+    return navmod.NavLinks(
+        log=lambda msg: None,
+        fix_key_hint=lambda: ("", ""),
+        place_row=lambda target: None,
+        setting=lambda key, default: default,
+        fps=fps,
+    )
+
+
+def _patch_no_position(monkeypatch):
+    from astral_toolkit.navigation import navigate as n
+
+    monkeypatch.setattr(n, "label", lambda target: "目标")
+    monkeypatch.setattr(n, "load", lambda: {})
+    monkeypatch.setattr(n, "read_clipboard", lambda: "")
+    monkeypatch.setattr(n, "parse_clip", lambda clip: None)
+
+
+def test_ground_wait_follows_fps_setting():
+    values = [5]
+    worker, _, _ = _ground_worker(_FakePos(), links=_fps_links(lambda: values[0]))
+    assert abs(worker._ground_wait() - 0.1) < 1e-9
+    values[0] = 10
+    assert abs(worker._ground_wait() - 0.05) < 1e-9
+    values[0] = 60
+    assert abs(worker._ground_wait() - 0.5 / 60) < 1e-9
+
+    worker, _, _ = _ground_worker(_FakePos(), links=_fps_links(lambda: "abc"))
+    assert abs(worker._ground_wait() - 0.1) < 1e-9
+
+    def boom():
+        raise ValueError("坏帧数")
+
+    worker, _, _ = _ground_worker(_FakePos(), links=_fps_links(boom))
+    assert abs(worker._ground_wait() - 0.1) < 1e-9
+
+
+def test_ground_tick_tells_pos_the_fps_and_follows_changes(monkeypatch):
+    _patch_no_position(monkeypatch)
+    box = [30]
+    pos = _FakePos()
+    worker, session, ctx = _ground_worker(pos, links=_fps_links(lambda: box[0]))
+    ctx.first = False
+    ctx.data = {}
+    now = time.time()
+
+    tick = worker._ground_tick(session, ctx, now)
+    assert pos.fps == [30]
+    assert pos.demand[-1] == ("nav", float("inf"))
+    assert abs(tick.wait - 0.5 / 30) < 1e-9
+
+    worker._ground_tick(session, ctx, now + 0.1)
+    assert pos.fps == [30]
+
+    box[0] = 60
+    tick = worker._ground_tick(session, ctx, now + 0.2)
+    assert pos.fps == [30, 60]
+    assert abs(tick.wait - 0.5 / 60) < 1e-9
+
+
+def test_ground_tick_reads_clipboard_by_time_not_by_ticks(monkeypatch):
+    from astral_toolkit.navigation import navigate as n
+
+    reads = []
+
+    def read():
+        reads.append(1)
+        return ""
+
+    _patch_no_position(monkeypatch)
+    monkeypatch.setattr(n, "read_clipboard", read)
+    worker, session, ctx = _ground_worker(_FakePos())
+    ctx.first = False
+    ctx.data = {}
+    now = time.time()
+    worker._ground_tick(session, ctx, now)
+    assert len(reads) == 1
+    worker._ground_tick(session, ctx, now + 0.1)
+    assert len(reads) == 1
+    worker._ground_tick(session, ctx, now + 0.2)
+    assert len(reads) == 1
+    worker._ground_tick(session, ctx, now + 0.35)
+    assert len(reads) == 2
+
+
+def test_nav_log_at_most_every_0_2_seconds(monkeypatch):
+    from astral_toolkit.navigation import navigate as n
+
+    logs = []
+    monkeypatch.setattr(navmod, "nav_log", lambda here, info, view: logs.append(here))
+    monkeypatch.setattr(
+        navmod,
+        "_nav_view",
+        lambda here, goal, data, steady=None, prev=None: {
+            "bearing": 10.0,
+            "arrived": False,
+        },
+    )
+    for name, value in (
+        ("locate", lambda g, **k: {"x": g[0], "y": g[1], "z": g[2], "body": "B"}),
+        ("is_city", lambda t: False),
+        ("is_space", lambda t: False),
+        ("near_text", lambda here, data: ""),
+        ("_short", lambda *a: "短"),
+        ("label", lambda t: "目标"),
+        ("read_clipboard", lambda: ""),
+        ("parse_clip", lambda clip: None),
+    ):
+        monkeypatch.setattr(n, name, value)
+    now = time.time()
+    pos = _FakePos()
+    worker, session, ctx = _ground_worker(pos)
+    ctx.data = {}
+    ctx.first = False
+    ctx.state["here"] = {}
+
+    pos.latest = (now, (1.0, 2.0, 3.0), {"t": now})
+    pos.current = pos.latest
+    worker._ground_tick(session, ctx, now)
+    assert len(logs) == 1
+
+    pos.latest = (now + 0.1, (4.0, 5.0, 6.0), {"t": now + 0.1})
+    pos.current = pos.latest
+    worker._ground_tick(session, ctx, now + 0.1)
+    assert len(logs) == 1
+
+    pos.latest = (now + 0.3, (7.0, 8.0, 9.0), {"t": now + 0.3})
+    pos.current = pos.latest
+    worker._ground_tick(session, ctx, now + 0.3)
+    assert len(logs) == 2
+
+
+def test_start_asks_fps_only_for_live_mode(monkeypatch):
+    nav, pos, _loop = _make_nav(monkeypatch, links=_fps_links(lambda: 20))
+    target = {"n": "X", "b": "Daymar", "t": "Planet", "qt": 0}
+    row = {"key": "x", "label": "X"}
+
+    assert nav.start(target, target_row=row, space_mode=False).status == "started"
+    assert pos.fps[-1] == 20
+    assert nav.start(target, target_row=row, space_mode=True).status == "started"
+    assert pos.fps[-1] is None

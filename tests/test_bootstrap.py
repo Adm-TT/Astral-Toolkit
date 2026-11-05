@@ -233,6 +233,27 @@ def test_nav_links_are_wired_by_bootstrap():
         bootstrap.shutdown(app, budget=0.2)
 
 
+def test_nav_fps_follows_settings_page(monkeypatch, tmp_path):
+    from astral_toolkit.core import settings
+    from astral_toolkit.infrastructure.platform import timer
+
+    monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
+    app = bootstrap.build("test")
+    try:
+        assert app.nav._links.fps() == 5
+        settings.update(nav_fps=30)
+        assert app.nav._links.fps() == 30
+        settings.update(nav_fps=999)
+        assert app.nav._links.fps() == 60
+        assert app.pos._fine_timer is None
+        assert bootstrap._fine_timer("desktop") is timer.fine
+        desktop_pos = bootstrap._pos_service("desktop", settings.View())
+        assert desktop_pos._fine_timer is timer.fine  # 只造对象，不起线程
+        assert bootstrap._pos_service("test", settings.View())._fine_timer is None
+    finally:
+        bootstrap.shutdown(app, budget=0.2)
+
+
 def test_build_rejects_bad_mode_and_unknown_overrides():
     _assert_error(ValueError, "mode", lambda: bootstrap.build("prod"))
     _assert_error(

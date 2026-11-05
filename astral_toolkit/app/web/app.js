@@ -2764,6 +2764,10 @@ PAGES.settings = () => {
       <div class="set"><div>大小</div>${segH("ov-scale", [["0.5", "50%"], ["0.75", "75%"], ["1", "100%"]], String(Math.min(1, +(c.hud_scale ?? 1))), "悬浮窗大小")}</div>
       <div class="set"><div>底板</div>${segH("ov-plate", [["0.6", "浅"], ["0.72", "标准"], ["0.85", "深"]], String(+(c.hud_plate ?? 0.72)), "底板")}</div>
       <div class="set"><div>配色</div>${segH("ov-theme", [["默认", "默认"], ["蓝金", "蓝金"], ["浅色", "浅色"]], c.hud_theme || "默认", "悬浮窗配色")}</div></div>
+    <h2>导航</h2>
+    <div class="panel"><div class="set" style="border:0;padding:0"><div>帧数
+      <p>导航时每秒读几次游戏右上角、刷新几次记号和转向提示。越高转镜头时记号越跟手，也越占 CPU；电脑忙时实际会低一些。默认 5。</p></div>
+      ${segH("nav-fps", [["5", "5"], ["10", "10"], ["20", "20"], ["30", "30"], ["60", "60"]], String(c.nav_fps ?? 5), "导航帧数")}</div></div>
     <h2>遇到问题</h2>
     <div class="panel"><div class="set"><div>问题反馈
       <p>矿物、信号或物品识别错误时，在游戏中按 <kbd>${esc(c.report_key || "F10")}</kbd>（或点击「报告问题」），AT 保存当时的截图、识别文字和显示结果，并自动发给作者用于改进识别。截图中可能有游戏聊天框。</p>
@@ -2837,7 +2841,7 @@ PAGES.settings = () => {
     applyTheme(e.target.value);
     try { state.status.settings = await api("set_settings", { theme: e.target.value }); } catch (err) { toast(err.message); }
   };
-  for (const [id, key] of [["#ov-scale", "hud_scale"], ["#ov-plate", "hud_plate"]]) {
+  for (const [id, key] of [["#ov-scale", "hud_scale"], ["#ov-plate", "hud_plate"], ["#nav-fps", "nav_fps"]]) {
     $(id).onchange = async (e) => {
       try { state.status.settings = await api("set_settings", { [key]: +e.target.value }); toast("已保存"); } catch (err) { toast(err.message); }
     };

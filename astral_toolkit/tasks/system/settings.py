@@ -80,6 +80,10 @@ def set_settings(**kw):
     if "ocr_device" in kw:
         allowed.add("ocr_device")
         kw["ocr_device"] = str(kw["ocr_device"]).lower()
+    # 导航帧数：取整、限在 5–60（设置页只给五档，直接调接口也不越界）
+    if "nav_fps" in kw:
+        kw["nav_fps"] = settings.nav_fps(kw["nav_fps"])
+    allowed.add("nav_fps")
     clear_train = (
         kw.get("train_upload") is False
     )  # 关掉「帮助改进识别」：先存「关」，再删本地攒着没发的
@@ -112,7 +116,8 @@ def set_settings(**kw):
             train_data.clear()
         except Exception:
             pass
-    if any(k in kw for k in ("hud_theme", "hud_plate", "hud_scale")):
+    # 导航帧数变了，悬浮窗也马上按新帧数刷记号
+    if any(k in kw for k in ("hud_theme", "hud_plate", "hud_scale", "nav_fps")):
         try:
             h = _hud()
             if h and hasattr(h, "restyle"):

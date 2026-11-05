@@ -170,8 +170,24 @@ def _nav_marker(pos: Any, live: Any, mode: str, view: Any) -> _NavMarker:
     )
 
 
-def _nav_links() -> NavLinks:
-    """导航引擎要用的导航任务函数（NV-B4）：以前经 `_T("navigation")` 动态取，现在在这里接。"""
+def _fine_timer(mode: str) -> Callable[[bool], None] | None:
+    """读得快时调高 Windows 等待精度（导航帧数，NV-B5）：只给 desktop；test 模式不碰系统计时"""
+    if mode != "desktop":
+        return None
+    from .infrastructure.platform import timer
+
+    return timer.fine
+
+
+def _pos_service(mode: str, view: Any) -> _Pos:
+    """位置服务（NV-B5）：调试模式开关交给读右上角的 Reader；desktop 读得快时调 Windows 等待精度"""
+    return _Pos(debug=_debug_on(view), fine_timer=_fine_timer(mode))
+
+
+def _nav_links(view: Any) -> NavLinks:
+    """导航引擎要用的导航任务函数（NV-B4）：以前经 `_T("navigation")` 动态取，现在在这里接。
+    fps：设置页的导航帧数，从内存里的设置取（不读盘），已限在 5–60"""
+    from .core import settings
     from .tasks import navigation as navigation_tasks
 
     return NavLinks(
@@ -179,6 +195,7 @@ def _nav_links() -> NavLinks:
         fix_key_hint=navigation_tasks.fix_key_hint,
         place_row=navigation_tasks._place_row,
         setting=navigation_tasks.settings_key,
+        fps=lambda: settings.nav_fps(view.get("nav_fps")),
     )
 
 
@@ -217,8 +234,8 @@ def build(
     # 常看的设置（调试模式、记号）：一份内存里的，存设置后自动重读（NV-B5）
     view = settings.View()
 
-    pos = _Pos(debug=_debug_on(view))
-    links = _nav_links()
+    pos = _pos_service(mode, view)
+    links = _nav_links(view)
     cam_filter = _CamFilter(log=links.log)
     steady = _Steady()
     game_events = _GameEvents(on_qt_arrived=pos.request_read_now)

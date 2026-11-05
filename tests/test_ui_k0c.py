@@ -80,7 +80,7 @@ class _FakePos:
     def request_read_now(self):
         pass
 
-    def set_demand(self, key, until):
+    def set_demand(self, key, until, fps=None):
         self.demand.append((key, until))
 
 
