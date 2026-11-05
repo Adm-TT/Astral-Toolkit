@@ -5,6 +5,8 @@ UEX 只认英文名；游戏是中文界面，截图识别和手动搜索得到�
 
 import re
 
+from ..contracts.textkeys import fold_en as _fold_en, norm_zh as _norm_zh
+
 CJK = re.compile(r"[一-鿿]")
 _PAREN = re.compile(r"\s*[（(][^）)]*[）)]\s*")
 
@@ -79,21 +81,6 @@ def to_english(query: str, limit: int = 8) -> list[str]:
 # ---------------------------------------------------------------- 认错的名字 → 汉化包里的标准名（2026-10-23）
 # F8 认说明框时常有个别字认错或认丢：「冷冻舱（剜度）」认成「冷冻舱（刻度）」「冷冻舱（度）」，「巅峰期」认成「峰期」。
 # 名字以玩家游戏里的汉化包为准：先用英文名对（英文很少认错），对不上再找最接近的中文名。
-
-
-def _fold_en(text):  # 改了要升 gamedata/_schema.IMPORTER_VERSION（见 _CODE 上面）
-    return re.sub(r"[^a-z0-9]", "", (text or "").lower())
-
-
-def _norm_zh(text):  # 改了要升 gamedata/_schema.IMPORTER_VERSION（见 _CODE 上面）
-    return (
-        (text or "")
-        .replace("(", "（")
-        .replace(")", "）")
-        .replace(" ", "")
-        .replace("　", "")
-        .strip()
-    )
 
 
 def _index() -> tuple[dict, dict]:

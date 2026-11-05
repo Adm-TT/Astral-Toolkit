@@ -11,6 +11,7 @@ import urllib.request
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+from ..contracts.textkeys import fold_mixed_loose as _fold  # noqa: E402
 from ..core.paths import DATA  # noqa: E402
 
 INDEX = DATA / "loot_index.json"
@@ -29,11 +30,6 @@ def _get(url, timeout=60):
     return json.loads(
         read(urllib.request.Request(url, headers=UA), timeout=timeout).decode("utf-8")
     )
-
-
-def _fold(s):
-    """名字折叠键。gamedata/_import.import_loot 导入时用它算 norm_en / norm_zh：改了规则要升 _build.IMPORTER_VERSION"""
-    return re.sub(r"[^a-z0-9一-鿿]", "", (s or "").lower().replace("l", "i"))
 
 
 def latest_version():

@@ -47,7 +47,7 @@ def _lst(v: Any) -> list:
 
 def _known_en(sources: dict[str, SourceBytes]) -> set[str]:
     """迁移前 trade/names._known_names()（107a760 之前）的规则：商店和掉落里所有英文名（折叠过）——从已读的源算，不碰模块缓存"""
-    from ..trade.names import _fold_en
+    from ..contracts.textkeys import fold_en as _fold_en
 
     out: set[str] = set()
     for v in (_d(sources, "shops.json", {}).get("items") or {}).values():
@@ -59,8 +59,9 @@ def _known_en(sources: dict[str, SourceBytes]) -> set[str]:
 
 def _names_table(sources: dict[str, SourceBytes]) -> dict[str, str]:
     """中英对照表的组装规则（唯一一份；迁移前在 trade/names.table()，107a760 之前）：去假英文名；zh_only_names 只补中文 ≥3 字且还没有的。
-    用到的 trade/names._junk / _norm_zh / _fold_en / _CODE 改了要升 _build.IMPORTER_VERSION"""
-    from ..trade.names import _junk, _norm_zh
+    用到的 trade/names._junk / contracts.textkeys.norm_zh / contracts.textkeys.fold_en / _CODE 改了要升 gamedata/_schema.IMPORTER_VERSION"""
+    from ..contracts.textkeys import norm_zh as _norm_zh
+    from ..trade.names import _junk
 
     zh_names = _d(sources, "zh_names.json", None)
     if zh_names is None:
@@ -120,8 +121,9 @@ def import_wiki_rows(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) 
 
 
 def import_items(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> None:
+    from ..contracts.textkeys import en_key, zh_key
     from ..core.i18n import gear_zh_of_item
-    from ..crafting.itemsearch import _has_cjk, _variant, _wiki_noise, en_key, zh_key
+    from ..crafting.itemsearch import _has_cjk, _variant, _wiki_noise
 
     by_en: dict[str, dict] = {}
     rows: list[dict] = []
@@ -305,7 +307,7 @@ def import_shops(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> N
 def import_loot(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> None:
     import json
 
-    from ..crafting.loot import _fold
+    from ..contracts.textkeys import fold_mixed_loose as _fold
 
     raw = _d(sources, "loot_index.json", None)
     rows = (raw.get("rows") if isinstance(raw, dict) else None) or []
@@ -339,9 +341,9 @@ def import_loot(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> No
 def import_wiki_classes(
     conn: sqlite3.Connection, sources: dict[str, SourceBytes]
 ) -> None:
-    """loot._wiki_classes 的规则：按 loot._fold(n) 收 cls 和 alt[] 的小写，空串不存。
+    """loot._wiki_classes 的规则：按 contracts.textkeys.fold_mixed_loose(n) 收 cls 和 alt[] 的小写，空串不存。
     n 缺失折叠成 ''（旧 _fold(None) == ''）；n 不是字符串、alt 不是列表的条目跳过 / 当空（旧代码整个函数吞错返回空集）"""
-    from ..crafting.loot import _fold
+    from ..contracts.textkeys import fold_mixed_loose as _fold
 
     items = _lst((_d(sources, "wiki_items.json", {}) or {}).get("items"))
     out = []
@@ -630,7 +632,7 @@ def import_mining_spots(
 
 
 # ---------------------------------------------------------------- schema 4：制造 / 维科洛 / 物品属性（批 3 公共层，2026-11-02）
-# 规则直接 import 复用：crafting.assign_keys（「名字#序号」编号）、crafting._fold_name / _search_norm、wikelo._fold、itemsearch.en_key
+# 规则直接 import 复用：crafting.assign_keys（「名字#序号」编号）、crafting._fold_name / _search_norm、contracts.textkeys.fold_mixed_loose、contracts.textkeys.en_key
 # 都是可选源：缺了空表；坏一条跳一条（_rows）
 
 
@@ -641,8 +643,8 @@ def import_crafting(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -
     id / source_order 用源下标（和别的表一致）。编号撞车（源里真有叫「X#1」的名字）后出现的那份跳过。"""
     import json
 
+    from ..contracts.textkeys import en_key
     from ..crafting.crafting import _fold_name, _search_norm, assign_keys
-    from ..crafting.itemsearch import en_key
 
     raw = _d(sources, "crafting.json", {}) or {}
     all_bps = _lst(raw.get("blueprints")) if isinstance(raw, dict) else []
@@ -734,7 +736,7 @@ def import_crafting(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -
 
 def import_wikelo(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> None:
     """合同按 id 去重只留首个（子表也只从首个生成，不会把两份合同的条目混到一起）；标量列不是字符串存空"""
-    from ..crafting.wikelo import _fold
+    from ..contracts.textkeys import fold_mixed_loose as _fold
 
     raw = _d(sources, "wikelo.json", {}) or {}
     contracts = _lst(raw.get("contracts")) if isinstance(raw, dict) else []

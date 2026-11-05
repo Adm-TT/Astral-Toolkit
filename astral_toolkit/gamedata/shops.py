@@ -9,7 +9,7 @@ from ._types import ShopRow
 
 @dataclass(frozen=True)
 class CatalogItem:
-    """商店物品目录的一条：英文名、类别是 shops.json 原样；folded 是 crafting.shops._fold(en)（l→i、去符号）"""
+    """商店物品目录的一条：英文名、类别是 shops.json 原样；folded 是 contracts.textkeys.fold_en_loose(en)（l→i、去符号）"""
 
     uex_item_id: int
     en: str
@@ -22,7 +22,7 @@ _cat: VersionCache[tuple[CatalogItem, ...]] = VersionCache()
 
 
 def _load_catalog(s) -> tuple[CatalogItem, ...]:
-    from ..crafting.shops import _fold
+    from ..contracts.textkeys import fold_en_loose as _fold
 
     return tuple(
         CatalogItem(i, en, cat, _fold(en), o)

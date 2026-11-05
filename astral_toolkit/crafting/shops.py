@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+from ..contracts.textkeys import fold_en_loose as _fold  # noqa: E402
 from ..core.paths import DATA  # noqa: E402
 
 CACHE = DATA / "shops.json"
@@ -143,10 +144,6 @@ def load(auto_update=True):
         except Exception as e:
             print(f"更新失败（{e}），" + ("使用旧数据" if _data else "暂时无法查询"))
     return _data or {"items": {}, "rows": []}
-
-
-def _fold(s):
-    return re.sub(r"[^a-z0-9]", "", (s or "").lower().replace("l", "i"))
 
 
 def _folded_items():

@@ -104,7 +104,7 @@ def zh_keys_of_all(snap=None) -> dict[str, tuple[str, ...]]:
 
 def by_name(name: str, snap=None) -> ItemRow | None:
     """英文名（折叠后）精确对上物品主键；其次对上旧写法（kind='aka'）"""
-    from ..crafting.itemsearch import en_key
+    from ..contracts.textkeys import en_key
 
     k = en_key(name)
     if not k:

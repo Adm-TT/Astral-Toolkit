@@ -122,6 +122,7 @@ MODULES = [
     "tests.test_nav_golden",
     "tests.test_catalog_golden",
     "tests.test_f8_golden",
+    "tests.test_textkeys",
     "tests.test_pos_service",
     "tests.test_nav_fps",
     "tests.test_count_session",

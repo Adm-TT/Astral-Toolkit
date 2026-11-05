@@ -6,14 +6,10 @@
 对不上的返回 None，不硬猜。数据从游戏数据层读（gamedata.names 的原样有序行），索引按内容版本缓存。
 """
 
-import re
+from ..contracts.textkeys import fold_en as _fold
 
 # 按游戏数据内容版本缓存一份索引（公共工具 gamedata/_cache.VersionCache）。本模块顶层不 import gamedata，第一次用时才建
 _caches: dict = {}
-
-
-def _fold(s):
-    return re.sub(r"[^a-z0-9]", "", (s or "").lower())
 
 
 def _cache():

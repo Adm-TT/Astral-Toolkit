@@ -66,7 +66,7 @@ DDL: list[str] = [
     "CREATE INDEX idx_shop_rows_item ON shop_rows(uex_item_id)",
     "CREATE INDEX idx_shop_rows_shop ON shop_rows(shop_name)",
     # loot_index.json 的 rows 原样 6 列
-    # schema 4 加三列（批 4 公共层）：norm_en / norm_zh = crafting.loot._fold（find 的比较键，源里原样 en/zh 折叠，不做中英对调）；
+    # schema 4 加三列（批 4 公共层）：norm_en / norm_zh = contracts.textkeys.fold_mixed_loose（find 的比较键，源里原样 en/zh 折叠，不做中英对调）；
     # cls_lower = cls 小写（mine_info 按前缀筛；真实数据 uuid 无重复、各列无 None，2026-11-02 核过）
     """CREATE TABLE loot_rows (
         uuid TEXT PRIMARY KEY,
@@ -84,7 +84,7 @@ DDL: list[str] = [
     "CREATE INDEX idx_loot_rows_norm_en ON loot_rows(norm_en)",
     "CREATE INDEX idx_loot_rows_norm_zh ON loot_rows(norm_zh)",
     "CREATE INDEX idx_loot_rows_cls_lower ON loot_rows(cls_lower)",
-    # wiki_items.json 的游戏类名（cls + alt[] 同一列多行），norm_n = crafting.loot._fold(n)：loot._wiki_classes 用（批 4 公共层）。
+    # wiki_items.json 的游戏类名（cls + alt[] 同一列多行），norm_n = contracts.textkeys.fold_mixed_loose(n)：loot._wiki_classes 用（批 4 公共层）。
     # 不能用 item_source_ids('class') 代替：那张表没有 alt、同名只留首个、折叠规则是 en_key
     """CREATE TABLE wiki_classes (
         norm_n TEXT NOT NULL,
@@ -289,7 +289,7 @@ DDL: list[str] = [
     )""",
     "CREATE INDEX idx_bp_materials_material ON blueprint_materials(material)",
     # wikelo.json contracts：标量原样（可空文本存 NULL；q 不声明类型，源里 int 就是 int、float 就是 float——goals 要原样乘数量）；
-    # rewards / req / systems 各一张子表，idx 保序；req.norm_n = wikelo._fold（uses 的比较规则）
+    # rewards / req / systems 各一张子表，idx 保序；req.norm_n = contracts.textkeys.fold_mixed_loose（uses 的比较规则）
     """CREATE TABLE wikelo_contracts (
         id TEXT PRIMARY KEY,
         type TEXT,

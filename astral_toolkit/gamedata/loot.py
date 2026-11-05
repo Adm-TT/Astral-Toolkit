@@ -14,7 +14,7 @@ from ._ready import use
 @dataclass(frozen=True)
 class LootRow:
     """loot_index.json 的一行：uuid / en / zh / rarity / n 原样（库里 None 存成 '' / 0）；
-    norm_en / norm_zh = crafting.loot._fold(en / zh)，cls_lower = 类名小写"""
+    norm_en / norm_zh = contracts.textkeys.fold_mixed_loose(en / zh)，cls_lower = 类名小写"""
 
     uuid: str
     en: str
