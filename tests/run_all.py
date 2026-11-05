@@ -63,6 +63,7 @@ MODULES = [
     "tests.test_trade",
     "tests.test_tools",
     "tests.test_tooltip_two_line",
+    "tests.test_f8_retry",
     "tests.test_goals",
     "tests.test_loadout_sweep",
     "tests.test_run_directml",

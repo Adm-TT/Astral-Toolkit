@@ -262,6 +262,10 @@ def _hover_more(seq, at, zh, en, info, quality=None, canon=True):
         bus.runtime_log(f"F8 价格与数据同步完成: {zh or en}", tag="HOVER", level="INFO")
 
 
+# F8 第一遍没认准时，等这么久再截一次（说明框还没出来 / 没出完，2026-11-06 老大验收 RD-B1）
+RETRY_WAIT = 0.5
+
+
 def hover_once(img=None):
     """F8：认出鼠标指着的物品，马上把名字和本机数据（哪里买、维科洛、制造）显示到悬浮窗；
     要联网的（玩家市场价、掉落）放到后台，查到了再补上。以前要等联网全查完才显示，慢好几秒"""
@@ -274,6 +278,7 @@ def hover_once(img=None):
     from ..core import run_records
 
     run_records.record("HOVER", "触发 F8 物品识别", ui_tag="HOVER")
+    own = img is None  # 自己截的图才等一下再截第二次；窗口、测试传进来的图照旧只认一遍
     t_grab_0 = time.time()
     img = img or grab()
     t_grab = time.time()
@@ -288,7 +293,24 @@ def hover_once(img=None):
     bus.publish("hover", {"state": "working"})
     _item_hud("识别中…", 30)  # 按下就有反应
     cx, cy = C._cursor_on_image(img) if WIN else (img.width // 2, img.height // 2)
-    res = inspect_item(img, (cx, cy))
+    res = (
+        inspect_item(img, (cx, cy), whole_screen=False)
+        if own
+        else inspect_item(img, (cx, cy))
+    )
+    if own and not (res and res["sure"]):
+        # 第一遍没认准：多半按早了，说明框还没出来 / 没出完（截到半透明的）。等一下再截一次，这一遍照旧可以整屏；
+        # 第二遍什么都没认出来就还用第一遍的（2026-11-06 老大验收：一次没认出、一次 8 秒认成制造商）
+        got = f"认成「{res['zh'] or res['en']}」没对上汉化包" if res else "没找到说明框"
+        bus.runtime_log(
+            f"F8 第一遍{got}，等 {RETRY_WAIT} 秒再截一次", tag="HOVER", level="INFO"
+        )
+        time.sleep(RETRY_WAIT)
+        img2 = grab()
+        cur2 = C._cursor_on_image(img2) if WIN else (img2.width // 2, img2.height // 2)
+        res2 = inspect_item(img2, cur2)
+        if res2 is not None or res is None:
+            img, (cx, cy), res = img2, cur2, res2
     t2 = time.time()
     if not res:
         msg = "未找到物品说明框。鼠标停在物品上，等说明框出现后再按"

@@ -537,7 +537,7 @@ def _dbg_texts(tokens, n: int = 8) -> str:
     return " / ".join(texts)
 
 
-def _read_tooltip(img, cursor):
+def _read_tooltip(img, cursor, whole_screen=True):
     """→ (文字, (中文名, 英文名) 或 None, 认的范围)
     识别机制（2026-11-04 F8 标题带方案，见 docs/superpowers/specs/2026-11-04-f8-title-band-ocr.md §3、§4）：
     1. 先只认说明框顶部的标题窄带（屏高 24%~36%，按原尺寸认字），宽度按鼠标横向位置选
@@ -547,6 +547,7 @@ def _read_tooltip(img, cursor):
     3. 再对不上用原来的全高竖条（0%~100%）：说明框标题完整（英文名下面紧跟体积 / 物品类型…）
        就照旧当认到了——没入库的物品不再为它多跑一次整屏。
     4. 都还没有：鼠标在屏幕中间带、且从没见过说明框锚点 → 多半在驾驶位，不整屏；否则整屏兜底。
+    whole_screen=False（F8 第一遍）：不整屏兜底，认不出由调用方等一下再截一次（2026-11-06 老大验收：说明框没出完就按了）。
     """
     from ..ocr import recognize
     from . import debug_shots
@@ -630,6 +631,11 @@ def _read_tooltip(img, cursor):
                 "INFO",
             )
         _shot_stop("驾驶位保护")
+        return cand if cand is not None else last
+    if not whole_screen:
+        if dbg:
+            _dbg("第一遍不整屏｜等一下再截一次", "INFO")
+        _shot_stop("第一遍·不整屏")
         return cand if cand is not None else last
 
     # 都不行的时候全屏兜底
@@ -833,9 +839,15 @@ def _is_mineral(zh, en, fuzzy=True):
 
 
 def inspect_item(
-    img, cursor: Tuple[int, int], tokens=None, where=None, craft_override=False
+    img,
+    cursor: Tuple[int, int],
+    tokens=None,
+    where=None,
+    craft_override=False,
+    whole_screen=True,
 ) -> Optional[Dict[str, Any]]:
     """识别鼠标悬停的物品格与说明框，返回结构化字典或 None。
+    whole_screen=False（F8 第一遍）：说明框条带都没认出时不整屏兜底，由调用方等一下再截一次。
     craft_override=True（F6 盘点用）：制造品的加成和蓝图完全对上时，用倒推出的品质和各槽品质，
     读到的品质数字也让位（和 1.1.1 盘点一样）；F8 默认只在没读到品质数字时才倒推：
     {
@@ -862,7 +874,11 @@ def inspect_item(
     result = None
     try:
         if tokens is None or where is None:
-            tokens, name, where = _read_tooltip(img, (cx, cy))
+            tokens, name, where = (
+                _read_tooltip(img, (cx, cy))
+                if whole_screen
+                else _read_tooltip(img, (cx, cy), whole_screen=False)
+            )
         else:
             name, _sure = tooltip_pick(tokens, (cx, cy), img)
 
