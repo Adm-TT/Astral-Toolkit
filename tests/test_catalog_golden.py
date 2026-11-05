@@ -1,15 +1,19 @@
-"""物品查询接口黄金测试：不读本机数据，锁住 `tasks/trade.py` 现在的组合与排版。
+"""物品查询接口黄金测试：不读本机数据，锁住窗口接口（app/api/trade）和 tasks/trade 旧壳现在的组合与排版。
 
-IQ-B1～B7 拆物品查询链时，这些字面量应当一个字都不变。
+物品查询链 IQ-B1～B7 拆代码时，这些字面量应当一个字都不变。
 """
 
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from decimal import Decimal as D
 from types import SimpleNamespace
 from typing import Any
 
+from astral_toolkit.app.api import trade as A
 from astral_toolkit.core import i18n
 from astral_toolkit.crafting import acquire, itemsearch, loot
+from astral_toolkit.tasks import catalog as C
+from astral_toolkit.tasks import goals as G
 from astral_toolkit.tasks import trade as T
 from astral_toolkit.trade.models import Item, PriceKey, PriceStats, ProviderResult
 
@@ -131,7 +135,8 @@ def test_item_search_maps_rows(monkeypatch):
     monkeypatch.setattr(itemsearch, "find", fake_find)
     monkeypatch.setattr(i18n, "SHOP_CAT_ZH", {"WeaponPersonal": "单兵武器"})
 
-    assert T.item_search("x") == [
+    out = A.item_search(q="x")
+    assert out == [
         {
             "id": 11,
             "name": "Shop Gun",
@@ -161,7 +166,8 @@ def test_item_search_maps_rows(monkeypatch):
             "src": "loc",
         },
     ]
-    assert seen == [("x", 30)]
+    assert T.item_search("x") == out
+    assert seen == [("x", 30), ("x", 30)]
 
 
 def test_item_info_calls_and_enriches(monkeypatch):
@@ -183,6 +189,7 @@ def test_item_info_calls_and_enriches(monkeypatch):
         calls.append((name_en, name_zh, item_id, show_loot, exact, loot_online))
         return dict(payload)
 
+    monkeypatch.setattr(C, "_pinned", nullcontext)
     monkeypatch.setattr(acquire, "info", fake_info)
     monkeypatch.setattr(i18n, "gear_zh_of_item", lambda _en: "霍夫斯泰德")
     monkeypatch.setattr(i18n, "SHOP_CAT_ZH", {"WeaponMining": "采矿激光器"})
@@ -190,7 +197,7 @@ def test_item_info_calls_and_enriches(monkeypatch):
     def never(_en):
         raise AssertionError("不该走 _zh_of")
 
-    monkeypatch.setattr(T, "_zh_of", never)
+    monkeypatch.setattr(C, "_zh_of", never)
     token = object()
     goal_calls = []
     text_calls = []
@@ -203,12 +210,12 @@ def test_item_info_calls_and_enriches(monkeypatch):
         text_calls.append(g)
         return "目标文本"
 
-    monkeypatch.setattr(T, "_goal_for", fake_goal_for)
-    monkeypatch.setattr(T, "_goal_text", fake_goal_text)
+    monkeypatch.setattr(G, "_goal_for", fake_goal_for)
+    monkeypatch.setattr(G, "_goal_text", fake_goal_text)
 
     exact: Any = 1  # 故意传 1：item_info 要把它转成 True 再交给 acquire.info
-    out = T.item_info(
-        "Hofstede-S2 Mining Laser", "旧中文", id=7, loot=False, exact=exact
+    out = A.item_info(
+        name="Hofstede-S2 Mining Laser", zh="旧中文", id=7, loot=False, exact=exact
     )
 
     assert calls == [
@@ -227,6 +234,30 @@ def test_item_info_calls_and_enriches(monkeypatch):
     assert out["category"] == "采矿激光器"
     assert out["goal"] == "目标文本"
 
+    assert (
+        T.item_info("Hofstede-S2 Mining Laser", "旧中文", id=7, loot=False, exact=exact)
+        == out
+    )
+    assert calls == [
+        ("Hofstede-S2 Mining Laser", "旧中文", 7, False, True, False),
+        ("Hofstede-S2 Mining Laser", "旧中文", 7, False, True, False),
+    ]
+    assert goal_calls == [
+        (
+            "Hofstede-S2 Mining Laser",
+            "Hofstede-S2 Mining Laser",
+            "旧中文",
+            "霍夫斯泰德",
+        ),
+        (
+            "Hofstede-S2 Mining Laser",
+            "Hofstede-S2 Mining Laser",
+            "旧中文",
+            "霍夫斯泰德",
+        ),
+    ]
+    assert text_calls == [token, token]
+
 
 def test_item_info_keeps_original_zh_and_empty_goal(monkeypatch):
     payload = {"name": "X", "zh": "原名", "category": ""}
@@ -241,21 +272,22 @@ def test_item_info_keeps_original_zh_and_empty_goal(monkeypatch):
     ):
         return dict(payload)
 
+    monkeypatch.setattr(C, "_pinned", nullcontext)
     monkeypatch.setattr(acquire, "info", fake_info)
     monkeypatch.setattr(i18n, "gear_zh_of_item", lambda _en: "")
 
     def never(_en):
         raise AssertionError("不该走 _zh_of")
 
-    monkeypatch.setattr(T, "_zh_of", never)
-    monkeypatch.setattr(T, "_goal_for", lambda *args: None)
+    monkeypatch.setattr(C, "_zh_of", never)
+    monkeypatch.setattr(G, "_goal_for", lambda *args: None)
 
     def never_text(_g):
         raise AssertionError("没有目标时不该写 goal")
 
-    monkeypatch.setattr(T, "_goal_text", never_text)
+    monkeypatch.setattr(G, "_goal_text", never_text)
 
-    out = T.item_info("X", "参数中文")
+    out = A.item_info(name="X", zh="参数中文")
 
     assert out["zh"] == "原名"
     assert out["category"] == ""
@@ -280,12 +312,13 @@ def test_item_info_falls_back_to_zh_of(monkeypatch):
         seen.append(en)
         return "反查中文"
 
+    monkeypatch.setattr(C, "_pinned", nullcontext)
     monkeypatch.setattr(acquire, "info", fake_info)
     monkeypatch.setattr(i18n, "gear_zh_of_item", lambda _en: "")
-    monkeypatch.setattr(T, "_zh_of", fake_zh)
-    monkeypatch.setattr(T, "_goal_for", lambda *args: None)
+    monkeypatch.setattr(C, "_zh_of", fake_zh)
+    monkeypatch.setattr(G, "_goal_for", lambda *args: None)
 
-    out = T.item_info("Y", "")
+    out = A.item_info(name="Y", zh="")
 
     assert seen == ["Y"]
     assert out["zh"] == "反查中文"
@@ -300,7 +333,7 @@ def test_item_loot_success(monkeypatch):
 
     monkeypatch.setattr(loot, "info", fake_info)
 
-    assert T.item_loot("A", "甲") == {
+    assert A.item_loot(name="A", zh="甲") == {
         "loot": {"groups": [{"p": 0.5, "box": "箱子", "regions": ["地点"]}]}
     }
     assert calls == [("A", "甲")]
@@ -312,7 +345,7 @@ def test_item_loot_error(monkeypatch):
 
     monkeypatch.setattr(loot, "info", boom)
 
-    assert T.item_loot("A", "甲") == {"loot": {"error": "掉落数据出错：断网"}}
+    assert A.item_loot(name="A", zh="甲") == {"loot": {"error": "掉落数据出错：断网"}}
 
 
 def test_market_lookup_shape_and_limit(monkeypatch):

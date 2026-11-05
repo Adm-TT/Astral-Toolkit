@@ -2,7 +2,7 @@
 
 专职处理：
 1. 全局跨模块聚合搜索（物品、地点、矿脉、蓝图制造、Wikelo兑换）；
-2. 物品查询搜索、同款/掉落查询、商店导航定位；
+2. 物品查询旧壳（IQ-B5：用例在 tasks/catalog.py、排版在 app/presenters/catalog.py）与商店导航定位；
 3. 玩家市场行情查价与报价明细查询（UEX / 社区市场）；
 4. 矿脉分布检索、小行星带导航与精炼厂加成查询。
 """
@@ -15,7 +15,10 @@ import threading
 # 2026-10-30 重构阶段 1：直接调别的任务模块和 app.hud_state，不再经 services 转发、出错也不再回头找 services 兜底。
 # 别的任务在函数里 import（任务之间互相引用，顶层 import 会循环），取模块属性，测试换掉的名字能打中。
 from ..app.hud_state import _item_hud
-from ..gamedata._cache import VersionCache
+
+# IQ 过渡：下面 item_search / item_info 旧壳排版用，IQ-B6/B7 删壳时一起删
+from ..app.presenters import catalog as _present_catalog
+from . import catalog as _catalog
 
 
 def _nav_search(q=""):
@@ -97,141 +100,19 @@ def search(q=""):
     return out
 
 
-# ================================================================ 物品：在哪买 / 同款 / 掉落 / 维科洛
+# ================================================================ 物品查询旧壳（IQ-B5）+ 商店导航
 
 
 def item_search(q=""):
-    """物品查询搜索（1.6.41 起商店、掉落、汉化包一起搜，见 itemsearch.py）。
-    src：shop 商店有数据 / loot 只在掉落数据里 / loc 商店和掉落数据里都没有（只有汉化包里有名字）"""
-    from ..crafting import itemsearch
-    from ..core.i18n import shop_cat_zh
-
-    return [
-        {
-            "id": r["shop"],
-            "name": r["en"],
-            "zh": r["zh"],
-            "category": shop_cat_zh(r["cat"]) or _wiki_cat(r),
-            "src": "shop"
-            if r["shop"] is not None
-            else "loot"
-            if r["loot"]
-            else "wiki"
-            if r.get("wiki")
-            else "loc",
-        }
-        for r in itemsearch.find(q, limit=30)
-    ]
-
-
-WIKI_TYPE_ZH = {
-    "WeaponPersonal": "单兵武器",
-    "WeaponGun": "舰炮",
-    "MissileLauncher": "导弹架",
-    "Missile": "导弹",
-    "Turret": "炮塔",
-    "Char_Armor_Helmet": "头盔",
-    "Char_Armor_Torso": "胸甲",
-    "Char_Armor_Arms": "臂甲",
-    "Char_Armor_Legs": "腿甲",
-    "Char_Armor_Backpack": "背包",
-    "Char_Armor_Undersuit": "基底服",
-    "Char_Clothing_Torso_0": "上衣",
-    "Char_Clothing_Torso_1": "外套",
-    "Char_Clothing_Legs": "裤子",
-    "Char_Clothing_Feet": "鞋",
-    "Char_Clothing_Hat": "帽子",
-    "Char_Clothing_Hands": "手套",
-    "WeaponAttachment": "附件",
-    "Shield": "护盾生成器",
-    "PowerPlant": "发电机",
-    "Cooler": "冷却器",
-    "QuantumDrive": "量子驱动器",
-    "Radar": "雷达",
-    "WeaponMining": "采矿激光器",
-    "MiningModifier": "采矿模组",
-    "Container": "货柜",
-    "TractorBeam": "牵引光束",
-    "FuelTank": "燃料箱",
-    "FuelIntake": "燃料进气口",
-    "Thruster": "推进器",
-    "Armor": "舰船装甲",
-    "UtilityTurret": "工具炮塔",
-    "RemovableChip": "钥匙卡",
-    "FPS_Consumable": "消耗品",
-    "Food": "食物",
-    "Drink": "饮料",
-    "Commodity": "商品",
-}
-
-
-def _wiki_cat(r):
-    """只在 wiki 清单里的物品：类型 + 尺寸当分类显示（「导弹架 S5」）"""
-    if not r.get("wtype"):
-        return ""
-    t = WIKI_TYPE_ZH.get(r["wtype"], r["wtype"])
-    return (
-        f"{t} S{r['wsize']}"
-        if r.get("wsize") not in (None, 0, 1)
-        or (
-            r.get("wsize") == 1
-            and r["wtype"]
-            in (
-                "WeaponGun",
-                "MissileLauncher",
-                "Shield",
-                "PowerPlant",
-                "Cooler",
-                "QuantumDrive",
-                "Radar",
-                "WeaponMining",
-            )
-        )
-        else t
-    )
-
-
-# 英文 → 中文反查，跟着 names.table() 那份对象走：更新数据后自己失效（以前挂在函数属性上永不失效）
-_ZH_REV: VersionCache = VersionCache(identity=True)
-
-
-def _zh_of(en):
-    try:
-        from ..trade.names import table
-
-        t = table()
-        rev = _ZH_REV.get_for(t, lambda: {v.lower(): k for k, v in t.items()})
-        return rev.get(en.lower(), "")
-    except Exception:
-        return ""
+    """旧壳（IQ-B5）：库存联想（tasks/stock）、上面的全局搜索还在调。窗口物品查询页走 app/api/trade → tasks/catalog + app/presenters/catalog"""
+    return _present_catalog.present_search_results(_catalog.search_items(q))
 
 
 def item_info(name="", zh="", id=None, loot=True, exact=False):
-    """exact=True：从物品查询 / 顶上搜索框的结果点进来的（名字是准的）。
-    掉落明细本机没有时不上网等（loot 里给 pending），窗口再调 item_loot 后台取（2026-10-28 用户反馈卡 10 秒）"""
-    from ..crafting import acquire
-
-    d = acquire.info(name, zh, id, show_loot=loot, exact=bool(exact), loot_online=False)
-    from ..core.i18n import gear_zh_of_item, shop_cat_zh
-
-    d["zh"] = (
-        gear_zh_of_item(d["name"]) or d.get("zh") or _zh_of(d["name"])
-    )  # 采矿装备的中文不带型号，和配置区一致
-    if d.get("category"):
-        d["category"] = shop_cat_zh(d["category"])
-    g = _goal_for(d.get("name"), name, zh, d["zh"])
-    d["goal"] = _goal_text(g) if g else ""
-    return d
-
-
-def item_loot(name="", zh=""):
-    """物品查询里掉落那一块：明细本机没有时窗口在后面单独调这个（会上网，最多等 15 秒，不挡别的）"""
-    try:
-        from ..crafting.loot import info as loot_info
-
-        return {"loot": loot_info(name, zh)}
-    except Exception as e:
-        return {"loot": {"error": f"掉落数据出错：{e}"}}
+    """旧壳（IQ-B5）：F8（tasks/hover）还在调，IQ-B6 换接口后删"""
+    return _present_catalog.present_item_info(
+        _catalog.get_item_info(name, zh, id, loot, exact)
+    )
 
 
 def nav_shop(shop="", place=""):
@@ -533,13 +414,9 @@ def mineral_info(name=""):
 
 
 __all__ = [
-    "WIKI_TYPE_ZH",
     "search",
     "item_search",
-    "_wiki_cat",
-    "_zh_of",
     "item_info",
-    "item_loot",
     "nav_shop",
     "trade",
     "market_lookup",

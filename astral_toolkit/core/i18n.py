@@ -165,7 +165,7 @@ def gear_zh_of_item(en: str) -> str:
 
 
 # 商店分类（UEX 的英文分类）→ 游戏里的叫法（汉化包 item_Type…）。护甲三件用物品名里的「臂甲 / 胸甲 / 腿甲」、模组用「采矿模组」，
-# 和汉化包的物品名一致；物品查询里只在 wiki 有记录的物品（tasks.trade.WIKI_TYPE_ZH）用同一套词
+# 和汉化包的物品名一致；物品查询里只在 wiki 有记录的物品（app/presenters/catalog.WIKI_TYPE_ZH）用同一套词
 SHOP_CAT_ZH = {
     "Jackets": "夹克",
     "Footwear": "鞋子",
