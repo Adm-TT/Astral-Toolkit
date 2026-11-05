@@ -7,7 +7,6 @@
 4. 导航记号（Marker Tick）计算与投射、3D 空间站/太空指引与导览日志。
 """
 
-import math
 import sys  # noqa: F401
 import threading  # noqa: F401
 import time
@@ -124,40 +123,27 @@ def _marker_tick(target, data, state, shown, ref=None):
     """导航记号（2026-10-27）：每圈先判断该不该显示（还没算出位置、到了、跨星系、1.5 秒没读到、切出游戏、玩家关了、
     采矿助手开着——记号窗口读屏时会被涂黑，会挡住扫描面板和雷达信号），不该显示就收起；
     该显示且右上角有新截图（停着只转镜头也算）就按镜头朝向和视角重算位置。返回这次画的截图时间，收起了返回 None"""
+    from ..navigation import marker as _marker
     from ..navigation import navigate as n
     from ..system.showloc import game_foreground
 
     t, g, info = _need_positions().snapshot().current
     h = state.get("here")
-    cam = (info or {}).get("camdir")
-    if cam:
-        _CAM_LAST.update(t=t, cam=cam)
-    elif _CAM_LAST["cam"] and 0 <= t - _CAM_LAST["t"] < CAM_HOLD:
-        # 偶尔一帧镜头方向没读出（坐标照样有）：以前记号当场收起、下一帧再出来，一直闪（老大 11-03 实测）。
-        # 1 秒内读到的接着用；记号按坐标那一帧重画，镜头方向不会因此当成新读的
-        cam = _CAM_LAST["cam"]
+    cam = _marker.camera_hold((info or {}).get("camdir"), t, _CAM_LAST, CAM_HOLD)
     try:
         fg = game_foreground()
     except Exception:
         fg = True
-    why = (
-        "还没算出位置"
-        if h is None or not g
-        else "没有镜头方向"
-        if not cam
-        else "读数过期"
-        if time.time() - t >= MARKER_STALE
-        else "已到达"
-        if h.get("arrived")
-        else "跨星系"
-        if h.get("far")
-        else "游戏不在前台"
-        if not fg
-        else "采矿助手开着"
-        if _need_live().running()
-        else "设置里关了"
-        if not _marker_on()
-        else None
+    why = _marker.hidden_reason(
+        h,
+        g,
+        cam,
+        t,
+        now=time.time,
+        stale=MARKER_STALE,
+        foreground=fg,
+        mining_running=lambda: _need_live().running(),
+        enabled=_marker_on,
     )
     if why != _MK_WHY["why"]:
         _MK_WHY["why"] = why
@@ -171,9 +157,10 @@ def _marker_tick(target, data, state, shown, ref=None):
     try:
         from ..navigation.displayinfo import last_fov
         from ..core.capture import game_area
+        from ..app.presenters import nav as _present_nav
 
         a = game_area()
-        fov = info.get("fov") or last_fov() or 70.0
+        fov = _marker.pick_fov(info.get("fov"), last_fov)
         tg = n.target_global(target, data, info.get("t"), ref)
         pr = n.project(
             g,
@@ -184,13 +171,9 @@ def _marker_tick(target, data, state, shown, ref=None):
             a["height"],
             vertical=settings_key("fov_axis", "v") != "h",
         )
-        _mark_hud(
-            {
-                "area": (a["left"], a["top"], a["width"], a["height"]),
-                "proj": pr,
-                "label": n.dist_text(pr["dist"]),
-            }
-        )
+        label = _present_nav.marker_label(pr["dist"])
+        model = _present_nav.marker_model(a, pr, label)
+        _mark_hud(model)
         return t
     except Exception:
         _mark_hud(None)
@@ -237,123 +220,33 @@ def _nav_log(here, info, view):
 
 def _space_view(g, target, data):
     """导航去太空路标：没有南北，给直线距离、先量子跳到哪、对准哪个标记偏几度"""
-    from ..navigation import navigate as n
+    from ..navigation import views as _views
+    from ..app.presenters import nav as _present_nav
 
-    s = n.space_guide(g, target, data)
-    out = {
-        "space": True,
-        "same_body": False,
-        "inside": False,
-        "text": n.space_text(g, target, data),
-    }
-    if not s["same_system"]:
-        out["far"] = (
-            f"目标位于 {n.SYS_ZH.get(s['target_system'], s['target_system'])}星系，需先跃迁到该星系"
-        )
-        return out
-    out.update(
-        direct=s["direct"], arrived=s["arrived"], aim=s.get("aim"), qt=s.get("qt")
-    )
-    return out
+    return _present_nav.space_view(_views.space_facts(g, target, data), g, target, data)
 
 
 def _station_view(g, target, data, when=None, prev=None, info=None):
     """拉格朗日点 / 跳跃点空间站里走路：距离按米、按站自己的朝向分上下；转向靠机头那一行和屏幕记号"""
-    from ..navigation import navigate as n
+    from ..navigation import views as _views
+    from ..app.presenters import nav as _present_nav
 
-    out = {
-        "space": True,
-        "city": True,
-        "station": True,
-        "inside": True,
-        "same_body": True,
-    }
-    try:  # 先核对星系：别的星系同一个坐标也可能有东西（二审 2026-10-27）
-        system, sure = n.system_info(
-            g,
-            data,
-            **{k: (info or {}).get(k) or "" for k in ("zone", "location", "solar_id")},
-        )
-    except Exception:
-        system, sure = "", False  # noqa: F841
-    if (
-        target.get("sys") and system and system != target["sys"]
-    ):  # 猜出来的星系不一样也不算到（复审 2026-10-27）
-        out["far"] = (
-            f"目标位于 {n.SYS_ZH.get(target['sys'], target['sys'])}星系，需先跃迁到该星系"
-        )
-        return out
-    tg = n.target_global(target, data, when)
-    d = math.dist(g, tg)
-    out.update(direct=d / 1000, direct_m=d)
-    if d > 50_000:
-        out["far"] = (
-            f"先前往{target.get('city_zh') or target.get('site_en') or '空间站'}，到站后按步行指引前往"
-        )
-        return out
-    up = sum((t - a) * u for t, a, u in zip(tg, g, target.get("up") or (0, 0, 0)))
-    arrived = n.city_arrived(
-        d, bool(prev and prev.get("station") and prev.get("arrived"))
+    return _present_nav.station_view(
+        _views.station_facts(g, target, data, when, prev, info),
+        g,
+        target,
+        data,
+        when,
     )
-    out.update(
-        arrived=arrived,
-        close=not arrived and d < n.CITY_NEAR_M,
-        updown=up,
-        text=n.station_text(g, target, data, when, arrived),
-    )
-    return out
 
 
 def _nav_view(here, target, data, steady=None, prev=None):
-    from ..navigation import navigate as n
+    from ..navigation import views as _views
+    from ..app.presenters import nav as _present_nav
 
-    out = {
-        "text": n.here_text(here, data),
-        "inside": here["inside"],
-        "body": n.body_label(here["body"]),
-        "same_body": here["inside"] and here["body"] == target["b"],
-    }
-    if not out["same_body"]:
-        out["far"] = (
-            f"先前往{target.get('city_zh') or n.body_label(target['b'])}，到达城市后按步行指引前往"
-            if n.is_city(target)
-            else f"先量子跳跃到 {n.body_label(target['b'])}，再按推荐路线前往"
-        )
-        return out
-    a, t = n.pos(here), n.pos(target)
-    out["raw_bearing"] = n.bearing(a, t)
-    out["bearing"] = steady(out["raw_bearing"]) if steady else out["raw_bearing"]
-    out["compass"] = n.compass(out["bearing"])
-    out["surface"] = n.surface_km(a, t, here["radius_km"])
-    out["direct"] = n.direct_km(a, t)
-    out["height"] = here["height_m"]
-    out["target_height"] = n.latlon(t)[2] * 1000 - here["radius_km"] * 1000
-    out["lat"], out["lon"] = here["lat"], here["lon"]
-    out["arrived"] = out["surface"] < 1
-    if n.is_city(target):  # 城里：几米以内才算到，距离按米、加上下楼层（2026-10-27）
-        d, up = n.city_metrics(here, target)
-        arrived = n.city_arrived(
-            d, bool(prev and prev.get("city") and prev.get("arrived"))
-        )
-        out.update(
-            city=True,
-            arrived=arrived,
-            close=not arrived and d < n.CITY_NEAR_M,
-            direct_m=d,
-            updown=up,
-            near=None,
-            station=bool(target.get("up")),
-        )  # 绕星球轨道的空间站：不给南北方位
-        return out
-    near = n.nearby(here, data)
-    out["near"] = {"name": n.label(near[1]), "km": near[0]} if near else None
-    best = n.approaches(target, data, top=1)
-    if best and best[0][1] < out["surface"] * 0.5 and out["surface"] > 30:
-        d3q, dsq, brgq, q = best[0]
-        out["hint"] = (
-            f"距离过远：先量子跳跃到 {n.label(q)}（距目标 {dsq:,.1f} km），再朝 {n.deg_text(brgq)}° 飞行"
-        )
-    return out
+    return _present_nav.ground_view(
+        _views.ground_facts(here, target, data, prev), here, target, data, steady
+    )
 
 
 # ---------------------------------------------------------------- 实时读屏与扫描面板解析

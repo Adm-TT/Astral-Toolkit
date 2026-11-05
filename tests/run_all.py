@@ -117,6 +117,7 @@ MODULES = [
     "tests.test_ui_k0c",
     "tests.test_ui_client",
     "tests.test_nav_session",
+    "tests.test_nav_golden",
     "tests.test_pos_service",
     "tests.test_count_session",
 ]
