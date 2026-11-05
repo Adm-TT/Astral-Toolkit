@@ -41,6 +41,13 @@ WIN = sys.platform == "win32"
 
 LIVE_STALE = 3.0  # 右上角多少秒没读到才算读不到（这时才用玩家自己输的 /showlocation）
 DI_HELP = "未检测到右上角位置信息：在游戏中按 ~ 打开控制台，输入 r_DisplayInfo 2 后回车"
+_BASE_FPS = 5  # 导航帧数取不到时按 5（设置默认值）
+CLIP_EVERY = 0.3  # 地面导航没有新读数时多久看一次剪贴板（以前每 3 圈一次、一圈 0.1 秒；帧数调高后一圈变短，改按时间，NV-B5）
+NAV_LOG_EVERY = 0.2  # 导航日志最多每 0.2 秒一行（帧数调高后 300 KB 不至于十几秒就写满；5 帧时和以前一样）
+
+
+def _base_fps() -> int:
+    return _BASE_FPS
 
 
 @dataclass(frozen=True)
@@ -57,6 +64,8 @@ class NavLinks:
     setting: Callable[
         [str, Any], Any
     ]  # 读一项设置（tasks.navigation.settings_key：空值也按没设）
+    # 导航帧数（设置页「导航帧数」；bootstrap 传进来时已限在 5–30）
+    fps: Callable[[], int] = _base_fps
 
 
 def _quiet_log(msg: str) -> None:
@@ -70,6 +79,14 @@ QUIET_LINKS = NavLinks(
     place_row=lambda target: None,
     setting=lambda key, default: default,
 )
+
+
+def _links_fps(links: NavLinks) -> int:
+    """导航帧数；取不到、不像数字按 5"""
+    try:
+        return max(1, int(links.fps()))
+    except Exception:
+        return _BASE_FPS
 
 
 def nav_tip(on, last_ok, now, has_shown, di_help):
@@ -385,7 +402,9 @@ class _NavCtx:
     shown: str
     first: bool
     arrived_once: bool
-    tick_count: int
+    clip_at: float
+    log_at: float
+    fps: int | None
 
     def __init__(self, session_id: int, payload: NavPayload) -> None:
         self.session_id = session_id
@@ -409,7 +428,9 @@ class _NavCtx:
         self.shown = ""
         self.first = True
         self.arrived_once = False
-        self.tick_count = 0
+        self.clip_at = float("-inf")  # 上次看剪贴板（tick 的 now）
+        self.log_at = float("-inf")  # 上次写导航日志（tick 的 now）
+        self.fps = None  # 已经告诉位置服务的帧数
 
 
 class _NavWorker:
@@ -451,6 +472,10 @@ class _NavWorker:
         if loop is None:
             raise RuntimeError("导航循环尚未绑定")
         return loop
+
+    def _ground_wait(self) -> float:
+        """地面导航每圈等多久：读数间隔的一半，最长 0.1 秒（5 帧时和以前一样 0.1）"""
+        return min(0.1, 0.5 / _links_fps(self._links))
 
     @property
     def pause_wait(self) -> float:
@@ -565,7 +590,7 @@ class _NavWorker:
         if ctx.first:
             ok = self._first_tick(session, ctx)
             if not ok:
-                return Tick(0.1 if not ctx.payload.space_mode else 0.3)
+                return Tick(self._ground_wait() if not ctx.payload.space_mode else 0.3)
             ctx.first = False
         self._process_fix_requests(session, ctx)
         if ctx.payload.space_mode:
@@ -647,7 +672,8 @@ class _NavWorker:
         ctx.steady = _Steady()
         self._pos.request_read_now()
         ctx.clip_seen = n.read_clipboard()
-        ctx.tick_count = 0
+        # 第一圈地面导航照旧马上看一次剪贴板（以前是 tick_count 清零）
+        ctx.clip_at = float("-inf")
         ctx.mk_seen = None
         return True
 
@@ -773,6 +799,13 @@ class _NavWorker:
     def _ground_tick(self, session: Session, ctx: _NavCtx, now: float) -> Tick:
         from ...navigation import navigate as n
 
+        fps = _links_fps(self._links)
+        if fps != ctx.fps:  # 帧数变了（设置页改了）：告诉位置服务按新的读
+            ctx.fps = fps
+            try:
+                self._pos.set_demand("nav", float("inf"), fps=fps)
+            except Exception:
+                pass
         data: Any = ctx.data
         target = ctx.payload.target
         if data is None:
@@ -797,7 +830,8 @@ class _NavWorker:
             ctx.seen_cur, g_di, info = snap.current
             got = (g_di, info or {}, False)
             still = True
-        elif ctx.tick_count % 3 == 0:
+        elif now - ctx.clip_at >= CLIP_EVERY:
+            ctx.clip_at = now
             clip = n.read_clipboard()
             g_clip = n.parse_clip(clip)
             live_ok = time.time() - snap.read_at < LIVE_STALE
@@ -805,7 +839,6 @@ class _NavWorker:
                 got = (tuple(g_clip), {"t": time.time()}, True)
             if g_clip:
                 ctx.clip_seen = clip
-        ctx.tick_count += 1
         here = ctx.here
         ref = ctx.ref
         if got is not None:
@@ -889,7 +922,9 @@ class _NavWorker:
                 ) + (f"\n{near}" if near else "")
                 if steps:
                     ctx.shown += "\n" + "\n".join(str(s) for s in steps)
-                if not still:  # 停着不动每帧都来，日志只记坐标变了的
+                # 停着不动每帧都来，日志只记坐标变了的；最多每 0.2 秒一行
+                if not still and now - ctx.log_at >= NAV_LOG_EVERY:
+                    ctx.log_at = now
                     nav_log(here, info, ctx.state["here"])
             cam = self._cam_filter.check(
                 info.get("camdir"), fast=bool(info.get("fast"))
@@ -953,7 +988,7 @@ class _NavWorker:
         ops.append(("hud.set", "导航", f"{head}\n{ctx.shown or '等待位置信息…'}" + tip))
         ok = self._require_loop().commit(session, *ops)
         if not ok:
-            return Tick(0.1)
+            return Tick(self._ground_wait())
         if fresh:
             ctx.here = here
             ctx.ref = ref
@@ -965,7 +1000,7 @@ class _NavWorker:
             ctx.state,
             ref if fresh else ctx.ref,
         )
-        return Tick(0.1)
+        return Tick(self._ground_wait())
 
     def _marker_after_commit(
         self, session: Session, ctx: Any, target: Any, data: Any, state: Any, ref: Any
@@ -1162,7 +1197,9 @@ class _Nav:
             self.target = target
             self.space_mode = space
         try:
-            self._positions.set_demand("nav", float("inf"))
+            self._positions.set_demand(
+                "nav", float("inf"), fps=None if space else _links_fps(self._links)
+            )  # 实时定位按导航帧数读；手动定位（只用 /showlocation）不用读得快
             self._positions.request_read_now()
         except Exception:
             pass

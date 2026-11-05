@@ -1,6 +1,7 @@
 """用户设置（settings.json，放在程序外层，更新程序不会覆盖）"""
 
 import json
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -29,17 +30,31 @@ DEFAULTS = {
     "update_online": True,  # 启动时到网上检查新版本（只读一个小文件；下载要玩家点）
     "ocr_device": "gpu",  # 文字识别设备：gpu (显卡 DirectML 加速) / cpu (处理器)
     "always_use_gpu": True,  # 兼容旧配置项
-    "debug_mode": False,  # 调试模式：开着时 F8/盘点把裁切阶段与停因打进运行日志，并在 userdata/shots/debug/ 落下识别区域调试图（仅本机，不上传；默认关）
+    "debug_mode": False,  # 调试模式：开着时 F8/盘点把裁切阶段与停因打进运行日志、在 userdata/shots/debug/ 落识别区域调试图；导航读右上角的诊断（logs/di_log.txt、shots/di_fail、记号收起原因）也只在开着时写（NV-B5）。仅本机，不上传；默认关
     "train_upload": True,  # 帮助改进识别：认字的错题（一行字的小截图 + 正确答案）发给作者训练（2026-10-27 负责人定）
     "feedback_upload": True,  # 问题反馈存好后自动发给作者（2026-10-27 负责人定，设置页能关）
     "nav_marker": True,  # 导航时在游戏画面上画目标记号（画面外贴边画箭头）和瞄准环（2026-10-27）
     "fov_axis": "v",  # 右上角 FOV 是上下（v）还是左右（h）的视角：记号位置不对时改这个
     "nav_mode": "auto",  # 导航方式：auto / ground = 实时读右上角；space = 手动定位（只用 /showlocation）
+    "nav_fps": 5,  # 导航帧数：导航时每秒读几次右上角、刷新几次记号（5–30；越高越跟手、越占 CPU；老大 11-05 定，60 档实测只读到约 31 次，当晚改成 5–30）
     "live_on": False,  # 原矿扫描开着没有：AT 重启、一键升级后自动接着扫           # 游戏里按这个键：把当前位置记成路标（要开着右上角调试信息）
     "agreed": False,  # 第一次打开时确认过「本软件是免费软件」
     "mining_ship": None,  # 原矿扫描按哪条船的配置算：mole / prospector / golem；None = 还没选（窗口会先问）
     "mining_loadouts": {},  # 自己改过的配置 {船: {"heads": [[矿头, [模组…]], …], "crew": 几人}}；没改过的用默认
 }
+
+
+NAV_FPS = (5, 30)  # 导航帧数能选的范围（老大 11-05 定 5–60，实机后改 5–30）
+
+
+def nav_fps(value):
+    """导航帧数：取整、限在 5–30；不像数字（手改坏了、没设）按 5"""
+    lo, hi = NAV_FPS
+    try:
+        v = int(round(float(value)))
+    except (TypeError, ValueError, OverflowError):
+        return lo
+    return max(lo, min(hi, v))
 
 
 def load():
@@ -93,11 +108,16 @@ _LOCK = (
 )  # 窗口线程、日志线程、识别线程都会改设置：读-改-写要连在一起（2026-10-28 整体审查）
 
 
+# 本进程存过几次设置（save 每存一次加 1）：View 看它变了才重读文件（NV-B5）
+_SAVED = [0]
+
+
 def save(cfg):
     from .paths import write_json
 
     with _LOCK:
         write_json(FILE, cfg, indent=1)
+        _SAVED[0] += 1
 
 
 _unread = __import__("threading").local()
@@ -115,3 +135,43 @@ def update(**kw):
             return cfg
         save(cfg)
         return cfg
+
+
+class View:
+    """每帧都要看的设置（调试模式、导航记号……）：内存里留一份，平时不读盘（NV-B5）。
+
+    本进程存过设置以后，下一次取才重读文件：设置页保存、settings.update 都走 save，所以一改马上生效。
+    这次没读到真实设置（文件被别的程序占着）：先用读到的默认值，RETRY 秒后再读。
+    手改 settings.json 不会马上生效：重开 AT，或在设置页随便改一项。
+    取到的字典是大家共用的，只读，别改它。"""
+
+    RETRY = 1.0
+
+    def __init__(self):
+        # 上次读文件时的 _SAVED[0]；None = 还没读过 / 上次没读到真实设置
+        self._seen = None
+        self._retry_at = 0.0
+        self._cfg = dict(DEFAULTS)
+
+    def all(self):
+        """整份设置（共用的字典，只读）"""
+        if _SAVED[0] == self._seen:
+            return self._cfg
+        now = time.monotonic()
+        if self._seen is None and now < self._retry_at:
+            return self._cfg
+        with _LOCK:
+            saved = _SAVED[0]
+            _unread.flag = False
+            cfg = load()
+            unread = getattr(_unread, "flag", False)
+        self._cfg = cfg
+        if unread:
+            self._seen = None
+            self._retry_at = now + self.RETRY
+        else:
+            self._seen = saved
+        return cfg
+
+    def get(self, key, default=None):
+        return self.all().get(key, default)

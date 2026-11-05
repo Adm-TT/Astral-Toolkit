@@ -181,15 +181,42 @@ def test_nav_marker_is_wired_by_bootstrap():
 
     pos = SimpleNamespace()
     live = SimpleNamespace(running=lambda: False)
-    marker = bootstrap._nav_marker(pos, live, "desktop")
+    view = settings.View()
+    marker = bootstrap._nav_marker(pos, live, "desktop", view)
     assert marker._pos is pos
     assert marker._mining_running is live.running
     assert marker._hud is hud_state._hud
     assert marker._foreground is window.foreground
     assert marker._game_area is window.game_area
     assert marker._last_fov is displayinfo.last_fov
-    assert marker._settings is settings.load
-    assert marker._diag is navmod.marker_diag
+    assert marker._settings == view.all
+
+
+def test_debug_mode_gates_nav_diagnostics(monkeypatch, tmp_path):
+    from astral_toolkit.core import paths, settings
+
+    monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
+    monkeypatch.setattr(paths, "log", lambda name: tmp_path / name)
+    app = bootstrap.build("test")
+    try:
+        app.nav._marker._diag("读数过期")
+        assert not (tmp_path / "di_log.txt").exists()
+        assert app.pos.reader._diag_on() is False
+
+        settings.update(debug_mode=True)
+        app.nav._marker._diag("读数过期")
+        text = (tmp_path / "di_log.txt").read_text(encoding="utf-8")
+        assert text.count("\n") == 1
+        assert "记号 收起：读数过期" in text
+        assert app.pos.reader._diag_on() is True
+
+        settings.update(debug_mode=False)
+        app.nav._marker._diag("读数过期")
+        text = (tmp_path / "di_log.txt").read_text(encoding="utf-8")
+        assert text.count("\n") == 1
+        assert app.pos.reader._diag_on() is False
+    finally:
+        bootstrap.shutdown(app, budget=0.2)
 
 
 def test_nav_links_are_wired_by_bootstrap():
@@ -202,6 +229,27 @@ def test_nav_links_are_wired_by_bootstrap():
         assert links.place_row is nav_tasks._place_row
         assert links.setting is nav_tasks.settings_key
         assert app.cam_filter._log is links.log
+    finally:
+        bootstrap.shutdown(app, budget=0.2)
+
+
+def test_nav_fps_follows_settings_page(monkeypatch, tmp_path):
+    from astral_toolkit.core import settings
+    from astral_toolkit.infrastructure.platform import timer
+
+    monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
+    app = bootstrap.build("test")
+    try:
+        assert app.nav._links.fps() == 5
+        settings.update(nav_fps=30)
+        assert app.nav._links.fps() == 30
+        settings.update(nav_fps=999)
+        assert app.nav._links.fps() == 30
+        assert app.pos._fine_timer is None
+        assert bootstrap._fine_timer("desktop") is timer.fine
+        desktop_pos = bootstrap._pos_service("desktop", settings.View())
+        assert desktop_pos._fine_timer is timer.fine  # 只造对象，不起线程
+        assert bootstrap._pos_service("test", settings.View())._fine_timer is None
     finally:
         bootstrap.shutdown(app, budget=0.2)
 

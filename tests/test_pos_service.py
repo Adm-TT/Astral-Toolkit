@@ -88,3 +88,81 @@ def test_game_events_shell_and_callback():
     assert ev.on_qt_arrived is not None
     ev.request_stop()
     assert ev.join(0.0) is True
+
+
+def test_position_service_passes_debug_switch_to_reader():
+    def on():
+        return True
+
+    assert posmod._Pos(debug=on).reader.debug is on
+    assert posmod._Pos().reader.debug is None
+
+
+def test_demand_fps_takes_highest_live_request():
+    p = posmod._Pos()
+    now = time.time()
+    assert p.fps_wanted() == 5
+    p.set_demand("nav", now + 10, fps=20)
+    assert p.fps_wanted() == 20
+    p.set_demand("halo", now + 10, fps=10)
+    assert p.fps_wanted() == 20
+    p.set_demand("x", now + 10, fps=120)
+    assert p.fps_wanted() == 30  # 最高 30
+    p.set_demand("x", 0)
+    assert p.fps_wanted() == 20
+    p.set_demand("old", now - 1, fps=25)
+    assert p.fps_wanted() == 20
+    p.set_demand("nav", now + 10)
+    assert p.fps_wanted() == 10
+    p.set_demand("halo", now + 10, fps=0)
+    assert p.fps_wanted() == 5
+    p.set_demand("halo", now + 10, fps=-3)
+    assert p.fps_wanted() == 5
+
+
+def test_tune_sets_read_interval_from_fps():
+    from types import SimpleNamespace
+
+    p = posmod._Pos()
+    p.reader = SimpleNamespace(every=None, max_gap=None)
+    assert p._tune(True, False) == 5
+    assert p.reader.every == 0.2
+    assert p.reader.max_gap == 60.0
+
+    now = time.time()
+    p.set_demand("nav", now + 10, fps=60)  # 要 60 也按 30
+    assert p._tune(True, True) == 30
+    assert p.reader.every == 1 / 30
+    assert p.reader.max_gap == 5.0
+
+    p._tune(False, True)
+    assert p.reader.every == 1.0
+    p._tune(False, False)
+    assert p.reader.every == posmod._Pos.CALIB_EVERY
+
+
+def test_nap_waits_until_next_read_at_most_50ms():
+    p = posmod._Pos()
+    assert p._nap(False, 0) == 0.2
+    assert p._nap(True, 100.0, now=99.0) == 0.05
+    assert abs(p._nap(True, 100.0, now=99.99) - 0.01) < 1e-9
+    assert p._nap(True, 100.0, now=101.0) == 0.001
+
+
+def test_fine_timer_switches_once_per_change():
+    calls = []
+    p = posmod._Pos(fine_timer=calls.append)
+    p._fine(True)
+    p._fine(True)
+    p._fine(False)
+    p._fine(False)
+    assert calls == [True, False]
+
+    posmod._Pos()._fine(True)
+
+    def boom(on):
+        raise RuntimeError("没有计时器")
+
+    p = posmod._Pos(fine_timer=boom)
+    p._fine(True)
+    p._fine(False)

@@ -934,6 +934,7 @@ class Hud:
         self._ready = threading.Event()
         self._blocks, self._fresh = [], {}
         self._cfg, self._cfg_at = (1.0, PLATE_ALPHA), 0.0
+        self._fps = 5  # 导航帧数：记号显示着时悬浮窗按它加快（跟设置走，两秒读一次；设置页改了收到 restyle 马上重读）
         if ENABLED and sys.platform == "win32":
             threading.Thread(target=self._thread, daemon=True, name="overlay").start()
             self._ready.wait(5)
@@ -1079,6 +1080,7 @@ class Hud:
                     max(0.3, min(1.0, float(c.get("hud_plate", PLATE_ALPHA)))),
                 )
                 use_palette(c.get("hud_theme") or "默认")
+                self._fps = settings.nav_fps(c.get("nav_fps"))
             except Exception:
                 pass
         return self._cfg
@@ -1094,6 +1096,7 @@ class Hud:
 
     def _tick(self):
         dirty = False
+        mk = False
         try:
             while True:
                 cmd = self._q.get_nowait()
@@ -1102,7 +1105,8 @@ class Hud:
                 elif cmd == "hide":
                     self._push(None)
                 elif cmd == "marker":
-                    self._marker_render()
+                    # 一圈里来几个记号只画最新的一次（帧数高了一圈会来好几个）
+                    mk = True
                 elif (
                     cmd == "restyle"
                 ):  # 设置页换了配色 / 底板 / 大小：马上按新设置重画（二审 2026-10-27）
@@ -1111,13 +1115,15 @@ class Hud:
                     if getattr(
                         self, "_mk", None
                     ):  # 正在显示导航记号才重画（没有就别建窗口）
-                        self._marker_render()
+                        mk = True
                 elif cmd in ("move_on", "move_off"):
                     self.movable = cmd == "move_on"
                     self._apply_style()
                     dirty = True
         except queue.Empty:
             pass
+        if mk:
+            self._marker_render()
         busy = False
         try:
             if dirty or self._fresh:
@@ -1130,7 +1136,15 @@ class Hud:
                 import traceback
 
                 traceback.print_exc()
-        self.root.after(30 if busy else 100, self._tick)
+        self.root.after(self._next_ms(busy), self._tick)
+
+    def _next_ms(self, busy):
+        """下一圈隔多久（毫秒）：平时 100、有动画 30；导航记号显示着时按导航帧数加快，读数间隔的一半（5 帧时还是 100）"""
+        ms = 30 if busy else 100
+        if getattr(self, "mk_data", None):
+            self._settings()
+            ms = min(ms, max(1, int(500 / max(1, self._fps))))
+        return ms
 
     def _mk_window(self):
         """导航记号用的两个小窗口（记号、瞄准环）：和悬浮窗一样点不中、不抢焦点、不进任务栏"""

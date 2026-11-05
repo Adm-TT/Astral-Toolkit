@@ -132,10 +132,29 @@ def _no_hud() -> None:
     return None
 
 
-def _nav_marker(pos: Any, live: Any, mode: str) -> _NavMarker:
-    """导航 HUD 记号要的东西（NV-B3）：以前 tasks/mining 自己去找，现在在这里一次接好。"""
+def _debug_on(view: Any) -> Callable[[], bool]:
+    """调试模式开没开（NV-B5）：问内存里的设置（core.settings.View），不读盘；设置页一改，下一次问就是新的"""
+
+    def on() -> bool:
+        return bool(view.get("debug_mode", False))
+
+    return on
+
+
+def _debug_only(fn: Callable[..., Any], on: Callable[[], bool]) -> Callable[..., None]:
+    """调试模式开着才调 fn（NV-B5：诊断日志只在调试模式写；关着时连字符串都不拼）"""
+
+    def call(*args: Any) -> None:
+        if on():
+            fn(*args)
+
+    return call
+
+
+def _nav_marker(pos: Any, live: Any, mode: str, view: Any) -> _NavMarker:
+    """导航 HUD 记号要的东西（NV-B3）：以前 tasks/mining 自己去找，现在在这里一次接好。
+    view：core.settings.View，设置从内存取；记号收起原因只在调试模式写（NV-B5）"""
     from .app import hud_state
-    from .core import settings
     from .infrastructure.platform import window
     from .navigation import displayinfo
 
@@ -145,14 +164,30 @@ def _nav_marker(pos: Any, live: Any, mode: str) -> _NavMarker:
         foreground=window.foreground,
         game_area=window.game_area,
         last_fov=displayinfo.last_fov,
-        settings=settings.load,
+        settings=view.all,
         hud=hud_state._hud if mode == "desktop" else _no_hud,
-        diag=marker_diag,
+        diag=_debug_only(marker_diag, _debug_on(view)),
     )
 
 
-def _nav_links() -> NavLinks:
-    """导航引擎要用的导航任务函数（NV-B4）：以前经 `_T("navigation")` 动态取，现在在这里接。"""
+def _fine_timer(mode: str) -> Callable[[bool], None] | None:
+    """读得快时调高 Windows 等待精度（导航帧数，NV-B5）：只给 desktop；test 模式不碰系统计时"""
+    if mode != "desktop":
+        return None
+    from .infrastructure.platform import timer
+
+    return timer.fine
+
+
+def _pos_service(mode: str, view: Any) -> _Pos:
+    """位置服务（NV-B5）：调试模式开关交给读右上角的 Reader；desktop 读得快时调 Windows 等待精度"""
+    return _Pos(debug=_debug_on(view), fine_timer=_fine_timer(mode))
+
+
+def _nav_links(view: Any) -> NavLinks:
+    """导航引擎要用的导航任务函数（NV-B4）：以前经 `_T("navigation")` 动态取，现在在这里接。
+    fps：设置页的导航帧数，从内存里的设置取（不读盘），已限在 5–30"""
+    from .core import settings
     from .tasks import navigation as navigation_tasks
 
     return NavLinks(
@@ -160,6 +195,7 @@ def _nav_links() -> NavLinks:
         fix_key_hint=navigation_tasks.fix_key_hint,
         place_row=navigation_tasks._place_row,
         setting=navigation_tasks.settings_key,
+        fps=lambda: settings.nav_fps(view.get("nav_fps")),
     )
 
 
@@ -193,8 +229,13 @@ def build(
     if output is None:
         output = BusOutput()
 
-    pos = _Pos()
-    links = _nav_links()
+    from .core import settings
+
+    # 常看的设置（调试模式、记号）：一份内存里的，存设置后自动重读（NV-B5）
+    view = settings.View()
+
+    pos = _pos_service(mode, view)
+    links = _nav_links(view)
     cam_filter = _CamFilter(log=links.log)
     steady = _Steady()
     game_events = _GameEvents(on_qt_arrived=pos.request_read_now)
@@ -214,7 +255,7 @@ def build(
         output=output,
         clock=options.get("clock"),
         closing=lifecycle.is_closing,
-        marker=_nav_marker(pos, live, mode),
+        marker=_nav_marker(pos, live, mode, view),
         links=links,
     )
     count = _Count(

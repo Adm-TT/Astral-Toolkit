@@ -100,6 +100,7 @@ MODULES = [
     "tests.test_runtime_arch",
     "tests.test_junk_check",
     "tests.test_bootstrap",
+    "tests.test_settings_view",
     "tests.test_runtime_results",
     "tests.test_runtime_output",
     "tests.test_runtime_session",
@@ -120,6 +121,7 @@ MODULES = [
     "tests.test_nav_session",
     "tests.test_nav_golden",
     "tests.test_pos_service",
+    "tests.test_nav_fps",
     "tests.test_count_session",
 ]
 

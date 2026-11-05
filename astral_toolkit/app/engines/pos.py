@@ -60,16 +60,18 @@ class PositionRead:
 
 class _Pos:
     """一直在后台读游戏右上角的调试信息（r_DisplayInfo 2）：有就随时知道你在哪，导航、路标、「离你最近的买点」都用它。
-    2026-10-26 起：字模识别（gridtext）几毫秒认一次，游戏在最前面就每 0.2 秒读一次，顶栏位置是实时的；
-    字模还没学好时（第一次用、换了分辨率）用识别引擎认，每 2 秒一次来校准，导航时 1 秒一次"""
+    2026-10-26 起：字模识别（gridtext）几毫秒认一次，游戏在最前面就每 0.2 秒读一次（BASE_FPS）；有模块要更快（导航帧数）就按它要的，最高 30（NV-B5）；顶栏位置是实时的；
+    字模还没学好时（第一次用、换了分辨率）用识别引擎认，每 2 秒一次来校准，导航时 1 秒一次
+    debug：调试模式开没开（无参函数），交给读右上角的 Reader，开着才写 di_log / di_fail（NV-B5）"""
 
-    FAST_EVERY = 0.2
+    BASE_FPS = 5  # 平时（没人要更快）字模读右上角每秒 5 次 = 以前的 0.2 秒一次
+    MAX_FPS = 30  # 谁要再快也按 30（设置页最高档；60 档实测只读到约 31 次，老大 11-05 改成 5–30）
     CALIB_EVERY = 2.0  # 字模还没校准好：每 2 秒用识别引擎认一次来学（一般 3～5 次就好，好了就停）；读不到会自己放慢
 
-    def __init__(self):
+    def __init__(self, *, debug=None, fine_timer=None):
         from ...navigation.displayinfo import Reader
 
-        self.reader: Any = Reader(every=1.0)
+        self.reader: Any = Reader(every=1.0, debug=debug)
         self.latest: Any = (
             0.0,
             None,
@@ -91,6 +93,9 @@ class _Pos:
         self.reader_active = False
         self.reader_ok_at = 0.0
         self.demand = {}  # key -> until（导航开始放 inf，结束清 0）
+        self.rate = {}  # key -> 这个模块要每秒读几次（只在字模好了时按它读）
+        self._fine_timer = fine_timer  # 读得快时调 Windows 等待精度（bootstrap 给 infrastructure.platform.timer.fine；None = 不调）
+        self._fine_on = False
         self.thread = None
         self.stop_ev = threading.Event()
         self._lock = threading.Lock()
@@ -155,17 +160,66 @@ class _Pos:
         g = tuple(info["global"]) if info.get("global") else None
         return PositionRead(ok_at, info, g)
 
-    def set_demand(self, key, until):
+    def set_demand(self, key, until, fps=None):
+        """key 这个模块要位置要到 until（time.time() 的秒数；inf = 一直要，0 = 不要了）。
+        fps = 想要每秒读几次右上角（字模学好以后才按它读）：所有没过期的需求里取最高的，最低 BASE_FPS、最高 MAX_FPS；
+        不给按 BASE_FPS。导航按设置页的「导航帧数」要；别的模块要更快也调这个（NV-B5）"""
         with self._lock:
             if until:
                 self.demand[key] = float(until)
+                if fps is not None and float(fps) > 0:
+                    self.rate[key] = float(fps)
+                else:
+                    self.rate.pop(key, None)
             else:
                 self.demand.pop(key, None)
+                self.rate.pop(key, None)
 
     def _navigating(self):
         now = time.time()
         with self._lock:
             return any(until > now for until in self.demand.values())
+
+    def fps_wanted(self):
+        """现在要每秒读几次：没过期的需求里要得最多的，至少 BASE_FPS，最多 MAX_FPS"""
+        now = time.time()
+        with self._lock:
+            asked = [
+                self.rate[key]
+                for key, until in self.demand.items()
+                if until > now and key in self.rate
+            ]
+        return min(float(self.MAX_FPS), max([float(self.BASE_FPS), *asked]))
+
+    def _tune(self, ready, navigating):
+        """（在 _reader_lock 里调）定读右上角的间隔：字模好了按要的帧数；没好时导航中 1 秒、平时 2 秒校准一次。返回这次按几帧读"""
+        fps = self.fps_wanted()
+        self.reader.max_gap = 5.0 if navigating else 60.0
+        if ready:
+            self.reader.every = 1.0 / fps
+        elif navigating:
+            self.reader.every = 1.0
+        else:
+            self.reader.every = self.CALIB_EVERY
+        return fps
+
+    def _nap(self, ready, next_at, now=None):
+        """这一圈完了等多久：字模没好 0.2 秒；好了等到下次该读的时候，最长 0.05 秒（以前固定 0.05，帧数高了会多等一拍）"""
+        if not ready:
+            return 0.2
+        now = time.time() if now is None else now
+        return min(0.05, max(0.001, next_at - now))
+
+    def _fine(self, on):
+        """读得比平时快时打开 1 毫秒等待精度，不快了关掉；状态没变不重复调，调不了就算了"""
+        on = bool(on)
+        if on == self._fine_on or self._fine_timer is None:
+            return
+        self._fine_on = on
+        try:
+            self._fine_timer(on)
+        except Exception:
+            pass
 
     def _absorb(self, n, ok_at, info):
         g = tuple(info["global"])
@@ -242,6 +296,7 @@ class _Pos:
         was = False
         while not self.stop_ev.is_set():
             ready = False
+            nap = 0.2
             try:
                 try:
                     fg = game_foreground()
@@ -255,20 +310,18 @@ class _Pos:
                     pass
                 navigating = self._navigating()
                 if not fg:
+                    self._fine(False)
                     self.stop_ev.wait(0.5)
                     continue
                 with self._reader_lock:
-                    self.reader.max_gap = 5.0 if navigating else 60.0
-                    if ready:
-                        self.reader.every = self.FAST_EVERY
-                    elif navigating:
-                        self.reader.every = 1.0
-                    else:
-                        self.reader.every = self.CALIB_EVERY
+                    fps = self._tune(ready, navigating)
                     seen = self.reader.ok_at
                     self.reader.poll()
                     ok_at, info = self.reader.snapshot()
                     reader_active = bool(self.reader.active)
+                    next_at = self.reader.next_at
+                self._fine(ready and fps > self.BASE_FPS)
+                nap = self._nap(ready, next_at)
                 info = info or {}
                 if ok_at != seen and info.get("global"):
                     self._absorb(n, ok_at, info)
@@ -284,7 +337,8 @@ class _Pos:
                 bus.publish(
                     "log", {"task": "displayinfo", "line": f"右上角识别失败：{e}"}
                 )
-            self.stop_ev.wait(0.05 if ready else 0.2)
+            self.stop_ev.wait(nap)
+        self._fine(False)
 
 
 class _LogWatch:

@@ -3,6 +3,7 @@
 用法（在项目根目录）：
   .venv\\Scripts\\python.exe -X utf8 tools\\runtime_baseline_nav.py --out <输出.json>
   .venv\\Scripts\\python.exe -X utf8 tools\\runtime_baseline_nav.py --compare <改前.json> <改后.json>
+  --debug：调试模式开着录（NV-B5）
 
 输入尽量照现有测试的造法：地面用 test_tools.py 的静止定位，站内用真实星图 / 城镇地点里能走通的空间站目标，
 太空用 test_nav_session.py 的停着转镜头位置。造不出来的项写成 {"skipped": "原因"}，改前改后应一致跳过。
@@ -108,8 +109,9 @@ def call_space_view(g, target, data):
 
 def make_marker(positions, live):
     from astral_toolkit import bootstrap
+    from astral_toolkit.core import settings
 
-    return bootstrap._nav_marker(positions, live, "desktop")
+    return bootstrap._nav_marker(positions, live, "desktop", settings.View())
 
 
 def call_marker_tick(marker, target, data, state, shown, ref=None):
@@ -174,13 +176,14 @@ class _HudRecorder:
 class _Sandbox:
     """把任务模块和几个外部依赖换成脚本内的替身；退出时逐项还原"""
 
-    def __init__(self, tmp: Path):
+    def __init__(self, tmp: Path, debug=False):
         self.tmp = tmp
         self.clock = _Clock()
         self.live = _FakeLive()
         self.positions = _FakePositions()
         self.hud = _HudRecorder()
-        self.settings = dict(DEFAULT_SETTINGS)
+        self.defaults = {**DEFAULT_SETTINGS, "debug_mode": bool(debug)}
+        self.settings = dict(self.defaults)
         self.geometry = dict(GEOM_A)
         self.last_fov = None
         self.fg_mode = "true"
@@ -237,7 +240,7 @@ class _Sandbox:
         self.clock.now = 1000.0
         self.live.is_running = False
         self.settings.clear()
-        self.settings.update(DEFAULT_SETTINGS)
+        self.settings.update(self.defaults)
         self.geometry = dict(GEOM_A)
         self.last_fov = None
         self.fg_mode = "true"
@@ -933,11 +936,11 @@ def _collect_logs(items, box, tmp: Path) -> None:
 
 
 # ---------------------------------------------------------------- 录制与比较
-def collect() -> dict[str, Any]:
+def collect(debug=False) -> dict[str, Any]:
     tmp = Path(tempfile.mkdtemp(prefix="at_nav_baseline_"))
     nav = importlib.import_module("astral_toolkit.navigation.navigate")
     items: dict[str, Any] = {}
-    with _CalibSandbox(nav, tmp), _Sandbox(tmp) as box:
+    with _CalibSandbox(nav, tmp), _Sandbox(tmp, debug=debug) as box:
         meta = _meta(nav)
         try:
             data = nav.load()
@@ -1037,6 +1040,11 @@ def main(argv=None) -> int:
         metavar=("A", "B"),
         help="比较两个基线 JSON 的 items",
     )
+    ap.add_argument(
+        "--debug",
+        action="store_true",
+        help="调试模式开着录：NV-B5 起记号收起原因只在调试模式写 di_log；开着录的结果应和 NV-B0 录的一模一样",
+    )
     args = ap.parse_args(argv)
 
     if args.compare:
@@ -1044,7 +1052,7 @@ def main(argv=None) -> int:
     if not args.out:
         ap.error("需要 --out 或 --compare")
 
-    result = collect()
+    result = collect(debug=args.debug)
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(

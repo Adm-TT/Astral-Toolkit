@@ -2764,6 +2764,10 @@ PAGES.settings = () => {
       <div class="set"><div>大小</div>${segH("ov-scale", [["0.5", "50%"], ["0.75", "75%"], ["1", "100%"]], String(Math.min(1, +(c.hud_scale ?? 1))), "悬浮窗大小")}</div>
       <div class="set"><div>底板</div>${segH("ov-plate", [["0.6", "浅"], ["0.72", "标准"], ["0.85", "深"]], String(+(c.hud_plate ?? 0.72)), "底板")}</div>
       <div class="set"><div>配色</div>${segH("ov-theme", [["默认", "默认"], ["蓝金", "蓝金"], ["浅色", "浅色"]], c.hud_theme || "默认", "悬浮窗配色")}</div></div>
+    <h2>导航</h2>
+    <div class="panel"><div class="set" style="border:0;padding:0"><div>帧数
+      <p>导航时每秒读几次游戏右上角、刷新几次记号和转向提示。越高转镜头时记号越跟手，也越占 CPU；电脑忙时实际会低一些。默认 5。</p></div>
+      ${segH("nav-fps", [["5", "5"], ["10", "10"], ["15", "15"], ["20", "20"], ["30", "30"]], String(c.nav_fps ?? 5), "导航帧数")}</div></div>
     <h2>遇到问题</h2>
     <div class="panel"><div class="set"><div>问题反馈
       <p>矿物、信号或物品识别错误时，在游戏中按 <kbd>${esc(c.report_key || "F10")}</kbd>（或点击「报告问题」），AT 保存当时的截图、识别文字和显示结果，并自动发给作者用于改进识别。截图中可能有游戏聊天框。</p>
@@ -2779,7 +2783,7 @@ PAGES.settings = () => {
       </p></div>
       ${segH("ocr-device", [["gpu", "显卡 (GPU)"], ["cpu", "处理器 (CPU)"]], (c.ocr_device || (c.always_use_gpu !== false ? "gpu" : "cpu")), "文字识别硬件")}</div>
     <div class="set"><div>调试模式
-      <p>开启后，每次 F8 物品识别与 F6 盘点会把裁切阶段、停因写入运行日志，并在 userdata/shots/debug/ 落下识别区域调试图（仅本机，不上传），便于排查认错、偏慢或裁切区域不对。日志和磁盘占用会明显增加；平时请保持关闭。</p></div>
+      <p>开启后，F8 物品识别与 F6 盘点会把裁切阶段、停因写入运行日志，并在 userdata/shots/debug/ 落下识别区域调试图；导航读游戏右上角时每读一次在 userdata/logs/di_log.txt 记一行（导航记号收起的原因也记在这里），没读出的画面存到 userdata/shots/di_fail/。都只在本机，不上传，便于排查认错、偏慢、裁切区域不对或导航记号消失。日志和磁盘占用会明显增加；平时请保持关闭。</p></div>
       <button class="switch ${c.debug_mode ? "on" : ""}" id="debug-sw" aria-label="调试模式"></button></div>
     <div class="set" style="border:0;padding:0"><div>导出日志
       <p>将运行日志、设置和系统信息打包到桌面，发给作者用于排查问题。不含聊天记录、浏览数据等个人信息。识别类问题（扫描、F8、导航）建议附上出现问题时的游戏截图。</p></div>
@@ -2837,7 +2841,7 @@ PAGES.settings = () => {
     applyTheme(e.target.value);
     try { state.status.settings = await api("set_settings", { theme: e.target.value }); } catch (err) { toast(err.message); }
   };
-  for (const [id, key] of [["#ov-scale", "hud_scale"], ["#ov-plate", "hud_plate"]]) {
+  for (const [id, key] of [["#ov-scale", "hud_scale"], ["#ov-plate", "hud_plate"], ["#nav-fps", "nav_fps"]]) {
     $(id).onchange = async (e) => {
       try { state.status.settings = await api("set_settings", { [key]: +e.target.value }); toast("已保存"); } catch (err) { toast(err.message); }
     };

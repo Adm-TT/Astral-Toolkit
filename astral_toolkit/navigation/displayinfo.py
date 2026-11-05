@@ -646,9 +646,10 @@ def yielding():
     return time.time() < _YIELD["until"]
 
 
-def read(img=None, allow_yield=True):
+def read(img=None, allow_yield=True, diag=False):
     """→ parse() 的结果，另外 t = 截图的时间（星球在转：算位置要用截图那一刻，不能用认完字的时刻）、
-    fast = 这次是字模认的（几毫秒）还是识别引擎认的、yielded = 给采矿助手让路，这次没用识别引擎（没读到）"""
+    fast = 这次是字模认的（几毫秒）还是识别引擎认的、yielded = 给采矿助手让路，这次没用识别引擎（没读到）
+    diag = 写诊断（di_log.txt 一行；字模没读出时存 di_fail 截图）：调试模式开着时 Reader 才传 True（NV-B5）"""
     shot_at = time.time()
     if img is None:  # 只截右上角这一块
         from ..core.capture import grab_region, game_area
@@ -696,7 +697,8 @@ def read(img=None, allow_yield=True):
         # （认一次几秒、之后还要隔 2 秒，导航记号就收了），当成快速读失败，0.2 秒后再用字模试
         info = parse([])
         info.update(fast=True, t=shot_at, grid_miss=True)
-        _diag(piece, screen_h, was_ready, info)
+        if diag:
+            _diag(piece, screen_h, was_ready, info)
         return info
     if info is None and skip:
         info = parse([])
@@ -716,7 +718,7 @@ def read(img=None, allow_yield=True):
     elif was_ready:
         gridtext.note(True)
     info["t"] = shot_at
-    if img is None:
+    if img is None and diag:
         _diag(piece, screen_h, was_ready, info)
     return info
 
@@ -731,7 +733,8 @@ DIAG_KEEP = 15
 def _diag(piece, screen_h, was_ready, info):
     """实时读右上角的诊断（老大 11-03 实测「记号还是消失、转向不跟手」，要数据定位）：
     每次读一行进 logs/di_log.txt（字模好没好、走的哪条路、有没有坐标、有没有镜头方向）；
-    字模没读出来的画面存到 shots/di_fail（最多 15 张，只有右上角这一小块）"""
+    字模没读出来的画面存到 shots/di_fail（最多 15 张，只有右上角这一小块）
+    只在调试模式开着时调（NV-B5，熊老师「平时日志照留，开调试才多输出」）：关着时 read 不调它，不拼字符串、不开文件"""
     try:
         from ..core import paths
 
@@ -768,10 +771,11 @@ class Reader:
     """导航/位置用：定时读右上角，有新坐标就返回；读不到（没开 r_DisplayInfo）就慢慢试。
     后台位置线程和采矿扫描线程都会调 poll：整个读取加锁，同一时间只读一次，旧帧不会盖掉新帧（2026-10-27 补审）"""
 
-    def __init__(self, every=1.0):
+    def __init__(self, every=1.0, debug=None):
         import threading
 
         self.every = every
+        self.debug = debug  # 调试模式开没开（无参函数，bootstrap 经位置服务传进来）；None = 不写诊断
         self.next_at = 0.0
         self.misses = 0
         self.max_gap = 60.0  # 读不到时最多隔多久再试；导航开着时位置线程改成几秒（玩家反馈 2026-10-30）
@@ -795,6 +799,13 @@ class Reader:
         with self._lock:
             return self.ok_at, self.info
 
+    def _diag_on(self):
+        """这次读要不要写诊断：调试模式开着才写；问不出来就不写"""
+        try:
+            return bool(self.debug is not None and self.debug())
+        except Exception:
+            return False
+
     def poll(self, force=False):
         with self._lock:
             now = time.time()
@@ -807,7 +818,7 @@ class Reader:
                     self.next_at = now + 1.0
                     return None
                 info = read(
-                    allow_yield=not force
+                    allow_yield=not force, diag=self._diag_on()
                 )  # 强制读（采矿助手要判断地面/太空）不让路
             except Exception:
                 info = None
@@ -820,11 +831,14 @@ class Reader:
                 return None
             # 不是字模读的（识别引擎，几百毫秒一次）：成功、失败都至少隔 2 秒，不按 0.2 秒狂读
             gap = self.every if (info and info.get("fast")) else max(self.every, 2.0)
+            # 字模读的（十几毫秒）：按这次开始读的时间排下一次，帧数才是设的那个（导航 30 帧时读一次约 15 毫秒，
+            # 从读完算起只有二十来次，老大 11-05 实测）；识别引擎照旧从读完算起
+            base = now if (info and info.get("fast")) else done
             if info and info["global"]:
                 self.misses = 0
                 self.ok_at = done
                 self.info = info
-                self.next_at = done + gap
+                self.next_at = base + gap
                 g = info["global"]
                 if (
                     self.last is None
@@ -834,7 +848,7 @@ class Reader:
                     return g
                 return None
             self.misses += 1
-            self.next_at = done + (
+            self.next_at = base + (
                 gap
                 if self.misses < 3
                 else max(gap, min(self.max_gap, self.every * self.misses))

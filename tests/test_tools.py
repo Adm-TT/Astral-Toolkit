@@ -945,7 +945,7 @@ def test_reader_backoff_capped_while_navigating(monkeypatch):
     from astral_toolkit.navigation import displayinfo as D
 
     monkeypatch.setattr(
-        D, "read", lambda allow_yield=True: {**D.parse([]), "fast": False}
+        D, "read", lambda allow_yield=True, diag=False: {**D.parse([]), "fast": False}
     )
     from astral_toolkit.system import showloc
 
