@@ -190,31 +190,12 @@ def _stop_loop(loop):
 def _read_loop_switches(monkeypatch, ui, loop, read_switches):
     from astral_toolkit.app import ui_stream
     from astral_toolkit.core import settings
-    from tests.bootstrap_helpers import restore_bindings, snapshot_bindings
 
     monkeypatch.setattr(settings, "load", lambda: {"live_on": False})
     live = SimpleNamespace(loop=loop, running=loop.running)
-    nav = SimpleNamespace(
-        running=lambda: False,
-        target_label=lambda: "",
-        space_mode=False,
-    )
-    pos = SimpleNamespace(
-        reader=SimpleNamespace(active=False),
-        reader_active=False,
-        label=(0.0, None),
-        system=(0.0, ""),
-    )
-
-    def bound_read_switches():
-        saved = snapshot_bindings()
-        ui_stream.bind_switches(live, nav, pos, replace=True)
-        try:
-            return read_switches()
-        finally:
-            restore_bindings(saved)
-
-    monkeypatch.setattr(ui, "read_switches", bound_read_switches)
+    monkeypatch.setattr(ui_stream, "_SOURCES", ui_stream._SOURCES)
+    ui_stream.bind_switches(live, None, None, replace=True)
+    monkeypatch.setattr(ui, "read_switches", read_switches)
 
 
 def _mining_tile(ui):

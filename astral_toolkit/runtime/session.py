@@ -32,10 +32,6 @@ def _never() -> bool:
     return False
 
 
-def _noop() -> None:
-    pass
-
-
 class RunState(Enum):
     """会话状态（架构稿 §7.4）。FAILED 只在工作线程已经退出后出现（出错用尽）"""
 
@@ -160,7 +156,8 @@ class Worker(Protocol):
     """每个引擎实现：只写业务，不写线程"""
 
     name: str
-    # 可选类属性 activity_kind（如 "mining"）：有就由 _confirm_stop_locked 发展示终态；不在协议里声明，按 getattr 读
+    # 可选类属性 activity_kind（如 "mining"）、log_tag（如 "NAV"）/ display_name（如「导航」）：
+    # 有就由 _confirm_stop_locked 发展示终态、框架日志按它标；不在协议里声明，按 getattr 读
     retries: int
     idle_close: float | None
     stale_after: dict[str, float]
@@ -254,6 +251,12 @@ class SessionLoop:
         self._worker = worker
         # ResultStore 的拒收线按循环分开记：会话号各循环各数各的（2026-11-04）
         self._owner = str(getattr(worker, "name", "") or "")
+        # 框架日志 / 运行记录按引擎标（RT-K1）：worker 上可选 log_tag（如 "MINING"）、display_name（如「采矿助手」），
+        # 和 activity_kind 一样按 getattr 读；没写就用 name 的大写
+        self._log_tag = str(
+            getattr(worker, "log_tag", None) or getattr(worker, "name", "") or "APP"
+        ).upper()
+        self._display_name = str(getattr(worker, "display_name", None) or self._log_tag)
         self._results = results
         self._output = output
         self._foreground = foreground
@@ -261,9 +264,6 @@ class SessionLoop:
         self._join_timeout = join_timeout
         self._run_flag = run_flag
         self._closing = closing
-        self._finish_hook: Callable[[], object] = (
-            _noop  # 只给测试：线程收尾最后一步前停住
-        )
         self._lock = _OwnedLock()
         self._flag_lock = threading.Lock()
         self._flag_want: bool | None = None
@@ -419,11 +419,11 @@ class SessionLoop:
             if pending_alive:
                 self._apply_locked(
                     [
-                        ("log", "上次停止还没结束，已开新会话", "MINING"),
+                        ("log", "上次停止还没结束，已开新会话", self._log_tag),
                         (
                             "record",
-                            "MINING",
-                            "采矿助手上次停止还没结束，已开新会话",
+                            self._log_tag,
+                            f"{self._display_name}上次停止还没结束，已开新会话",
                             "",
                         ),
                     ],
@@ -525,7 +525,12 @@ class SessionLoop:
         if run.superseded:
             run.confirm_sent = True
             deferred.append(
-                ("record", "MINING", "采矿助手引擎已停止（已被新会话取代）", "")
+                (
+                    "record",
+                    self._log_tag,
+                    f"{self._display_name}引擎已停止（已被新会话取代）",
+                    "",
+                )
             )
             self._queue_activity_end_locked(run, info, deferred)
             return
@@ -651,7 +656,12 @@ class SessionLoop:
                 return  # 没被按过停止：不算停止超时（3-5）
             run.stop_timeout = True  # 线程没退就不进 FAILED，只标出来
             deferred.append(
-                ("record", "MINING", "采矿助手停止超时：旧线程仍未退出", "")
+                (
+                    "record",
+                    self._log_tag,
+                    f"{self._display_name}停止超时：旧线程仍未退出",
+                    "",
+                )
             )
             # 自停（idle / error）卡在收尾：「已停止」确认照 v4.2 d′ 不发（留给取代），
             # 但展示终态先发，否则活动会一直挂在全家福里（UI-K0b 审查）
@@ -789,7 +799,9 @@ class SessionLoop:
     def _hook_error(self, name: str, exc: BaseException) -> None:
         """钩子自身出错：只排队一条锁后 log，绝不在锁内写文件（2-5）"""
         with self._hook_logs_lock:
-            self._hook_logs.append(("log", f"HOOK_ERROR {name}: {exc!r}", "MINING"))
+            self._hook_logs.append(
+                ("log", f"HOOK_ERROR {name}: {exc!r}", self._log_tag)
+            )
 
     def _flush_hook_logs(self) -> None:
         with self._hook_logs_lock:
@@ -848,7 +860,7 @@ class SessionLoop:
                         "on_error", worker.on_error, session, ctx, exc, default=None
                     )
                     if ctx is None:
-                        self._run_ops([("log", f"ERROR {exc!r}", "MINING")])
+                        self._run_ops([("log", f"ERROR {exc!r}", self._log_tag)])
                     if not self._is_current(session):
                         break
                     if attempt + 1 >= attempts:
@@ -892,11 +904,15 @@ class SessionLoop:
             if session.cancel.is_set():
                 return
             now = self._clock()
-            if worker.needs_foreground and self._foreground() is False:
-                # 进暂停的时刻在「读前台窗口」之后取：读窗口本身也花时间（假时钟里这一步还会走时间）
-                self._enter_pause(session, ctx, self._clock())
-                session.cancel.wait(max(0.0, float(worker.pause_wait)))
-                continue
+            if worker.needs_foreground:
+                fg = self._foreground()
+                if session.cancel.is_set():
+                    return  # 读前台窗口这段时间里被停了：不进暂停、不再 tick（RT-K1 / N4）
+                if fg is False:
+                    # 进暂停的时刻在「读前台窗口」之后取：读窗口本身也花时间（假时钟里这一步还会走时间）
+                    self._enter_pause(session, ctx, self._clock())
+                    session.cancel.wait(max(0.0, float(worker.pause_wait)))
+                    continue
             if self._is_paused(session):
                 self._leave_pause(session, ctx, now)
             if self._idle_expired(session):
@@ -1072,4 +1088,3 @@ class SessionLoop:
                 pending = self._pending.pop(session.id, None)
                 if pending is not None:
                     pending.stop_timeout = False
-        self._finish_hook()

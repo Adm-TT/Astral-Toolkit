@@ -2358,11 +2358,16 @@ def test_live_republishes_corrected_total_scu(monkeypatch, tmp_path):
 def test_live_session_isolation(monkeypatch, tmp_path):
     """快速停了又开（旧线程还卡在识别里、join 已超时）：新会话是全新的；旧会话的结果写不进来"""
     import threading
+    from dataclasses import replace
 
-    from astral_toolkit.core import paths
-    from astral_toolkit.mining import screen
-    from astral_toolkit.tasks import mining as t_mining
     import astral_toolkit.app.engines.live as live_mod
+    from astral_toolkit.core import paths
+    from astral_toolkit.mining import screen, signals
+    from astral_toolkit.mining.parse import Scan
+    from astral_toolkit.runtime.results import MINING_SCAN
+    from astral_toolkit.runtime.session import RunFlag
+    from astral_toolkit.tasks import mining as t_mining
+    from tests.runtime_fakes import RecordingOutput
 
     monkeypatch.setattr(paths, "log", lambda name: tmp_path / name)
     monkeypatch.setattr(paths, "shots", lambda name: tmp_path)
@@ -2370,27 +2375,45 @@ def test_live_session_isolation(monkeypatch, tmp_path):
         "RGB", (320, 180), (30, 20, 20)
     )
     monkeypatch.setattr(screen, "grab", lambda: frame)
-    from astral_toolkit.mining.parse import Scan
-
-    monkeypatch.setattr(screen, "analyse", lambda img: (Scan(), ({}, None, None)))
-    real = screen.analyse
+    monkeypatch.setattr(
+        live_mod,
+        "setting_run_flag",
+        lambda key: RunFlag(key, lambda k, v: None),
+    )
+    old_rock = "旧石头"
+    old_scan = replace(
+        _rock(
+            10000.0,
+            20,
+            5.0,
+            12.0,
+            [("Copper", 40.0, 500), ("Inert Materials", 60.0, 0)],
+        ),
+        rock=old_rock,
+    )
+    empty_scan = Scan()
     gate = threading.Event()
     entered = threading.Event()
     calls = {"n": 0}
 
     def analyse(img):
         calls["n"] += 1
-        entered.set()
         if calls["n"] == 1:
-            gate.wait(30)  # A 卡在识别里
-        return real(img)
+            return old_scan, ({}, None, None)  # A 先认出一帧
+        if calls["n"] == 2:
+            entered.set()
+            gate.wait(30)  # A 第二帧卡在识别里；放行后两帧投票成立、真去提交（应被拒）
+            return old_scan, ({}, None, None)
+        return empty_scan, ({}, None, None)
 
     monkeypatch.setattr(screen, "analyse", analyse)
+    monkeypatch.setattr(signals, "find_signatures", lambda img: [])
     monkeypatch.setattr(screen, "INTERVAL", 0.01)
     monkeypatch.setattr(screen, "LAST_RAW", {})
     monkeypatch.setattr(screen, "LAST_PANEL", {})
     monkeypatch.setattr(t_mining, "_game_front", lambda: None)
-    live = live_mod._Live()
+    out = RecordingOutput()
+    live = live_mod._Live(output=out, foreground=lambda: True)
     live.loop._join_timeout = 0.05
     try:
         assert live.start() is not None
@@ -2400,15 +2423,22 @@ def test_live_session_isolation(monkeypatch, tmp_path):
         attempt = live.stop()
         assert attempt.timed_out and not old.alive(), "旧会话的开关已经按下、线程还卡着"
         assert live.start() is not None and live.session_id > first
+        second = live.session_id
         new = live.loop._current.session  # type: ignore[union-attr]
         assert new is not old and new.alive() and live.running()
+        out.clear()
         gate.set()  # 放行旧线程
         assert live.loop.join(session_id=first, timeout=30)
-        assert live.running() and live.session_id > first, "旧会话退出不影响新会话"
+        entry = live.results.get(MINING_SCAN)
+        assert entry is None or old_rock not in repr(entry.value)
+        assert not any(old_rock in repr(r.op) for r in out.ops)
+        assert live.loop.state().session_id == second
+        assert live.running(), "旧会话退出不影响新会话"
         assert live.loop.stamp(old, 1.0) is None  # 旧会话再来取表被拒
     finally:
         gate.set()
         live.stop()
+        live.loop.join_all(timeout=30)
 
 
 def test_live_stop_during_compute_publishes_nothing(monkeypatch, tmp_path):
@@ -5253,25 +5283,64 @@ def test_rotation_phase_calibration(tmp_path, monkeypatch):
 
 
 def test_live_key_hint_says_stopping_when_refused(monkeypatch):
-    """3-2：F5 被拒（正在停止）时悬浮窗说「正在停止，请稍候」，不说「已开启」"""
+    """3-2：真引擎正在停止时按 F5，提示「正在停止，请稍候」，不说「已开启」"""
     from types import SimpleNamespace
 
-    from astral_toolkit.app.engines import hover as hover_mod
+    from PIL import Image
 
+    from astral_toolkit.app.engines import hover as hover_mod
+    from astral_toolkit.app.engines import live as live_engine
+    from astral_toolkit.mining import screen as mining_screen
+    from astral_toolkit.mining import signals
+    from astral_toolkit.mining.parse import Scan
+    from astral_toolkit.runtime.session import RunFlag, StopInfo
+    from astral_toolkit.tasks import navigation as nav_tasks
+    from tests.bootstrap_helpers import app_for_test
+    from tests.runtime_fakes import FakeClock, Gate, RecordingOutput
+
+    flag_writes = []
+    monkeypatch.setattr(
+        live_engine,
+        "setting_run_flag",
+        lambda key: RunFlag(key, lambda k, v: flag_writes.append((k, v))),
+    )
+    monkeypatch.setattr(
+        mining_screen, "analyse", lambda img: (Scan(), ({}, None, None))
+    )
+    monkeypatch.setattr(signals, "find_signatures", lambda img: [])
+    monkeypatch.setattr(nav_tasks, "settings_key", lambda *a, **k: "F5")
     notes = []
     hud = SimpleNamespace(_note_hud=lambda section, text: notes.append(text))
-    tasks = SimpleNamespace(
-        settings_key=lambda *a: "F5",
-        live_start=lambda: {"running": False, "error": "正在停止，请稍候"},
-        live_stop=lambda: {"running": False},
-    )
     monkeypatch.setattr(hover_mod, "_H", lambda: hud)
-    monkeypatch.setattr(hover_mod, "_T", lambda name: tasks)
-    h = object.__new__(hover_mod._Hover)
-    # RT-B7：引擎构造时注入，不再找全局 _E()
-    h._live = SimpleNamespace(running=lambda: False)
-    h._toggle_live()
-    assert notes == ["正在停止，请稍候"], "被拒时不能说「已开启」"
-    tasks.live_start = lambda: {"running": True}  # 允许开的时候照旧
-    h._toggle_live()
-    assert notes[-1] == "采矿助手已开启｜按 F5 关闭"
+
+    frame = Image.new("RGB", (320, 180), (30, 20, 20))
+    gate = Gate()
+    calls = {"n": 0}
+
+    def grab():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            gate.hold()
+        return frame
+
+    with app_for_test(
+        foreground=lambda: True,
+        grab=grab,
+        clock=FakeClock(),
+        output=RecordingOutput(),
+    ) as app:
+        try:
+            sid = app.live.start()
+            assert sid is not None
+            assert gate.entered.wait(10)
+            app.live.loop.request_stop_current(StopInfo("user"))  # 不 join：停止中
+            app.hover._toggle_live()
+            assert notes[-1] == "正在停止，请稍候", "被拒时不能说「已开启」"
+            assert "已开启" not in notes[-1]
+            gate.release.set()
+            assert app.live.loop.join(session_id=sid)
+            app.hover._toggle_live()
+            assert notes[-1] == "采矿助手已开启｜按 F5 关闭"
+            app.live.stop()
+        finally:
+            gate.release.set()

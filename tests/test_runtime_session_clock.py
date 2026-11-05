@@ -354,8 +354,8 @@ def test_shutdown_keeps_the_run_flag_and_confirms_once():
 
 def test_slow_tick_uses_the_observation_time():
     """tick 在 t=0 观测、卡到 t=130 才返回：返回后立刻判自动关闭 / 过期（2-3）"""
-    # 自动关闭：观测时刻是 0，返回时活动时钟 130 → 立刻关
-    clock = FakeClock()
+    # 自动关闭：观测时刻是 0，返回时活动时钟正好 130，超过 120 的限值 → 立刻关
+    clock = FakeClock(start=0.0)
     worker = FakeWorker(idle_close=120.0, wait=0.01, observed={"panel": 0.0})
     gate = Gate()
     worker.gate = gate
@@ -371,8 +371,8 @@ def test_slow_tick_uses_the_observation_time():
         loop.request_stop_current(StopInfo("user"))
         loop.join(session_id=_current_id(loop))
 
-    # 过期：同样卡到 130 秒，返回后立刻标 stale（不是从返回时刻重新算）
-    clock = FakeClock()
+    # 过期：同样从 0 卡到 130 秒，返回后立刻标 stale（不是从返回时刻重新算）
+    clock = FakeClock(start=0.0)
     worker = FakeWorker(stale_after={"panel": 5.0}, wait=0.01, observed={"panel": 0.0})
     gate = Gate()
     worker.gate = gate

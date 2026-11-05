@@ -97,6 +97,8 @@ class _CountWorker:
     """盘点 Worker：只写业务，不碰线程"""
 
     name = "count"
+    log_tag = "COUNT"
+    display_name = "盘点"
     retries = 1
     idle_close: float | None = 60.0
     stale_after: dict[str, float] = {}

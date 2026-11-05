@@ -207,6 +207,8 @@ class _NavWorker:
     """导航 Worker：只做一轮位置判断 / 定位 / 视图 / nav_tip，输出统一走 loop.commit"""
 
     name: str = "nav"
+    log_tag: str = "NAV"
+    display_name: str = "导航"
     activity_kind: str = "nav"
     retries: int = 3
     idle_close: float | None = None

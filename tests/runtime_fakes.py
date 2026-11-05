@@ -90,6 +90,22 @@ class Gate:
         return False
 
 
+def hold_after_finish(loop, gate):
+    """测试用：工作线程收尾最后一步（_finish_thread 做完、线程还没退）停在 gate.hold()；返回恢复函数"""
+    orig = loop._finish_thread
+
+    def held(session, info, ops):
+        orig(session, info, ops)
+        gate.hold()
+
+    loop._finish_thread = held  # type: ignore[method-assign]
+
+    def restore():
+        loop.__dict__.pop("_finish_thread", None)
+
+    return restore
+
+
 class TickGate:
     """tick 每轮都停在闸上：测试放一步、走一步（卡时机不靠 sleep）"""
 
@@ -149,6 +165,8 @@ class FakeWorker:
     setup_fail_times: int = 0  # 前几次 setup 直接抛错
     finish_gate: Any = None  # 卡住 finish 的栅栏（测「已停写 Ctx」的顺序）
     resume_gate: Any = None  # 卡住 on_resume 的栅栏（测回调 op 在停止后被丢）
+    log_tag: str = "MINING"
+    display_name: str = "采矿助手"
 
     def hotkey(self):
         self.calls.append(("hotkey",))
