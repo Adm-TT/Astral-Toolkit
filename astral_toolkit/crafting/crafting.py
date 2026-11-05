@@ -7,6 +7,11 @@
 
 import re
 
+from ..contracts.textkeys import (
+    blueprint_norm as _fold_name,
+    blueprint_search_norm as _search_norm,
+)
+
 GEAR_ZH = {
     ("fpsgear", "armour"): "护甲",
     ("fpsgear", "weapons"): "个人武器",
@@ -305,24 +310,8 @@ def material_zh(name: str) -> str:
     return ITEM_ZH.get(name) or mineral_zh(name)
 
 
-def assign_keys(bps):
-    """每份蓝图的唯一编号（纯函数，游戏数据层导入也用它，规则只写一处）：名字不重复就用名字；
-    有十几个名字对应两份不同配方（比如 Main Powerplant），这些用「名字#1」「名字#2」区分（二审 2026-10-23 发现：只按名字会点开别的配方）。
-    返回 (keys: {id(bp): 编号}, index: {编号: bp}, total: Counter(名字))"""
-    from collections import Counter
-
-    total = Counter(b["n"] for b in bps)
-    seen, keys, index = Counter(), {}, {}
-    for b in bps:
-        seen[b["n"]] += 1
-        k = b["n"] if total[b["n"]] == 1 else f"{b['n']}#{seen[b['n']]}"
-        keys[id(b)] = k
-        index[k] = b
-    return keys, index, total
-
-
 def _keys():
-    """(keys: {id(bp): 编号}, index: {编号: bp}, total: Counter(名字))，跟着 data() 那一版走；编号导入时按 assign_keys 算好"""
+    """(keys: {id(bp): 编号}, index: {编号: bp}, total: Counter(名字))，跟着 data() 那一版走；编号导入时按 contracts.blueprints.assign_keys 算好"""
     c = _catalog()
     return c.keys, c.index, c.total
 
@@ -369,16 +358,6 @@ def display_name(bp) -> str:
     """蓝图名「中文 English」（2026-10-26 统一写法）：「霍夫斯泰德 Hofstede-S2 Mining Laser」「卡纳 步枪 Karna Rifle」"""
     zh, en = name_parts(bp)
     return f"{zh} {en}" if zh else en
-
-
-def _fold_name(s):
-    """for_item 的比较键：小写、去掉所有非字母数字（游戏数据层 blueprints.norm_n / norm_z 用同一个函数算）"""
-    return re.sub(r"[\W_]+", "", (s or "").lower())
-
-
-def _search_norm(s):
-    """search 的比较键：小写、去空格（和 for_item 的规则不同，各存各的：blueprints.search_n / search_z）"""
-    return (s or "").lower().replace(" ", "")
 
 
 def for_item(name_en="", name_zh=""):

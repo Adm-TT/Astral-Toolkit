@@ -6,6 +6,8 @@ CR-B1～B6 拆制造代码时，这些输出应当一个字都不变。
 import logging
 from types import SimpleNamespace
 
+from astral_toolkit.contracts.blueprints import assign_keys
+from astral_toolkit.contracts.textkeys import blueprint_norm, blueprint_search_norm
 from astral_toolkit.core import i18n
 from astral_toolkit.crafting import crafting as C
 from astral_toolkit.crafting import itemstats
@@ -185,7 +187,7 @@ def _build_bps():
             0,
         ),
     ]
-    keys, index, total = C.assign_keys(bps)
+    keys, index, total = assign_keys(bps)
     table = Blueprints(
         {"blueprints": bps},
         keys,
@@ -250,7 +252,7 @@ def _install(monkeypatch):
             if not key:
                 continue
             for bp in BPS:
-                if C._fold_name(bp["n"]) == key or C._fold_name(bp["z"]) == key:
+                if blueprint_norm(bp["n"]) == key or blueprint_norm(bp["z"]) == key:
                     return bp
         return None
 
@@ -260,7 +262,8 @@ def _install(monkeypatch):
         return [
             bp
             for bp in BPS
-            if q in C._search_norm(bp["n"]) or q in C._search_norm(bp["z"])
+            if q in blueprint_search_norm(bp["n"])
+            or q in blueprint_search_norm(bp["z"])
         ]
 
     def using_material(material, snap=None):

@@ -146,3 +146,59 @@ def test_junk_en_examples():
     assert not textkeys.junk_en("Tin", known) and not textkeys.junk_en(
         "Guardian Undersuit", known
     )
+
+
+# 制造蓝图的两套键（CR-B1 从 crafting.crafting 逐字搬进 contracts）：下面的值是搬之前那两个函数算的
+_BP_TABLE = (
+    (None, "", ""),
+    ("", "", ""),
+    ("Lawson Mining Laser", "lawsonmininglaser", "lawsonmininglaser"),
+    ("LAWSON", "lawson", "lawson"),
+    ("\u2161", "\u2171", "\u2171"),
+    (
+        "\uff2d\uff45\uff44 \uff30\uff45\uff4e",
+        "\uff4d\uff45\uff44\uff50\uff45\uff4e",
+        "\uff4d\uff45\uff44\uff50\uff45\uff4e",
+    ),
+    ("Citadel-SE", "citadelse", "citadel-se"),
+    (
+        "\u533b\u7597\u7b14\uff08\u8840\u7ea2\u624e\uff09",
+        "\u533b\u7597\u7b14\u8840\u7ea2\u624e",
+        "\u533b\u7597\u7b14\uff08\u8840\u7ea2\u624e\uff09",
+    ),
+    (
+        "\u533b\u7597\u7b14(\u8840\u7ea2\u624e)",
+        "\u533b\u7597\u7b14\u8840\u7ea2\u624e",
+        "\u533b\u7597\u7b14(\u8840\u7ea2\u624e)",
+    ),
+    ("l I 1 |", "li1", "li1|"),
+    ("Hofstede\u2013S2", "hofstedes2", "hofstede\u2013s2"),
+    ("\uff2c", "\uff4c", "\uff4c"),
+    ("\u0130stanbul", "istanbul", "i\u0307stanbul"),
+    ("\U0001f600 Cap", "cap", "\U0001f600cap"),
+    ("  \u4e2d \u6587\u3000", "\u4e2d\u6587", "\u4e2d\u6587\u3000"),
+    ("\u533b\u7597\u3000\u7b14", "\u533b\u7597\u7b14", "\u533b\u7597\u3000\u7b14"),
+    ("x_y-z.w", "xyzw", "x_y-z.w"),
+    ("\u01c5", "\u01c6", "\u01c6"),
+    ("\u216b-3", "\u217b3", "\u217b-3"),
+    (
+        "\uff21\uff52\uff45\uff41\uff11\uff18",
+        "\uff41\uff52\uff45\uff41\uff11\uff18",
+        "\uff41\uff52\uff45\uff41\uff11\uff18",
+    ),
+    ("\xa0Nbsp", "nbsp", "\xa0nbsp"),
+    ("Main Power-Plant", "mainpowerplant", "mainpower-plant"),
+    (
+        "\u4e3b\u53d1\u7535\u673a B",
+        "\u4e3b\u53d1\u7535\u673ab",
+        "\u4e3b\u53d1\u7535\u673ab",
+    ),
+    ("Main  Powerplant_MK2", "mainpowerplantmk2", "mainpowerplant_mk2"),
+)
+
+
+def test_blueprint_rules_table():
+    for value, norm, search in _BP_TABLE:
+        label = repr(value)
+        assert textkeys.blueprint_norm(value) == norm, label
+        assert textkeys.blueprint_search_norm(value) == search, label

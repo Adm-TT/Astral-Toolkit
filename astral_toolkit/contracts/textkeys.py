@@ -1,7 +1,8 @@
 """名字的比较键。
 
 这些函数把物品名折成比较用的键；有的结果存进了 gamedata 的列
-（掉落 norm_en / norm_zh、wiki 类名 norm_n、维科洛材料 norm_n、物品名的键、名字对照表），
+（掉落 norm_en / norm_zh、wiki 类名 norm_n、维科洛材料 norm_n、制造蓝图 norm_n / norm_z / search_n / search_z、
+物品名的键、名字对照表），
 改任何一条都要升 gamedata/_schema.IMPORTER_VERSION，否则库里存的键和查询时算的键对不上。
 """
 
@@ -44,6 +45,18 @@ def norm_zh(text):
         .replace("　", "")
         .strip()
     )
+
+
+def blueprint_norm(s):
+    """制造蓝图 for_item 的比较键：小写、去掉所有非字母数字（汉字留着）；gamedata blueprints.norm_n / norm_z 和
+    crafting.for_item 都用它（原 crafting._fold_name）。"""
+    return re.sub(r"[\W_]+", "", (s or "").lower())
+
+
+def blueprint_search_norm(s):
+    """制造蓝图 search 的比较键：小写、去半角空格（和 blueprint_norm 不是一个规则，各存各的）；
+    gamedata blueprints.search_n / search_z 和 crafting.search 都用它（原 crafting._search_norm）。"""
+    return (s or "").lower().replace(" ", "")
 
 
 # 汉化包里物品「简称」带出来的假英文名（1.6.41）：简称后面跟的是尺寸、型号代码，不是英文名，

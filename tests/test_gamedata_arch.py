@@ -73,14 +73,16 @@ def test_reused_rules_are_pure(monkeypatch):
         for n in names:
             monkeypatch.setattr(mod, n, boom)
 
+    from astral_toolkit.contracts.blueprints import assign_keys
     from astral_toolkit.contracts.textkeys import (
+        blueprint_norm,
+        blueprint_search_norm,
         en_key,
         fold_en as _fold_en,
         junk_en as _junk,
         norm_zh as _norm_zh,
         zh_key,
     )
-    from astral_toolkit.crafting.crafting import _fold_name, _search_norm, assign_keys
     from astral_toolkit.crafting.loot import _fold as loot_fold
     from astral_toolkit.crafting.wikelo import _fold as wikelo_fold
     from astral_toolkit.navigation.names import _norm
@@ -91,8 +93,8 @@ def test_reused_rules_are_pure(monkeypatch):
     keys, index, total = assign_keys(bps)
     assert [keys[id(b)] for b in bps] == ["X#1", "X#2", "Y"] and total["X"] == 2
     assert (
-        _fold_name("Main Power-Plant") == "mainpowerplant"
-        and _search_norm("Main Power") == "mainpower"
+        blueprint_norm("Main Power-Plant") == "mainpowerplant"
+        and blueprint_search_norm("Main Power") == "mainpower"
     )
     assert (
         en_key("Lawson Mining Laser")

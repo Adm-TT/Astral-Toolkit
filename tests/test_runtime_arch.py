@@ -597,51 +597,54 @@ def test_catalog_imports_stdlib_or_contracts_only():
 
 
 _GAMEDATA_REVERSE_ROOTS = ("astral_toolkit.crafting", "astral_toolkit.trade")
-_GAMEDATA_REVERSE_ALLOWED = {
-    "astral_toolkit.crafting.crafting": {"_fold_name", "_search_norm", "assign_keys"}
-}
 
 
 def _module_under(module, root):
     return module == root or module.startswith(root + ".")
 
 
+def _reverse_target(module):
+    return any(_module_under(module, root) for root in _GAMEDATA_REVERSE_ROOTS)
+
+
 def _gamedata_reverse_imports(source, package):
-    """gamedata 里对 crafting / trade 的 import：只剩 crafting.crafting 的三个规则名。"""
+    """gamedata 里对 crafting / trade 的 import（函数体里的、「from .. import crafting」这种也算）。"""
     bad = []
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, ast.ImportFrom):
             module = _textkeys_resolve_from(node, package)
-            if not any(_module_under(module, root) for root in _GAMEDATA_REVERSE_ROOTS):
-                continue
-            allowed = _GAMEDATA_REVERSE_ALLOWED.get(module, set())
             for alias in node.names:
-                if alias.name not in allowed:
+                if _reverse_target(module) or _reverse_target(f"{module}.{alias.name}"):
                     bad.append(f"{module}: {alias.name}")
         elif isinstance(node, ast.Import):
             for alias in node.names:
-                if any(
-                    _module_under(alias.name, root) for root in _GAMEDATA_REVERSE_ROOTS
-                ):
+                if _reverse_target(alias.name):
                     bad.append(f"{alias.name}: <module>")
     return bad
 
 
-def test_gamedata_reverse_imports_only_crafting_rules_left():
-    """gamedata 只还许拿 crafting.crafting 的制造规则，别的 crafting / trade 都不许。"""
+def test_gamedata_has_no_reverse_imports():
+    """gamedata 不许反过来 import crafting / trade：CR-B1 把制造的名字键和蓝图编号也搬进了 contracts，一个都不剩。"""
     assert _gamedata_reverse_imports(
         "def f():\n    from ..crafting.itemsearch import _has_cjk\n",
         "astral_toolkit.gamedata",
     )
-    assert (
-        _gamedata_reverse_imports(
-            "def f():\n    from ..crafting.crafting import assign_keys\n",
-            "astral_toolkit.gamedata",
-        )
-        == []
+    assert _gamedata_reverse_imports(
+        "def f():\n    from ..crafting.crafting import assign_keys\n",
+        "astral_toolkit.gamedata",
+    ) == ["astral_toolkit.crafting.crafting: assign_keys"]
+    assert _gamedata_reverse_imports(
+        "from .. import crafting\n", "astral_toolkit.gamedata"
     )
     assert _gamedata_reverse_imports(
         "from ..trade.names import _junk\n", "astral_toolkit.gamedata"
+    )
+    assert (
+        _gamedata_reverse_imports(
+            "from ..contracts.blueprints import assign_keys\nfrom .. import contracts\n",
+            "astral_toolkit.gamedata",
+        )
+        == []
     )
     files = list((_ROOT / "gamedata").rglob("*.py"))
     assert files
@@ -654,6 +657,7 @@ def test_gamedata_reverse_imports_only_crafting_rules_left():
 
 
 _PRODUCT_CODE_KEY_MODULES = {
+    "astral_toolkit.crafting.crafting": {"_fold_name", "_search_norm"},
     "astral_toolkit.crafting.shops": {"_fold"},
     "astral_toolkit.crafting.loot": {"_fold"},
     "astral_toolkit.crafting.wikelo": {"_fold"},
@@ -661,6 +665,7 @@ _PRODUCT_CODE_KEY_MODULES = {
     "astral_toolkit.trade.names": {"_fold_en", "_norm_zh"},
 }
 _PRODUCT_CODE_KEY_DEFINERS = {
+    "crafting/crafting.py",
     "crafting/shops.py",
     "crafting/loot.py",
     "crafting/wikelo.py",
@@ -732,6 +737,9 @@ def test_product_code_takes_name_keys_from_contracts():
     assert _product_code_key_imports(
         "from ..crafting import shops\nshops._fold('a')\n",
         "astral_toolkit.crafting",
+    )
+    assert _product_code_key_imports(
+        "from ..crafting.crafting import _search_norm\n", "astral_toolkit.tasks"
     )
     assert (
         _product_code_key_imports(

@@ -121,8 +121,11 @@ def _built(monkeypatch, tmp_path, **override):
 
 
 def test_blueprints_rows_keys_and_norms(monkeypatch, tmp_path):
-    """标量原样、「名字#序号」编号与 crafting.assign_keys 一致、两套比较键、u 空允许、item_id 只在 items 里有的才填"""
-    from astral_toolkit.crafting.crafting import _fold_name, _search_norm, assign_keys
+    """标量原样、「名字#序号」编号与 contracts.blueprints.assign_keys 一致、两套比较键（每行存的 = contracts 现算的，
+    查询那边用的也是这两个函数）、u 空允许、item_id 只在 items 里有的才填"""
+    from astral_toolkit.contracts.blueprints import assign_keys
+    from astral_toolkit.contracts.textkeys import blueprint_norm, blueprint_search_norm
+    from astral_toolkit.crafting import crafting as C
 
     snapshot = _built(monkeypatch, tmp_path)
     bps = _CRAFT_SOURCES["crafting.json"]["blueprints"]
@@ -145,15 +148,54 @@ def test_blueprints_rows_keys_and_norms(monkeypatch, tmp_path):
         rows[2][1] == "" and rows[2][12] == "medpen"
     )  # u 是空串就存空串（源里就是 ""）；Medpen 在 items 里
     assert rows[0][12] is None  # Main Powerplant 不在 items 里
-    assert rows[0][8] == _fold_name("Main Powerplant") == "mainpowerplant"
+    assert rows[0][8] == blueprint_norm("Main Powerplant") == "mainpowerplant"
     assert (
-        rows[0][9] == _fold_name("主发电机")
-        and rows[0][10] == _search_norm("Main Powerplant") == "mainpowerplant"
+        rows[0][9] == blueprint_norm("主发电机")
+        and rows[0][10] == blueprint_search_norm("Main Powerplant") == "mainpowerplant"
     )
-    assert rows[1][11] == _search_norm("主发电机 B") == "主发电机b"
+    assert rows[1][11] == blueprint_search_norm("主发电机 B") == "主发电机b"
     assert (
         [r[0] for r in rows] == [0, 1, 2] == [r[13] for r in rows]
     )  # id = source_order = 源下标（和别的表一致）
+    for r in rows:  # 每一行存的键 = contracts 现算的键
+        assert r[8:12] == (
+            blueprint_norm(r[2]),
+            blueprint_norm(r[3]),
+            blueprint_search_norm(r[2]),
+            blueprint_search_norm(r[3]),
+        ), r[7]
+    # 查询那边（crafting.for_item / search）用的也是这两个函数，不另写一份
+    assert C._fold_name is blueprint_norm and C._search_norm is blueprint_search_norm
+
+
+def test_blueprint_keys_split_on_punctuation(monkeypatch, tmp_path):
+    """名字带标点、下划线、全角括号时 for_item 键和 search 键不一样：库里各存各的，就是 contracts 现算的那个"""
+    from astral_toolkit.contracts.textkeys import blueprint_norm, blueprint_search_norm
+
+    craft = {
+        **_CRAFT_SOURCES["crafting.json"],
+        "blueprints": [{**_BP, "n": "Main Power-Plant_MK2", "z": "主发电机（B） 型"}],
+    }
+    snapshot = _built(monkeypatch, tmp_path, **{"crafting.json": craft})
+    with snapshot() as s:
+        rows = s.execute(
+            "select n, z, norm_n, norm_z, search_n, search_z from blueprints"
+        )
+    want = (
+        "mainpowerplantmk2",
+        "主发电机b型",
+        "mainpower-plant_mk2",
+        "主发电机（b）型",
+    )
+    assert [tuple(r) for r in rows] == [
+        ("Main Power-Plant_MK2", "主发电机（B） 型", *want)
+    ]
+    assert want == (
+        blueprint_norm("Main Power-Plant_MK2"),
+        blueprint_norm("主发电机（B） 型"),
+        blueprint_search_norm("Main Power-Plant_MK2"),
+        blueprint_search_norm("主发电机（B） 型"),
+    )
 
 
 def test_blueprints_slots_src_json_roundtrip(monkeypatch, tmp_path):
