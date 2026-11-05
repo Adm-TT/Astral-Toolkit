@@ -13,7 +13,7 @@ import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-from .names import canonical, has_chinese  # noqa: F401
+from .names import canonical, has_chinese, split_bilingual  # noqa: F401
 
 # 物品说明框识别区域配置：按鼠标横向位置自适应分级识别
 # 只管左右；上下由 HEIGHT_STAGES 的高度阶段决定（旧行为 = 每个宽度条带都取全高 0.0 ~ 1.0）
@@ -171,6 +171,19 @@ _NOT_ITEM = re.compile(
     re.I,
 )
 
+# 汉化包加在物品名下面的标签行（2026-11-06）：整行一对方括号、里面带中文，
+# 「[冷却 S1 民用 D]」「[S10 红外线IR 270m/s 总伤750,000]」「[缓解脑震荡]」；
+# 聊天频道前缀被单独认成一行（「[全局]」）不算（复核 2026-11-06）
+_TAG = re.compile(r"^\s*[\[【［][^\[\]【】［］]{1,40}[\]】］]\s*$")
+
+
+def _is_tag(text: str) -> bool:
+    return (
+        bool(_TAG.match(text or ""))
+        and has_chinese(text)
+        and not _NOT_ITEM.search(text)
+    )
+
 
 def _ink(img, box):
     """一行字有多亮：框里亮的像素（字）比一般像素（底）亮多少。两个说明框叠在一起时，
@@ -298,6 +311,50 @@ def tooltip_pick(tokens, cursor=None, img=None):
         if anchored:
             dist -= 10000
         pairs.append((dist, zh, en, anchored, tuple(e.box), anch_boxes))
+    # 汉化包新格式：中英一行 + 下一行标签（2026-11-06）
+    for z in toks:
+        if not has_chinese(z.text) or _is_tag(z.text):
+            continue
+        zh, en = split_bilingual(z.text)
+        if not en:
+            continue
+        h = max(z.box[3], 12)
+        tags = [
+            k
+            for k in toks
+            if _is_tag(k.text)
+            and 0.4 * h < k.box[1] - z.box[1] < 2.6 * h
+            and abs(k.box[0] - z.box[0]) < 2.5 * h
+        ]
+        if not tags:
+            continue
+        tag = min(tags, key=lambda k: k.box[1])
+        if (
+            _ANCHOR.match(zh.replace(" ", ""))
+            or _SENTENCE.search(zh)
+            or len(zh) > 30
+            or len(en) > 60
+            or _SENTENCE.search(en.rstrip("."))
+            or _STAT.search(zh)
+            or _STAT.search(en)
+            or _NOT_ITEM.search(zh)
+            or _NOT_ITEM.search(en)
+        ):
+            continue
+        th = max(tag.box[3], 12)
+        below = [
+            k
+            for k in toks
+            if 0.4 * th < k.box[1] - tag.box[1] < 2.6 * th
+            and abs(k.box[0] - tag.box[0]) < 2.5 * th
+        ]
+        anch_boxes = tuple(tuple(k.box) for k in below if _is_anchor(k.text))
+        anchored = bool(anch_boxes)
+        cx, cy = cursor if cursor else (z.box[0], z.box[1])
+        dist = ((z.box[0] - cx) ** 2 + (z.box[1] - cy) ** 2) ** 0.5
+        if anchored:
+            dist -= 10000
+        pairs.append((dist, zh, en, anchored, tuple(z.box), anch_boxes))
     anch = [p for p in pairs if p[3]]
     if (
         anch
@@ -374,6 +431,8 @@ def _anchor_name(toks, cursor=None, img=None):
         and not _is_anchor(k.text)
         and not re.search(r"[:：]", k.text)  # 「制造商：灰猫工业」不是名字
         and not re.search(r"[。！？，,；]\s*$", k.text)  # 「越。」：说明文字的最后一截
+        and not _is_tag(k.text)
+        and (has_chinese(k.text) or len(re.sub(r"[^A-Za-z0-9]", "", k.text)) >= 3)
     ]
     if not above:
         return None
