@@ -5,6 +5,7 @@
 
 import re
 
+from ..contracts.textkeys import fold_en_loose
 from . import shops
 
 
@@ -53,7 +54,7 @@ def text(name_en="", name_zh="", item_id=None, show_loot=True):
     if item_id is None and (name_en or name_zh):
         hits = shops.find(name_en or name_zh, limit=3)
         exact = (
-            [h for h in hits if shops._fold(h[1]) == shops._fold(name_en)]
+            [h for h in hits if fold_en_loose(h[1]) == fold_en_loose(name_en)]
             if name_en
             else hits[:1]
         )
@@ -138,7 +139,7 @@ def resolve(name_en="", name_zh="", item_id=None):
         return item_id
     if name_en:
         hits = shops.find(name_en, limit=3)
-        exact = [h for h in hits if shops._fold(h[1]) == shops._fold(name_en)]
+        exact = [h for h in hits if fold_en_loose(h[1]) == fold_en_loose(name_en)]
         if exact:
             return exact[0][0]
     if name_zh:

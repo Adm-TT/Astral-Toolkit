@@ -3,8 +3,6 @@
 from types import SimpleNamespace
 
 from astral_toolkit.catalog import search
-from astral_toolkit.contracts import textkeys
-from astral_toolkit.crafting import itemsearch
 
 
 def _item(en, item_id, zh, *, zlen=None, variant=False, loot=False, loc=False):
@@ -120,16 +118,3 @@ def test_lookup_uses_en_key():
     index = _index_for_find()
     assert search.lookup(index, " Z-SHORT ")["en"] == "Z Short"
     assert search.lookup(index, "none") is None
-
-
-def test_old_private_names_are_same_catalog_functions():
-    assert itemsearch._has_cjk is search.has_cjk
-    assert itemsearch._variant is search.variant
-    assert itemsearch._trigrams is search.trigrams
-    assert itemsearch._wiki_noise is search.wiki_noise
-    assert itemsearch._subseq is search.subseq
-    assert itemsearch._rank_zh is search.rank_zh
-    assert itemsearch._rank_en is search.rank_en
-    assert itemsearch._empty_index is search.empty_index
-    assert itemsearch.en_key is textkeys.en_key
-    assert itemsearch.zh_key is textkeys.zh_key

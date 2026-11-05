@@ -195,7 +195,11 @@ def test_names_topic_cached_per_version(monkeypatch, tmp_path):
 
 def _legacy_table(d):
     """迁移前 trade/names.table() + _known_names() 的函数体原样，只把读文件 / shops.load / loot.load_index 换成读 d 下的 JSON"""
-    from astral_toolkit.trade.names import _fold_en, _junk, _norm_zh
+    from astral_toolkit.contracts.textkeys import (
+        fold_en as _fold_en,
+        junk_en as _junk,
+        norm_zh as _norm_zh,
+    )
 
     try:
         raw = _read(d, "zh_names.json")

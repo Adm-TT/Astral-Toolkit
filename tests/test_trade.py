@@ -207,8 +207,8 @@ def test_whitespace_same_location_move_cannot_create_stock(inv):
 def test_short_names_not_in_name_table():
     """汉化包里物品的「简称」（视差步枪HD、刀轴Arbor S00、导弹 [红外]灾星 XII-IR）后面跟的是型号 / 尺寸代码，不是英文名：
     重建对照表时跳过，已有的对照表读进来时也筛掉（以前「视差步枪」→ HD，物品查询搜不到视差步枪，1.6.41）"""
+    from astral_toolkit.contracts import textkeys
     from astral_toolkit.update import localization as L
-    from astral_toolkit.trade import names
 
     ini = {
         "item_Namevolt_rifle_energy_01": "视差 能量突击步枪\\nParallax Energy Assault Rifle",
@@ -221,14 +221,14 @@ def test_short_names_not_in_name_table():
         "视差 能量突击步枪": "Parallax Energy Assault Rifle",
         "锡": "Tin",
     }
-    known = {names._fold_en("Tin")}
+    known = {textkeys.fold_en("Tin")}
     assert (
-        names._junk("HD", known)
-        and names._junk("S1", known)
-        and names._junk("XII-IR", known)
+        textkeys.junk_en("HD", known)
+        and textkeys.junk_en("S1", known)
+        and textkeys.junk_en("XII-IR", known)
     )
-    assert names._junk("Arbor S00", known) and names._junk("1 SCU", known)
-    assert not names._junk("Tin", known) and not names._junk(
+    assert textkeys.junk_en("Arbor S00", known) and textkeys.junk_en("1 SCU", known)
+    assert not textkeys.junk_en("Tin", known) and not textkeys.junk_en(
         "Guardian Undersuit", known
     )
 

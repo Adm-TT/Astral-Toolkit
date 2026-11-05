@@ -3235,6 +3235,7 @@ def test_item_search_finds_everything():
     视差步枪 → 视差 能量突击步枪（基础款在前，2026-10-23 用户报搜不到）；汉化包简称带出来的假英文名（视差步枪 → HD）不再有；
     商店和掉落数据里都没有的也搜得到，点开写明「商店和掉落数据里都没有」，能造的带上蓝图"""
     from astral_toolkit.app.api import trade as t_api
+    from astral_toolkit.contracts.textkeys import en_key
     from astral_toolkit.crafting import itemsearch as I
     from astral_toolkit import crafting
     from astral_toolkit.trade import names
@@ -3246,13 +3247,13 @@ def test_item_search_finds_everything():
     miss_en = [
         e["en"]
         for e in rows
-        if not any(I.en_key(x["en"]) == e["ek"] for x in I.find(e["en"], 30))
+        if not any(en_key(x["en"]) == e["ek"] for x in I.find(e["en"], 30))
     ]
     miss_zh = [
         (k, e["en"])
         for e in rows
         for k in e["zks"]
-        if not any(I.en_key(x["en"]) == e["ek"] for x in I.find(k, 30))
+        if not any(en_key(x["en"]) == e["ek"] for x in I.find(k, 30))
     ]
     assert not miss_en and not miss_zh, (
         len(miss_en),
@@ -3277,18 +3278,16 @@ def test_item_search_finds_everything():
         assert t_trade.item_search("Steel")[0]["name"] == "Steel"
     # 完全一样的排第一（同一个中文名有两三件东西的，排在最前面那几个里）
     for e in rows[:: max(1, len(rows) // 300)]:
-        assert I.en_key(I.find(e["en"], 1)[0]["en"]) == e["ek"], e["en"]
+        assert en_key(I.find(e["en"], 1)[0]["en"]) == e["ek"], e["en"]
         if e["zh"]:
-            assert e["ek"] in [I.en_key(x["en"]) for x in I.find(e["zh"], 3)], e["zh"]
+            assert e["ek"] in [en_key(x["en"]) for x in I.find(e["zh"], 3)], e["zh"]
     # 商店和掉落数据里都没有的（任务奖励、活动、涂装……）：搜得到，点开写明
     loc = [
         e for e in rows if not e["has_data"] and e["loc"]
     ]  # 1.6.48 起另有只在 wiki 清单里的（没有中文名）
     assert loc and all(e["zh"] for e in loc)
     e = loc[len(loc) // 2]
-    hit = next(
-        x for x in t_trade.item_search(e["zh"]) if I.en_key(x["name"]) == e["ek"]
-    )
+    hit = next(x for x in t_trade.item_search(e["zh"]) if en_key(x["name"]) == e["ek"])
     assert hit["src"] == "loc" and hit["id"] is None
     d = t_api.item_info(name=hit["name"], zh=hit["zh"], exact=True)
     assert (

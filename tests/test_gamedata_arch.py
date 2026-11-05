@@ -73,14 +73,19 @@ def test_reused_rules_are_pure(monkeypatch):
         for n in names:
             monkeypatch.setattr(mod, n, boom)
 
+    from astral_toolkit.contracts.textkeys import (
+        en_key,
+        fold_en as _fold_en,
+        junk_en as _junk,
+        norm_zh as _norm_zh,
+        zh_key,
+    )
     from astral_toolkit.crafting.crafting import _fold_name, _search_norm, assign_keys
-    from astral_toolkit.crafting.itemsearch import en_key, zh_key
     from astral_toolkit.crafting.loot import _fold as loot_fold
     from astral_toolkit.crafting.wikelo import _fold as wikelo_fold
     from astral_toolkit.navigation.names import _norm
     from astral_toolkit.navigation.starmap import fix_points
     from astral_toolkit.navigation.transit import _city_rows
-    from astral_toolkit.trade.names import _fold_en, _junk, _norm_zh
 
     bps = [{"n": "X"}, {"n": "X"}, {"n": "Y"}]
     keys, index, total = assign_keys(bps)

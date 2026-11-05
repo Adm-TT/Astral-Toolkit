@@ -16,7 +16,7 @@ import threading
 # 别的任务在函数里 import（任务之间互相引用，顶层 import 会循环），取模块属性，测试换掉的名字能打中。
 from ..app.hud_state import _item_hud
 
-# IQ 过渡：下面 item_search 旧壳排版用（库存联想、全局搜索还在调），删壳时一起删
+# item_search 旧壳：库存联想（库存冻结）和上面的全局搜索在用，新库存做完再删
 from ..app.presenters import catalog as _present_catalog
 from . import catalog as _catalog
 
@@ -104,7 +104,7 @@ def search(q=""):
 
 
 def item_search(q=""):
-    """旧壳（IQ-B5）：库存联想（tasks/stock）、上面的全局搜索还在调。窗口物品查询页走 app/api/trade → tasks/catalog + app/presenters/catalog"""
+    """item_search 旧壳：库存联想（库存冻结）和上面的全局搜索在用，新库存做完再删。窗口物品查询页走 app/api/trade → tasks/catalog + app/presenters/catalog"""
     return _present_catalog.present_search_results(_catalog.search_items(q))
 
 

@@ -11,12 +11,9 @@ import urllib.request
 from pathlib import Path
 
 from ..catalog.loot import (
-    PLACED as _PLACED,
-    VARIANT,
     exact_candidates,
     group_info,
     mine_groups,
-    partial,
     partial_hits,
     pick_exact,
     ship_groups,
@@ -107,11 +104,6 @@ def _index_meta(snap=None):
         return None
 
 
-# 同名的「变体」：NPC 专用、不显示的、测试 / 枪械游戏模式、低模、模板……玩家拿不到，掉落不算它的（2026-10-24 全量核对：
-# 「Citadel 胸甲」对到了 _ai_exclusive、「FSK-8 战斗刀」对到了 _gungame）
-_VARIANT = VARIANT
-
-
 def _wiki_classes(name_en):
     """物品查询（wiki）里这个英文名对应的全部游戏类名（含 alt）；没有返回空集。在 find 里调时用 find 钉住的快照"""
     try:
@@ -120,9 +112,6 @@ def _wiki_classes(name_en):
         return set(gd_loot.wiki_classes(_fold(name_en)))
     except Exception:
         return set()
-
-
-_partial = partial
 
 
 def find(name_en="", name_zh=""):
@@ -309,9 +298,6 @@ def detail(uuid, online=True):
 
     write_json(f, d)  # 先写临时文件再换名，不留半个文件
     return d
-
-
-PLACED = _PLACED
 
 
 # 副本专属矿：不会从箱子里开出来，只能在副本里开采（用户 2026-10-24 告知；掉落站把手采物品挂在挖矿宝石掉落表上，

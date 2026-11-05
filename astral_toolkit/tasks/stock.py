@@ -529,7 +529,8 @@ def stock_add_named(
 def stock_suggest(q=""):
     """手动入库的名字联想：矿物、交易库里的物品、汉化包里的物品名，中文 / 英文 / 名字的一部分 / 错一两个字都行。
     返回 [{zh, en, kind: 矿物 / 物品, unit}]，最多 12 个"""
-    from ..trade.names import suggest, _fold_en
+    from ..contracts.textkeys import fold_en as _fold_en
+    from ..trade.names import suggest
 
     q = (q or "").strip()
     if not q:

@@ -38,8 +38,9 @@ from .inspector import (
 )
 from .inventory import Inventory
 from .market_service import MarketService
+from ..contracts.textkeys import fold_en as _fold_en
 from .models import ImportRow, Item, StockKey, StockLine
-from .names import has_chinese, to_english, _fold_en
+from .names import has_chinese, to_english
 from .parser import parse_inventory
 from .providers.scm import ScmProvider
 from .providers.uex import UexProvider
@@ -48,7 +49,7 @@ from .storage import Database
 
 def _fold(text):
     """比较名字用：忽略大小写、空格、符号；OCR 常把 II 认成 ll，统一成 i。
-    names._fold_en 不动（那边查表要分清 l 和 i），只在这里比较 OCR 认出的名字时放宽"""
+    contracts.textkeys.fold_en 不动（那边查表要分清 l 和 i），只在这里比较 OCR 认出的名字时放宽"""
     return _fold_en(text).replace("l", "i")
 
 

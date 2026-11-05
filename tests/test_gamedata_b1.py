@@ -177,7 +177,7 @@ def test_items_candidates_aliases_and_cache(monkeypatch, tmp_path):
 
 
 def test_items_names_and_zh_keys(monkeypatch, tmp_path):
-    from astral_toolkit.crafting.itemsearch import zh_key
+    from astral_toolkit.contracts.textkeys import zh_key
     from astral_toolkit.gamedata import items
 
     _setup(monkeypatch, tmp_path)
@@ -650,15 +650,14 @@ def _legacy_build(monkeypatch, tmp_path):
     """迁移前 itemsearch._build_locked() 的合并规则（只在测试里留一份，对照用）：直接读最小源 JSON"""
     import json
 
-    from astral_toolkit.core.i18n import gear_zh_of_item
-    from astral_toolkit.crafting.itemsearch import (
-        _has_cjk,
-        _trigrams,
-        _variant,
-        _wiki_noise,
-        en_key,
-        zh_key,
+    from astral_toolkit.catalog.search import (
+        has_cjk as _has_cjk,
+        trigrams as _trigrams,
+        variant as _variant,
+        wiki_noise as _wiki_noise,
     )
+    from astral_toolkit.contracts.textkeys import en_key, zh_key
+    from astral_toolkit.core.i18n import gear_zh_of_item
     from astral_toolkit.gamedata._import import _names_table
     from astral_toolkit.gamedata._sources import read_sources
 
