@@ -817,13 +817,16 @@ def _tooltip_body_tokens(img, cursor, where):
     return recognize(crop, urgent=True, offset=box[:2]) or None
 
 
-def _is_mineral(zh, en):
+def _is_mineral(zh, en, fuzzy=True):
+    """矿（按 SCU 算量、品质看说明框那一行）：英文名在采矿信号表里，或中文名是船挖矿名。
+    fuzzy=False：名字已经在汉化包里精确对上了（inspect_item 的 canon），矿名也只认精确的、不模糊兜底——
+    「刚毅」（发电机）被配成「刚玉」、「冰块」（冷却器）配成「冰」都是模糊配的（2026-11-06 老大验收 F8）"""
     try:
         from ..mining.data import SIGNATURES
         from ..core.i18n import mineral_en
 
         return (en or "").strip().lower() in {k.lower() for k in SIGNATURES} or bool(
-            zh and mineral_en(zh)
+            zh and mineral_en(zh, fuzzy=fuzzy)
         )
     except Exception:
         return False
@@ -873,7 +876,7 @@ def inspect_item(
         if canon:
             zh, en = canon
 
-        mineral = _is_mineral(zh, en)
+        mineral = _is_mineral(zh, en, fuzzy=not canon)  # 汉化包对上了就不模糊配矿名
         row_q, row_amt = tooltip_row(tokens)
         q_from_row_label = False
         if row_q is None:

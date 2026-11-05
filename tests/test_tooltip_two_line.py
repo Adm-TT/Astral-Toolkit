@@ -132,3 +132,57 @@ def test_two_line_path_keeps_name_filters():
         OcrToken("体积：84000uSCU", 95, (100, 148, 120, 20)),
     ]
     assert I.tooltip_pick(toks, (300, 300)) == (None, False)
+
+
+class _Img:
+    size = (2560, 1440)
+    width, height = size
+
+    def crop(self, box):
+        return _Img()
+
+
+def _fake_minerals(monkeypatch):
+    """采矿信号表只有刚玉；中文矿名只在模糊时把「刚毅」配成刚玉（照 11-06 老大那次的真结果造的替身）。"""
+    from astral_toolkit.core import i18n
+    from astral_toolkit.mining import data as mining_data
+
+    monkeypatch.setattr(mining_data, "SIGNATURES", {"Corundum": None})
+    monkeypatch.setattr(
+        i18n,
+        "mineral_en",
+        lambda zh, fuzzy=True, ship_only=True, prefer=None: (
+            "Corundum" if zh == "刚玉" or fuzzy else None
+        ),
+    )
+
+
+def test_is_mineral_exact_when_asked(monkeypatch):
+    """fuzzy=False 时中文矿名只认精确的：「刚毅」不是矿，「刚玉」还是。"""
+    _fake_minerals(monkeypatch)
+    assert I._is_mineral("刚毅", "Fortitude") is True  # 默认照旧模糊（没把握的名字用）
+    assert I._is_mineral("刚毅", "Fortitude", fuzzy=False) is False
+    assert I._is_mineral("刚玉", "", fuzzy=False) is True
+    assert I._is_mineral("", "Corundum", fuzzy=False) is True
+
+
+def test_inspect_item_matched_name_is_not_fuzzy_mineral(monkeypatch):
+    """F8 / F6：名字在汉化包里对上了（刚毅 = 发电机）不当矿，品质 0、按个算；没对上的照旧模糊（11-06 老大验收）。"""
+    from astral_toolkit.trade import names
+
+    _fake_minerals(monkeypatch)
+    toks = [OcrToken("刚毅Fortitude", 95, (1370, 371, 96, 18))]
+    monkeypatch.setattr(
+        I,
+        "_read_tooltip",
+        lambda img, cur: (toks, ("刚毅", "Fortitude"), "50-70%@title"),
+    )
+    monkeypatch.setattr(I, "cell_labels", lambda *a, **k: (None, 1))
+    monkeypatch.setattr(names, "canonical", lambda zh, en: ("刚毅", "Fortitude"))
+    res = I.inspect_item(_Img(), (2395, 945))
+    assert res is not None
+    assert (res["quality"], res["qty"], res["unit"]) == (0, 1, "个")
+    monkeypatch.setattr(names, "canonical", lambda zh, en: None)
+    res = I.inspect_item(_Img(), (2395, 945))
+    assert res is not None
+    assert (res["quality"], res["unit"]) == (None, "SCU")
