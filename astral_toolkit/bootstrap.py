@@ -202,9 +202,12 @@ def _nav_links(view: Any) -> NavLinks:
 
 def _hover_links() -> HoverLinks:
     """F8 要用的物品查询（IQ-B6）：物品卡片和窗口物品查询页同一份（tasks/catalog 用例 + app/presenters/catalog 排版）；
-    掉落、玩家市场经 tasks/catalog（Trade 只在那里的市场会话里用，第一次用才造，和以前一样）"""
+    掉落、玩家市场经 tasks/catalog（Trade 只在那里的市场会话里用，第一次用才造，和以前一样）；
+    「可通过维科洛兑换获得」「可制造：有蓝图」经 tasks/wikelo、tasks/crafting，CR-B5"""
     from .app.presenters import catalog as present_catalog
     from .tasks import catalog as catalog_tasks
+    from .tasks import crafting as crafting_tasks
+    from .tasks import wikelo as wikelo_tasks
     from .tasks.hover import HoverLinks
 
     def item_card(name="", zh="", id=None, loot=True, exact=False):
@@ -218,6 +221,8 @@ def _hover_links() -> HoverLinks:
         market=catalog_tasks.open_market,
         market_rows=catalog_tasks.market_rows,
         hud_market=catalog_tasks.market_hud_text,
+        wikelo_rewards=wikelo_tasks.rewards_for,
+        has_blueprint=crafting_tasks.has_blueprint,
     )
 
 

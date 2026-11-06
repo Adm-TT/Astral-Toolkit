@@ -89,7 +89,9 @@ def craft_slots(key):
     bp = head_blueprint(key)
     if not bp:
         return ()
-    from ..crafting.crafting import group_mods, slot_zh, material_zh
+    from ..crafting.crafting import material_zh
+    from ..crafting.labels import slot_zh
+    from ..crafting.quality import group_mods
 
     out = []
     for slot, opts, mods in bp["slots"]:
@@ -129,7 +131,7 @@ def craft_mult(key, craft):
     数据里没有合并规则，按游戏制造终端、SCM、Crafter 三处一致的「各槽百分比相加」"""
     if not craft:
         return 1.0
-    from ..crafting.crafting import curve_value
+    from ..crafting.quality import curve_value
 
     out = 1.0
     for s in craft_slots(key):

@@ -34,6 +34,23 @@ def _bp(n, z, g, t, s, u, m, sec, d, slots, src=None, nsrc=0):
     }
 
 
+def test_listing_named_matches_en_and_zh():
+    """F8「可制造：有蓝图」：英文名、中文名都能对上，按源顺序；None / 空名字不算，z 是 None 也不出错"""
+    bps = [
+        _bp("Other", None, "g", "t", "", "", "", 0, False, []),
+        _bp("Medical Pen", "医疗笔", "g", "t", "", "", "", 0, False, []),
+        _bp("Lima", "利马", "g", "t", "", "", "", 0, False, []),
+    ]
+    assert listing.named(bps, ("医疗笔",)) == [bps[1]]
+    assert listing.named(bps, ("medicalpen",)) == [bps[1]]
+    assert listing.named(bps, ("Test Widget", "利马")) == [bps[2]]
+    assert listing.named(bps, ("Lima", "Other")) == [bps[0], bps[2]]
+    assert listing.named(bps, ("  ", "")) == []
+    assert listing.named(bps, (None,)) == []
+    assert listing.named(bps, ("不存在",)) == []
+    assert listing.named([], ("医疗笔",)) == []
+
+
 STATS_BP = _bp(
     "Test Widget",
     "测试部件",

@@ -77,6 +77,18 @@ def _same(a, b):
     )
 
 
+def rewarding(contracts, name, zh):
+    """能换到这件东西的兑换：奖励名 rz 或奖励列表里有一个和英文名 / 中文名对得上（_same；中文名空就只比英文名），按原顺序"""
+    return [
+        c
+        for c in contracts
+        if any(
+            _same(x, name) or (zh and _same(x, zh))
+            for x in [c.get("rz", ""), *c.get("rewards", [])]
+        )
+    ]
+
+
 def uses(name_en, name_zh, pairs, load, is_full):
     """这样东西（英文名/中文名）在哪些兑换里要用：[(兑换, 需要的数量, 单位)]"""
     fe, fz = _fold(name_en), _fold(name_zh)

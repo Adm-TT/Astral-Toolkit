@@ -41,6 +41,26 @@ _RCMBNT_NOTE = (
 )
 
 
+def test_rewarding_matches_rz_rewards_and_zh():
+    """F8「可通过维科洛兑换获得」：奖励 rz / rewards 对英文名、中文名都对得上，按原顺序"""
+    a = dict(_PLAIN, id="a")
+    b = dict(_RECOMB, id="b")
+    c = dict(_ORE, id="c")
+    rows = [a, b, c]
+    assert wikelo_rules.rewarding(rows, "极地涂装 巡逻车", "") == [a]
+    assert wikelo_rules.rewarding(rows, "Recombination Reward", "") == []
+    assert wikelo_rules.rewarding(rows, "xx", "重组奖励") == [b]
+    assert wikelo_rules.rewarding(rows, "Jaclium Reward", "杰金奖励") == [c]
+    assert wikelo_rules.rewarding(rows, "xx", "") == []
+
+
+def test_rewarding_uses_same_containment_rule():
+    """rewarding 用 _same 的规则：不足 4 个字的包含不算、够 4 个字的包含算"""
+    c = {"t": "甲", "rz": "ABCDEF", "rewards": []}
+    assert wikelo_rules.rewarding([c], "ABC", "") == []
+    assert wikelo_rules.rewarding([c], "ABCD", "") == [c]
+
+
 def test_wikelo_rules_are_pure(monkeypatch):
     """外部取数入口全换成抛错，纯规则照常算。"""
 

@@ -7,7 +7,6 @@
 """
 
 import itertools
-import re
 import sys
 import threading
 import time
@@ -37,13 +36,17 @@ class HoverLinks:
     item_card(name, zh, id=None, loot=True, exact=False)：物品卡片字典，和窗口物品查询页同一份；
     loot(name, zh)：掉落 → LootLookup（loot / error）；
     market()：开一个玩家市场会话（match / remember_alias / label），Trade 第一次用才造；
-    market_rows(item_id, tier)：报价表 (prices, results)；hud_market(results)：悬浮窗「市场」那一行"""
+    market_rows(item_id, tier)：报价表 (prices, results)；hud_market(results)：悬浮窗「市场」那一行；
+    wikelo_rewards(name, zh)：能换到这件东西的维科洛兑换（tasks/wikelo.rewards_for）；
+    has_blueprint(*names)：有没有做这件东西的蓝图（tasks/crafting.has_blueprint）"""
 
     item_card: Callable[..., dict]
     loot: Callable[[str, str], Any]
     market: Callable[[], Any]
     market_rows: Callable[[Any, str], Any]
     hud_market: Callable[[Any], str]
+    wikelo_rewards: Callable[[str, str], list]
+    has_blueprint: Callable[..., bool]
 
 
 _links: HoverLinks | None = None
@@ -137,17 +140,8 @@ def _hover_lines(info, en, zh):
     if info.get("how"):
         lines.append(f"获取：{info['how']}")
     try:
-        from ..crafting import wikelo
-
         name = info.get("name") or en
-        got = [
-            c
-            for c in wikelo.load()
-            if any(
-                wikelo._same(x, name) or (zh and wikelo._same(x, zh))
-                for x in [c.get("rz", ""), *c.get("rewards", [])]
-            )
-        ]
+        got = _need_links().wikelo_rewards(name, zh)
         if got:
             lines.append(
                 f"可通过维科洛兑换获得：{got[0]['t']}"
@@ -163,16 +157,7 @@ def _hover_lines(info, en, zh):
     except Exception:
         pass
     try:
-        from ..crafting import crafting
-
-        fold = lambda x: re.sub(r"[^a-z0-9一-鿿]", "", (x or "").lower())  # noqa: E731
-        want = {fold(info.get("name")), fold(en), fold(zh)} - {""}
-        bps = [
-            b
-            for b in crafting.blueprints()
-            if fold(b["n"]) in want or fold(b["z"]) in want
-        ]
-        if bps:
+        if _need_links().has_blueprint(info.get("name"), en, zh):
             lines.append("可制造：有蓝图（材料见物品查询）")
     except Exception:
         pass
@@ -356,7 +341,7 @@ def hover_once(img=None):
             else "｜识别结果不确定"
         )
     try:
-        from ..crafting.crafting import craft_text
+        from ..crafting.reverse import craft_text
     except Exception:
         craft_text = lambda c: ""  # noqa: E731
     lines = (

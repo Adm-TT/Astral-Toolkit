@@ -2,6 +2,7 @@
 接口在 app/api/wikelo.py；tasks/goals.py 的 wikelo_* 是旧壳（全局搜索、目标页、测试还在调）。不 import app / runtime / bootstrap。"""
 
 from ..crafting import wikelo
+from ..crafting.wikelo_rules import note_for, rewarding
 from ..trade.console import material_source
 
 _wk_cache = {}
@@ -34,7 +35,7 @@ def exchange_detail(key=""):
         return None
     groups = []
     for r in c["req"]:
-        k = (r["z"], r["q"], r["u"]) if wikelo.note_for(r["n"]) else (r["n"],)
+        k = (r["z"], r["q"], r["u"]) if note_for(r["n"]) else (r["n"],)
         if groups and groups[-1][0] == k:
             groups[-1][1].append(r)
         else:
@@ -47,3 +48,8 @@ def exchange_detail(key=""):
             tip = ""
         out.append((rs, tip))
     return {"c": c, "groups": out}
+
+
+def rewards_for(name, zh):
+    """能换到这件东西的维科洛兑换（F8「可通过维科洛兑换获得」），按兑换原来的顺序"""
+    return rewarding(wikelo.load(), name, zh)

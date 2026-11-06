@@ -25,6 +25,11 @@ def fold_mixed_loose(s):
     return re.sub(r"[^a-z0-9一-鿿]", "", (s or "").lower().replace("l", "i"))
 
 
+def fold_mixed(s):
+    """名字比较键：小写、只留 a-z0-9 和汉字（l 不当 i）；F8「可制造：有蓝图」比蓝图名用"""
+    return re.sub(r"[^a-z0-9一-鿿]", "", (s or "").lower())
+
+
 def zh_key(s):
     """中文名比较键：全角转半角（NFKC）、小写、去掉非字母数字和标点；catalog.search、gamedata 物品索引在用。"""
     return re.sub(r"[\W_]+", "", unicodedata.normalize("NFKC", s or "").lower())

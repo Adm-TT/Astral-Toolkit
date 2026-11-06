@@ -11,9 +11,11 @@ from typing import Any
 
 from astral_toolkit import bootstrap
 from astral_toolkit.core import run_records
-from astral_toolkit.crafting import crafting as crafting_mod
 from astral_toolkit.crafting import loot as loot_mod
+from astral_toolkit.crafting import reverse as reverse_mod
 from astral_toolkit.crafting import wikelo as wikelo_mod
+from astral_toolkit.crafting import wikelo_rules
+from astral_toolkit.tasks import crafting as crafting_tasks
 from astral_toolkit.tasks import hover as Hv
 from astral_toolkit.tasks import trade as T
 from astral_toolkit.system import train_data
@@ -234,9 +236,9 @@ def _install(
     monkeypatch.setattr(C, "hud_market", fake_hud_market)
     monkeypatch.setattr(train_data, "from_tooltip", from_tooltip)
     monkeypatch.setattr(wikelo_mod, "load", wikelo_load or (lambda: []))
-    monkeypatch.setattr(wikelo_mod, "_same", wikelo_same or (lambda a, b: a == b))
-    monkeypatch.setattr(crafting_mod, "blueprints", blueprints or (lambda: []))
-    monkeypatch.setattr(crafting_mod, "craft_text", craft_text or (lambda slots: ""))
+    monkeypatch.setattr(wikelo_rules, "_same", wikelo_same or (lambda a, b: a == b))
+    monkeypatch.setattr(crafting_tasks, "blueprints", blueprints or (lambda: []))
+    monkeypatch.setattr(reverse_mod, "craft_text", craft_text or (lambda slots: ""))
     monkeypatch.setattr(loot_mod, "info", fake_loot)
 
     return SimpleNamespace(

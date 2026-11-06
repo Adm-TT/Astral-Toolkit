@@ -364,15 +364,15 @@ def mineral_info(name=""):
     )
     uses = ""
     try:
-        from ..crafting.crafting import uses_report
+        from . import crafting as _crafting_uc
 
-        uses = uses_report(name)
+        uses = _crafting_uc.mineral_uses_text(name)
     except Exception:
         pass
     try:
-        from ..crafting.crafting import mat_summary
+        from . import crafting as _crafting_uc
 
-        craft_count = mat_summary(name)["count"]
+        craft_count = _crafting_uc.material_summary(name)["count"]
     except Exception:
         craft_count = 0
     from ..mining.gems import GEMS

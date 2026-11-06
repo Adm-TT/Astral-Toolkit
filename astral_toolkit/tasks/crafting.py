@@ -2,6 +2,7 @@
 接口在 app/api/crafting.py；tasks/goals.py 的 craft_* / _craft_struct 是旧壳（全局搜索、目标页、测试还在调）。不 import app / runtime / bootstrap。"""
 
 from ..crafting.crafting import (
+    blueprints,
     bp_key,
     browse,
     by_key,
@@ -9,16 +10,19 @@ from ..crafting.crafting import (
     display_name,
     effect,
     header,
-    laser_total,
     mat_summary,
     material_zh,
-    mix_plan,
     mix_targets,
     name_parts,
+    quality_hints,
     search as _craft_search,
     stats,
+    uses_report,
     variant_note,
 )
+from ..crafting.listing import named
+from ..crafting.mix import mix_plan
+from ..crafting.quality import laser_total
 from ..mining.data import best_price
 from ..mining.locations import where, zh_name
 
@@ -156,3 +160,23 @@ def craft_mix(need=0, target=0, margin=2, boxes=()):
     except (TypeError, ValueError):
         return {"ok": False, "msg": "品质和数量需为数字"}
     return mix_plan(float(need or 0), float(target or 0), rows, float(margin or 0))
+
+
+def scan_hints(composition):
+    """采矿助手的制造提示：[(矿物, 百分比, 品质)] → 每种矿的品质对制造意味着什么（tasks/mining 用）"""
+    return quality_hints(composition)
+
+
+def material_summary(mineral, q=None):
+    """多少份蓝图用到这种矿；给了品质再算其中多少份品质够（tasks/mining、物品查询矿物页用）"""
+    return mat_summary(mineral, q)
+
+
+def mineral_uses_text(mineral):
+    """物品查询矿物页的「制造用途」那段字"""
+    return uses_report(mineral)
+
+
+def has_blueprint(*names):
+    """F8「可制造：有蓝图」：有没有英文名或中文名（contracts.textkeys.fold_mixed 比）和这几个名字之一一样的蓝图"""
+    return bool(named(blueprints(), names))

@@ -1,5 +1,7 @@
 """名字比较键（contracts/textkeys）：几组固定输入的结果锁死；改任何一条都要升 gamedata/_schema.IMPORTER_VERSION"""
 
+import re
+
 from astral_toolkit.contracts import textkeys
 
 _TABLE = (
@@ -202,3 +204,35 @@ def test_blueprint_rules_table():
         label = repr(value)
         assert textkeys.blueprint_norm(value) == norm, label
         assert textkeys.blueprint_search_norm(value) == search, label
+
+
+def test_fold_mixed_examples():
+    """F8「可制造：有蓝图」的名字键：和 fold_mixed_loose 一样，只是 l 不当 i"""
+    assert textkeys.fold_mixed("Lima") == "lima"
+    assert textkeys.fold_mixed("医疗笔 MedPen-2") == "医疗笔medpen2"
+    assert textkeys.fold_mixed(None) == ""
+    assert textkeys.fold_mixed("") == ""
+
+
+def test_fold_mixed_same_as_old_hover_lambda():
+    """和 tasks/hover.py 原来那个 fold 逐字搬来的 lambda 在各类名字上结果一样"""
+
+    def fold(x):
+        return re.sub(r"[^a-z0-9一-鿿]", "", (x or "").lower())
+
+    for value in (
+        None,
+        "",
+        "Lima",
+        "Medical Pen-2",
+        "医疗笔 MedPen-2",
+        "劳森 Lawson",
+        "Ｌａｗｓｏｎ",
+        "Citadel-SE",
+        "Ｈｏｖｅｒ－３",
+        "Ａｒｅａ１８",
+        " 中 文　",
+        "l I 1 |",
+        "ホバー Hover-3",
+    ):
+        assert textkeys.fold_mixed(value) == fold(value), repr(value)

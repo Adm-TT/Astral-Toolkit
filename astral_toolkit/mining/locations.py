@@ -216,7 +216,8 @@ def report(mineral: str, top: int = 8) -> str:
     best = [f"{station_zh(st)} {b:+.0f}%" for b, st, _ in bonus[:3] if b > 0]
     lines.append("精炼加成最高：" + "，".join(best) if best else "无可用精炼加成")
     try:
-        from ..crafting.crafting import uses, GEAR_ZH
+        from ..crafting.crafting import uses
+        from ..crafting.labels import GEAR_ZH
         from collections import Counter
 
         kinds = Counter(
