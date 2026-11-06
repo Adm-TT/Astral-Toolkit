@@ -808,3 +808,153 @@ def test_load_index_still_available_for_batch6(monkeypatch, tmp_path):
     monkeypatch.setattr(loot_index, "INDEX", tmp_path / "loot_index.json")
     monkeypatch.setattr(loot_index, "_index", None)
     assert loot_index.load_index(False) == _MIN_SOURCES["loot_index.json"]
+
+
+# ---------------------------------------------------------------- 目录迁移 Q3a 补测：改坏检查第一次没抓到的（老代码也没人测）
+
+
+def test_detail_rejects_bad_uuid_before_touching_files(monkeypatch, tmp_path):
+    """编号要拼进缓存路径和网址：不是字母数字、横线的（..\\ 之类、空的、太长的、不是字符串的）先拒，
+    不碰整包、不建缓存目录、不联网"""
+    from astral_toolkit.tasks.catalog_queries import loot
+    from tests.minipytest import raises
+
+    _setup(monkeypatch, tmp_path)
+    rec = _detail_env(monkeypatch, tmp_path)
+    for bad in ("../x", "a/b", "a\\b", "x.json", "", "x" * 65, 7, None):
+        with raises(ValueError):
+            loot.detail(bad, online=True)
+    assert rec == {"zip": [], "get": []}
+    assert not (tmp_path / "loot").exists()
+
+
+def test_detail_backs_off_ten_minutes_after_failure(monkeypatch, tmp_path):
+    """同一件联网失败后 10 分钟内不再试，直接报网络不通（断网时别每次都等超时）；别的物品照常试；过了 10 分钟再试"""
+    from astral_toolkit.infrastructure.providers import loot_site
+    from astral_toolkit.tasks.catalog_queries import loot
+
+    _setup(monkeypatch, tmp_path)
+    _detail_env(monkeypatch, tmp_path)
+    calls = []
+
+    def down(url, timeout=60):
+        calls.append(url)
+        raise OSError("断网")
+
+    def err(u):
+        try:
+            loot.detail(u, online=True)
+        except OSError as e:
+            return str(e)
+        raise AssertionError("断网却没报错")
+
+    monkeypatch.setattr(loot_site, "get_json", down)
+    assert err("u1") == "断网" and len(calls) == 1
+    assert err("u1") == "网络不通，稍后再试" and len(calls) == 1  # 10 分钟内：不再联网
+    assert err("u2") == "断网" and len(calls) == 2  # 别的物品照常试
+    loot._failed["u1"] -= 601  # 过了 10 分钟
+    assert err("u1") == "断网" and len(calls) == 3
+
+
+def test_detail_drops_half_written_cache_file(monkeypatch, tmp_path):
+    """单件缓存是半个文件（旧版直接写、写到一半被结束）：删掉当没有——离线照样挂起，联网现取再写好"""
+    from astral_toolkit.tasks.catalog_queries import loot
+
+    _setup(monkeypatch, tmp_path)
+    rec = _detail_env(monkeypatch, tmp_path)
+    f = tmp_path / "loot" / "4.10.2LIVE_u1.json"
+    f.parent.mkdir(parents=True)
+    f.write_text('{"half": ', encoding="utf-8")
+    try:
+        loot.detail("u1", online=False)
+    except loot.Pending:
+        pass
+    else:
+        raise AssertionError("半个缓存文件不该当成有")
+    assert not f.exists()  # 坏文件删了，不会一直卡在它上面
+    assert loot.detail("u1", online=True) == {"url": rec["get"][-1]} and f.exists()
+
+
+def test_close_bundle_closes_the_open_bundle(monkeypatch, tmp_path):
+    """换整包前关掉正在读的那个（Windows 上打开着的文件不能替换）：真的关上，下次读再重新打开"""
+    from astral_toolkit.infrastructure.persistence import loot_details
+
+    z = _details_zip(tmp_path / "loot_details.zip", "4.10.2LIVE", {"u1": {"a": 1}})
+    monkeypatch.setattr(loot_details, "DETAILS", z)
+    monkeypatch.setattr(
+        loot_details, "_zip", {"z": None, "mtime": None, "version": None}
+    )
+    assert loot_details.from_zip("u1", "4.10.2LIVE") == {"a": 1}
+    opened = loot_details._zip["z"]
+    assert opened is not None and opened.fp is not None
+    loot_details.close_bundle()
+    assert opened.fp is None
+    assert loot_details._zip == {"z": None, "mtime": None, "version": None}
+    assert loot_details.from_zip("u1", "4.10.2LIVE") == {"a": 1}  # 重新打开
+    loot_details.close_bundle()
+
+
+def test_loot_update_version_order(monkeypatch, tmp_path):
+    """更新掉落索引取版本的先后：站点最新 → 本机索引里的 → 4.10.2LIVE；清单里没写版本就用取到的这个"""
+    import json
+
+    from astral_toolkit.infrastructure.providers import loot_site
+    from astral_toolkit.update import loot as loot_index
+    from tests.test_gamedata_b1 import _count_updating
+
+    _setup(monkeypatch, tmp_path)
+    index = tmp_path / "loot_index.json"
+    monkeypatch.setattr(loot_index, "INDEX", index)
+    _count_updating(monkeypatch)  # 写文件换成记录：本机索引一直是下面写的这份
+    urls = []
+
+    def get(url, timeout=60):
+        urls.append(url)
+        return {} if url.endswith("manifest.json") else []
+
+    def version(latest):
+        monkeypatch.setattr(loot_site, "latest_version", lambda: latest)
+        monkeypatch.setattr(loot_index, "_index", None)
+        urls.clear()
+        got = loot_index.update(progress=None)["version"]
+        assert urls == [
+            f"{loot_site.BASE}{got}/manifest.json",
+            f"{loot_site.BASE}{got}/search.json",
+        ], urls
+        return got
+
+    monkeypatch.setattr(loot_site, "get_json", get)
+    index.write_text(
+        json.dumps({"version": "4.10.9LIVE", "rows": []}), encoding="utf-8"
+    )
+    assert version("4.11.0LIVE") == "4.11.0LIVE"  # 站点最新优先
+    assert version(None) == "4.10.9LIVE"  # 站点取不到：本机索引里的
+    index.unlink()
+    assert version(None) == "4.10.2LIVE"  # 都没有：默认
+
+
+def test_instance_ore_names():
+    """副本专属矿：英文名（带不带 (Ore)、大小写、纯的）和汉化包里的中文名（有没有空格）都认得；别的矿、普通物品不算"""
+    from astral_toolkit.catalog.loot import instance_ore
+
+    assert instance_ore("Carinite") == instance_ore("carinite (Ore)") == "carinite"
+    assert instance_ore("Carinite (Pure)") == "carinitepure"
+    assert instance_ore("", "杰金") == "jaclium"
+    assert (
+        instance_ore("", "科力晶（纯）")
+        == instance_ore("", "纯净科力晶")
+        == "carinitepure"
+    )
+    assert instance_ore("", "烁迪银 矿石") == "saldynium"
+    assert instance_ore("Quantanium", "量子矿") is None and instance_ore() is None
+
+
+def test_mine_info_english_names(monkeypatch, tmp_path):
+    """副本专属矿开采点的英文名：纯科力晶是 Carinite (Pure)，其余首字母大写"""
+    _setup(monkeypatch, tmp_path, **_loot_src(_ROCKS))
+    _detail_env(monkeypatch, tmp_path)
+    _fake_details(monkeypatch)
+    pure = _mine("carinitepure", online=False)
+    assert pure["en"] == "Carinite (Pure)" and pure["name"] == "科力晶（纯）"
+    assert _mine("carinite", online=False)["en"] == "Carinite"
+    assert _mine("janalite", online=False)["en"] == "Janalite"
