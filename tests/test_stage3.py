@@ -14,7 +14,9 @@ MINING_BOUND = (
     "set_mining_gadgets",
 )
 MINING = MINING_STATIC + MINING_BOUND
-VISION = ("hover_trigger", "count_toggle", "count_state", "count_apply", "count_cancel")
+VISION_STATIC = ("count_toggle", "count_state", "count_apply", "count_cancel")
+VISION_BOUND = ("hover_trigger",)
+VISION = VISION_STATIC + VISION_BOUND
 
 
 def test_mining_vision_controller_routes():
@@ -26,17 +28,23 @@ def test_mining_vision_controller_routes():
     for name in MINING_STATIC:
         assert r[name].__module__ == "astral_toolkit.app.api.mining", name
         assert r[name] is mining.ROUTES[name]
-    bound = mining.bound(object())
+    mining_bound = mining.bound(object())
     for name in MINING_BOUND:
-        assert bound[name].__module__ == "astral_toolkit.app.api.mining", name
-    for name in VISION:
+        assert mining_bound[name].__module__ == "astral_toolkit.app.api.mining", name
+    for name in VISION_STATIC:
         assert r[name].__module__ == "astral_toolkit.app.api.vision", name
         assert r[name] is vision.ROUTES[name]
+    vision_bound = vision.bound(object())
+    for name in VISION_BOUND:
+        assert vision_bound[name].__module__ == "astral_toolkit.app.api.vision", name
     assert set(mining.ROUTES) == set(MINING_STATIC)  # 一个不多一个不少
-    assert set(bound) == set(MINING_BOUND)
-    assert not set(mining.ROUTES) & set(bound)
-    assert set(mining.ROUTES) | set(bound) == set(MINING)
-    assert set(vision.ROUTES) == set(VISION)
+    assert set(mining_bound) == set(MINING_BOUND)
+    assert not set(mining.ROUTES) & set(mining_bound)
+    assert set(mining.ROUTES) | set(mining_bound) == set(MINING)
+    assert set(vision.ROUTES) == set(VISION_STATIC)
+    assert set(vision_bound) == set(VISION_BOUND)
+    assert not set(vision.ROUTES) & set(vision_bound)
+    assert set(vision.ROUTES) | set(vision_bound) == set(VISION)
 
 
 def test_mining_vision_tasks_no_services():

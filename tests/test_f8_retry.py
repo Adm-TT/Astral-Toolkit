@@ -70,22 +70,21 @@ def _setup(monkeypatch, results):
         wikelo_rewards=lambda name, zh: [],
         has_blueprint=lambda *names: False,
     )
-    monkeypatch.setattr(Hv, "_links", links)
-    return imgs, calls, logs
+    return imgs, calls, logs, links
 
 
 def test_miss_twice_grabs_again_and_second_pass_may_go_full(monkeypatch):
     """第一遍不整屏、认不出 → 再截一张，第二遍照旧（可以整屏）；两遍都没有就是未识别。"""
-    imgs, calls, logs = _setup(monkeypatch, [None, None])
-    assert Hv.hover_once() == {"miss": True}
+    imgs, calls, logs, links = _setup(monkeypatch, [None, None])
+    assert Hv.hover_once(links) == {"miss": True}
     assert calls == [(0, False), (1, True)] and len(imgs) == 2
     assert any("第一遍没找到说明框" in m and "再截一次" in m for m in logs)
 
 
 def test_sure_first_pass_does_not_grab_again(monkeypatch):
     """第一遍就在汉化包里对上了：不等、不再截。"""
-    imgs, calls, logs = _setup(monkeypatch, [_res("极地", "Polar", True)])
-    assert Hv.hover_once()["ok"]
+    imgs, calls, logs, links = _setup(monkeypatch, [_res("极地", "Polar", True)])
+    assert Hv.hover_once(links)["ok"]
     assert calls == [(0, False)] and len(imgs) == 1
     assert not any("再截一次" in m for m in logs)
     assert Hv._last_hover["lines"][0].startswith("极地")
@@ -93,10 +92,10 @@ def test_sure_first_pass_does_not_grab_again(monkeypatch):
 
 def test_unsure_first_pass_uses_second_pass(monkeypatch):
     """第一遍没把握 → 再截一次，用第二遍的。"""
-    imgs, calls, logs = _setup(
+    imgs, calls, logs, links = _setup(
         monkeypatch, [_res("罗伯茨太空工业", "", False), _res("黎明女神", "Eos", True)]
     )
-    assert Hv.hover_once()["ok"]
+    assert Hv.hover_once(links)["ok"]
     assert calls == [(0, False), (1, True)]
     assert any("认成「罗伯茨太空工业」" in m and "再截一次" in m for m in logs)
     assert Hv._last_hover["lines"][0].startswith("黎明女神")
@@ -104,18 +103,18 @@ def test_unsure_first_pass_uses_second_pass(monkeypatch):
 
 def test_second_pass_empty_keeps_first(monkeypatch):
     """第二遍什么都没认出来：还用第一遍没把握的那个，不报未识别。"""
-    imgs, calls, logs = _setup(
+    imgs, calls, logs, links = _setup(
         monkeypatch, [_res("某样东西", "Something Odd", False), None]
     )
-    assert Hv.hover_once()["ok"]
+    assert Hv.hover_once(links)["ok"]
     assert Hv._last_hover["lines"][0].startswith("某样东西")
 
 
 def test_given_image_reads_once_as_before(monkeypatch):
     """窗口、测试传进来的图：只认一遍、照旧可以整屏，不截屏。"""
-    imgs, calls, logs = _setup(monkeypatch, [None])
+    imgs, calls, logs, links = _setup(monkeypatch, [None])
     given = SimpleNamespace(width=1920, height=1080)
-    assert Hv.hover_once(given) == {"miss": True}
+    assert Hv.hover_once(links, given) == {"miss": True}
     assert calls == [("给的", True)] and imgs == []
     assert not any("再截一次" in m for m in logs)
 

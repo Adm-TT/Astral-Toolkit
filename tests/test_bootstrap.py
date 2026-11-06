@@ -142,8 +142,9 @@ def test_build_desktop_binds_everything_to_this_app(monkeypatch):
             assert nav_tasks._game_events is app.game_events
             assert nav_tasks._results is app.results
             assert count_tasks._count is app.count
-            assert hover_tasks._links is not None
-            assert hover_tasks._links.loot is catalog_tasks.get_item_loot
+            assert not hasattr(hover_tasks, "_links")
+            assert app.hover_links.loot is catalog_tasks.get_item_loot
+            assert app.hover._links is app.hover_links
             status = system_common._status
             assert status is not None and status.results is app.results
             assert callable(system_common._start)
@@ -310,11 +311,6 @@ def test_bind_all_and_task_binds_refuse_second_binding():
         _assert_error(
             RuntimeError,
             "已绑定",
-            lambda: hover_tasks.bind(bootstrap._hover_links()),
-        )
-        _assert_error(
-            RuntimeError,
-            "已绑定",
             lambda: nav_tasks.bind(app.nav, app.pos, app.game_events, app.results),
         )
         _assert_error(
@@ -330,13 +326,6 @@ def test_unbound_modules_raise_and_gate_stays_open():
     try:
         count_tasks._count = None
         _assert_error(RuntimeError, "未绑定", count_tasks.count_state)
-
-        hover_tasks._links = None
-        _assert_error(
-            RuntimeError,
-            "未绑定",
-            lambda: hover_tasks.item_info("MedPen", "医疗笔", loot=False),
-        )
 
         nav_tasks._nav = None
         nav_tasks._pos = None
@@ -465,31 +454,69 @@ def test_test_app_restores_previous_bindings():
 
 
 def test_routes_table_static_plus_bound(monkeypatch):
-    """F 段 B5a：bootstrap.routes(app) = 各 Controller 的 ROUTES + 要后台对象的 bound(...)；采矿那 4 个拿的是这个 app 的 live"""
+    """F 段 B5a：bootstrap.routes(app) = 各 Controller 的 ROUTES + 要后台对象的 bound(...)；采矿那 4 个拿的是这个 app 的 live，F8 的拿这个 app 的 HoverLinks"""
     from astral_toolkit.app.api import mining as mining_api
     from astral_toolkit.app.api import router
+    from astral_toolkit.app.api import vision as vision_api
 
-    real = mining_api.bound
+    real_mining = mining_api.bound
     seen = []
     monkeypatch.setattr(
-        mining_api, "bound", lambda live: seen.append(live) or real(live)
+        mining_api, "bound", lambda live: seen.append(live) or real_mining(live)
+    )
+    real_vision = vision_api.bound
+    seen_vision = []
+    monkeypatch.setattr(
+        vision_api,
+        "bound",
+        lambda links: seen_vision.append(links) or real_vision(links),
     )
     app = bootstrap.build("test")
     try:
         api = bootstrap.routes(app)
         assert seen == [app.live]
+        assert seen_vision == [app.hover_links]
         static = router.routes()
-        bound = set(real(app.live))
+        bound = set(real_mining(app.live)) | set(real_vision(app.hover_links))
         assert bound == {
             "live_start",
             "live_stop",
             "set_mining_gear",
             "set_mining_gadgets",
+            "hover_trigger",
         }
         assert not bound & set(static)
         assert set(api.table) == set(static) | bound
         for name in static:
             assert api.table[name] is static[name], name
+    finally:
+        bootstrap.shutdown(app, budget=0.2)
+
+
+def test_hover_links_shared_by_hotkey_and_route(monkeypatch):
+    """F 段 B5b：F8 热键（app.hover）和窗口「识别」接口（routes 的 hover_trigger）用同一份 HoverLinks"""
+    from astral_toolkit.app import task_runner
+
+    app = bootstrap.build("test")
+    try:
+        assert app.hover._links is app.hover_links
+        got = []
+        monkeypatch.setattr(
+            task_runner,
+            "run_task_once",
+            lambda task_id, fn, *args, **kw: got.append((task_id, fn, args)),
+        )
+        out = bootstrap.routes(app).call("hover_trigger")
+        assert got == [("hover", hover_tasks.hover_once, (app.hover_links,))]
+        assert out == {"ok": True, "data": {"error": "F8 正在识别中，请稍候"}}
+        seen = []
+        monkeypatch.setattr(
+            hover_tasks,
+            "hover_once",
+            lambda links, img=None: seen.append(links) or {"ok": True},
+        )
+        app.hover._recognize()
+        assert seen == [app.hover_links]
     finally:
         bootstrap.shutdown(app, budget=0.2)
 

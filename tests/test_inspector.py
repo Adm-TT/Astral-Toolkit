@@ -212,6 +212,7 @@ def test_inspect_item_raw_and_canon(monkeypatch):
 def test_hover_sends_raw_and_canon_to_train_data(monkeypatch):
     """F8 收错题：传给 train_data.from_tooltip 的是「认成了什么」和「应该是什么」两组名字"""
     import types
+    from astral_toolkit import bootstrap
     from astral_toolkit.tasks import hover as Hv
     from astral_toolkit.system import train_data
 
@@ -254,12 +255,12 @@ def test_hover_sends_raw_and_canon_to_train_data(monkeypatch):
     )
     monkeypatch.setattr(Hv.threading, "Thread", FakeThread)
     img = MockImage()
-    assert Hv.hover_once(img)["ok"]
+    assert Hv.hover_once(bootstrap._hover_links(), img)["ok"]
     sent = [a for t, a in started if t is train_data.from_tooltip]
     assert sent == [(img, toks, ("医疗芼", "MedPenn"), ("医疗笔", "MedPen"))]
     res.update(canon=None, sure=False)  # 汉化包里没对上：不收
     started.clear()
-    Hv.hover_once(img)
+    Hv.hover_once(bootstrap._hover_links(), img)
     assert not [a for t, a in started if t is train_data.from_tooltip]
 
 

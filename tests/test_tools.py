@@ -1287,7 +1287,6 @@ def test_hover_overlay_updates_before_network(monkeypatch, tmp_path):
         t_trade, "trade", lambda: C.Trade(tmp_path, [])
     )  # 后台线程不开真实库存库、没有联网的价格源
     # 照生产接法：市场会话、报价、掉落走 tasks/catalog
-    monkeypatch.setattr(t_hover, "_links", bootstrap._hover_links())
     monkeypatch.setattr(
         "astral_toolkit.crafting.loot.info", lambda *a, **k: {}
     )  # 掉落查询也不联网
@@ -1302,7 +1301,7 @@ def test_hover_overlay_updates_before_network(monkeypatch, tmp_path):
         monkeypatch.setattr(_m, "_hud", _v)
     t0 = time.time()
     try:
-        r = t_hover.hover_once(Image.new("RGB", (2560, 1440)))
+        r = t_hover.hover_once(bootstrap._hover_links(), Image.new("RGB", (2560, 1440)))
         assert r["ok"] and shown[-1][1].startswith(
             ("CQ7步枪", "CQ7 步枪")
         )  # 名字按汉化包纠正成标准写法（1.6.37）
@@ -3470,6 +3469,7 @@ def test_live_signals_pause_while_scan_panel_open(monkeypatch, tmp_path):
 
 def test_goal_shortage_marked_everywhere(monkeypatch):
     """目标还缺的材料：扫描结果、悬浮窗、信号、物品页、矿物页都标出来；精炼后的量给 SCU 和 uSCU（2026-10-23 用户要求）"""
+    from astral_toolkit import bootstrap
     from astral_toolkit.mining.parse import parse_scan
     from astral_toolkit.tasks import (
         count as t_count,
@@ -3566,9 +3566,9 @@ def test_goal_shortage_marked_everywhere(monkeypatch):
         and lines[2].startswith("🎯")
     )
     assert t_trade.mineral_info(name="Gold")["goal"].startswith("🎯 目标缺少 金 2 SCU")
-    assert t_hover._hover_lines({"name": "Tungsten"}, "Tungsten", "钨")[0].startswith(
-        "🎯"
-    )
+    assert t_hover._hover_lines(
+        bootstrap._hover_links(), {"name": "Tungsten"}, "Tungsten", "钨"
+    )[0].startswith("🎯")
     t_goals._SHORT["t"] = 0.0
 
 

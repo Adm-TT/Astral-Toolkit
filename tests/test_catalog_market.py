@@ -158,7 +158,6 @@ def test_hover_more_stops_when_market_cannot_open(monkeypatch):
         wikelo_rewards=lambda name, zh: [],
         has_blueprint=lambda *names: False,
     )
-    monkeypatch.setattr(Hv, "_links", links)
     monkeypatch.setattr(Hv, "_last_hover", {"seq": 5, "lines": ["医疗笔"]})
     monkeypatch.setattr(
         Hv,
@@ -170,7 +169,9 @@ def test_hover_more_stops_when_market_cannot_open(monkeypatch):
     )
     caught = None
     try:
-        Hv._hover_more(5, "12:00:00", "医疗笔", "MedPen", {"name": "MedPen"}, 650, True)
+        Hv._hover_more(
+            links, 5, "12:00:00", "医疗笔", "MedPen", {"name": "MedPen"}, 650, True
+        )
     except RuntimeError as e:
         caught = str(e)
     assert caught == "玩家库打不开"

@@ -105,7 +105,7 @@ def test_closing_gate_f5_f6(monkeypatch):
             count_task, "count_toggle", lambda: calls.append("count") or {"ok": True}
         )
 
-        h = hover._Hover(live=live, count=count)
+        h = hover._Hover(live=live, count=count, links=None)
         h._toggle_live()
         assert calls == []
         assert notes[-1] == ("采矿助手", "正在退出")
@@ -138,6 +138,7 @@ def test_closing_gate_navigation_and_writes(monkeypatch):
         h = _Hover(
             live=SimpleNamespace(running=lambda: False),
             count=SimpleNamespace(running=lambda: False),
+            links=None,
         )
         assert h._mark().get("error") == "正在退出"
         assert h._fix().get("error") == "正在退出"
