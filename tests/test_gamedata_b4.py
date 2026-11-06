@@ -406,7 +406,7 @@ def test_clear_caches_still_safe(monkeypatch, tmp_path):
 
 
 def _detail_env(monkeypatch, tmp_path):
-    """明细相关路径都换到 tmp_path；_from_zip / _get 换成记录器（不联网、不读真实整包）"""
+    """明细相关路径都换到 tmp_path；整包 from_zip、下载 get_json 换成记录器（不联网、不读真实整包）"""
     from astral_toolkit.infrastructure.persistence import loot_details
     from astral_toolkit.infrastructure.providers import loot_site
     from astral_toolkit.tasks.catalog_queries import loot

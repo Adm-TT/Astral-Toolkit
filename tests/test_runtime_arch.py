@@ -465,7 +465,17 @@ _INFRA_ADAPTER_FORBIDDEN = _INFRA_FORBIDDEN + (
     "astral_toolkit.mining",
     "astral_toolkit.navigation",
     "astral_toolkit.system",
+    "astral_toolkit.run",
+    "astral_toolkit.selftest",
+    "astral_toolkit.frozen_main",
 )
+
+
+def _infra_adapter_violations(source, pkg):
+    """适配层碰了不该碰的：禁用清单里的模块（函数里的 import 也算）、裸 import astral_toolkit 再走属性（等于绕开清单）"""
+    mods = list(_imports_in_source(source, pkg))
+    bare = [m for m in _bound_modules(source, pkg) if m in _BARE_FORBIDDEN]
+    return _forbidden(mods, _INFRA_ADAPTER_FORBIDDEN) + bare
 
 
 def test_infrastructure_adapters_stay_below_domain():
@@ -479,16 +489,21 @@ def test_infrastructure_adapters_stay_below_domain():
     assert len(files) >= 4, files
     for f in files:
         rel = f.relative_to(_ROOT).as_posix()
-        assert _forbidden(list(_imports_in(f)), _INFRA_ADAPTER_FORBIDDEN) == [], rel
-        assert _thread_makers_in_source(f.read_text(encoding="utf-8")) == [], rel
+        source = f.read_text(encoding="utf-8")
+        pkg = ".".join(("astral_toolkit", *f.relative_to(_ROOT).parent.parts))
+        assert _infra_adapter_violations(source, pkg) == [], rel
+        assert _thread_makers_in_source(source) == [], rel
     for bad in (
         "from ...gamedata import loot",
         "def f():\n    from ...update import loot\n",
         "def f():\n    from ...crafting import acquire\n",
         "from ...tasks.catalog_queries import loot",
+        "def f():\n    from ... import run\n    run.update()\n",
+        "import astral_toolkit\nastral_toolkit.gamedata.loot.rows()\n",
     ):
-        mods = list(_imports_in_source(bad, "astral_toolkit.infrastructure.providers"))
-        assert _forbidden(mods, _INFRA_ADAPTER_FORBIDDEN), bad
+        assert _infra_adapter_violations(
+            bad, "astral_toolkit.infrastructure.providers"
+        ), bad
     assert _thread_makers_in_source(
         "from concurrent.futures import ThreadPoolExecutor\nThreadPoolExecutor(4)\n"
     )
@@ -1144,6 +1159,7 @@ def test_catalog_use_cases_stay_below_app():
         "from ...crafting.acquire import info",
         "from ...crafting import itemsearch",
         "def f():\n    from ...crafting.shops import where\n",
+        "def f():\n    from ...crafting.loot import detail\n",
     ):
         assert _catalog_use_case_violations(bad, sub), bad
     for bad in (
@@ -1191,12 +1207,23 @@ def test_catalog_queries_import_starts_no_thread():
     assert {"search", "shops"} <= set(names.split(",")), out
 
 
-_THREAD_MAKERS = ("Thread", "Timer", "ThreadPoolExecutor", "ProcessPoolExecutor")
+_THREAD_MAKERS = (
+    "Thread",
+    "Timer",
+    "ThreadPoolExecutor",
+    "ProcessPoolExecutor",
+    "ThreadPool",
+    "Pool",
+    "start_new_thread",
+    "to_thread",
+    "run_in_executor",
+)
 
 
 def _thread_makers_in_source(source):
     """起线程 / 线程池的调用，按被调的名字认：threading.Thread、from threading import Thread、
-    __import__('threading').Thread、Timer、concurrent.futures 的池子都算"""
+    __import__('threading').Thread、Timer、concurrent.futures 的池子、multiprocessing 的 Pool / ThreadPool、
+    _thread.start_new_thread、asyncio.to_thread、run_in_executor 都算；继承 Thread 的类也算（Q3a 审查补）"""
     out = []
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, ast.Call):
@@ -1204,6 +1231,12 @@ def _thread_makers_in_source(source):
             name = f.attr if isinstance(f, ast.Attribute) else getattr(f, "id", "")
             if name in _THREAD_MAKERS:
                 out.append(name)
+        elif isinstance(node, ast.ClassDef):
+            for b in node.bases:
+                if (
+                    b.attr if isinstance(b, ast.Attribute) else getattr(b, "id", "")
+                ) == "Thread":
+                    out.append(f"{node.name}(Thread)")
     return out
 
 
@@ -1221,8 +1254,15 @@ def test_catalog_queries_code_starts_no_threads():
         "from threading import Thread\ndef f():\n    Thread(target=g).start()\n",
         "__import__('threading').Timer(1, f).start()\n",
         "from concurrent.futures import ThreadPoolExecutor\nThreadPoolExecutor(4)\n",
+        "import _thread\n_thread.start_new_thread(f, ())\n",
+        "import asyncio\nasync def f():\n    await asyncio.to_thread(g)\n",
+        "from multiprocessing import Pool\nPool(2)\n",
+        "import threading\nclass W(threading.Thread):\n    pass\n",
     ):
         assert _thread_makers_in_source(bad), bad
+    assert (
+        _thread_makers_in_source("import threading\n_lock = threading.Lock()\n") == []
+    )
 
 
 def test_crafting_reaches_up_into_tasks_only_where_listed():
