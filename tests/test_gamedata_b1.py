@@ -624,8 +624,22 @@ def _shop_setup(monkeypatch, tmp_path):
         [200, "Shop W", "Pyro · W", 1100.0, 0.0, "4.10", _F2],
     ]
     _setup(monkeypatch, tmp_path, **_shops_with_rows(*rows))
-    # 查询路径不读 shops.json（CL-C4 起 shops.load 都删了，原来在这里看守它不被调用）
+    import astral_toolkit.gamedata as G
+
+    G.ensure()
+    # 库建好后删掉源 JSON，模块里 import 时绑好的 CACHE 也指到删掉的那个：查询只能从库读（CL-C4 删了 shops.load）
+    for p in tmp_path.glob("*.json"):
+        p.unlink()
+    monkeypatch.setattr(shops, "CACHE", tmp_path / "shops.json")
     return shops
+
+
+def test_item_record_reads_from_db(monkeypatch, tmp_path):
+    """商店里这件的 [英文名, 类别] 从库里读（源 JSON 删了照样有），字符串编号也认；没有的给 None（CL-C4）"""
+    shops = _shop_setup(monkeypatch, tmp_path)
+    assert shops.item_record(171) == ["Venture Arms", "Arms"]
+    assert shops.item_record("200") == ["Lawson Mining Laser", "Mining"]
+    assert shops.item_record(999) is None
 
 
 def test_catalog_verbatim_and_folded(monkeypatch, tmp_path):

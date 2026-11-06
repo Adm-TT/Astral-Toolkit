@@ -658,7 +658,7 @@ def _details_zip(path, version, details):
 
 
 _DETAILS = {
-    # 8 个地区概率、箱子一样（合成一行，「等 8 类」），再加 6 个更低的（top=5 截掉 →「…还有 N 类」）
+    # 8 个地区概率、箱子一样（合成一行，regions 有 8 个），再加 6 个更低的（top=5 截掉 → more 大于 0）
     "c4": {
         "raw": "Item.core_01_c",
         "regions": [

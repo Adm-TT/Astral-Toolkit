@@ -432,16 +432,17 @@ def test_nearest_distinct_places_and_loot_grouping(monkeypatch, tmp_path):
     }
     monkeypatch.setattr(loot, "find", lambda en, zh: [("u", "X", "某物", 1)])
     monkeypatch.setattr(loot, "detail", lambda u, online=True: d)
-    d = loot.info("X")
-    groups = d["groups"] if d else None
+    got = loot.info("X")
+    groups = got["groups"] if got else None
     assert isinstance(groups, list)
-    # 概率和箱子一样的三个地点合成一行
+    # 概率和箱子一样的三个地点合成一行；都是箱子里开的，不是刷在场景里
     rows = sorted(
-        (round(g["p"], 4), g["box"] or "", tuple(g["regions"])) for g in groups
+        (round(g["p"], 4), g["box"] or "", g["placed"], tuple(g["regions"]))
+        for g in groups
     )
     assert rows == [
-        (0.0106, "Large", ("ASD", "QV", "Hathor")),
-        (0.1364, "", ("SoO",)),
+        (0.0106, "Large", False, ("ASD", "QV", "Hathor")),
+        (0.1364, "", False, ("SoO",)),
     ], rows
 
 

@@ -1,6 +1,6 @@
 """商店查询的纯规则：按名字找物品、买卖行排序、最近买点排序、同款候选。
 
-原 crafting/shops.py 里的纯计算搬到这里；读 shops.json、查 gamedata、算导航距离
+原 crafting/shops.py 里的纯计算搬到这里；从 UEX 更新 shops.json、查 gamedata、算导航距离
 留在旧文件，catalog 不读文件、不联网、不碰全局缓存。
 """
 
