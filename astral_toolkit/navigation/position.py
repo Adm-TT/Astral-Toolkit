@@ -88,18 +88,45 @@ def _zh_name(name):
 
 
 def _station_at(internal):
+    """星图内部点（P1_L2）上建的空间站名，没有返回空：查 _station_table"""
+    try:
+        table = _station_table(_data_version())
+    except _ScanStopped as e:
+        table = e.table
+    return table.get(internal, "")
+
+
+class _ScanStopped(Exception):
+    """站名表扫到一半出错，带着出错前扫到的那部分（抛出去的 lru_cache 不缓存，下次重扫）"""
+
+    def __init__(self, table):
+        super().__init__()
+        self.table = table
+
+
+@lru_cache(maxsize=1)
+def _station_table(_version):
+    """星图内部点 → 建在这个点上的空间站名（没有站名用城市名），按库版本缓存、只留当前版本。
+    以前每查一个点从头扫一遍商店表、每行都查星图库，全局搜索第一次要等 4 秒；现在整张表扫一遍，
+    同样的位置只算一次星图点（几千行商店只有几十种位置）。同一个点有几行取源顺序第一行。
+    中途出错：这次用出错前扫到的、后面的当没有（以前从头找，出错前找到的照返回，之后的返回空）；
+    出错可能是一时的，不缓存、下次重扫"""
+    table, seen = {}, {}
     try:
         from ..crafting import shops
         from ..gamedata import shops as gd_shops
 
         for r in gd_shops.lagrange_rows():  # 轨道带 Lagrange、有站名的商店行
             f = r.fields
-            p = shops.shop_point(f)
-            if p and p["i"] == internal:
-                return f[4] or f[5]
-    except Exception:
-        pass
-    return ""
+            key = tuple(f)
+            if key not in seen:
+                seen[key] = shops.shop_point(f)
+            p = seen[key]
+            if p and p["i"] not in table:
+                table[p["i"]] = f[4] or f[5]
+    except Exception as e:
+        raise _ScanStopped(table) from e
+    return table
 
 
 def place_name(code):
@@ -212,6 +239,7 @@ def reset_names():
     """汉化包更新后清掉地名缓存，这次运行里马上用上新地名"""
     _ini_cache.clear()
     _place_name.cache_clear()
+    _station_table.cache_clear()
 
 
 def _ini_label(code):

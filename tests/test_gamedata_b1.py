@@ -392,8 +392,96 @@ def test_station_at_uses_lagrange_rows(monkeypatch, tmp_path):
     monkeypatch.setattr(
         shops, "shop_point", lambda f: {"i": "ARC_L1"} if f[4] == "Station X" else None
     )
+    monkeypatch.setattr(
+        position, "_data_version", lambda: str(tmp_path)
+    )  # 站名表按库版本缓存：用这个测试自己的键，不拿别的测试建的表
     assert position._station_at("ARC_L1") == "Station X"
     assert position._station_at("ARC_L2") == ""
+
+
+def _fake_station_rows(monkeypatch, rows, bad=()):
+    """假的拉格朗日商店行和 shop_point（按行星认点：Pyro I → P1_L2、Pyro II → P2_L1；站名在 bad 里的那行出错），记调用次数"""
+    from types import SimpleNamespace
+
+    from astral_toolkit.crafting import shops
+    from astral_toolkit.gamedata import shops as gd_shops
+
+    calls = {"rows": 0, "point": 0}
+
+    def fake_rows():
+        calls["rows"] += 1
+        return tuple(SimpleNamespace(fields=f) for f in rows)
+
+    def fake_point(f):
+        calls["point"] += 1
+        if f[4] in bad:
+            raise RuntimeError("坏行")
+        return {"i": {"Pyro I": "P1_L2", "Pyro II": "P2_L1"}[f[1]]}
+
+    monkeypatch.setattr(gd_shops, "lagrange_rows", fake_rows)
+    monkeypatch.setattr(shops, "shop_point", fake_point)
+    return calls
+
+
+def _pyro_row(planet, station="", city=""):
+    lp = {"Pyro I": "Lagrange Point 2", "Pyro II": "Lagrange Point 1"}[planet]
+    return ["Pyro", planet, lp, "", station, city]
+
+
+def test_station_table_scans_once_first_row_wins(monkeypatch):
+    """站名表：整张商店表只扫一遍（以前每查一个点扫一遍、每行都查星图库，全局搜索第一次要等 4 秒）；
+    同一个点有几行取源顺序第一行，没有站名用城市名，同样的位置只算一次星图点，查不到返回空"""
+    from astral_toolkit.navigation import position
+
+    rows = [
+        _pyro_row("Pyro I", "Station A"),
+        _pyro_row("Pyro I", "Station A"),
+        _pyro_row("Pyro I", "Station B"),
+        _pyro_row("Pyro II", city="City C"),
+    ]
+    calls = _fake_station_rows(monkeypatch, rows)
+    monkeypatch.setattr(position, "_data_version", lambda: "station-test-1")
+    assert position._station_at("P1_L2") == "Station A"
+    assert position._station_at("P2_L1") == "City C"
+    assert position._station_at("P9_L9") == ""
+    assert calls == {"rows": 1, "point": 3}
+
+
+def test_station_table_follows_data_version(monkeypatch):
+    """站名表按库版本缓存：同一版本不重扫；换代以后重扫、用上新数据；汉化包更新时 reset_names 也清掉"""
+    from astral_toolkit.navigation import position
+
+    rows = [_pyro_row("Pyro I", "Station A")]
+    calls = _fake_station_rows(monkeypatch, rows)
+    ver = {"v": "station-test-a"}
+    monkeypatch.setattr(position, "_data_version", lambda: ver["v"])
+    assert position._station_at("P1_L2") == "Station A"
+    assert position._station_at("P1_L2") == "Station A" and calls["rows"] == 1
+    rows[0] = _pyro_row("Pyro I", "Station Z")
+    ver["v"] = "station-test-b"
+    assert position._station_at("P1_L2") == "Station Z" and calls["rows"] == 2
+    position.reset_names()
+    assert position._station_at("P1_L2") == "Station Z" and calls["rows"] == 3
+
+
+def test_station_table_keeps_rows_before_error(monkeypatch):
+    """扫到一半出错：这次用出错前扫到的、后面的当没有（以前从头找，出错前找到的照返回，之后的返回空）；
+    出错的不缓存，下次重扫——出错可能是一时的，好了以后要用上整张表"""
+    from astral_toolkit.navigation import position
+
+    rows = [
+        _pyro_row("Pyro I", "Station A"),
+        _pyro_row("Pyro I", "Bad"),
+        _pyro_row("Pyro II", "Station C"),
+    ]
+    bad = {"Bad"}
+    calls = _fake_station_rows(monkeypatch, rows, bad)
+    monkeypatch.setattr(position, "_data_version", lambda: "station-test-err")
+    assert position._station_at("P1_L2") == "Station A"
+    assert position._station_at("P2_L1") == "" and calls["rows"] == 2
+    bad.clear()
+    assert position._station_at("P2_L1") == "Station C" and calls["rows"] == 3
+    assert position._station_at("P1_L2") == "Station A" and calls["rows"] == 3
 
 
 # ---------------------------------------------------------------- Task 5：矿价和更新边界
