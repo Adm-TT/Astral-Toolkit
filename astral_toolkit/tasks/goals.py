@@ -1,9 +1,9 @@
 """制造与目标规划任务模块（Task: Goals, Crafting & Wikelo Exchanges）
 
 专职处理：
-1. 蓝图制造查询、分类检索、槽位结构化解析、属性计算与混料算法；
+1. 制造查询、分类检索、槽位结构化解析、属性计算与混料算法的旧壳（用例已搬到 tasks/crafting.py）；
 2. 目标规划（联动库存、计算材料缺口、市价估算、目标材料扣减及直接入库）；
-3. Wikelo 特殊兑换搜索与材料需求解析；
+3. Wikelo 特殊兑换搜索与材料需求解析的旧壳（用例已搬到 tasks/wikelo.py）；
 4. 采矿/悬停识别等模块所需的目标材料缺口判定与标记 (_goal_for, _mark_goal_lines 等)。
 """
 
@@ -16,82 +16,18 @@ try:
 except ImportError:
     from ..crafting import goals as G
 
-try:
-    from ..crafting import wikelo
-except ImportError:
-    from ..crafting import wikelo
-
-try:
-    from ..crafting.crafting import (
-        PROP_KEY,
-        LOWER_BETTER,
-        GEAR_ZH,
-        SUB_ZH,
-        _clean_title,
-        bp_key,
-        browse,
-        by_key,
-        category_zh,
-        curve_text,
-        describe,
-        display_name,
-        effect,
-        group_mods,
-        header,
-        laser_total,
-        mat_summary,
-        material_zh,
-        mix_plan,
-        mix_targets,
-        name_parts,
-        needs,
-        part_of,
-        prop_zh,
-        search as _craft_search,
-        slot_zh,
-        stats,
-        variant_note,
-    )
-except ImportError:
-    from ..crafting.crafting import (  # type: ignore
-        PROP_KEY,
-        LOWER_BETTER,
-        GEAR_ZH,
-        SUB_ZH,
-        _clean_title,
-        bp_key,
-        browse,
-        by_key,
-        category_zh,
-        curve_text,
-        describe,
-        display_name,
-        effect,
-        group_mods,
-        header,
-        laser_total,
-        mat_summary,
-        material_zh,
-        mix_plan,
-        mix_targets,
-        name_parts,
-        needs,
-        part_of,
-        prop_zh,
-        search as _craft_search,
-        slot_zh,
-        stats,
-        variant_note,
-    )
-
-from ..mining.data import best_price
-from ..mining.locations import where, zh_name
-from ..trade.console import material_source, SOURCE_ZH
+from ..crafting.crafting import by_key, effect, laser_total, material_zh, slot_zh
+from ..trade.console import SOURCE_ZH
 
 
 # ---------------------------------------------------------------- 依赖：交易库、库存地点
 # 2026-10-30 重构阶段 2：直接用 tasks 里的交易库和库存地点，不再经 services 转发、出错也不再回头找 services 兜底。
 from .trade import trade
+
+from . import crafting as _crafting_uc
+from . import wikelo as _wikelo_uc
+from ..app.presenters import crafting as _present_crafting
+from ..app.presenters import wikelo as _present_wikelo
 
 
 def _place_for(location, bin=None):
@@ -103,15 +39,13 @@ def _place_for(location, bin=None):
 
 
 # ---------------------------------------------------------------- 内部状态与缓存
-_wk_cache = {}
-_bp_cache = {}
 _SHORT = {"t": 0.0, "map": {}}
 
 
 def clear_caches():
     """更新数据后清掉接口层的缓存"""
-    _wk_cache.clear()
-    _bp_cache.clear()
+    _crafting_uc.clear_caches()
+    _wikelo_uc.clear_caches()
     _SHORT.update(t=0.0, map={})
 
 
@@ -383,254 +317,53 @@ def goal_prices():
 
 
 # ---------------------------------------------------------------- 维科洛兑换
+# 旧壳：用例在 tasks/crafting.py、tasks/wikelo.py，排版在 app/presenters/；全局搜索、目标页、测试还在调，B5 换调用方、B6 删
 def wikelo_search(q=""):
-    rows = wikelo.search(q or "")
-    out = []
-    for c in rows[:60]:
-        key = c["id"]  # 兑换自己的 id 当 key：流水号会在清缓存后重号，指到别的兑换
-        _wk_cache[key] = c
-        out.append(
-            {
-                "key": key,
-                "title": c["t"],
-                "type": c["type"],
-                "reward": c["rz"] or "、".join(c["rewards"][:2]),
-            }
-        )
-    return out
+    return _present_wikelo.present_search(_wikelo_uc.search_exchanges(q))
 
 
 def wikelo_detail(key=""):
-    c = _wk_cache.get(key) or next((x for x in wikelo.load() if x["id"] == key), None)
-    if not c:
-        return {"error": "未找到此兑换，需重新搜索"}
-    reqs = []
-    groups = []
-    for r in c["req"]:
-        k = (r["z"], r["q"], r["u"]) if wikelo.note_for(r["n"]) else (r["n"],)
-        if groups and groups[-1][0] == k:
-            groups[-1][1].append(r)
-        else:
-            groups.append((k, [r]))
-    for _, rs in groups:
-        r = rs[0]
-        name = (
-            f"{r['z']}（{'、'.join(x['n'] for x in rs)}）"
-            if len(rs) > 1
-            else wikelo.req_label(r)
-        )
-        try:
-            tip = material_source(r["n"])
-        except Exception:
-            tip = ""
-        reqs.append(
-            {
-                "name": name,
-                "q": (f"{r['q']:g} {r['u']}" if r["q"] else "若干")
-                + (" 各" if len(rs) > 1 else ""),
-                "tip": tip,
-                "en": r["n"],
-                "zh": r["z"],
-            }
-        )
-    return {
-        "id": c["id"],
-        "title": c["t"],
-        "type": c["type"],
-        "reward": c["rz"] or "、".join(c["rewards"][:4]) or c["te"],
-        "req": reqs,
-    }
+    return _present_wikelo.present_detail(_wikelo_uc.exchange_detail(key))
 
 
 # ---------------------------------------------------------------- 制造与蓝图
+# 旧壳：用例在 tasks/crafting.py、tasks/wikelo.py，排版在 app/presenters/；全局搜索、目标页、测试还在调，B5 换调用方、B6 删
 def craft_effect(key="", qualities=None):
-    """蓝图在给定材料品质下，每个槽对成品属性的影响（目标页「品质影响」）。qualities：{槽序号: 品质}"""
-    bp = _bp_cache.get(key) or by_key(key)
-    if not bp:
-        return {"error": "未找到此蓝图"}
-    slots = effect(bp, qualities or {})
-    return {
-        "slots": slots,
-        "total": laser_total(bp, qualities or {}) if slots else None,
-    }
+    return _crafting_uc.craft_effect(key, qualities)
 
 
 def craft_search(q=""):
-    out = []
-    for bp in _craft_search(q, limit=30):
-        key = bp_key(bp)
-        _bp_cache[key] = bp
-        note = variant_note(bp)
-        zh, en = name_parts(bp)
-        out.append(
-            {
-                "key": key,
-                "name": display_name(bp) + (f"｜{note}" if note else ""),
-                "zh": zh,
-                "en": en,
-                "note": note,
-                "kind": GEAR_ZH.get((bp["g"], bp["t"]), bp["t"] or bp["g"]),
-            }
-        )
-    return out
+    return _present_crafting.present_search(_crafting_uc.search_blueprints(q))
 
 
 def craft_browse(
     cat="", sub="", part="", maker="", q="", unlocked=False, offset=0, mat="", mq=None
 ):
-    """蓝图字典：分类筛选 + 分页；mat=只看用到这种矿的（mq=手上矿的品质，标出够不够做）"""
-    r = browse(cat, sub, part, maker, q, bool(unlocked), int(offset or 0), mat=mat)
-    try:
-        mq = int(mq) if mq not in (None, "") else None
-    except (TypeError, ValueError):
-        mq = None
-    rows = []
-    for bp in r["rows"]:
-        key = bp_key(bp)
-        _bp_cache[key] = bp
-        tags = [
-            t
-            for t in (
-                part_of(bp),
-                SUB_ZH.get(bp["s"] or "", bp["s"] or ""),
-                variant_note(bp),
-            )
-            if t
-        ]
-        row = {
-            "key": key,
-            "name": display_name(bp),
-            "kind": category_zh(bp),
-            "tags": " · ".join(tags),
-            "maker": bp["m"] or "",
-            "unlocked": bool(bp["d"]),
-        }
-        if mat:
-            n = needs(bp, mat)
-            minq = max(m for _, m in n)
-            row["need"] = f"{material_zh(mat)} {sum(x for x, _ in n):g} SCU" + (
-                f"（品质 ≥{minq}）" if minq > 1 else ""
-            )
-            if mq is not None and minq > 1:  # 只有带品质门槛的才标够不够
-                row["ok"] = mq >= minq
-        rows.append(row)
-    out = {**r, "rows": rows}
-    if mat:
-        out["mat"] = {
-            "en": mat,
-            "zh": material_zh(mat),
-            "q": mq,
-            **mat_summary(mat, mq),
-        }
-    return out
+    return _present_crafting.present_browse(
+        _crafting_uc.browse_blueprints(
+            cat, sub, part, maker, q, unlocked, offset, mat, mq
+        )
+    )
 
 
 def _craft_struct(bp, note=""):
-    """制造页改版（1.6.47）用的结构化详情：标题标签、材料槽（带品质曲线）、去哪挖、蓝图来源"""
-    h = header(bp)
-    h["note"] = note
-    slots, minerals = [], []
-    for idx, (slot, opts, mods) in enumerate(bp["slots"]):
-        mats = [
-            {
-                "kind": k,
-                "en": name,
-                "zh": material_zh(name),
-                "qty": qty,
-                "unit": "SCU" if k == "r" else "个",
-                "minq": minq,
-            }
-            for k, name, qty, minq in opts
-        ]
-        gm = group_mods(mods)
-        curves = [
-            {
-                "prop": pz,
-                "name": prop_zh(pz, bp),
-                "key": PROP_KEY.get(pz, ""),
-                "add": segs[0][4],
-                "lower": pz in LOWER_BETTER,
-                "segs": [list(x[:4]) for x in segs],
-                "text": curve_text(pz, segs, prop_zh(pz, bp)),
-            }
-            for pz, segs in gm.items()
-        ]
-        slots.append(
-            {
-                "idx": idx,
-                "slot": slot_zh(slot),
-                "mats": mats,
-                "minq": max([m["minq"] for m in mats] + [0]),
-                "curves": curves,
-            }
-        )
-        minerals += [name for k, name, *_ in opts if k == "r"]
-    mine = []
-    for m in dict.fromkeys(minerals):
-        rows = where(m)[:2]
-        price, city = best_price(m)
-        mine.append(
-            {
-                "en": m,
-                "zh": material_zh(m),
-                "spots": [
-                    {"loc": zh_name(loc), "pct": round(pct)} for pct, loc in rows
-                ],
-                "price": price,
-                "city": city or "",
-            }
-        )
-    src = [
-        {"title": _clean_title(t), "who": w, "kind": k, "systems": sy, "chance": ch}
-        for t, w, k, sy, ch in bp["src"]
-    ]
-    return {"head": h, "slots": slots, "mine": mine, "sources": src, "nsrc": bp["nsrc"]}
+    return _present_crafting.present_struct(_crafting_uc.struct_facts(bp, note))
 
 
 def craft_detail(key=""):
-    bp = _bp_cache.get(key) or by_key(key)
-    if not bp:
-        hits = craft_search(key)
-        bp = _bp_cache.get(hits[0]["key"]) if hits else None
-    if not bp:
-        return {"error": "未找到此蓝图"}
-    note = variant_note(bp)
-    text = describe(bp)
-    if note:  # 同名多份配方：标题行后面注明是哪一份
-        first, _, rest = text.partition("\n")
-        text = f"{first}｜{note}\n{rest}" if rest else f"{first}｜{note}"
-    return {
-        "key": bp_key(bp),
-        "text": text,
-        "mix": mix_targets(bp),
-        **_craft_struct(bp, note),
-    }
+    return _present_crafting.present_detail(_crafting_uc.blueprint_detail(key))
 
 
 def craft_stats(key="", qualities=None):
-    """成品属性统计（制造 / 目标页）：各槽品质 → 每项属性的基础值、强化后、变化（1.6.47）"""
-    bp = _bp_cache.get(key) or by_key(key)
-    if not bp:
-        return {"error": "未找到此蓝图"}
-    qs = qualities or {}
-    return {"stats": stats(bp, qs), "slots": effect(bp, qs)}
+    return _crafting_uc.craft_stats(key, qualities)
 
 
 def craft_mix(need=0, target=0, margin=2, boxes=()):
-    """混料计算器：boxes = [[品质, SCU], …]"""
-    try:
-        rows = [
-            (float(q), float(s)) for q, s in boxes if str(q).strip() and str(s).strip()
-        ]
-    except (TypeError, ValueError):
-        return {"ok": False, "msg": "品质和数量需为数字"}
-    return mix_plan(float(need or 0), float(target or 0), rows, float(margin or 0))
+    return _crafting_uc.craft_mix(need, target, margin, boxes)
 
 
 __all__ = [
     # 状态与缓存
-    "_wk_cache",
-    "_bp_cache",
     "_SHORT",
     "clear_caches",
     # 内部辅助函数

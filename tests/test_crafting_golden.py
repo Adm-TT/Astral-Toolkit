@@ -17,6 +17,7 @@ from astral_toolkit.gamedata.crafting import Blueprints
 from astral_toolkit.mining import data as mining_data
 from astral_toolkit.mining import locations as mining_locations
 from astral_toolkit.mining import quality_tiers
+from astral_toolkit.tasks import crafting as TC
 from astral_toolkit.tasks import goals as G
 
 MIN_ZH = {
@@ -290,9 +291,9 @@ def _install(monkeypatch):
     monkeypatch.setattr(mining_locations, "where", _fake_where)
     monkeypatch.setattr(mining_locations, "zh_name", _fake_zh_name)
     monkeypatch.setattr(quality_tiers, "tiers", _fake_tiers)
-    monkeypatch.setattr(G, "best_price", _fake_best_price)
-    monkeypatch.setattr(G, "where", _fake_where)
-    monkeypatch.setattr(G, "zh_name", _fake_zh_name)
+    monkeypatch.setattr(TC, "best_price", _fake_best_price)
+    monkeypatch.setattr(TC, "where", _fake_where)
+    monkeypatch.setattr(TC, "zh_name", _fake_zh_name)
 
 
 def _locspots():

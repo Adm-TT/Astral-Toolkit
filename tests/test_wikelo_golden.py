@@ -10,6 +10,7 @@ from astral_toolkit.contracts.textkeys import fold_mixed_loose
 from astral_toolkit.crafting import wikelo
 from astral_toolkit.gamedata import wikelo as gd_wikelo
 from astral_toolkit.tasks import goals
+from astral_toolkit.tasks import wikelo as TW
 from astral_toolkit.trade import names
 
 _VEHICLE = {
@@ -140,7 +141,7 @@ def _no_exact(zh="", en=""):
 def _install(monkeypatch, rows=None, calls=None):
     contracts = _patch_data(monkeypatch, rows, calls)
     monkeypatch.setattr(gd_wikelo, "print_places", lambda key, snap=None: [])
-    monkeypatch.setattr(goals, "material_source", lambda name: "来源：" + name)
+    monkeypatch.setattr(TW, "material_source", lambda name: "来源：" + name)
     monkeypatch.setattr(names, "canonical_exact", _no_exact)
     return contracts
 
@@ -437,7 +438,7 @@ def test_wikelo_detail_tip_exception_is_empty(monkeypatch):
                 raise RuntimeError("来源坏了")
             return "来源：" + name
 
-        monkeypatch.setattr(goals, "material_source", source)
+        monkeypatch.setattr(TW, "material_source", source)
         out = goals.wikelo_detail("gear-1")
         assert out["req"] == [
             {

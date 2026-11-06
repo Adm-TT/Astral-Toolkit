@@ -3,6 +3,9 @@
 只吃传进来的名字，不读库、不读文件、不读汉化包。
 """
 
+import re
+
+
 GEAR_ZH = {
     ("fpsgear", "armour"): "护甲",
     ("fpsgear", "weapons"): "个人武器",
@@ -184,3 +187,8 @@ def slot_zh(slot):
     if not slot or "PLACEHOLDER" in slot:
         return "材料"
     return SLOT_ZH.get(slot, slot)
+
+
+def clean_title(t: str) -> str:
+    """蓝图来源任务标题里的 ~mission(…) 换成「[地点]」（原 crafting._clean_title）"""
+    return re.sub(r"~mission\([^)]*\)", "[地点]", t)
