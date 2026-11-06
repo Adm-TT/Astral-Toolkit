@@ -2,15 +2,18 @@
 
 from pathlib import Path
 
-MINING = (
+MINING_STATIC = (
     "scan_view",
-    "live_start",
-    "live_stop",
     "mining_gear",
-    "set_mining_gear",
-    "set_mining_gadgets",
     "manual_scan",
 )
+MINING_BOUND = (
+    "live_start",
+    "live_stop",
+    "set_mining_gear",
+    "set_mining_gadgets",
+)
+MINING = MINING_STATIC + MINING_BOUND
 VISION = ("hover_trigger", "count_toggle", "count_state", "count_apply", "count_cancel")
 
 
@@ -20,13 +23,19 @@ def test_mining_vision_controller_routes():
 
     router.reset()
     r = router.routes()
-    for name in MINING:
+    for name in MINING_STATIC:
         assert r[name].__module__ == "astral_toolkit.app.api.mining", name
         assert r[name] is mining.ROUTES[name]
+    bound = mining.bound(object())
+    for name in MINING_BOUND:
+        assert bound[name].__module__ == "astral_toolkit.app.api.mining", name
     for name in VISION:
         assert r[name].__module__ == "astral_toolkit.app.api.vision", name
         assert r[name] is vision.ROUTES[name]
-    assert set(mining.ROUTES) == set(MINING)  # 一个不多一个不少
+    assert set(mining.ROUTES) == set(MINING_STATIC)  # 一个不多一个不少
+    assert set(bound) == set(MINING_BOUND)
+    assert not set(mining.ROUTES) & set(bound)
+    assert set(mining.ROUTES) | set(bound) == set(MINING)
     assert set(vision.ROUTES) == set(VISION)
 
 

@@ -137,7 +137,7 @@ def test_build_desktop_binds_everything_to_this_app(monkeypatch):
         restore_bindings({key: (m, n, None) for key, (m, n, _) in saved.items()})
         app = bootstrap.build("desktop")
         try:
-            assert mining_tasks._live is app.live
+            assert not hasattr(mining_tasks, "_live")
             assert nav_tasks._nav is app.nav and nav_tasks._pos is app.pos
             assert nav_tasks._game_events is app.game_events
             assert nav_tasks._results is app.results
@@ -306,11 +306,6 @@ def test_bind_all_and_task_binds_refuse_second_binding():
     before = snapshot_bindings()
     with app_for_test() as app:
         _assert_error(RuntimeError, "已绑定", lambda: bootstrap.bind_all(app))
-        _assert_error(
-            RuntimeError,
-            "已绑定",
-            lambda: mining_tasks.bind(app.live),
-        )
         _assert_error(RuntimeError, "已绑定", lambda: count_tasks.bind(app.count))
         _assert_error(
             RuntimeError,
@@ -333,9 +328,6 @@ def test_bind_all_and_task_binds_refuse_second_binding():
 def test_unbound_modules_raise_and_gate_stays_open():
     saved = snapshot_bindings()
     try:
-        mining_tasks._live = None
-        _assert_error(RuntimeError, "未绑定", mining_tasks.live_start)
-
         count_tasks._count = None
         _assert_error(RuntimeError, "未绑定", count_tasks.count_state)
 
@@ -379,7 +371,7 @@ class _Grabber:
         return Image.new("RGB", (1920, 1080))
 
 
-def test_mining_session_starts_and_stops_with_fake_screen(monkeypatch):
+def _quiet_mining(monkeypatch):
     real_grab_calls = []
 
     def fail_grab(*args, **kwargs):
@@ -400,6 +392,11 @@ def test_mining_session_starts_and_stops_with_fake_screen(monkeypatch):
         "setting_run_flag",
         lambda key: RunFlag(key, lambda k, v: flag_writes.append((k, v))),
     )
+    return real_grab_calls, flag_writes
+
+
+def test_mining_session_starts_and_stops_with_fake_screen(monkeypatch):
+    real_grab_calls, flag_writes = _quiet_mining(monkeypatch)
     grabber = _Grabber()
     with app_for_test(
         foreground=lambda: True,
@@ -448,20 +445,89 @@ def test_count_session_uses_fake_worker(monkeypatch):
 def test_test_app_restores_previous_bindings():
     saved = snapshot_bindings()
     try:
-        mining_tasks._live = None
+        count_tasks._count = None
         before = snapshot_bindings()
         with app_for_test() as app:
-            assert mining_tasks._live is app.live
+            assert count_tasks._count is app.count
         assert snapshot_bindings() == before
-        assert mining_tasks._live is None
+        assert count_tasks._count is None
 
         # 只看绑定是不是原样恢复，用不着真引擎
-        a_live: Any = SimpleNamespace(name="A-live")
-        mining_tasks.bind(a_live, replace=True)
+        a_count: Any = SimpleNamespace(name="A-count")
+        count_tasks.bind(a_count, replace=True)
         with_a = snapshot_bindings()
         with app_for_test() as app:
-            assert mining_tasks._live is app.live
+            assert count_tasks._count is app.count
         assert snapshot_bindings() == with_a
-        assert mining_tasks._live is a_live
+        assert count_tasks._count is a_count
     finally:
         restore_bindings(saved)
+
+
+def test_routes_table_static_plus_bound(monkeypatch):
+    """F 段 B5a：bootstrap.routes(app) = 各 Controller 的 ROUTES + 要后台对象的 bound(...)；采矿那 4 个拿的是这个 app 的 live"""
+    from astral_toolkit.app.api import mining as mining_api
+    from astral_toolkit.app.api import router
+
+    real = mining_api.bound
+    seen = []
+    monkeypatch.setattr(
+        mining_api, "bound", lambda live: seen.append(live) or real(live)
+    )
+    app = bootstrap.build("test")
+    try:
+        api = bootstrap.routes(app)
+        assert seen == [app.live]
+        static = router.routes()
+        bound = set(real(app.live))
+        assert bound == {
+            "live_start",
+            "live_stop",
+            "set_mining_gear",
+            "set_mining_gadgets",
+        }
+        assert not bound & set(static)
+        assert set(api.table) == set(static) | bound
+        for name in static:
+            assert api.table[name] is static[name], name
+    finally:
+        bootstrap.shutdown(app, budget=0.2)
+
+
+def test_routes_hold_this_apps_live(monkeypatch):
+    """F 段 B5a（架构稿 §12.3 验收）：两个 build("test") 各一张接口表，采矿开 / 关只动自己那个 app 的实时读屏"""
+    real_grab_calls, _ = _quiet_mining(monkeypatch)
+    monkeypatch.setattr(
+        lifecycle_gate, "_CLOSING", None
+    )  # 不经 bind_all：没有「正在退出」
+    apps = []
+    try:
+        for _ in range(2):
+            apps.append(
+                bootstrap.build(
+                    "test",
+                    overrides={
+                        "foreground": lambda: True,
+                        "grab": _Grabber(),
+                        "clock": FakeClock(),
+                        "output": RecordingOutput(),
+                    },
+                )
+            )
+        a, b = apps
+        api_a, api_b = bootstrap.routes(a), bootstrap.routes(b)
+        got = api_a.call("live_start")
+        assert got["ok"] and not got["data"].get("error"), got
+        assert _wait_until(a.live.running)
+        assert not b.live.running()
+        got = api_b.call("live_start")
+        assert got["ok"] and not got["data"].get("error"), got
+        assert _wait_until(b.live.running) and a.live.running()
+        assert api_a.call("live_stop")["ok"]
+        assert not a.live.running() and b.live.running()
+        assert api_b.call("live_stop")["ok"]
+        assert not b.live.running()
+    finally:
+        for app in apps:
+            bootstrap.shutdown(app, budget=0.5)
+    assert not real_grab_calls

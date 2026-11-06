@@ -204,19 +204,22 @@ _OLD_API_NAMES = [
 
 def test_all_api_names_routed():
     """原来 services 能调的接口，现在 router 里都有（每个都由 app/api/ 下某个 Controller 接）"""
-    from astral_toolkit.app.api import router
+    from astral_toolkit import bootstrap
 
-    router.reset()
-    r = router.routes()
-    # 已删掉旧版导入与压缩包手动升级等退役接口，不再按旧数量硬编码。
-    assert len(_OLD_API_NAMES) == len(set(_OLD_API_NAMES))
-    missing = [n for n in _OLD_API_NAMES if n not in r]
-    assert not missing, missing
-    for n in _OLD_API_NAMES:
-        assert r[n].__module__.startswith("astral_toolkit.app.api."), (
-            n,
-            r[n].__module__,
-        )
+    app = bootstrap.build("test")
+    try:
+        r = bootstrap.routes(app).table
+        # 已删掉旧版导入与压缩包手动升级等退役接口，不再按旧数量硬编码。
+        assert len(_OLD_API_NAMES) == len(set(_OLD_API_NAMES))
+        missing = [n for n in _OLD_API_NAMES if n not in r]
+        assert not missing, missing
+        for n in _OLD_API_NAMES:
+            assert r[n].__module__.startswith("astral_toolkit.app.api."), (
+                n,
+                r[n].__module__,
+            )
+    finally:
+        bootstrap.shutdown(app, budget=0.2)
 
 
 def test_no_services_module():

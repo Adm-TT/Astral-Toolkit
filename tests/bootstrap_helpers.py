@@ -7,11 +7,10 @@ from contextlib import contextmanager
 from astral_toolkit import bootstrap
 from astral_toolkit.app import lifecycle_gate, ui_stream
 from astral_toolkit.navigation import navigate
-from astral_toolkit.tasks import count, hover, mining, navigation
+from astral_toolkit.tasks import count, hover, navigation
 from astral_toolkit.tasks.system import common as system_common
 
 _BINDINGS = (
-    (mining, ("_live",)),
     (navigation, ("_nav", "_pos", "_game_events", "_results")),
     (count, ("_count",)),
     (hover, ("_links",)),

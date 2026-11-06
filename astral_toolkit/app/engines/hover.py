@@ -167,13 +167,13 @@ class _Hover:
         try:
             k = _T("navigation").settings_key("live_key", "F5")
             if self._live.running():
-                _T("mining").live_stop()
+                _T("mining").live_stop(self._live)
                 _H()._note_hud("采矿助手", f"采矿助手已关闭｜按 {k} 开启")
             else:
                 if is_closing():
                     _H()._note_hud("采矿助手", "正在退出")
                     return
-                res = _T("mining").live_start() or {}
+                res = _T("mining").live_start(self._live) or {}
                 if res.get("error"):
                     # 正在停止 / 正在退出：别说「已开启」（3-2）
                     _H()._note_hud("采矿助手", res["error"])
