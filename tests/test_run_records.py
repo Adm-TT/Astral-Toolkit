@@ -121,7 +121,7 @@ def test_read_recent_fills_from_yesterday(monkeypatch, tmp_path):
 
 
 def test_record_mirrors_through_registered_sink(monkeypatch, tmp_path):
-    """面板那条经界面登记的函数推（core 不 import 界面，CL-C5）；没登记就只写文件、不抛"""
+    """面板那条经装配接进来的函数推（core 不 import 界面，CL-C5）；没接就只写文件、不抛"""
     logs = tmp_path / "logs"
     logs.mkdir()
     monkeypatch.setattr(paths, "LOGS", logs)
@@ -142,7 +142,7 @@ def test_record_mirrors_through_registered_sink(monkeypatch, tmp_path):
     assert len(seen) == 1 and "再停一次" in text
 
 
-def test_bootstrap_wires_runtime_log_as_sink(monkeypatch):
+def test_bootstrap_wires_runtime_log_as_sink(monkeypatch, tmp_path):
     """装配（bootstrap.bind_all）把面板那条接到 bus.runtime_log；经名字再调，换掉 bus.runtime_log 也照样走到"""
     import astral_toolkit.app.bus as bus
     from astral_toolkit import bootstrap
@@ -153,10 +153,15 @@ def test_bootstrap_wires_runtime_log_as_sink(monkeypatch):
     bootstrap._bind_core_to_ui()
     seen = []
     monkeypatch.setattr(
-        bus, "runtime_log", lambda line, tag="SYS", level="INFO": seen.append(line)
+        bus,
+        "runtime_log",
+        lambda line, tag="SYS", level="INFO": seen.append((line, tag, level)),
     )
-    run_records._ui_sink("一行", tag="SYS", level="INFO")
-    assert seen == ["一行"]
+    monkeypatch.setattr(paths, "LOGS", tmp_path)  # 运行记录写到临时目录，不碰真的日志
+    run_records.record(
+        "MINING", "x", ui_tag="LIVE", level="WARN"
+    )  # 走完整路径：标签、级别也要传到面板
+    assert seen == [("x", "LIVE", "WARN")]
 
 
 def test_record_still_mirrors_when_logs_unwritable(monkeypatch, tmp_path):
