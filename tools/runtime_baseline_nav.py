@@ -5,7 +5,7 @@
   .venv\\Scripts\\python.exe -X utf8 tools\\runtime_baseline_nav.py --compare <改前.json> <改后.json>
   --debug：调试模式开着录（NV-B5）
 
-输入尽量照现有测试的造法：地面用 test_tools.py 的静止定位，站内用真实星图 / 城镇地点里能走通的空间站目标，
+输入尽量照现有测试的造法：地面用 test_tools_nav.py 的静止定位，站内用真实星图 / 城镇地点里能走通的空间站目标，
 太空用 test_nav_session.py 的停着转镜头位置。造不出来的项写成 {"skipped": "原因"}，改前改后应一致跳过。
 不联网、不写 userdata、不导入 overlay；日志、自转校准都写到临时目录。
 """
