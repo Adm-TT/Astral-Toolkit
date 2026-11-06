@@ -557,7 +557,8 @@ def test_wikelo_uses_full_name_recognises_ore_suffix_distinct(monkeypatch):
         assert wikelo.uses("", "萨德宁") == [(row, 7, "个")]
 
 
-def test_wikelo_uses_text_more_than_five(monkeypatch):
+def test_wikelo_uses_keeps_order_and_units(monkeypatch):
+    """一样东西被 6 个兑换用到：按兑换的顺序全列出来，数量和单位（个 / SCU）照原样"""
     rows = [
         {
             "id": f"u{i}",
@@ -580,10 +581,10 @@ def test_wikelo_uses_text_more_than_five(monkeypatch):
     ]
     with _clean_caches():
         _install(monkeypatch, rows)
-        assert wikelo.uses_text("Kopion Horn", "寇骈角") == (
-            "维科洛兑换要用：兑换0（1），兑换1（2 SCU），兑换2（3），"
-            "兑换3（4 SCU），兑换4（5） 等 6 个"
-        )
+        got = [(c["t"], q, u) for c, q, u in wikelo.uses("Kopion Horn", "寇骈角")]
+        assert got == [
+            (f"兑换{i}", i + 1, "个" if i % 2 == 0 else "SCU") for i in range(6)
+        ]
 
 
 def test_wikelo_req_label_and_note_for():

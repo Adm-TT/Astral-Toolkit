@@ -83,10 +83,6 @@ def test_wikelo_rules_are_pure(monkeypatch):
     assert wikelo_rules.describe(_ORE) == (
         "【杰金样本】收集｜换：杰金奖励\n  · 杰金矿石（Jaclium (Ore)） × 20 个"
     )
-    assert wikelo_rules.uses_text([(_PLAIN, 15, "个"), (_ORE, 20, "个")]) == (
-        "维科洛兑换要用：极地巡逻车（15），杰金样本（20）"
-    )
-    assert wikelo_rules.uses_text([]) == ""
 
 
 def test_uses_equal_hit_does_not_load_or_check_full_name():
@@ -166,8 +162,9 @@ def test_source_note_uses_print_spots():
     )
 
 
-def test_old_uses_text_passes_chinese_name(monkeypatch):
-    """旧名字 wikelo.uses_text(英文名, 中文名) 把中文名也传给 uses：只靠中文名对上的兑换也要列出来"""
+def test_uses_passes_chinese_name(monkeypatch):
+    """wikelo.uses(英文名, 中文名) 把中文名也传下去：只靠中文名对上的兑换也要列出来
+    （原来经 uses_text 测，CL-C4 删了 uses_text）"""
 
     def requiring(norm_en, norm_zh, snap=None):
         return [(_ORE, _ORE["req"][0])] if norm_zh == "杰金矿石" else []
@@ -175,7 +172,9 @@ def test_old_uses_text_passes_chinese_name(monkeypatch):
     monkeypatch.setattr(gd_wikelo, "requiring", requiring)
     monkeypatch.setattr(names, "canonical_exact", lambda zh, en: None)
     monkeypatch.setattr(wikelo, "load", lambda: _ROWS)
-    assert wikelo.uses_text("", "杰金矿石") == "维科洛兑换要用：杰金样本（20）"
+    assert [(c["t"], q, u) for c, q, u in wikelo.uses("", "杰金矿石")] == [
+        ("杰金样本", 20, "个")
+    ]
 
 
 def test_req_label_only_pairs_real_chinese_names():

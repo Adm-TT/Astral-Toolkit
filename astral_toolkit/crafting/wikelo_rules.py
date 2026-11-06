@@ -191,11 +191,3 @@ def describe(c, where=None):
         else:
             lines.append(f"  · {req_label(r)} × {q}" + (f"｜{tip}" if tip else ""))
     return "\n".join(lines)
-
-
-def uses_text(hits):
-    if not hits:
-        return ""
-    parts = [f"{c['t']}（{q:g}{'' if u == '个' else ' ' + u}）" for c, q, u in hits[:5]]
-    more = f" 等 {len(hits)} 个" if len(hits) > 5 else ""
-    return "维科洛兑换要用：" + "，".join(parts) + more

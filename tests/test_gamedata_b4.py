@@ -701,7 +701,10 @@ _DETAILS = {
 }
 
 
-def test_info_and_text_equal_legacy_on_sample(monkeypatch, tmp_path):
+def test_info_equal_legacy_on_sample(monkeypatch, tmp_path):
+    """loot.info 离线、在线两种调法，新的找物品和旧的（legacy）结果一样；顺带钉住分组（多于 6 类地点、
+    还有概率更低的、刷在场景里）和明细本机没有时离线挂起、在线断网报错
+    （原来还比 loot.text 的整段文字，CL-C4 删了 text，改成看 info 本身）"""
     import json
 
     from astral_toolkit.catalog.loot import PLACED
@@ -734,7 +737,7 @@ def test_info_and_text_equal_legacy_on_sample(monkeypatch, tmp_path):
             monkeypatch.setattr(loot, "_failed", {})
             out.append(loot.info(en, zh, online=False))
             monkeypatch.setattr(loot, "_failed", {})
-            out.append(loot.text(en, zh))
+            out.append(loot.info(en, zh))
         return out
 
     new = run()
@@ -750,12 +753,14 @@ def test_info_and_text_equal_legacy_on_sample(monkeypatch, tmp_path):
     old = run()
     loot.close_bundle()
     assert new == old
-    texts = "\n".join(t for t in new[1::2] if t)
-    assert "等 8 类" in texts and "…还有" in texts and PLACED in texts
-    assert (
-        new[4] == {"pending": True} and "暂时取不到" in new[5]
-    )  # 明细本机没有：离线挂起、在线断网报错
-    assert new[8] is None and new[9] == ""
+    found = [d for d in new if d and "groups" in d]
+    groups = [g for d in found for g in d["groups"]]
+    assert any(len(g["regions"]) == 8 for g in groups)  # 多于 6 类地点
+    assert any(d.get("more", 0) > 0 for d in found)  # 还有概率更低的地点
+    assert any(PLACED in (g["box"] or "") for g in groups)  # 刷在场景里
+    # 明细本机没有：离线挂起、在线断网报错
+    assert new[4] == {"pending": True} and "暂时取不到" in new[5]["error"]
+    assert new[8] is None and new[9] is None
 
 
 def test_loot_update_still_inside_updating(monkeypatch, tmp_path):

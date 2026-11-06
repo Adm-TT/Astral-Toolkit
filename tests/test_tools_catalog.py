@@ -422,12 +422,17 @@ def test_nearest_distinct_places_and_loot_grouping(monkeypatch, tmp_path):
     }
     monkeypatch.setattr(loot, "find", lambda en, zh: [("u", "X", "某物", 1)])
     monkeypatch.setattr(loot, "detail", lambda u, online=True: d)
-    t = loot.text("X")
-    assert (
-        "13.64%｜SoO" in t
-        and "1.06%｜Large 箱｜ASD、QV、Hathor" in t
-        and t.count("1.06%") == 1
+    d = loot.info("X")
+    groups = d["groups"] if d else None
+    assert isinstance(groups, list)
+    # 概率和箱子一样的三个地点合成一行
+    rows = sorted(
+        (round(g["p"], 4), g["box"] or "", tuple(g["regions"])) for g in groups
     )
+    assert rows == [
+        (0.0106, "Large", ("ASD", "QV", "Hathor")),
+        (0.1364, "", ("SoO",)),
+    ], rows
 
 
 def test_log_location_found_far_back_and_updates(monkeypatch, tmp_path):

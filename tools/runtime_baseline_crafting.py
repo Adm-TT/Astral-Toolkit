@@ -204,12 +204,6 @@ def call_wikelo_uses(name_en="", name_zh=""):
     return wikelo.uses(name_en=name_en, name_zh=name_zh)
 
 
-def call_wikelo_uses_text(name_en="", name_zh=""):
-    from astral_toolkit.crafting import wikelo
-
-    return wikelo.uses_text(name_en, name_zh)
-
-
 def call_wikelo_source_note(name):
     from astral_toolkit.crafting import wikelo
 
@@ -825,11 +819,6 @@ def _collect_wikelo_uses(items, contracts):
             lambda en=en, zh=zh: _simplify_uses(
                 call_wikelo_uses(name_en=en, name_zh=zh)
             ),
-        )
-        _record(
-            items,
-            f"wikelo_uses_text.{label}",
-            lambda en=en, zh=zh: call_wikelo_uses_text(name_en=en, name_zh=zh),
         )
 
 
