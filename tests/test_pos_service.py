@@ -379,6 +379,7 @@ def test_bootstrap_wires_position_analysis_and_bus(monkeypatch):
     """bootstrap 把 tasks/position 的分析、游戏前台判断、推状态和写日志接进定位线程（R1）"""
     from astral_toolkit import bootstrap
     from astral_toolkit.app import bus
+    from astral_toolkit.infrastructure.platform import window
     from astral_toolkit.system import showloc
     from astral_toolkit.tasks import position as T
 
@@ -386,7 +387,7 @@ def test_bootstrap_wires_position_analysis_and_bus(monkeypatch):
     monkeypatch.setattr(bus, "publish", lambda topic, data: sent.append((topic, data)))
     p = bootstrap._pos_service("test", None, status=lambda: {"s": 1})
     assert (p._label_of, p._system_of, p._locate) == (T.label_of, T.system_of, T.locate)
-    assert p._calibrated is T.glyphs_ready
+    assert p._calibrated is T.glyphs_ready and p._foreground is window.foreground
     monkeypatch.setattr(showloc, "game_foreground", lambda: "现取的")
     assert p._foreground() == "现取的"  # 每次现取 showloc 里的，换了函数也用新的
     assert p._enabled is (sys.platform == "win32")
