@@ -1942,12 +1942,12 @@ def test_parse_mods_and_solve_slots(monkeypatch):
                     "slot": "线缆",
                     "mat": "矿A",
                     "mat_en": "MineralA",
-                    # 比的是绝对值：0 档（-10%）和 1000 档（+10%）一样，先找到的 0 档赢（现在的行为）
+                    # 射速的显示符号没核过：0 档（-10%）和 1000 档（+10%）绝对值一样，分不出是哪档
                     "q": 0,
                 },
             ],
             "avg": 250,
-            "exact": True,
+            "exact": False,  # CR-C1：以前先找到的 0 档赢、还报 exact，现在报不确定
         }
         assert C.solve_slots(
             WEAPON,
