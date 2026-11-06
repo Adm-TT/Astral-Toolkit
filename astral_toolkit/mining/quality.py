@@ -2,6 +2,9 @@
 
 数据：starcitizen.tools「Ore quality」页（矿石为实测，矿物为 4.9 游戏数据；2026-10-23 抄录）。
 4.8 之前挖的矿品质是 245~1000 之间的随机数，所以对不上档位的品质照常可用，只是标不出第几档。
+制造那边也用这张表：做出来的东西说明框里只有属性加成，按蓝图曲线倒推每个材料槽用的品质时只在这些值里找
+（用户那把视差「血红」：钨 858、金 916、科力晶 959，和 +17.50% / ±28.64% 一分不差）。
+以前 quality_tiers.py 另存了一份同样的表（列表、末尾带 1000），2026-11-06 合进这里（CL-C3）。
 """
 
 LETTERS = ("F", "E", "D", "C", "B", "A", "S")
@@ -50,16 +53,17 @@ TIERS = {
     "Sadaryx": (258, 510, 688, 797, 865, 940, 971),
 }
 _LOWER = {k.lower(): k for k in TIERS}
+# 每种矿能出的全部品质值：7 档 + 完美 1000，从低到高（制造倒推品质、扫描结果按档位纠错用）
+TIER_VALUES = {name: [*values, PERFECT] for name, values in TIERS.items()}
+_SUFFIXES = (" (ore)", " (raw)", " (pure)", " ore", " raw")
 
 
 def _key(material):
-    name = str(material or "").strip()
-    if name in TIERS:
-        return name
-    low = name.lower()
-    for suffix in (" (ore)", " (raw)", " ore", " raw"):
-        if low.endswith(suffix):
-            low = low[: -len(suffix)]
+    """矿名 → TIERS 里的写法：不分大小写，去掉 (Ore) / (Raw) / (Pure) / Ore / Raw 后缀（叠着的一直剥到没有，
+    「Tungsten (Pure) Ore」也认得）；认不出返回 None"""
+    low = str(material or "").strip().lower()
+    while suffix := next((s for s in _SUFFIXES if low.endswith(s)), None):
+        low = low[: -len(suffix)]
     low = {"ice": "pressurized ice"}.get(low, low)  # 制造表里叫 Ice（审查 2026-10-28）
     return _LOWER.get(low)
 
@@ -89,3 +93,9 @@ def tier_of(material, q):
         if v == q:
             return (l, i, len(LETTERS))
     return None
+
+
+def tier_values(material):
+    """这种矿 / 矿物能出的全部品质值（TIER_VALUES 那一行，含完美 1000）；认不出返回 None"""
+    k = _key(material)
+    return TIER_VALUES[k] if k else None

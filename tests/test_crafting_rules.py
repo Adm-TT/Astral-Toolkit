@@ -145,7 +145,7 @@ def _block_io(monkeypatch):
     from astral_toolkit.core import i18n
     from astral_toolkit.crafting import itemstats
     from astral_toolkit.gamedata import crafting as gd_crafting
-    from astral_toolkit.mining import quality_tiers
+    from astral_toolkit.mining import quality as mining_quality
 
     def boom(*args, **kwargs):
         raise AssertionError("纯规则不该触发查询 / 建库 / 汉化")
@@ -155,7 +155,7 @@ def _block_io(monkeypatch):
             gd_crafting,
             ("catalog", "cached", "for_item", "containing", "using_material"),
         ),
-        (quality_tiers, ("tiers",)),
+        (mining_quality, ("tier_values",)),
         (itemstats, ("base_value", "tags", "version")),
         (i18n, ("mineral_zh",)),
     ):

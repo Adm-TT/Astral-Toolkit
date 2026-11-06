@@ -1148,6 +1148,54 @@ def test_parse_stray_numbers_in_composition_ignored():
     assert s.mass == 13586 and not s.valid
 
 
+def test_quality_one_table_and_name_forms():
+    """CL-C3：quality_tiers 合进 quality 后只剩一张表：tier_values 是 7 档 + 完美 1000（制造倒推品质、扫描纠错用），
+    tiers / tier_of 照旧；名字整理合成一个：不分大小写，(Ore) / (Raw) / (Pure) / Ore / Raw 都去掉，Ice 当 Pressurized Ice"""
+    from astral_toolkit.mining import quality
+
+    assert quality.tier_values("Tungsten") == [363, 530, 662, 787, 858, 902, 964, 1000]
+    for name in (
+        "tungsten",
+        "Tungsten (Ore)",
+        "TUNGSTEN (RAW)",
+        "Tungsten (Pure)",
+        "Tungsten Ore",
+        "tungsten raw",
+        "Tungsten (Pure) Ore",
+    ):
+        assert quality.tier_values(name) == quality.tier_values("Tungsten"), name
+        assert quality.tier_of(name, 858) == ("B", 5, 7), name
+    assert quality.tier_values("Ice") == quality.TIER_VALUES["Pressurized Ice"]
+    assert quality.tier_values("没有这种矿") is None
+    assert len(quality.TIER_VALUES) == len(quality.TIERS) == 36
+    for k, values in quality.TIER_VALUES.items():
+        assert values == [*quality.TIERS[k], quality.PERFECT], k
+        assert quality.tier_values(k) is values, (
+            k
+        )  # 规范名认自己（合表后没有「原名直接命中」那条捷径了）
+
+
+def test_fix_by_tiers_counts_top_tier_when_renaming():
+    """扫描纠错查「这一档是哪种矿独有的」要算到 S 档，只有每种矿都有的完美 1000 不算
+    （CL-C3 合表时这里要的是带 1000 的那份；换成不带 1000 的，S 档会被当成 1000 剪掉）"""
+    from astral_toolkit.mining import quality
+    from astral_toolkit.mining.parse import _fix_by_tiers, _one_edit
+
+    gold = quality.TIER_VALUES["Gold"]
+    every = [v for values in quality.TIERS.values() for v in values]
+    picks = [
+        (name, values[-1])
+        for name, values in quality.TIERS.items()
+        if name not in ("Gold", "Pressurized Ice")
+        and every.count(values[-1]) == 1
+        and not any(_one_edit(str(values[-1]), str(g)) for g in gold)
+    ]
+    assert picks
+    name, top = picks[0]
+    # 读成「金」，品质却正好是另一种矿独有的 S 档、和金哪一档都不沾边 → 矿名认错了，改成那种矿
+    assert _fix_by_tiers([("Gold", 30.0, top)], None)[0][0] == name
+
+
 def test_crafted_head_quality(tmp_path, monkeypatch):
     """自造矿头（1.6.41）：发射器（萨达瑞晶）+ 汇流排（铜）的品质决定激光功率，破碎方案按自造的功率算。
     两个槽的加成相加（1.6.47 起；数据里没有合并规则，游戏制造终端、SCM、Crafter 三处都是相加：947 + 958 → +36.20%）"""
