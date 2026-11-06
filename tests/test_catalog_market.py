@@ -154,6 +154,8 @@ def test_hover_more_stops_when_market_cannot_open(monkeypatch):
         market=boom,
         market_rows=lambda item_id, tier: calls.append("market_rows"),
         hud_market=hud_market,
+        wikelo_rewards=lambda name, zh: [],
+        has_blueprint=lambda *names: False,
     )
     monkeypatch.setattr(Hv, "_links", links)
     monkeypatch.setattr(Hv, "_last_hover", {"seq": 5, "lines": ["医疗笔"]})

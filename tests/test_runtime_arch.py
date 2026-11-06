@@ -1218,6 +1218,8 @@ def test_api_route_names_unique():
 _F8_FORBIDDEN_IMPORTS = (
     "astral_toolkit.tasks.trade",
     "astral_toolkit.crafting.loot",
+    "astral_toolkit.crafting.crafting",
+    "astral_toolkit.crafting.wikelo",
     "astral_toolkit.trade.console.match_tooltip",
     "astral_toolkit.trade.console.hud_market",
 )
@@ -1240,6 +1242,8 @@ def test_f8_reaches_item_query_through_links():
     for bad in (
         "from . import trade as _t_trade",
         "def f():\n    from ..crafting.loot import info\n",
+        "def f():\n    from ..crafting import wikelo\n",
+        "def f():\n    from ..crafting.crafting import craft_text\n",
         "def f():\n    from ..trade.console import hud_market\n",
         "from ..trade.console import match_tooltip",
         "t = trade()",
@@ -1250,6 +1254,74 @@ def test_f8_reaches_item_query_through_links():
         assert _f8_link_violations(bad), bad
     ok = "m = links.market()\nm.match(zh, en)\nm.remember_alias(1, zh)\nlinks.hud_market([])\n"
     assert _f8_link_violations(ok) == []
+    assert (
+        _f8_link_violations("def f():\n    from ..crafting.reverse import craft_text\n")
+        == []
+    )
+
+
+_B5_OLD_CRAFT_NAMES = (
+    "GEAR_ZH",
+    "SUB_ZH",
+    "PROP_KEY",
+    "LOWER_BETTER",
+    "prop_zh",
+    "slot_zh",
+    "category_zh",
+    "part_of",
+    "needs",
+    "group_mods",
+    "curve_value",
+    "curve_text",
+    "laser_total",
+    "mix_plan",
+    "parse_mods",
+    "craft_text",
+    "_clean_title",
+)
+
+_B5_OLD_WIKELO_NAMES = ("note_for", "req_label", "describe", "_same")
+
+_B5_FILES = (
+    ("mining/laser.py", "astral_toolkit.mining"),
+    ("mining/locations.py", "astral_toolkit.mining"),
+    ("tasks/hover.py", "astral_toolkit.tasks"),
+    ("tasks/mining.py", "astral_toolkit.tasks"),
+    ("tasks/trade.py", "astral_toolkit.tasks"),
+    ("tasks/crafting.py", "astral_toolkit.tasks"),
+    ("tasks/wikelo.py", "astral_toolkit.tasks"),
+)
+
+
+def _b5_violations(source, pkg):
+    """经 crafting.crafting / crafting.wikelo 旧名字的地方（函数里的 import、wikelo.<旧名字> 属性也算）"""
+    bad = {f"astral_toolkit.crafting.crafting.{n}" for n in _B5_OLD_CRAFT_NAMES}
+    bad |= {f"astral_toolkit.crafting.wikelo.{n}" for n in _B5_OLD_WIKELO_NAMES}
+    out = [m for m in _imports_in_source(source, pkg) if m in bad]
+    for node in ast.walk(ast.parse(source)):
+        if (
+            isinstance(node, ast.Attribute)
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "wikelo"
+            and node.attr in _B5_OLD_WIKELO_NAMES
+        ):
+            out.append(f"wikelo.{node.attr}")
+    return out
+
+
+def test_b5_callers_use_new_homes():
+    """CR-B5：采矿、物品查询、F8 首屏和两个用例不再经 crafting.crafting / crafting.wikelo 的旧名字拿纯规则。"""
+    for name, pkg in _B5_FILES:
+        path = _ROOT / name
+        source = path.read_text(encoding="utf-8")
+        assert _b5_violations(source, pkg) == [], name
+    for bad in (
+        "def f():\n    from ..crafting.crafting import GEAR_ZH\n",
+        "def f():\n    from ..crafting.wikelo import note_for\n",
+        "wikelo.note_for(x)",
+        "wikelo._same(a, b)",
+    ):
+        assert _b5_violations(bad, "astral_toolkit.tasks"), bad
 
 
 _MUTABLE = (

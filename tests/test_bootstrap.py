@@ -21,10 +21,12 @@ from astral_toolkit.mining.parse import Scan
 from astral_toolkit.runtime.session import RunFlag, RunState
 from astral_toolkit.tasks import catalog as catalog_tasks
 from astral_toolkit.tasks import count as count_tasks
+from astral_toolkit.tasks import crafting as crafting_tasks
 from astral_toolkit.tasks import hover as hover_tasks
 from astral_toolkit.tasks import mining as mining_tasks
 from astral_toolkit.tasks import navigation as nav_tasks
 from astral_toolkit.tasks import system as system_tasks
+from astral_toolkit.tasks import wikelo as wikelo_tasks
 from astral_toolkit.tasks.system import common as system_common
 from tests.bootstrap_helpers import (
     restore_bindings,
@@ -247,6 +249,8 @@ def test_hover_links_are_wired_by_bootstrap(monkeypatch):
     assert links.market is catalog_tasks.open_market
     assert links.market_rows is catalog_tasks.market_rows
     assert links.hud_market is catalog_tasks.market_hud_text
+    assert links.wikelo_rewards is wikelo_tasks.rewards_for
+    assert links.has_blueprint is crafting_tasks.has_blueprint
 
     calls = []
 

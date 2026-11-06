@@ -73,17 +73,15 @@ def _game_front():
 
 
 def _quality_hints(composition):
-    from ..crafting.crafting import (
-        quality_hints,
-    )  # 读不到制造数据只丢提示，不影响扫描结果
+    from . import crafting as _crafting_uc  # 读不到制造数据只丢提示，不影响扫描结果
 
-    return quality_hints(composition)
+    return _crafting_uc.scan_hints(composition)
 
 
 def _mat_summary(*args):
-    from ..crafting.crafting import mat_summary
+    from . import crafting as _crafting_uc
 
-    return mat_summary(*args)
+    return _crafting_uc.material_summary(*args)
 
 
 def _craft_and_goal_facts(scan, mineral_zh):

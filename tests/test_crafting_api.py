@@ -1,5 +1,6 @@
 """CR-B4：制造 / 维科洛接口拆到 app/api + tasks 用例 + presenters 后，接口结果仍和 tasks/goals.py 旧壳逐字一样。"""
 
+import re
 from contextlib import contextmanager
 from typing import Any
 
@@ -168,3 +169,144 @@ def test_goals_craft_struct_shell_keeps_note(monkeypatch):
         detail = G.craft_detail(UC.bp_key(bp))
         keys = ("slots", "mine", "sources", "nsrc")
         assert {k: detail[k] for k in keys} == {k: plain[k] for k in keys}
+
+
+def test_b5_crafting_usecases_match_direct():
+    """CR-B5：采矿 / 物品查询用的三个用例和直接调 crafting.crafting 一样（有没有真数据都成立）"""
+    from astral_toolkit.crafting import crafting as crafting_mod
+
+    composition = [("Quantainium", 60.0, 650), ("Gold", 40.0, 700)]
+    assert UC.scan_hints(composition) == crafting_mod.quality_hints(composition)
+    assert UC.material_summary("Gold") == crafting_mod.mat_summary("Gold")
+    assert UC.material_summary("Gold", 600) == crafting_mod.mat_summary("Gold", 600)
+    assert UC.mineral_uses_text("Quantainium") == crafting_mod.uses_report(
+        "Quantainium"
+    )
+
+
+def test_b5_has_blueprint_matches_old_hover(monkeypatch):
+    """CR-B5：F8「可制造：有蓝图」和原来 hover 里 want / bps 那两句一样"""
+    bps = [
+        {"n": "Test Widget", "z": "测试部件"},
+        {"n": "Lima", "z": None},
+        {"n": "Other", "z": ""},
+    ]
+    monkeypatch.setattr(UC, "blueprints", lambda: bps)
+
+    def old(*names):
+        def fold(x):
+            return re.sub(r"[^a-z0-9一-鿿]", "", (x or "").lower())
+
+        want = {fold(x) for x in names} - {""}
+        return bool([b for b in bps if fold(b["n"]) in want or fold(b["z"]) in want])
+
+    for names in (
+        ("测试部件",),
+        ("Test Widget", "没有"),
+        ("没有", "测试部件"),
+        (None, "没有", "lima"),
+        ("Lima",),
+        ("lima",),
+        ("没有",),
+        (None, ""),
+        (),
+    ):
+        assert UC.has_blueprint(*names) == old(*names), names
+
+
+def test_b5_wikelo_rewards_match_old_hover(monkeypatch):
+    """CR-B5：F8「可通过维科洛兑换获得」和原来 hover 里那个列表推导一样"""
+    from astral_toolkit.crafting import wikelo as wikelo_mod
+
+    contracts = [
+        {"t": "甲", "rz": "极地涂装 巡逻车", "rewards": []},
+        {"t": "乙", "rz": "", "rewards": ["测试奖励"]},
+        {"t": "丙", "rz": "别的", "rewards": ["医疗笔"]},
+    ]
+    monkeypatch.setattr(wikelo_mod, "load", lambda: contracts)
+
+    def old(name, zh):
+        return [
+            c
+            for c in wikelo_mod.load()
+            if any(
+                wikelo_mod._same(x, name) or (zh and wikelo_mod._same(x, zh))
+                for x in [c.get("rz", ""), *c.get("rewards", [])]
+            )
+        ]
+
+    for name, zh in (
+        ("极地涂装 巡逻车", ""),
+        ("xx", "测试奖励"),
+        ("xx", "医疗笔"),
+        ("xx", ""),
+    ):
+        assert WU.rewards_for(name, zh) == old(name, zh), (name, zh)
+
+
+def test_b5_mining_and_mineral_page_go_through_usecases(monkeypatch):
+    """CR-B5：采矿助手的制造提示 / 可造份数、物品查询矿物页的制造用途 / 可造份数都经 tasks/crafting 的用例，参数原样传"""
+    from astral_toolkit.tasks import mining as TM
+    from astral_toolkit.tasks import trade as TT
+
+    calls = []
+
+    def hints(comp):
+        calls.append(("hints", comp))
+        return ["提示"]
+
+    def summary(*args):
+        calls.append(("summary", args))
+        return {"count": 3}
+
+    def uses_text(mineral):
+        calls.append(("uses", mineral))
+        return "用途"
+
+    monkeypatch.setattr(UC, "scan_hints", hints)
+    monkeypatch.setattr(UC, "material_summary", summary)
+    monkeypatch.setattr(UC, "mineral_uses_text", uses_text)
+    comp = [("Gold", 40.0, 700)]
+    assert TM._quality_hints(comp) == ["提示"]
+    assert TM._mat_summary("Gold", 700) == {"count": 3}
+    assert calls == [("hints", comp), ("summary", ("Gold", 700))]
+    info = TT.mineral_info(name="Gold")
+    assert info["uses"] == "用途" and info["craft_count"] == 3
+    assert ("uses", "Gold") in calls and ("summary", ("Gold",)) in calls
+
+
+def test_b5_hover_lines_pass_names_to_links(monkeypatch):
+    """CR-B5：F8 悬浮窗经 HoverLinks 查「可通过维科洛兑换获得」「可制造：有蓝图」，
+    名字原样传：兑换用物品卡片的名字（没有用认出的英文）和中文，蓝图用卡片名字、认出的英文、中文三个"""
+    from astral_toolkit.tasks import hover as Hv
+
+    calls = []
+
+    def rewards(name, zh):
+        calls.append(("rewards", name, zh))
+        return [{"t": "兑换甲"}]
+
+    def has_bp(*names):
+        calls.append(("bp", *names))
+        return True
+
+    links = Hv.HoverLinks(
+        item_card=lambda *a, **k: {},
+        loot=lambda *a, **k: None,
+        market=lambda: None,
+        market_rows=lambda *a, **k: ([], None),
+        hud_market=lambda results: "",
+        wikelo_rewards=rewards,
+        has_blueprint=has_bp,
+    )
+    monkeypatch.setattr(Hv, "_links", links)
+    monkeypatch.setattr(Hv, "_goal_for", lambda *names: None)
+    lines = Hv._hover_lines({"name": "Card Name", "buy": []}, "OCR En", "中文名")
+    assert lines == ["可通过维科洛兑换获得：兑换甲", "可制造：有蓝图（材料见物品查询）"]
+    assert calls == [
+        ("rewards", "Card Name", "中文名"),
+        ("bp", "Card Name", "OCR En", "中文名"),
+    ]
+    calls.clear()
+    Hv._hover_lines({"buy": []}, "OCR En", "")
+    assert calls[0] == ("rewards", "OCR En", "")

@@ -67,6 +67,8 @@ def _setup(monkeypatch, results):
         market=lambda: None,
         market_rows=lambda *a, **k: ([], None),
         hud_market=lambda results: "",
+        wikelo_rewards=lambda name, zh: [],
+        has_blueprint=lambda *names: False,
     )
     monkeypatch.setattr(Hv, "_links", links)
     return imgs, calls, logs

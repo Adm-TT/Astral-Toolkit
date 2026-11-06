@@ -3,7 +3,7 @@
 只吃传进来的蓝图（或取蓝图的函数）和筛选条件，不读库、不读文件、不读汉化包。
 """
 
-from ..contracts.textkeys import blueprint_search_norm as _search_norm
+from ..contracts.textkeys import blueprint_search_norm as _search_norm, fold_mixed
 from .classify import category, facet, part_of
 from .labels import GEAR_ZH, SUB_ZH
 from .materials import needs
@@ -91,3 +91,13 @@ def browse(
         "parts": parts,
         "makers": makers,
     }
+
+
+def named(blueprints, names):
+    """英文名或中文名的键（contracts.textkeys.fold_mixed）和 names 里某一个一样的蓝图，按源顺序；空名字不算"""
+    want = {fold_mixed(x) for x in names} - {""}
+    return [
+        b
+        for b in blueprints
+        if fold_mixed(b["n"]) in want or fold_mixed(b["z"]) in want
+    ]
