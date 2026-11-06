@@ -1,4 +1,4 @@
-"""物品查询搜索（1.6.41）：商店、掉落、汉化包三份物品名合成一份索引，中英文都能搜
+"""物品查询搜索（1.6.41；目录迁移 Q1 从 crafting/itemsearch.py 搬来）：商店、掉落、汉化包三份物品名合成一份索引，中英文都能搜
 
 以前的毛病（2026-10-23 用户：视差步枪搜不到）：
 - 中文先用对照表换成英文再搜，对照表里有「视差步枪 → HD」这种假的（物品简称后面带的型号代码），搜出来不对
@@ -12,42 +12,30 @@
   同一档里基础款排在涂装 / 限定版（名字带引号的）前面，有商店或掉落数据的排在前面，短的在前
 - 英文：完全一样 > 开头对得上 > 包含 > 每个词都有（顺序不限）
 
-纯匹配、排序、建索引在 catalog/search.py；本文件只留 gamedata 取数、缓存、锁。
+纯匹配、排序、建索引在 catalog/search.py；本文件管 gamedata 取数、按资料版本缓存一份索引、建索引的锁。
+全应用共享这一份缓存；库建不出来时给空索引、不进缓存（下次再试）。
+窗口打开后在后台先把索引建好（预热，第一次约 1–3 秒）：由 bootstrap 起线程调 build_index，本模块 import 时不起线程。
 """
 
-from ..catalog import search as _catalog_search
-from ..gamedata._cache import VersionCache
+import threading
 
-_cache = VersionCache()  # 索引按库的内容版本缓存一份
-_build_lock = __import__(
-    "threading"
-).Lock()  # 启动时后台先建索引；玩家这时搜索就等它建完，不重复建
+from ...catalog import search as _catalog_search
+from ...gamedata._cache import VersionCache
+
+_cache = VersionCache()  # 索引按库的内容版本缓存一份（全应用共享）
+_build_lock = threading.Lock()  # 启动时后台先建索引；玩家这时搜索就等它建完，不重复建
 
 
-def _build():
+def build_index():
+    """当前资料版本的索引（缓存里没有就建）：预热和每次搜索都走这里，同一时间只建一份"""
     with _build_lock:
         return _build_locked()
-
-
-def warm_up():
-    """窗口打开后在后台先把搜索索引建好（要读几份几 MB 的数据，第一次约 1–3 秒）：玩家第一次搜索不用等"""
-    import threading
-
-    def run():
-        try:
-            _build()
-        except Exception:
-            pass
-
-    thread = threading.Thread(target=run, daemon=True, name="search-warmup")
-    thread.start()
-    return thread
 
 
 def _build_locked():
     """从游戏数据层的物品目录建内存索引（合并规则在 gamedata/_import.import_items，和以前这里的一样）；
     缓存键是库的内容版本：五份源（商店、掉落、汉化、旧写法、wiki）哪份变了都会重建"""
-    from .. import gamedata
+    from ... import gamedata
 
     try:
         gamedata.ensure()
@@ -61,7 +49,7 @@ def _build_locked():
 
 def _index_from(snap):
     """从一个快照取好物品行，交给 catalog.search.index_from 建索引（VersionCache 按 snap.data_version 缓存）"""
-    from ..gamedata import items as gd_items
+    from ...gamedata import items as gd_items
 
     items = gd_items.all(snap)
     zks_of = gd_items.zh_keys_of_all(snap)
@@ -74,9 +62,9 @@ def find(query, limit=30):
     """[{en, zh, shop(商店 id 或 None), cat, loot(掉落数据里有), loc(只有汉化包里有名字), variant}]，最像的在前"""
     if not (query or "").strip():
         return []
-    return _catalog_search.find(_build(), query, limit)
+    return _catalog_search.find(build_index(), query, limit)
 
 
 def lookup(en):
     """按英文名（忽略大小写、空格、标点）找索引里的这一件；没有返回 None"""
-    return _catalog_search.lookup(_build(), en)
+    return _catalog_search.lookup(build_index(), en)

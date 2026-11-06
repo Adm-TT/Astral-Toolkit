@@ -449,8 +449,8 @@ def _register(app: DesktopApp) -> None:
             return
 
         from .core import settings
-        from .crafting import itemsearch
         from .tasks import system as _sys
+        from .tasks.catalog_queries import search as item_search
 
         online = getattr(_sys, "_online", None)
         if online is None:
@@ -474,7 +474,16 @@ def _register(app: DesktopApp) -> None:
                 online["loop"] = False
 
         def start_itemsearch() -> threading.Thread:
-            return itemsearch.warm_up()
+            # 窗口打开后在后台先把物品搜索索引建好，玩家第一次搜不用等（Q1：线程由装配起，搜索模块 import 时不起线程）
+            def run() -> None:
+                try:
+                    item_search.build_index()
+                except Exception:
+                    pass
+
+            thread = threading.Thread(target=run, daemon=True, name="search-warmup")
+            thread.start()
+            return thread
 
         def start_gamedata() -> threading.Thread:
             from . import gamedata

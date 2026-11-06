@@ -851,7 +851,7 @@ def _legacy_build(monkeypatch, tmp_path):
 
 
 def _fresh_search(monkeypatch):
-    from astral_toolkit.crafting import itemsearch as IS
+    from astral_toolkit.tasks.catalog_queries import search as IS
 
     monkeypatch.setattr(IS, "_cache", _VC())
     return IS
@@ -874,9 +874,9 @@ def test_itemsearch_find_matches_json_build_on_sample(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path)
     IS = _fresh_search(monkeypatch)
     new = [IS.find(q) for q in _QUERIES]
-    new_rows = [dict(e, zks=sorted(e["zks"])) for e in (IS._build() or {})["rows"]]
+    new_rows = [dict(e, zks=sorted(e["zks"])) for e in (IS.build_index() or {})["rows"]]
     legacy = _legacy_build(monkeypatch, tmp_path)
-    monkeypatch.setattr(IS, "_build", lambda: legacy)
+    monkeypatch.setattr(IS, "build_index", lambda: legacy)
     assert new_rows == [dict(e, zks=sorted(e["zks"])) for e in legacy["rows"]]
     assert [IS.find(q) for q in _QUERIES] == new
     assert any(new)  # 不是全空的比对
@@ -889,15 +889,15 @@ def test_itemsearch_cache_keyed_by_version(monkeypatch, tmp_path):
 
     _setup(monkeypatch, tmp_path)
     IS = _fresh_search(monkeypatch)
-    first = IS._build()
+    first = IS.build_index()
     G.rebuild(force=True)  # 新一代、内容版本不变：不重建索引
-    assert IS._build() is first
+    assert IS.build_index() is first
     # 只改 name_aliases.json（以前缓存键漏了它，改了不刷新）
     (tmp_path / "name_aliases.json").write_text(
         json.dumps({"Medi Pen": "Medpen", "MedPack X": "Medpen"}), encoding="utf-8"
     )
     G.rebuild()
-    second = IS._build()
+    second = IS.build_index()
     assert second is not first and IS.lookup("MedPack X")["ek"] == "medpen"
 
 
@@ -908,7 +908,7 @@ def test_query_during_rebuild_sees_old_or_new_never_error(monkeypatch, tmp_path)
 
     _setup(monkeypatch, tmp_path)
     IS = _fresh_search(monkeypatch)
-    IS._build()
+    IS.build_index()
     errors, empty = [], []
 
     from astral_toolkit.crafting import shops
@@ -1017,7 +1017,7 @@ def test_query_while_new_content_is_published(monkeypatch, tmp_path):
 
     _setup(monkeypatch, tmp_path)
     IS = _fresh_search(monkeypatch)
-    IS._build()
+    IS.build_index()
     errors, empty, stop = [], [], threading.Event()
 
     def worker():
@@ -1041,3 +1041,41 @@ def test_query_while_new_content_is_published(monkeypatch, tmp_path):
         stop.set()
         th.join(60)
     assert not errors and not empty
+
+
+def test_build_index_builds_once_when_warmup_and_search_overlap(monkeypatch):
+    """预热线程和玩家搜索撞在一起：同一资料版本只建一份索引，后来的等先来的建完直接用（目录迁移章程 §7.1）"""
+    import threading
+    import time
+    from contextlib import contextmanager
+    from types import SimpleNamespace
+
+    from astral_toolkit import gamedata
+    from astral_toolkit.tasks.catalog_queries import search as IS
+
+    @contextmanager
+    def snap():
+        yield SimpleNamespace(data_version=7)
+
+    gate, built = threading.Event(), []
+
+    def slow(s):
+        built.append(s.data_version)
+        gate.wait(5)
+        return {"rows": [], "by_char": {}, "by_tri": {}, "by_en": {}}
+
+    monkeypatch.setattr(gamedata, "ensure", lambda: None)
+    monkeypatch.setattr(gamedata, "snapshot", snap)
+    monkeypatch.setattr(IS, "_cache", _VC())
+    monkeypatch.setattr(IS, "_index_from", slow)
+    got = []
+    threads = [
+        threading.Thread(target=lambda: got.append(IS.build_index())) for _ in range(2)
+    ]
+    for t in threads:
+        t.start()
+    time.sleep(0.2)  # 两个都进去了：一个在建，一个在等
+    gate.set()
+    for t in threads:
+        t.join(5)
+    assert built == [7] and len(got) == 2 and got[0] is got[1]

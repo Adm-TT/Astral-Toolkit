@@ -90,7 +90,7 @@ def names_of(item_id: str, snap=None) -> tuple[tuple[str, str, str], ...]:
 
 
 def zh_keys_of_all(snap=None) -> dict[str, tuple[str, ...]]:
-    """item_id → 这件物品所有中文比较键（汉化包、掉落数据两种），顺序 = 导入顺序；itemsearch 建索引用"""
+    """item_id → 这件物品所有中文比较键（汉化包、掉落数据两种），顺序 = 导入顺序；物品搜索（tasks/catalog_queries/search）建索引用"""
     out: dict[str, list[str]] = {}
     with use(snap) as s:
         for item_id, norm in s.execute(
@@ -155,7 +155,7 @@ def search(fragment: str, limit: int | None = None, snap=None) -> tuple[ItemRow,
 def names_by_kind(
     kinds: tuple[str, ...], snap=None
 ) -> dict[str, tuple[tuple[str, str, str], ...]]:
-    """item_id → 这几种名字 (kind, name, norm)，按导入时的插入顺序；itemsearch 建索引一次取全"""
+    """item_id → 这几种名字 (kind, name, norm)，按导入时的插入顺序；物品搜索（tasks/catalog_queries/search）建索引一次取全"""
     out: dict[str, list[tuple[str, str, str]]] = {}
     marks = ",".join("?" * len(kinds))
     with use(snap) as s:

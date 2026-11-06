@@ -90,7 +90,7 @@ def test_topics_share_version_cache(monkeypatch, tmp_path):
     import json
 
     import astral_toolkit.gamedata as G
-    from astral_toolkit.crafting import itemsearch as IS
+    from astral_toolkit.tasks.catalog_queries import search as IS
     from astral_toolkit.crafting import stockplaces as SP
     from astral_toolkit.gamedata import items as gd_items
     from astral_toolkit.gamedata import shops as gd_shops
@@ -107,11 +107,12 @@ def test_topics_share_version_cache(monkeypatch, tmp_path):
         assert isinstance(getattr(mod, name), VersionCache)
         monkeypatch.setattr(mod, name, VersionCache())
     monkeypatch.setattr(SP, "_INDEX", VersionCache())
-    a = (gd_items.candidates(), gd_shops.catalog(), SP.places(), IS._build())
+    a = (gd_items.candidates(), gd_shops.catalog(), SP.places(), IS.build_index())
     assert all(
         x is y
         for x, y in zip(
-            a, (gd_items.candidates(), gd_shops.catalog(), SP.places(), IS._build())
+            a,
+            (gd_items.candidates(), gd_shops.catalog(), SP.places(), IS.build_index()),
         )
     )
     src = json.loads((tmp_path / "shops.json").read_text(encoding="utf-8"))
@@ -119,7 +120,7 @@ def test_topics_share_version_cache(monkeypatch, tmp_path):
     _write_min_sources(tmp_path, **{"shops.json": src})
     with G.updating():
         pass
-    b = (gd_items.candidates(), gd_shops.catalog(), SP.places(), IS._build())
+    b = (gd_items.candidates(), gd_shops.catalog(), SP.places(), IS.build_index())
     assert all(x is not y for x, y in zip(a, b))
     assert any(c.en == "Brand New Thing" for c in b[1])
 

@@ -663,3 +663,39 @@ def test_routes_hold_this_apps_live(monkeypatch):
         for app in apps:
             bootstrap.shutdown(app, budget=0.5)
     assert not real_grab_calls
+
+
+def test_search_warmup_thread_builds_index_in_background(monkeypatch):
+    """搜索预热（Q1 起线程由 bootstrap 起，搜索模块 import 时不起）：后台 daemon 线程、名字 search-warmup，
+    调 tasks/catalog_queries/search.build_index；建索引出错不往外抛"""
+    from astral_toolkit.tasks.catalog_queries import search as item_search
+
+    made = {}
+    real = bootstrap.OneShot
+
+    def record(name, phase, thread=None, *, factory=None):
+        made[name] = factory
+        return real(name, phase, thread, factory=factory)
+
+    monkeypatch.setattr(bootstrap, "OneShot", record)
+    app = bootstrap.build("test")
+    try:
+        calls = []
+        monkeypatch.setattr(
+            item_search, "build_index", lambda: calls.append(threading.current_thread())
+        )
+        t = made["search-warmup"]()
+        t.join(5)
+        assert calls == [t] and t.daemon and t.name == "search-warmup"
+
+        def boom():
+            raise RuntimeError("坏了")
+
+        hooked = []
+        monkeypatch.setattr(item_search, "build_index", boom)
+        monkeypatch.setattr(threading, "excepthook", hooked.append)
+        t = made["search-warmup"]()
+        t.join(5)
+        assert hooked == [] and not t.is_alive()
+    finally:
+        bootstrap.shutdown(app, budget=0.2)

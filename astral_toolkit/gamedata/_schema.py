@@ -8,7 +8,7 @@ IMPORTER_VERSION = 7  # 7：item_stats 空 dict 条目不入库（收口 2，202
 DDL: list[str] = [
     # 清单和版本：schema_version / importer_version / data_version / generation_id / build_time / src:<文件名>=sha256
     "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
-    # 物品目录：item_id 是规范化英文名（itemsearch.en_key），不是任何外部编号
+    # 物品目录：item_id 是规范化英文名（contracts.textkeys.en_key），不是任何外部编号
     """CREATE TABLE items (
         item_id TEXT PRIMARY KEY,
         en TEXT NOT NULL,
