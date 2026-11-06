@@ -23,7 +23,8 @@ def _words(s):
 
 def pick_variants(name, candidates):
     """买不到时推荐的同款：candidates 是 shops.variants 给的同系列能买到的几件 [(id, 名字, 类别)]（原型排前面），
-    去掉配件（这件本身是配件的除外），最多 2 件。name 用商店里这件的名字"""
+    去掉配件（这件本身是配件的除外），最多 2 件。
+    name：商店数据里有这件时是商店里的名字，没有时是传进来的英文名（没有英文名用中文名），见 name_and_category"""
     extra_ok = _words(name) & ACCESSORY
     return [v for v in candidates if not ((_words(v[1]) & ACCESSORY) - extra_ok)][:2]
 
