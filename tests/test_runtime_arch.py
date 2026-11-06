@@ -455,6 +455,17 @@ def test_infrastructure_stays_below_app():
         assert _forbidden(mods, _INFRA_FORBIDDEN), source
 
 
+def test_core_stays_below_app():
+    """core/ 是基础工具：不反向依赖界面、用例、runtime 和装配入口（CL-C5 去掉了截图读悬浮窗、运行记录推面板
+    这两处，改成装配接进来）。函数里的 import 也算"""
+    files = list((_ROOT / "core").rglob("*.py"))
+    assert files
+    for f in files:
+        assert _forbidden(list(_imports_in(f)), _INFRA_FORBIDDEN) == [], f.name
+    mods = list(_imports_in_source("from ..app import bus", "astral_toolkit.core"))
+    assert _forbidden(mods, _INFRA_FORBIDDEN)  # 检查本身认得出来
+
+
 _GAMEDATA_TEXTKEY_FORBIDDEN = (
     ("astral_toolkit.crafting.loot", {"_fold"}),
     ("astral_toolkit.crafting.wikelo", {"_fold"}),

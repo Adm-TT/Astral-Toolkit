@@ -207,6 +207,22 @@ def test_nav_marker_is_wired_by_bootstrap():
     assert marker._settings == view.all
 
 
+def test_bind_all_wires_core_to_ui(monkeypatch):
+    """bind_all 顺带把 core 的截图涂黑悬浮窗、运行记录推面板接上（CL-C5）；test 模式只 build 不接"""
+    from astral_toolkit.core import capture, run_records
+    from tests.bootstrap_helpers import app_for_test
+
+    monkeypatch.setattr(capture, "_overlay_state", None)  # 测完还原
+    monkeypatch.setattr(run_records, "_ui_sink", None)
+    app = bootstrap.build("test")
+    try:
+        assert capture._overlay_state is None and run_records._ui_sink is None
+    finally:
+        bootstrap.shutdown(app, budget=0.2)
+    with app_for_test():
+        assert capture._overlay_state is not None and run_records._ui_sink is not None
+
+
 def test_debug_mode_gates_nav_diagnostics(monkeypatch, tmp_path):
     from astral_toolkit.core import paths, settings
 

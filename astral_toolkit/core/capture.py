@@ -4,6 +4,21 @@ import sys
 import threading
 import time
 
+# 悬浮窗的窗口句柄和「现在有没有显示内容」由装配接进来（bootstrap.bind_all，CL-C5）：
+# core 不再反过来 import 界面。没接（不是桌面程序：工具、测试）当没有悬浮窗，和以前读到 HWND 是 None 一样
+_overlay_state = None
+
+
+def set_overlay_state(probe):
+    """装配时接一个 () -> (悬浮窗句柄, 显示着没有)；截图时用它找悬浮窗那块涂黑"""
+    global _overlay_state
+    _overlay_state = probe
+
+
+def _overlay():
+    probe = _overlay_state
+    return probe() if probe else (None, False)
+
 
 def overlay_rect():
     """悬浮窗现在在屏幕上的位置 (左, 上, 右, 下)，物理像素；没显示返回 None"""
@@ -12,12 +27,11 @@ def overlay_rect():
     try:
         import ctypes
         from ctypes import wintypes
-        from ..app import overlay
 
-        HWND = overlay.HWND
+        HWND, shown = _overlay()
         u32 = ctypes.windll.user32
         if (
-            not HWND or not overlay.SHOWN or not u32.IsWindowVisible(HWND)
+            not HWND or not shown or not u32.IsWindowVisible(HWND)
         ):  # 没内容时窗口全透明，不用涂
             return None
         r = wintypes.RECT()
@@ -36,8 +50,8 @@ def own_window_rects():
         import ctypes
         import os
         from ctypes import wintypes
-        from ..app import overlay
 
+        overlay_hwnd = _overlay()[0]
         u32 = ctypes.windll.user32
         pid, fg, out = os.getpid(), u32.GetForegroundWindow(), []
 
@@ -47,7 +61,7 @@ def own_window_rects():
             u32.GetWindowThreadProcessId(h, ctypes.byref(p))
             if (
                 p.value == pid
-                and h != overlay.HWND
+                and h != overlay_hwnd
                 and u32.IsWindowVisible(h)
                 and not u32.IsIconic(h)
             ):
