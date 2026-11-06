@@ -16,9 +16,9 @@ def test_record_writes_daily_file(monkeypatch, tmp_path):
     def fake_runtime_log(line, tag="SYS", level="INFO"):
         mirrored.append((line, tag, level))
 
-    import astral_toolkit.app.bus as bus
-
-    monkeypatch.setattr(bus, "runtime_log", fake_runtime_log)
+    monkeypatch.setattr(
+        run_records, "_ui_sink", fake_runtime_log
+    )  # 面板那条经装配接进来的函数推（CL-C5）
 
     run_records.record("HOVER", "触发 F8 物品识别", ui_tag="HOVER")
     today = time.strftime("%Y-%m-%d")
@@ -120,16 +120,60 @@ def test_read_recent_fills_from_yesterday(monkeypatch, tmp_path):
     assert run_records.read_recent(limit=2) == ["t0", "t1"]
 
 
+def test_record_mirrors_through_registered_sink(monkeypatch, tmp_path):
+    """面板那条经装配接进来的函数推（core 不 import 界面，CL-C5）；没接就只写文件、不抛"""
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    monkeypatch.setattr(paths, "LOGS", logs)
+    seen = []
+    monkeypatch.setattr(
+        run_records,
+        "_ui_sink",
+        lambda line, tag="SYS", level="INFO": seen.append((line, tag, level)),
+    )
+    run_records.record("NAV", "停止导航")
+    run_records.record("NAV", "不推面板", mirror_ui=False)
+    assert seen == [("停止导航", "NAV", "INFO")]
+    monkeypatch.setattr(run_records, "_ui_sink", None)
+    run_records.record("NAV", "再停一次")
+    text = (logs / f"runrec_{time.strftime('%Y-%m-%d')}.log").read_text(
+        encoding="utf-8"
+    )
+    assert len(seen) == 1 and "再停一次" in text
+
+
+def test_bootstrap_wires_runtime_log_as_sink(monkeypatch, tmp_path):
+    """装配（bootstrap.bind_all）把面板那条接到 bus.runtime_log；经名字再调，换掉 bus.runtime_log 也照样走到"""
+    import astral_toolkit.app.bus as bus
+    from astral_toolkit import bootstrap
+    from astral_toolkit.core import capture
+
+    monkeypatch.setattr(run_records, "_ui_sink", None)  # 测完还原
+    monkeypatch.setattr(capture, "_overlay_state", None)
+    bootstrap._bind_core_to_ui()
+    seen = []
+    monkeypatch.setattr(
+        bus,
+        "runtime_log",
+        lambda line, tag="SYS", level="INFO": seen.append((line, tag, level)),
+    )
+    monkeypatch.setattr(paths, "LOGS", tmp_path)  # 运行记录写到临时目录，不碰真的日志
+    run_records.record(
+        "MINING", "x", ui_tag="LIVE", level="WARN"
+    )  # 走完整路径：标签、级别也要传到面板
+    assert seen == [("x", "LIVE", "WARN")]
+
+
 def test_record_still_mirrors_when_logs_unwritable(monkeypatch, tmp_path):
     """logs 位置被同名文件占了、建不了目录：不抛错，面板那条照样显示"""
-    import astral_toolkit.app.bus as bus
-
     blocker = tmp_path / "logs"
     blocker.write_text("not a dir", encoding="utf-8")
     monkeypatch.setattr(paths, "LOGS", blocker)
     seen = []
     monkeypatch.setattr(
-        bus, "runtime_log", lambda line, tag="SYS", level="INFO": seen.append(line)
+        run_records,
+        "_ui_sink",
+        lambda line, tag="SYS", level="INFO": seen.append(line),
     )
     run_records.record("MINING", "采矿助手已暂停", "游戏不在最前面")
     assert seen == ["采矿助手已暂停 | 游戏不在最前面"]

@@ -318,6 +318,24 @@ def test_mask_own_window_too():
     assert isinstance(own_window_rects(), list)  # 非 Windows 返回空列表，不报错
 
 
+def test_bootstrap_wires_overlay_for_masking(monkeypatch):
+    """截图涂黑用的悬浮窗句柄和「显示着没有」由装配（bootstrap.bind_all）接给 core/capture（core 不 import 界面，CL-C5）；
+    每次读悬浮窗模块当时的值；没接当没有悬浮窗"""
+    from astral_toolkit import bootstrap
+    from astral_toolkit.app import overlay
+    from astral_toolkit.core import capture, run_records
+
+    monkeypatch.setattr(capture, "_overlay_state", None)  # 测完还原
+    monkeypatch.setattr(run_records, "_ui_sink", None)
+    assert capture._overlay() == (None, False) and capture.overlay_rect() is None
+    bootstrap._bind_core_to_ui()
+    monkeypatch.setattr(overlay, "HWND", 12345)
+    monkeypatch.setattr(overlay, "SHOWN", True)
+    assert capture._overlay() == (12345, True)
+    monkeypatch.setattr(overlay, "SHOWN", False)
+    assert capture._overlay() == (12345, False)
+
+
 def test_feedback_report_bundle(monkeypatch, tmp_path):
     """一键问题反馈（F10 / 「报告问题」）：整屏截图 + 最近采矿助手截图 + OCR 原文 + 当时显示的结果 + 日志尾巴
     存成 userdata\\feedback\\<时间>_<类型>（文件夹 + zip）；导出把所有 zip 再打包到桌面；清空"""

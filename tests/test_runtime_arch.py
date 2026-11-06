@@ -455,6 +455,35 @@ def test_infrastructure_stays_below_app():
         assert _forbidden(mods, _INFRA_FORBIDDEN), source
 
 
+def test_core_stays_below_app():
+    """core/ 是基础工具：不反向依赖界面、用例、runtime 和装配入口（CL-C5 去掉了截图读悬浮窗、运行记录推面板
+    这两处，改成装配接进来）。函数里的 import 也算"""
+    files = list((_ROOT / "core").rglob("*.py"))
+    assert files
+    for f in files:
+        assert _forbidden(list(_imports_in(f)), _INFRA_FORBIDDEN) == [], f.name
+        assert _core_dynamic_up(f.read_text(encoding="utf-8")) == [], f.name
+    mods = list(_imports_in_source("from ..app import bus", "astral_toolkit.core"))
+    assert _forbidden(mods, _INFRA_FORBIDDEN)  # 检查本身认得出来
+    for bad in (
+        "import importlib\nimportlib.import_module('astral_toolkit.app.bus')\n",
+        "__import__('astral_toolkit.app.bus')\n",
+        "import importlib\nimportlib.import_module('..app', __package__)\n",
+    ):
+        assert _core_dynamic_up(bad), bad
+    assert _core_dynamic_up("_lock = __import__('threading').Lock()\n") == []
+
+
+def _core_dynamic_up(source):
+    """core 里字符串导入（__import__ / import_module）的目标：往上拿界面 / 用例 / runtime / 装配入口的、
+    相对的（core 里用不着）都算；标准库照常（core/settings 里有 __import__("threading")）"""
+    return [
+        t
+        for t in _dynamic_import_targets(source)
+        if t.startswith(".") or _forbidden([t], _INFRA_FORBIDDEN)
+    ]
+
+
 _GAMEDATA_TEXTKEY_FORBIDDEN = (
     ("astral_toolkit.crafting.loot", {"_fold"}),
     ("astral_toolkit.crafting.wikelo", {"_fold"}),
