@@ -370,7 +370,9 @@ def test_wikelo_data_and_lookup():
     assert wikelo.uses("", "纯净科力晶")
     asg = wikelo.search("Asgard")
     assert asg and "Wikelo Favor" in [r["n"] for r in asg[0]["req"]]
-    text = wikelo.describe(
+    from astral_toolkit.crafting import wikelo_rules
+
+    text = wikelo_rules.describe(
         asg[0], lambda n: "可买：某店" if n == "ASD Secure Drive" else ""
     )
     assert "× 50 个" in text and "可买：某店" in text
@@ -1661,7 +1663,7 @@ def test_nav_uses_display_info_waypoints_use_showlocation():
 
 def test_mix_plan_matches_guide_example():
     """攻略图里的例子：S1 绿柱石 0.14 SCU，860 的低料 + 967 的高料，按 902 混 → 低 0.085 + 高 0.055，高料占 39%"""
-    from astral_toolkit import crafting as c
+    from astral_toolkit.crafting import mix as c
 
     r = c.mix_plan(0.14, 900, [(860, 1), (967, 1)])
     assert r["ok"] and r["goal"] == 902
@@ -3166,19 +3168,18 @@ def test_names_follow_game_localization(tmp_path, monkeypatch):
     舰船部件按类名取名字（同名不同物品不再张冠李戴），双语包才拿来用"""
     from astral_toolkit.update import localization
     from astral_toolkit.crafting import build_crafting as B
-    from astral_toolkit import crafting
+    from astral_toolkit.crafting import labels
 
     assert (
-        crafting.SUB_ZH["size3"] == "S3"
-        and crafting.GEAR_ZH[("vehiclegear", "quantumdrive")] == "量子驱动器"
+        labels.SUB_ZH["size3"] == "S3"
+        and labels.GEAR_ZH[("vehiclegear", "quantumdrive")] == "量子驱动器"
     )
     assert (
-        crafting.GEAR_ZH[("vehiclegear", "shield")] == "护盾生成器"
-        and crafting.SUB_ZH["tachyon"] == "快子"
+        labels.GEAR_ZH[("vehiclegear", "shield")] == "护盾生成器"
+        and labels.SUB_ZH["tachyon"] == "快子"
     )
     assert (
-        crafting.SUB_ZH["undersuit"] == "基底服"
-        and crafting.SUB_ZH["distortion"] == "畸变"
+        labels.SUB_ZH["undersuit"] == "基底服" and labels.SUB_ZH["distortion"] == "畸变"
     )
     ini = {
         "item_name_qdrv_arcc_s02_torrent": "激流Torrent\\n[量子 S2 民用 C]",

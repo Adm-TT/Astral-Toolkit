@@ -419,19 +419,7 @@ def test_listing_reverse_and_classify_rules_are_pure(monkeypatch):
 def test_old_names_are_aliases():
     from astral_toolkit.crafting import crafting as C
 
-    assert C.GEAR_ZH is labels.GEAR_ZH
-    assert C.SUB_ZH is labels.SUB_ZH
-    assert C.PROP_KEY is quality.PROP_KEY
-    assert C.LOWER_BETTER is quality.LOWER_BETTER
-    assert C.prop_zh is labels.prop_zh
     assert C.slot_zh is labels.slot_zh
-    assert C.category_zh is classify.category_zh
-    assert C.part_of is classify.part_of
-    assert C.needs is materials.needs
-    assert C.group_mods is quality.group_mods
-    assert C.curve_value is quality.curve_value
-    assert C.curve_text is quality.curve_text
     assert C.laser_total is quality.laser_total
-    assert C.mix_plan is mix.mix_plan
     assert C.parse_mods is reverse.parse_mods
     assert C.craft_text is reverse.craft_text

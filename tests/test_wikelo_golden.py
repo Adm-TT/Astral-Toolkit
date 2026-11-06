@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from astral_toolkit import gamedata
 from astral_toolkit.contracts.textkeys import fold_mixed_loose
 from astral_toolkit.crafting import wikelo
+from astral_toolkit.crafting import wikelo_rules
 from astral_toolkit.gamedata import wikelo as gd_wikelo
 from astral_toolkit.tasks import goals
 from astral_toolkit.tasks import wikelo as TW
@@ -587,16 +588,16 @@ def test_wikelo_uses_text_more_than_five(monkeypatch):
 
 def test_wikelo_req_label_and_note_for():
     with _clean_caches():
-        assert wikelo.req_label({"n": "Polaris Bit", "z": "Polaris 点数"}) == (
+        assert wikelo_rules.req_label({"n": "Polaris Bit", "z": "Polaris 点数"}) == (
             "Polaris 点数（Polaris Bit）"
         )
-        assert wikelo.req_label({"n": "Only English", "z": ""}) == "Only English"
-        assert wikelo.note_for("RCMBNT-XTL") == _RCMBNT_NOTE
-        assert wikelo.note_for("Wikelo Favor") == (
+        assert wikelo_rules.req_label({"n": "Only English", "z": ""}) == "Only English"
+        assert wikelo_rules.note_for("RCMBNT-XTL") == _RCMBNT_NOTE
+        assert wikelo_rules.note_for("Wikelo Favor") == (
             "维科洛人情",
             "做维科洛的「换人情」兑换拿到",
         )
-        assert wikelo.note_for("别的东西") is None
+        assert wikelo_rules.note_for("别的东西") is None
 
 
 def test_wikelo_source_note_variants(monkeypatch):
@@ -655,12 +656,12 @@ def test_wikelo_describe_with_and_without_where():
         return "终端合成" if name.startswith("RCMBNT") else ""
 
     with _clean_caches():
-        assert wikelo.describe(c) == (
+        assert wikelo_rules.describe(c) == (
             "【试兑换】载具｜换：奖A、奖B\n"
             "  · 重组样本（RCMBNT-A、RCMBNT-B） 各 × 5 个\n"
             "  · 杰金矿石（Jaclium (Ore)） × 若干"
         )
-        assert wikelo.describe(c, where) == (
+        assert wikelo_rules.describe(c, where) == (
             "【试兑换】载具｜换：奖A、奖B\n"
             "  · 重组样本（RCMBNT-A、RCMBNT-B） 各 × 5 个｜终端合成\n"
             "  · 杰金矿石（Jaclium (Ore)） × 若干"

@@ -5,13 +5,10 @@
 - 扫描联动：扫到的矿石各成分品质，够做多少蓝图
 
 规则在 labels / classify / materials / quality / mix / listing / reverse，这里留取数据、还没拆的排版和旧名字。
+describe、header、uses_report、ask 是取数据 + 排版，外面（命令行、目标、F8、物品查询）还在用，crafting 又不能反过来 import app：命令行 ask 删掉、这些调用方都走用例以后再挪进排版文件。
 """
 
-from ..contracts.textkeys import (
-    blueprint_norm as _fold_name,
-    blueprint_search_norm as _search_norm,
-)
-from . import classify as _classify
+from ..contracts.textkeys import blueprint_norm, blueprint_search_norm
 from . import labels as _labels
 from . import listing as _listing
 from . import materials as _materials
@@ -19,24 +16,14 @@ from . import mix as _mix
 from . import quality as _quality
 from . import reverse as _reverse
 
-# 旧名字：B5 换调用方、B6 删
-GEAR_ZH = _labels.GEAR_ZH
-SUB_ZH = _labels.SUB_ZH
-PROP_KEY = _quality.PROP_KEY
-LOWER_BETTER = _quality.LOWER_BETTER
-prop_zh = _labels.prop_zh
+# 旧名字：只留给还冻着的调用方，别处一律从纯规则文件拿（test_runtime_arch 管着）
+# 目标（crafting/goals、tasks/goals）：目标链改从 crafting.labels / crafting.quality 拿时删
 slot_zh = _labels.slot_zh
-category_zh = _classify.category_zh
-part_of = _classify.part_of
-needs = _materials.needs
-group_mods = _quality.group_mods
-curve_value = _quality.curve_value
-curve_text = _quality.curve_text
 laser_total = _quality.laser_total
-mix_plan = _mix.mix_plan
+# 读屏（trade/inspector，熊老师的模块）：他改成从 crafting.reverse 拿时删
 parse_mods = _reverse.parse_mods
+# 库存（tasks/stock，冻着）：库存改从 crafting.reverse 拿时删
 craft_text = _reverse.craft_text
-_clean_title = _labels.clean_title
 
 
 def stats(bp, qualities):
@@ -76,7 +63,7 @@ def header(bp):
     return {
         "zh": bp["z"] or "",
         "en": bp["n"],
-        "kind": GEAR_ZH.get((bp["g"], bp["t"]), bp["t"] or bp["g"]),
+        "kind": _labels.GEAR_ZH.get((bp["g"], bp["t"]), bp["t"] or bp["g"]),
         "tags": tags,
         "maker": bp["m"] or "",
         "sec": bp["sec"],
@@ -188,7 +175,9 @@ def for_item(name_en="", name_zh=""):
     from .. import gamedata
 
     try:
-        return gamedata.crafting.for_item(_fold_name(name_en), _fold_name(name_zh))
+        return gamedata.crafting.for_item(
+            blueprint_norm(name_en), blueprint_norm(name_zh)
+        )
     except gamedata.GamedataError:  # 库不可用：当成没有蓝图
         return None
 
@@ -207,7 +196,7 @@ def search(query: str, limit: int = 20):
     """按中文或英文名搜索蓝图：完全匹配优先，再按包含匹配（候选由库按搜索键筛，分法和排序照旧）"""
     from .. import gamedata
 
-    q = _search_norm(query.strip())
+    q = blueprint_search_norm(query.strip())
     if not q:
         return []
     try:
@@ -246,7 +235,7 @@ def describe(bp, with_locations: bool = True) -> str:
     from ..mining.data import best_price
     from ..mining.locations import where, zh_name
 
-    kind = GEAR_ZH.get((bp["g"], bp["t"]), bp["t"] or bp["g"])
+    kind = _labels.GEAR_ZH.get((bp["g"], bp["t"]), bp["t"] or bp["g"])
     lines = [
         f"【{display_name(bp)}】{kind}｜{bp['m'] or '—'}｜制造 {bp['sec'] // 60} 分 {bp['sec'] % 60} 秒"
         + ("｜默认已解锁" if bp["d"] else "")
@@ -259,13 +248,15 @@ def describe(bp, with_locations: bool = True) -> str:
             for kind_, name, qty, minq in opts
         )
         effect = "；".join(
-            curve_text(p, segs, prop_zh(p, bp)) for p, segs in group_mods(mods).items()
+            _quality.curve_text(p, segs, _labels.prop_zh(p, bp))
+            for p, segs in _quality.group_mods(mods).items()
         )
         lines.append(
-            f"  · {slot_zh(slot)}：{alts}" + (f"｜品质影响：{effect}" if effect else "")
+            f"  · {_labels.slot_zh(slot)}：{alts}"
+            + (f"｜品质影响：{effect}" if effect else "")
         )
         minerals += [name for kind_, name, *_ in opts if kind_ == "r"]
-    total = laser_total(bp)
+    total = _quality.laser_total(bp)
     if total:
         lines.append(f"  · {total}")
     if with_locations and minerals:
@@ -287,7 +278,7 @@ def describe(bp, with_locations: bool = True) -> str:
         for title, who, mtype, systems, chance in bp["src"][:5]:
             p = "" if chance >= 1 else f"，掉率 {chance:.0%}"
             lines.append(
-                f"    {_clean_title(title)}｜{who}｜{mtype}｜{systems or '—'}{p}"
+                f"    {_labels.clean_title(title)}｜{who}｜{mtype}｜{systems or '—'}{p}"
             )
     elif not bp["d"]:
         lines.append("  蓝图来源：scmdb 的任务数据里没有找到")
@@ -306,7 +297,7 @@ def uses_report(mineral: str, examples: int = 6) -> str:
         return f"{zh}：没有蓝图用到它。"
     by_kind = {}
     for bp, qty, minq in rows:
-        by_kind.setdefault(GEAR_ZH.get((bp["g"], bp["t"]), bp["t"]), []).append(
+        by_kind.setdefault(_labels.GEAR_ZH.get((bp["g"], bp["t"]), bp["t"]), []).append(
             (bp, qty, minq)
         )
     lines = [f"【{zh}】被 {len(rows)} 份蓝图用到："]
@@ -374,7 +365,8 @@ def ask():
             print(f"找到 {len(found)} 个，输入序号查看：")
             for i, bp in enumerate(found, 1):
                 print(
-                    f"  {i}. {display_name(bp)}｜{GEAR_ZH.get((bp['g'], bp['t']), bp['t'])}"
+                    f"  {i}. {display_name(bp)}｜"
+                    f"{_labels.GEAR_ZH.get((bp['g'], bp['t']), bp['t'])}"
                 )
             pick = input("序号> ").strip()
             if pick.isdigit() and 1 <= int(pick) <= len(found):

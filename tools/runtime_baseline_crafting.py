@@ -127,9 +127,9 @@ def call_wikelo_detail(key=""):
 
 
 def call_craft_text(slots):
-    from astral_toolkit.crafting import crafting
+    from astral_toolkit.crafting import reverse
 
-    return crafting.craft_text(slots)
+    return reverse.craft_text(slots)
 
 
 def call_mat_summary(mineral, q=None):
@@ -151,9 +151,9 @@ def call_quality_hints(composition):
 
 
 def call_curve_value(segs, q):
-    from astral_toolkit.crafting import crafting
+    from astral_toolkit.crafting import quality
 
-    return crafting.curve_value(segs, q)
+    return quality.curve_value(segs, q)
 
 
 def call_for_item(name_en="", name_zh=""):
@@ -217,15 +217,15 @@ def call_wikelo_source_note(name):
 
 
 def call_wikelo_describe(c, where=None):
-    from astral_toolkit.crafting import wikelo
+    from astral_toolkit.crafting import wikelo_rules
 
-    return wikelo.describe(c, where=where)
+    return wikelo_rules.describe(c, where=where)
 
 
 def call_group_mods(mods):
-    from astral_toolkit.crafting import crafting
+    from astral_toolkit.crafting import quality
 
-    return crafting.group_mods(mods)
+    return quality.group_mods(mods)
 
 
 def call_bp_key(bp):

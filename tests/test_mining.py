@@ -364,6 +364,7 @@ def test_where_to_mine():
 
 def test_crafting_dataset_and_links():
     from astral_toolkit.crafting import crafting as C
+    from astral_toolkit.crafting import quality
 
     bps = C.blueprints()
     assert len(bps) == 1618
@@ -373,8 +374,8 @@ def test_crafting_dataset_and_links():
     assert {"Iron", "Copper", "Sadaryx"} <= mats
     # 能量格的品质分段：<400 −1，400–899 0，≥900 +1
     defiant = C.search("Defiant")[0]
-    segs = C.group_mods(defiant["slots"][1][2])["Power Pips"]
-    assert [C.curve_value(segs, q) for q in (100, 500, 950)] == [-1, 0, 1]
+    segs = quality.group_mods(defiant["slots"][1][2])["Power Pips"]
+    assert [quality.curve_value(segs, q) for q in (100, 500, 950)] == [-1, 0, 1]
     hints = C.quality_hints([("Laranite", 6.55, 510)])
     assert "≥700/≥900" in hints[0]
     # 所有蓝图里的矿名都在矿物表里（物品类材料除外）
@@ -1374,13 +1375,17 @@ def test_laser_power_naming_on_craft_page():
         and "×1.40" in text
         and "相加" in text
     )
+    from astral_toolkit.crafting import quality
+
     eff = C.effect(bp, {1: 971, 2: 958})
     assert [p["name"] for x in eff for p in x["props"]] == [
         "激光功率",
         "激光功率",
     ] and eff[0]["material"] == "萨达瑞晶"
-    assert C.laser_total(bp, {1: 971, 2: 958})["text"].startswith("激光功率合计 +37.2%")
-    assert C.laser_total(bp, {1: 971})["mult"] is None
+    assert quality.laser_total(bp, {1: 971, 2: 958})["text"].startswith(
+        "激光功率合计 +37.2%"
+    )
+    assert quality.laser_total(bp, {1: 971})["mult"] is None
     from astral_toolkit.tasks import (
         goals as t_goals,
     )  # 目标页「品质影响」：点「计算」也带合计
@@ -1395,7 +1400,8 @@ def test_laser_power_naming_on_craft_page():
         and any(m[0] == "Impact Force" for _, _, mods in b["slots"] for m in mods)
     )
     assert (
-        "冲击力" in C.describe(gun, with_locations=False) and C.laser_total(gun) is None
+        "冲击力" in C.describe(gun, with_locations=False)
+        and quality.laser_total(gun) is None
     )
 
 
