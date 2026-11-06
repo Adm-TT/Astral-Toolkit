@@ -53,7 +53,8 @@ def test_desc_and_aka():
 def test_here_sell_craft_and_wikelo_shapes():
     assert A.here_summary(None) is None
     assert A.here_summary({"label": "NB", "age": 125}) == {"label": "NB", "minutes": 2}
-    assert A.here_summary({"label": "NB", "age": 179})["minutes"] == 2  # 往下取整
+    # 不足 3 分钟按 2 分钟算（往下取整）
+    assert A.here_summary({"label": "NB", "age": 179}) == {"label": "NB", "minutes": 2}
     assert A.sell_summary([]) is None
     assert A.sell_summary([(9000, "Shop", "Place"), (100, "B", "C")]) == {
         "price": 9000,
