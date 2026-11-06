@@ -359,7 +359,8 @@ def test_find_empty_when_no_index_or_db_unavailable(monkeypatch, tmp_path):
 
 
 def test_find_does_not_read_json(monkeypatch, tmp_path):
-    from astral_toolkit.crafting import itemsearch, loot
+    from astral_toolkit.crafting import loot
+    from astral_toolkit.tasks.catalog_queries import search as itemsearch
 
     def boom(*a, **kw):
         raise AssertionError("查询路径不该再读 JSON")

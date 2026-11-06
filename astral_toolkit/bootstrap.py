@@ -438,6 +438,17 @@ def shutdown(app: DesktopApp, budget: float = 5.0) -> StopReport:
     return app.lifecycle.stop_all(budget)
 
 
+def _warm_search_index() -> None:
+    """搜索预热线程里跑的（Q1：线程由装配起，搜索模块 import 时不起）：窗口打开后在后台先把物品搜索索引建好，
+    玩家第一次搜不用等；出错不往外抛（搜的时候会再建）"""
+    from .tasks.catalog_queries import search as item_search
+
+    try:
+        item_search.build_index()
+    except Exception:
+        pass
+
+
 def _register(app: DesktopApp) -> None:
     """按现有启动顺序登记；build 时做一次，gate 只控制自动启动。"""
     lock = app.state.get("_register_lock")
@@ -449,7 +460,6 @@ def _register(app: DesktopApp) -> None:
             return
 
         from .core import settings
-        from .crafting import itemsearch
         from .tasks import system as _sys
 
         online = getattr(_sys, "_online", None)
@@ -474,7 +484,11 @@ def _register(app: DesktopApp) -> None:
                 online["loop"] = False
 
         def start_itemsearch() -> threading.Thread:
-            return itemsearch.warm_up()
+            thread = threading.Thread(
+                target=_warm_search_index, daemon=True, name="search-warmup"
+            )
+            thread.start()
+            return thread
 
         def start_gamedata() -> threading.Thread:
             from . import gamedata

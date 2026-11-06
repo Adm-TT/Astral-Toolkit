@@ -459,7 +459,7 @@ _GAMEDATA_TEXTKEY_FORBIDDEN = (
     ("astral_toolkit.crafting.loot", {"_fold"}),
     ("astral_toolkit.crafting.wikelo", {"_fold"}),
     ("astral_toolkit.crafting.shops", {"_fold"}),
-    ("astral_toolkit.crafting.itemsearch", {"en_key", "zh_key"}),
+    ("astral_toolkit.tasks.catalog_queries.search", {"en_key", "zh_key"}),
     ("astral_toolkit.trade.names", {"_fold_en", "_norm_zh"}),
 )
 
@@ -1017,9 +1017,21 @@ def _catalog_presenter_violations(source):
     return _forbidden(mods, _CATALOG_PRESENTER_FORBIDDEN) + _dynamic_imports(source)
 
 
-def _catalog_use_case_violations(source):
-    mods = list(_imports_in_source(source, "astral_toolkit.tasks"))
-    return _forbidden(mods, _CATALOG_USE_CASE_FORBIDDEN) + _dynamic_imports(source)
+# 查询内部实现（tasks/catalog_queries，目录迁移章程 §4）另外不许绕回旧的 crafting 取数文件
+_CATALOG_QUERIES_FORBIDDEN = _CATALOG_USE_CASE_FORBIDDEN + (
+    "astral_toolkit.crafting.acquire",
+    "astral_toolkit.crafting.itemsearch",
+)
+
+
+def _catalog_use_case_violations(source, pkg="astral_toolkit.tasks"):
+    mods = list(_imports_in_source(source, pkg))
+    forbidden = (
+        _CATALOG_QUERIES_FORBIDDEN
+        if pkg.startswith("astral_toolkit.tasks.catalog_queries")
+        else _CATALOG_USE_CASE_FORBIDDEN
+    )
+    return _forbidden(mods, forbidden) + _dynamic_imports(source)
 
 
 def _catalog_presenter_imports(source, pkg):
@@ -1050,10 +1062,28 @@ def test_catalog_presenter_imports():
 
 
 def test_catalog_use_cases_stay_below_app():
-    """物品查询用例不反向拿 app / runtime / bootstrap，也不动态导入。"""
-    path = _ROOT / "tasks" / "catalog.py"
-    source = path.read_text(encoding="utf-8")
-    assert _catalog_use_case_violations(source) == [], path.name
+    """物品查询用例不反向拿 app / runtime / bootstrap，也不动态导入；内部实现 tasks/catalog_queries 整个目录一起查
+    （目录迁移章程 §9：新目录要进门禁），还不许绕回旧的 crafting 取数文件。"""
+    files = [_ROOT / "tasks" / "catalog.py"] + sorted(
+        (_ROOT / "tasks" / "catalog_queries").rglob("*.py")
+    )
+    assert len(files) >= 3, files  # catalog.py + __init__ + search
+    for path in files:
+        source = path.read_text(encoding="utf-8")
+        pkg = ".".join(("astral_toolkit", *path.relative_to(_ROOT).parent.parts))
+        if (
+            path.parent.name == "catalog_queries"
+        ):  # 包算错了相对导入会解析到别处，就漏查了
+            assert pkg == "astral_toolkit.tasks.catalog_queries", pkg
+        assert _catalog_use_case_violations(source, pkg) == [], path.name
+    sub = "astral_toolkit.tasks.catalog_queries"
+    for bad in (
+        "from ...app import bus",
+        "def f():\n    from ...runtime import session\n",
+        "from ...crafting.acquire import info",
+        "from ...crafting import itemsearch",
+    ):
+        assert _catalog_use_case_violations(bad, sub), bad
     for bad in (
         "from ..app.presenters import catalog",
         "from ..app import bus",
@@ -1062,6 +1092,96 @@ def test_catalog_use_cases_stay_below_app():
         "import importlib\nimportlib.import_module('astral_toolkit.gamedata')",
     ):
         assert _catalog_use_case_violations(bad), bad
+
+
+def test_catalog_queries_import_starts_no_thread():
+    """导入物品查询内部实现不起线程（一闪就结束的也算）、不开库、不建库、不建索引：搜索预热线程由 bootstrap 起
+    （目录迁移章程 §9，Q1）。tasks、gamedata 包先导入好，只看 catalog_queries 自己导入时做了什么；
+    先确认被测模块还没被别处带进来，不然这条什么都测不到"""
+    code = (
+        "import sqlite3, sys, threading\n"
+        "import astral_toolkit.tasks, astral_toolkit.catalog.search\n"
+        "import astral_toolkit.gamedata as g\n"
+        "import astral_toolkit.gamedata._ready as ready\n"
+        "fresh = 'astral_toolkit.tasks.catalog_queries.search' not in sys.modules\n"
+        "started, touched = [], []\n"
+        "_start = threading.Thread.start\n"
+        "threading.Thread.start = lambda self: (started.append(self.name), _start(self))[1]\n"
+        "g.ensure = lambda *a, **k: touched.append('ensure')\n"
+        "g.snapshot = lambda *a, **k: touched.append('snapshot')\n"
+        "ready.ensure = lambda *a, **k: touched.append('ready')\n"
+        "sqlite3.connect = lambda *a, **k: touched.append('connect')\n"
+        "import astral_toolkit.tasks.catalog_queries.search as s\n"
+        "print(fresh, started, touched, s._cache._has)\n"
+    )
+    assert _run(code) == "True [] [] False"
+
+
+_THREAD_MAKERS = ("Thread", "Timer", "ThreadPoolExecutor", "ProcessPoolExecutor")
+
+
+def _thread_makers_in_source(source):
+    """起线程 / 线程池的调用，按被调的名字认：threading.Thread、from threading import Thread、
+    __import__('threading').Thread、Timer、concurrent.futures 的池子都算"""
+    out = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Call):
+            f = node.func
+            name = f.attr if isinstance(f, ast.Attribute) else getattr(f, "id", "")
+            if name in _THREAD_MAKERS:
+                out.append(name)
+    return out
+
+
+def test_catalog_queries_code_starts_no_threads():
+    """查询内部实现里不自己起线程、线程池（预热线程由 bootstrap 起，Q1）：怎么导入的都算，函数里起的也算。
+    Q2、Q3 搬进来的并发下载要用线程池的话，按文件、按函数写明放行和理由，不整目录放开"""
+    files = sorted((_ROOT / "tasks" / "catalog_queries").rglob("*.py"))
+    assert len(files) >= 2, files
+    for path in files:
+        assert _thread_makers_in_source(path.read_text(encoding="utf-8")) == [], (
+            path.name
+        )
+    for bad in (
+        "import threading\nthreading.Thread(target=f).start()\n",
+        "from threading import Thread\ndef f():\n    Thread(target=g).start()\n",
+        "__import__('threading').Timer(1, f).start()\n",
+        "from concurrent.futures import ThreadPoolExecutor\nThreadPoolExecutor(4)\n",
+    ):
+        assert _thread_makers_in_source(bad), bad
+
+
+def test_crafting_reaches_up_into_tasks_only_where_listed():
+    """crafting 在 tasks 下层，不该反过来导入 tasks（目录迁移章程：兼容只许有明确调用者和删除批次），只许减不许加：
+    acquire → 物品搜索是 Q1 搬走搜索后留的临时边，Q3 把 acquire 搬进 catalog_queries 时删；
+    goals → tasks.trade 是老的，目标业务这轮不动。字符串导入（__import__ / import_module）本项目的模块一律算，
+    往上往下都不许，免得绕过这条。"""
+    allowed = {
+        "acquire.py": {
+            "astral_toolkit.tasks.catalog_queries.search",
+            "astral_toolkit.tasks.catalog_queries.search.lookup",
+        },
+        "goals.py": {"astral_toolkit.tasks.trade", "astral_toolkit.tasks.trade.trade"},
+    }
+    seen, sneaky = {}, []
+    for path in sorted((_ROOT / "crafting").rglob("*.py")):
+        rel = path.relative_to(_ROOT / "crafting").as_posix()
+        pkg = ".".join(("astral_toolkit", *path.relative_to(_ROOT).parent.parts))
+        source = path.read_text(encoding="utf-8")
+        up = {
+            m
+            for m in _imports_in_source(source, pkg)
+            if m == "astral_toolkit.tasks" or m.startswith("astral_toolkit.tasks.")
+        }
+        if up:
+            seen[rel] = up
+        sneaky += [
+            f"{rel}: {t}"
+            for t in _dynamic_import_targets(source)
+            if t.startswith((".", "astral_toolkit"))
+        ]
+    assert seen == allowed, seen
+    assert sneaky == [], sneaky
 
 
 def test_only_trade_shell_imports_catalog_presenter():

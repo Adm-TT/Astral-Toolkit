@@ -1,6 +1,6 @@
 """物品查询的应用用例（IQ-B5，架构稿 §4.2、§4.4）：取好数据交给 app/presenters/catalog.py 排版。
 
-- search_items：搜索列表（crafting.itemsearch.find 的行原样，最多 30 条）
+- search_items：搜索列表（catalog_queries.search.find 的行原样，最多 30 条）
 - get_item_info：一件物品的详情（acquire.info + 中文名 + 目标提示）→ ItemInfo
 - get_item_loot：掉落（crafting.loot.info，会上网）→ LootLookup，出错不抛
 - MarketSession / open_market / market_rows / market_hud_text：玩家市场（IQ-B6：F8 用 Trade 只经这里，报价留 F 段）
@@ -31,11 +31,11 @@ def _pinned() -> Iterator[None]:
 
 
 def search_items(q=""):
-    """物品查询搜索（1.6.41 起商店、掉落、汉化包一起搜，见 crafting/itemsearch.py）：find 的行原样，最像的在前，最多 30 条。
-    索引在 itemsearch 里自己钉一个快照建，这里不另钉"""
-    from ..crafting import itemsearch
+    """物品查询搜索（1.6.41 起商店、掉落、汉化包一起搜，见 catalog_queries/search.py）：find 的行原样，最像的在前，最多 30 条。
+    索引在 catalog_queries.search 里自己钉一个快照建，这里不另钉"""
+    from .catalog_queries import search
 
-    return itemsearch.find(q, limit=30)
+    return search.find(q, limit=30)
 
 
 # 英文 → 中文反查，跟着 names.table() 那份对象走：更新数据后自己失效（以前挂在函数属性上永不失效）

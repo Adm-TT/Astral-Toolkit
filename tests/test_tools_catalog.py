@@ -255,7 +255,7 @@ def test_info_wires_lookups_into_facts(monkeypatch, tmp_path):
     """info 只取数据、交给规则拼（IQ-C2）：名字和类别以商店数据为准、当前位置、不是精确点进来时按商店名字查描述、
     维科洛用途和掉落按传进来的英文名、中文名查、精确命中但掉落数据里没有这件时不查掉落、
     排在前面的同款候选是配件时照样推荐原型、商店数据里有这件时是不是配件按商店里的名字判断"""
-    from astral_toolkit.crafting import itemsearch
+    from astral_toolkit.tasks.catalog_queries import search as itemsearch
 
     setup(monkeypatch, tmp_path)
     monkeypatch.setattr(
@@ -324,7 +324,7 @@ def test_info_nowhere_brings_blueprint(monkeypatch, tmp_path):
     """「哪都没有」（物品查询精确命中、商店和掉落数据里都没有、不随船自带、没有来源说明）才去查制造蓝图，
     蓝图的 key 和显示名不对调；随船自带、有来源说明就不算「哪都没有」、也不查蓝图；商店里没有这件时名字先用英文名（IQ-C2）"""
     from astral_toolkit.crafting import crafting as C
-    from astral_toolkit.crafting import itemsearch
+    from astral_toolkit.tasks.catalog_queries import search as itemsearch
 
     setup(monkeypatch, tmp_path)
     monkeypatch.setattr(position, "current", lambda: None)
@@ -616,12 +616,12 @@ def test_item_search_finds_everything():
     商店和掉落数据里都没有的也搜得到，点开写明「商店和掉落数据里都没有」，能造的带上蓝图"""
     from astral_toolkit.app.api import trade as t_api
     from astral_toolkit.contracts.textkeys import en_key
-    from astral_toolkit.crafting import itemsearch as I
+    from astral_toolkit.tasks.catalog_queries import search as I
     from astral_toolkit import crafting
     from astral_toolkit.trade import names
     from astral_toolkit.tasks import trade as t_trade
 
-    rows = I._build()["rows"]
+    rows = I.build_index()["rows"]
     if len(rows) < 1000:
         pytest.skip("没有商店 / 掉落数据")
     miss_en = [
@@ -741,7 +741,7 @@ def test_item_search_wiki_gap_fill_and_tail_name_keys():
     ②英文 wiki（游戏数据）的物品清单只补别处都没有的英文名（标 wiki），中文名只信汉化包；涂装、飞船内部通用件不补；
     ③只有掉落数据的物品也带上 wiki 的类型 / 尺寸当分类"""
     from astral_toolkit.update.localization import zh2en_items
-    from astral_toolkit.crafting import itemsearch as I
+    from astral_toolkit.tasks.catalog_queries import search as I
     from astral_toolkit.tasks import trade as t_trade
 
     t = zh2en_items(
@@ -789,7 +789,7 @@ def test_item_search_wiki_gap_fill_and_tail_name_keys():
     assert any(
         r["category"].startswith("炮塔") for r in t_trade.item_search("Remote Turret")
     )  # 掉落物品带上 wiki 的类型
-    names = {r["en"] for r in I._build()["rows"]}
+    names = {r["en"] for r in I.build_index()["rows"]}
     assert "mount_gimbal_mining_golem" not in names  # 内部占位名不收
 
 
@@ -799,7 +799,7 @@ def test_item_desc_and_alias_from_wiki(monkeypatch, tmp_path):
       记进 name_aliases.json，搜旧写法也能找到正名；③wiki 清单带类名 cls"""
     from astral_toolkit.app.api import trade as t_api
     from astral_toolkit.update import localization as L
-    from astral_toolkit.crafting import itemsearch as I
+    from astral_toolkit.tasks.catalog_queries import search as I
     from astral_toolkit.core import paths
     from astral_toolkit.tasks import trade as t_trade
 

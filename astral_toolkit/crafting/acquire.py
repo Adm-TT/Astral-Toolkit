@@ -84,7 +84,8 @@ def info(
         pass
     hit = None
     if exact and name_en:
-        from .itemsearch import lookup
+        # 物品搜索 Q1 搬到 tasks/catalog_queries/search；本文件 Q3 也搬过去，这条旧位置调新位置的边随之消失
+        from ..tasks.catalog_queries.search import lookup
 
         hit = lookup(name_en)
     if hit:
@@ -111,7 +112,7 @@ def info(
     if hit:
         entry = hit
     else:
-        from .itemsearch import lookup
+        from ..tasks.catalog_queries.search import lookup
 
         entry = lookup(name)
     out["desc"], out["aka"] = _rules.desc_and_aka(

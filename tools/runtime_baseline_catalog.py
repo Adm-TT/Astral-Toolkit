@@ -417,9 +417,9 @@ def _meta() -> dict[str, Any]:
 
 # ---------------------------------------------------------------- 挑查询
 def _index_rows():
-    from astral_toolkit.crafting import itemsearch
+    from astral_toolkit.tasks.catalog_queries import search
 
-    index = itemsearch._build()
+    index = search.build_index()
     return list(index.get("rows") or [])
 
 
