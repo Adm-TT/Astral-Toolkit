@@ -65,7 +65,7 @@ def test_ensure_raises_when_no_sources(monkeypatch, tmp_path):
 def test_shops_queries_empty_when_db_unavailable(monkeypatch, tmp_path):
     """库建不出来（没有 shops.json）：F8 / 哪买 / 可买 查不到东西，但不往外抛（和以前读不到文件一样）"""
     from astral_toolkit.core import paths
-    from astral_toolkit.crafting import shops
+    from astral_toolkit.tasks.catalog_queries import shops
 
     _setup(monkeypatch, tmp_path)
     monkeypatch.setattr(paths, "DATA", tmp_path / "empty")
@@ -370,7 +370,6 @@ def test_places_refresh_after_name_files_rebuild(monkeypatch, tmp_path):
 
 
 def test_station_at_uses_lagrange_rows(monkeypatch, tmp_path):
-    from astral_toolkit.crafting import shops
     from astral_toolkit.navigation import position
 
     row = [
@@ -384,7 +383,9 @@ def test_station_at_uses_lagrange_rows(monkeypatch, tmp_path):
     ]
     _setup(monkeypatch, tmp_path, **_shops_with_rows(row))
     monkeypatch.setattr(
-        shops, "shop_point", lambda f: {"i": "ARC_L1"} if f[4] == "Station X" else None
+        position,
+        "shop_point",
+        lambda f: {"i": "ARC_L1"} if f[4] == "Station X" else None,
     )
     monkeypatch.setattr(
         position, "_data_version", lambda: str(tmp_path)
@@ -397,8 +398,8 @@ def _fake_station_rows(monkeypatch, rows, bad=()):
     """假的拉格朗日商店行和 shop_point（按行星认点：Pyro I → P1_L2、Pyro II → P2_L1；站名在 bad 里的那行出错），记调用次数"""
     from types import SimpleNamespace
 
-    from astral_toolkit.crafting import shops
     from astral_toolkit.gamedata import shops as gd_shops
+    from astral_toolkit.navigation import position
 
     calls = {"rows": 0, "point": 0}
 
@@ -413,7 +414,7 @@ def _fake_station_rows(monkeypatch, rows, bad=()):
         return {"i": {"Pyro I": "P1_L2", "Pyro II": "P2_L1"}[f[1]]}
 
     monkeypatch.setattr(gd_shops, "lagrange_rows", fake_rows)
-    monkeypatch.setattr(shops, "shop_point", fake_point)
+    monkeypatch.setattr(position, "shop_point", fake_point)
     return calls
 
 
@@ -586,7 +587,7 @@ def test_refresh_runs_inside_updating(monkeypatch, tmp_path):
 
 
 def test_shops_update_runs_inside_updating(monkeypatch, tmp_path):
-    from astral_toolkit.crafting import shops
+    from astral_toolkit.update import shops
 
     _setup(monkeypatch, tmp_path)
     state = _count_updating(monkeypatch)
@@ -609,13 +610,47 @@ def test_shops_update_runs_inside_updating(monkeypatch, tmp_path):
     assert state["n"] == 1 and len(state["writes"]) == 1 and state["writes"][0][1]
 
 
+def test_shops_update_writes_nothing_when_a_category_fails(monkeypatch, tmp_path):
+    """有一类商店价格下载失败：整批不写（以前会把残缺表写成最新，审查 2026-10-28），报错写明哪类，也不进更新边界"""
+    from astral_toolkit.update import shops
+
+    _setup(monkeypatch, tmp_path)
+    state = _count_updating(monkeypatch)  # 经 paths.write_json 写的记一笔
+    # 旧表：不经 write_json、直接写这个文件的也要抓到
+    cache = tmp_path / "old_shops.json"
+    cache.write_text('{"old": true}', encoding="utf-8")
+    monkeypatch.setattr(shops, "CACHE", cache)
+
+    def fake_get(path, params=None):
+        if path == "categories":
+            return [
+                {"id": 1, "type": "item", "name": "Arms", "section": "S"},
+                {"id": 2, "type": "item", "name": "Gear", "section": "S"},
+            ]
+        if (params or {}).get("id_category") == "2":
+            raise RuntimeError("断网")
+        return [{"id_item": 5, "item_name": "Gun", "id_category": 1, "price_buy": 10}]
+
+    monkeypatch.setattr(shops, "_get", fake_get)
+    try:
+        shops.update(progress=None)
+    except RuntimeError as e:
+        err = str(e)
+    else:
+        raise AssertionError("有一类下载失败却没报错")
+    assert "1 类下载失败" in err and "Gear：断网" in err
+    assert cache.read_text(encoding="utf-8") == '{"old": true}'
+    assert state["n"] == 0 and state["writes"] == []
+
+
 # ---------------------------------------------------------------- Task 2 补：商店物品目录；Task 3：商店查询改走数据层
 
 _F2 = ["Pyro", "Pyro I", "", "", "", "W"]
 
 
 def _shop_setup(monkeypatch, tmp_path):
-    from astral_toolkit.crafting import shops
+    from astral_toolkit.tasks.catalog_queries import shops
+    from astral_toolkit.update import shops as shop_prices
 
     rows = [
         [171, "Shop D", "Stanton · D", 500.0, 0.0, "4.10", _F2],
@@ -630,7 +665,7 @@ def _shop_setup(monkeypatch, tmp_path):
     # 库建好后删掉源 JSON，模块里 import 时绑好的 CACHE 也指到删掉的那个：查询只能从库读（CL-C4 删了 shops.load）
     for p in tmp_path.glob("*.json"):
         p.unlink()
-    monkeypatch.setattr(shops, "CACHE", tmp_path / "shops.json")
+    monkeypatch.setattr(shop_prices, "CACHE", tmp_path / "shops.json")
     return shops
 
 
@@ -643,7 +678,7 @@ def test_item_record_reads_from_db(monkeypatch, tmp_path):
 
 
 def test_catalog_verbatim_and_folded(monkeypatch, tmp_path):
-    from astral_toolkit.crafting.shops import _fold
+    from astral_toolkit.tasks.catalog_queries.shops import _fold
     from astral_toolkit.gamedata import shops as gs
 
     _setup(monkeypatch, tmp_path)
@@ -690,14 +725,13 @@ def test_where_sorts_buy_asc_sell_desc(monkeypatch, tmp_path):
         [],
         [],
     )  # 以前按 == 比，字符串对不上
-    assert "500 aUEC｜Shop D" in shops.where_text(171)
 
 
 def test_nearest_dedups_place(monkeypatch, tmp_path):
     from astral_toolkit.navigation import position
 
     shops = _shop_setup(monkeypatch, tmp_path)
-    monkeypatch.setattr(shops, "shop_point", lambda f: {"i": f[5]})
+    monkeypatch.setattr(position, "shop_point", lambda f: {"i": f[5]})
     monkeypatch.setattr(
         position, "distance", lambda a, b: {"W": 10.0, "New Babbage": 20.0}[b["i"]]
     )
@@ -911,7 +945,7 @@ def test_query_during_rebuild_sees_old_or_new_never_error(monkeypatch, tmp_path)
     IS.build_index()
     errors, empty = [], []
 
-    from astral_toolkit.crafting import shops
+    from astral_toolkit.tasks.catalog_queries import shops
 
     def worker():
         for _ in range(200):

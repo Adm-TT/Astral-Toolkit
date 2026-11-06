@@ -49,6 +49,34 @@ def find_point(name=None, internal=None):
     return None
 
 
+def shop_point(fields):
+    """商店位置 → 星图点（卫星/拉格朗日点/行星）。目录迁移 Q2 从 crafting/shops 搬来：只用 find_point，本来就是星图这边的事"""
+    system, planet, orbit, moon, station, city = (list(fields) + [""] * 6)[:6]
+    if moon:
+        p = find_point(name=moon)
+        if p:
+            return p
+    m = re.search(r"Lagrange Point (\d)", orbit or "")
+    if m and planet:
+        base = find_point(name=planet)
+        if base:
+            iname = base["i"]
+            pm = re.fullmatch(r"(?i)pyro(\d)", iname)
+            p = find_point(
+                internal=f"P{pm.group(1)}_L{m.group(1)}"
+                if pm
+                else f"{iname}_L{m.group(1)}"
+            )
+            if p:
+                return p
+    for name in (planet, station, system and system + " Star"):
+        if name:
+            p = find_point(name=name)
+            if p:
+                return p
+    return None
+
+
 def from_code(code):
     """日志里的地点代码 → 星图点"""
     m = re.match(r"RR_(ARC|HUR|CRU|MIC)_L(\d)", code)
@@ -112,14 +140,13 @@ def _station_table(_version):
     出错可能是一时的，不缓存、下次重扫"""
     table, seen = {}, {}
     try:
-        from ..crafting import shops
         from ..gamedata import shops as gd_shops
 
         for r in gd_shops.lagrange_rows():  # 轨道带 Lagrange、有站名的商店行
             f = r.fields
             key = tuple(f)
             if key not in seen:
-                seen[key] = shops.shop_point(f)
+                seen[key] = shop_point(f)
             p = seen[key]
             if p and p["i"] not in table:
                 table[p["i"]] = f[4] or f[5]

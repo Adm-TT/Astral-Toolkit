@@ -4,7 +4,7 @@
 要不要查掉落、各块的样子、详情字典骨架）搬到 catalog/acquire.py，这里查数据（商店、物品查询、掉落、维科洛、蓝图、
 当前位置）。还夹着取数据、留在这里的规则：_buy_rows（有位置、算得出距离就给最近 3 处，不然给最便宜 3 处）、
 resolve（名字找物品 id 的先后）、material_source / loot_source（维科洛材料来源那一句），
-随搬目录那批（crafting/shops 这些的取数据归位）一起处理，见待做。
+目录迁移 Q3 把 acquire 搬进 tasks/catalog_queries 时一起处理（商店那部分 Q2 已搬完）。
 命令行「哪买」2026-11-06 删了，它用的整段文字版（text / buy_lines）也跟着删了。
 """
 
@@ -12,12 +12,19 @@ import re as _re
 
 from ..catalog import acquire as _rules
 from ..contracts.textkeys import fold_en_loose
-from . import shops
+
+
+def _shops():
+    """商店查询（目录迁移 Q2 搬到 tasks/catalog_queries/shops）：调用时才取。本文件 Q3 也搬过去以后改回直接导入，
+    这条往上调 tasks 的临时边随之消失（门禁 test_crafting_reaches_up_into_tasks_only_where_listed 钉着）"""
+    from ..tasks.catalog_queries import shops
+
+    return shops
 
 
 def _buy_rows(item_id, here, top=3):
     if here:
-        rows = shops.nearest(item_id, here, top)
+        rows = _shops().nearest(item_id, here, top)
         if rows and rows[0][0] != float("inf"):
             from ..navigation.position import fmt_distance
 
@@ -25,7 +32,7 @@ def _buy_rows(item_id, here, top=3):
                 {"dist": fmt_distance(d), "price": p, "shop": shop, "place": place}
                 for d, p, shop, place in rows
             ]
-    buy, _ = shops.where(item_id)
+    buy, _ = _shops().where(item_id)
     return [
         {"dist": "", "price": p, "shop": shop, "place": place}
         for p, shop, place in buy[:top]
@@ -37,20 +44,20 @@ def resolve(name_en="", name_zh="", item_id=None):
     if item_id is not None or not (name_en or name_zh):
         return item_id
     if name_en:
-        hits = shops.find(name_en, limit=3)
+        hits = _shops().find(name_en, limit=3)
         exact = [h for h in hits if fold_en_loose(h[1]) == fold_en_loose(name_en)]
         if exact:
             return exact[0][0]
     if name_zh:
-        hits = shops.find(name_zh, limit=3)
+        hits = _shops().find(name_zh, limit=3)
         if hits:
             return hits[0][0]
     if name_en:
-        close = shops.find_close(name_en)
+        close = _shops().find_close(name_en)
         if close:
             return close[0]
         if not name_zh:
-            hits = shops.find(name_en, limit=3)
+            hits = _shops().find(name_en, limit=3)
             return hits[0][0] if hits else None
     return None
 
@@ -94,7 +101,7 @@ def info(
     else:
         item_id = resolve(name_en, name_zh, item_id)
     name, category = _rules.name_and_category(
-        shops.item_record(item_id) if item_id is not None else None,
+        _shops().item_record(item_id) if item_id is not None else None,
         item_id,
         name_en,
         name_zh,
@@ -128,22 +135,24 @@ def info(
         except Exception:
             pass
     out["here"] = _rules.here_summary(here)
-    if item_id is not None and shops.buyable(item_id):
+    if item_id is not None and _shops().buyable(item_id):
         out["buyable"] = True
-        out["buy_total"] = len(shops.where(item_id)[0])
+        out["buy_total"] = len(_shops().where(item_id)[0])
         out["buy"] = _buy_rows(item_id, here)
     elif name:
-        for iid, vname, _ in _rules.pick_variants(name, shops.variants(name, limit=6)):
+        for iid, vname, _ in _rules.pick_variants(
+            name, _shops().variants(name, limit=6)
+        ):
             out["variants"].append(
                 {
                     "id": iid,
                     "name": vname,
-                    "total": len(shops.where(iid)[0]),
+                    "total": len(_shops().where(iid)[0]),
                     "buy": _buy_rows(iid, here),
                 }
             )
     if item_id is not None:
-        out["sell"] = _rules.sell_summary(shops.where(item_id)[1])
+        out["sell"] = _rules.sell_summary(_shops().where(item_id)[1])
     if _rules.shows_loot(show_loot, hit):
         try:
             from .loot import info as loot_info
@@ -162,13 +171,12 @@ def info(
 
 def material_source(name_en):
     """维科洛材料去哪弄：商店能买就给最便宜的店；是矿就给最好的矿点"""
-    from ..crafting import shops
     from ..crafting.wikelo import source_note
 
     note = source_note(name_en)
     if note:
         return note
-    tip = shops.where_by_name(name_en)
+    tip = _shops().where_by_name(name_en)
     if tip:
         return tip
     try:

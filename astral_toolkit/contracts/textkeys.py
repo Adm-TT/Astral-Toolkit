@@ -16,7 +16,7 @@ def fold_en(text):
 
 
 def fold_en_loose(s):
-    """名字比较键：小写、l 当 i、只留 a-z0-9；catalog.shops、crafting.shops 和 gamedata 商店在用（en_key 也走它）。"""
+    """名字比较键：小写、l 当 i、只留 a-z0-9；catalog.shops、tasks/catalog_queries/shops 和 gamedata 商店在用（en_key 也走它）。"""
     return re.sub(r"[^a-z0-9]", "", (s or "").lower().replace("l", "i"))
 
 

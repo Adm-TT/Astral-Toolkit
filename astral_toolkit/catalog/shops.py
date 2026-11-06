@@ -1,7 +1,7 @@
 """商店查询的纯规则：按名字找物品、买卖行排序、最近买点排序、同款候选。
 
-原 crafting/shops.py 里的纯计算搬到这里；从 UEX 更新 shops.json、查 gamedata、算导航距离
-留在旧文件，catalog 不读文件、不联网、不碰全局缓存。
+原 crafting/shops.py 里的纯计算搬到这里（目录迁移 Q2 把它其余部分拆开：从 UEX 更新 shops.json 在 update/shops.py，
+查 gamedata、算导航距离在 tasks/catalog_queries/shops.py）；catalog 不读文件、不联网、不碰全局缓存。
 """
 
 import difflib
@@ -85,7 +85,7 @@ def base_names(name):
 def variant_candidates(rows, base, name):
     """某个原型名 base 下可能的同款 [(id, 名字, 类别)]，按名字长度排序。
 
-    原 crafting/shops.variants 的候选匹配和排序部分；buyable 过滤留在旧文件。
+    原 crafting/shops.variants 的候选匹配和排序部分；buyable 过滤在 tasks/catalog_queries/shops.variants。
     """
     k = fold_en_loose(base)
     words = [w for w in re.findall(r"[a-z0-9]+", base.lower()) if len(w) > 2]

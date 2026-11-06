@@ -263,7 +263,7 @@ class _Sandbox:
         from astral_toolkit.core import net as net_mod
         from astral_toolkit.core import run_records
         from astral_toolkit.crafting import loot as loot_mod
-        from astral_toolkit.crafting import shops as shops_mod
+        from astral_toolkit.update import shops as shops_mod
         from astral_toolkit.navigation import position as position_mod
         from astral_toolkit.tasks import hover as hover_mod
         from astral_toolkit.tasks import navigation as navigation_mod
@@ -608,7 +608,7 @@ def _collect_queries(items, selected, queries):
 
 def _buy_points(rows, limit=300):
     """按行排序依次列出商店买点 (行, (价格, 店, 地点))，最多 limit 个"""
-    from astral_toolkit.crafting import shops
+    from astral_toolkit.tasks.catalog_queries import shops
 
     ordered = [row for row in rows if (row.get("en") or "").strip()]
     ordered.sort(key=_row_key)

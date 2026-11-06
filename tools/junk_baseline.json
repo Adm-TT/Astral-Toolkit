@@ -82,7 +82,6 @@
   "astral_toolkit/app/server.py": 12,
   "astral_toolkit/core/i18n.py": 1,
   "astral_toolkit/crafting/__init__.py": 2,
-  "astral_toolkit/crafting/shops.py": 1,
   "astral_toolkit/mining/laser.py": 1,
   "astral_toolkit/mining/screen.py": 1,
   "astral_toolkit/mining/signals.py": 1,

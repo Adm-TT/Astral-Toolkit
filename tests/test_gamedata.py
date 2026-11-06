@@ -846,7 +846,8 @@ def test_names_table_without_zh_names_is_empty(monkeypatch, tmp_path):
 
 def test_import_matches_itemsearch_index_on_sample(monkeypatch, tmp_path):
     """审查第 8 条：在同一份小样本上，建库结果和 itemsearch._build_locked() 逐条一致"""
-    from astral_toolkit.crafting import loot, shops
+    from astral_toolkit.crafting import loot
+    from astral_toolkit.update import shops
     from astral_toolkit.tasks.catalog_queries import search as itemsearch
     from astral_toolkit.gamedata import snapshot
     from astral_toolkit.gamedata._build import rebuild_if_needed
