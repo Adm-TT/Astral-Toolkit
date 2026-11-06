@@ -262,6 +262,14 @@ class _LoopReader:
         return self.ok_at, self.info
 
 
+class _StopOnWait(threading.Event):
+    """第一次等就叫停（游戏不在最前面时那下 0.5 秒的等）"""
+
+    def wait(self, timeout=None):
+        self.set()
+        return True
+
+
 def _drive(w, timeout=5.0):
     """在后台线程里跑一遍线程循环，最多等 timeout 秒：循环停不下来就叫停、判失败，不把整个测试卡死"""
     t = threading.Thread(target=w._run, daemon=True)
@@ -297,8 +305,8 @@ def test_loop_pauses_when_game_not_in_front():
     fine = []
     p = _worker(foreground=lambda: False, fine_timer=fine.append)
     p._fine_on = True
+    p.stop_ev = _StopOnWait()
     p.reader = _LoopReader(p.stop_ev)
-    p.stop_ev.wait = lambda t=None: p.stop_ev.set()  # 等 0.5 秒那下直接叫停
     _drive(p)
     assert p.reader.polls == [] and fine == [False]
 
@@ -422,6 +430,7 @@ def test_worker_starts_once_stops_and_restarts():
     p.request_stop()
     assert p.join(2.0) is True and not first.is_alive()
     p.start()
-    assert p.thread is not first and p.thread.is_alive()
+    again = p.thread
+    assert again is not None and again is not first and again.is_alive()
     p.request_stop()
     assert p.join(2.0) is True
