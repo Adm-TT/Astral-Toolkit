@@ -472,9 +472,6 @@ def _mine_file():
     return USER / "my_signatures.json"
 
 
-_MINE = {"stamp": -1, "t": {}}
-
-
 def my_signatures():
     """玩家自己给信号起的名字 {"12345": "名字"}（userdata/my_signatures.json，升级不动）"""
     from ..core.paths import cached_json

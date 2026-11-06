@@ -350,7 +350,13 @@ def test_unbound_modules_raise_and_gate_stays_open():
         nav_tasks._pos = None
         nav_tasks._game_events = None
         nav_tasks._results = None
-        _assert_error(RuntimeError, "未绑定", nav_tasks._need)
+        for need in (
+            nav_tasks._need_nav,
+            nav_tasks._need_pos,
+            nav_tasks._need_events,
+            nav_tasks._need_results,
+        ):
+            _assert_error(RuntimeError, "未绑定", need)
 
         system_common._status = None
         system_common._start = None

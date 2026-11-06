@@ -282,12 +282,13 @@ def test_navigation_bind_required():
     saved = snapshot_bindings()
     try:
         nt._nav = nt._pos = nt._game_events = nt._results = None
-        try:
-            nt._deps()
-        except RuntimeError as exc:
-            assert "未绑定" in str(exc)
-        else:
-            raise AssertionError("未绑定时应抛 RuntimeError")
+        for need in (nt._need_nav, nt._need_pos, nt._need_events, nt._need_results):
+            try:
+                need()
+            except RuntimeError as exc:
+                assert "未绑定" in str(exc)
+            else:
+                raise AssertionError(f"未绑定时 {need.__name__} 应抛 RuntimeError")
     finally:
         restore_bindings(saved)
 

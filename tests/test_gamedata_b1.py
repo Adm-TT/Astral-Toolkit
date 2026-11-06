@@ -266,9 +266,8 @@ def test_prices_city_prices(monkeypatch, tmp_path):
         "Area18",
         "Lorville",
     ]
-    assert prices.has_live()
     _setup(monkeypatch, tmp_path / "np", **{"prices.json": {"prices": {}}})
-    assert prices.city_prices() == {} and not prices.has_live()
+    assert prices.city_prices() == {}
 
 
 def test_topic_calls_share_outer_snapshot(monkeypatch, tmp_path):

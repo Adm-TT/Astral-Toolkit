@@ -15,7 +15,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 INV = re.compile(r"^<([^>]+)>.*requested inventory for Location\[([^\]]+)\]")
-QT = re.compile(r"^<([^>]+)>.*Projected Start Location is (.+?)\s+for route")
 ROMAN = {"I": 1, "II": 2, "III": 3, "IV": 4, "V": 5, "VI": 6}
 PLANET_CODE = {
     "ARC": "Stanton3",

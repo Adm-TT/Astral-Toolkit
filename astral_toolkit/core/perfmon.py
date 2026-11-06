@@ -166,17 +166,6 @@ def _cmdline(pid):
         ctypes.windll.kernel32.CloseHandle(h)
 
 
-def _tree(root, kids):
-    todo, seen = [root], set()
-    while todo:
-        pid = todo.pop()
-        if pid in seen:
-            continue
-        seen.add(pid)
-        todo += kids.get(pid, [])
-    return seen
-
-
 def _groups():
     """{名字: [pid…]}：AT 自己、窗口（用 AT 自己那个 Edge 配置文件夹的 Edge 进程）"""
     me = os.getpid()

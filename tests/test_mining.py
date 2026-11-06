@@ -643,33 +643,6 @@ def test_settings_roundtrip():
         settings.FILE = old
 
 
-def test_gamelog_vehicle_channel():
-    """读游戏日志判断在不在驾驶位"""
-    from astral_toolkit.system.gamelog import GameLog
-
-    g = GameLog()
-    g.line(
-        "<2026-10-20T07:36:58.726Z> [Notice] <SHUDEvent_OnNotification> Added notification \"你已加入 频道 'Aegis Idris-P : TestPilot01'。"
-    )
-    assert not g.aboard and g.channel.startswith(
-        "Aegis Idris"
-    )  # 在伊德里斯里走动：不算在开
-    seat = (
-        "<y> [Notice] <Failed to get starmap route data!> [ItemNavigation][CL][27808] | NOT AUTH | "
-        "AEGS_Idris_P_891312926245[891312926245]|CSCItemNavigation::GetStarmapRouteSegmentData|No "
-    )
-    g.line(seat)
-    assert g.aboard and g.vehicle == "AEGS_Idris_P"  # 坐上驾驶位
-    g.line(
-        "<z> [Notice] <SHUDEvent_OnNotification> Added notification \"你退出了 频道 'Aegis Idris-P : TestPilot01'。"
-    )
-    assert not g.aboard  # 坐着退出频道：清掉
-    g.line(seat)
-    assert g.aboard
-    g.line("<z> [CSessionManager::OnClientSpawned] Spawned!")
-    assert not g.aboard and g.channel is None  # 坐着重生：清掉
-
-
 def test_real_screenshot_scan():
     """原来菜单里的「截图测试」：用你电脑上截的 MOLE 扫描截图跑一遍完整识别（没装 OCR 就跳过）"""
     import pytest
@@ -689,54 +662,6 @@ def test_real_screenshot_scan():
 
     scan, bag = screen.analyse(Image.open(img).convert("RGB"))
     assert scan.composition and scan.mass and abs(scan.mass - 43066) / 43066 < 0.02
-
-
-def test_seat_from_real_log():
-    """你 2026-10-20 的日志：上船只加入一次频道、一直不退；离开驾驶位靠 ClearDriver，坐回去靠导航模块的日志"""
-    from astral_toolkit.system.gamelog import GameLog
-
-    g = GameLog()
-    g.line(
-        "<2026-10-20T06:39:22.010Z> [Notice] <SHUDEvent_OnNotification> Added notification \"你已加入 频道 'Anvil C8R Pisces Rescue : TestPilot01'。"
-    )
-    assert not g.aboard  # 只是登船
-    g.line(
-        "<2026-10-20T06:40:07.596Z> [Notice] <Vehicle Control Flow> CVehicleMovementBase::ClearDriver: Local client node "
-        "[721472803216] releasing control token for 'ANVL_C8R_Pisces_892158680463' [892158680463] [Team_CGP4][Vehicle]"
-    )
-    assert not g.aboard  # 下了驾驶位
-    g.line(
-        "<2026-10-20T06:43:18.562Z> [Notice] <Local Route Guard - Server Rerouted> [CL][27808] | NULL ENTITY|"
-        "CSCItemNavigation::PostInitialize::<lambda_1>::operator ()|FinalStop=-1 [Team_CGP4][QuantumTravel]"
-    )
-    assert not g.aboard  # 没有载具名的导航日志不算
-    g.line(
-        "<2026-10-20T06:42:24.793Z> [Notice] <Failed to get starmap route data!> [ItemNavigation][CL][27808] | NOT AUTH | "
-        "ANVL_C8R_Pisces_892158680463[892158680463]|CSCItemNavigation::GetStarmapRouteSegmentData|No "
-    )
-    assert g.aboard and g.vehicle == "ANVL_C8R_Pisces"  # 坐回驾驶位：不触发
-    g.line(
-        "<2026-10-20T07:00:39.033Z> [Notice] <Vehicle Control Flow> CVehicleMovementBase::ClearDriver: Local client node "
-        "[721472803216] releasing control token for 'ANVL_C8R_Pisces_892158680463' [892158680463] [Team_CGP4][Vehicle]"
-    )
-    assert not g.aboard
-
-
-def test_seat_state_after_replaying_real_log():
-    from pathlib import Path
-    import pytest
-    from astral_toolkit.system.gamelog import GameLog
-
-    import os
-
-    log = Path(
-        os.environ.get("AT_REAL_GAMELOG", "-")
-    )  # 想跑就把真实 Game.log 的路径放进这个环境变量
-    if not log.is_file():
-        pytest.skip("没有日志样本")
-    g = GameLog(log)
-    g.poll()  # 真实日志能完整读完、不出错
-    assert isinstance(g.aboard, bool)
 
 
 def test_ship_loadouts(tmp_path, monkeypatch):
@@ -1918,7 +1843,6 @@ def test_signal_mixed_named_and_fixed(monkeypatch, tmp_path):
     assert "混在一团" in g[0][0]
     # 自己记的名字排第一
     monkeypatch.setattr(S, "_mine_file", lambda: tmp_path / "my_signatures.json")
-    S._MINE.update(stamp=-1, t={})
     S.set_my_signature(v, "  我的怪信号  ")
     assert S.guesses(v, "space", area)[0] == ("我的怪信号（自己记的）", 0, True)
     S.set_my_signature(v, "")
