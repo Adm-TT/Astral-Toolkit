@@ -948,22 +948,15 @@ _NAV_API = [
     "halo_pin",
     "halo_unpin",
 ]
+# CR-B4 起制造 6 个、维科洛 2 个接口挪到 app/api/crafting.py、wikelo.py（归属在 tests/test_crafting_api.py 里查）
 _GOALS_API = [
     "goal_finish_preview",
     "goal_finish",
-    "wikelo_search",
-    "wikelo_detail",
     "goals",
     "goal_add",
     "goal_update",
     "goal_stock_add",
-    "craft_effect",
     "goal_prices",
-    "craft_search",
-    "craft_browse",
-    "craft_detail",
-    "craft_stats",
-    "craft_mix",
 ]
 
 

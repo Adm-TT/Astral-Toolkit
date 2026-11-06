@@ -136,6 +136,7 @@ MODULES = [
     "tests.test_wikelo_golden",
     "tests.test_crafting_rules",
     "tests.test_wikelo_rules",
+    "tests.test_crafting_api",
     "tests.test_pos_service",
     "tests.test_nav_fps",
     "tests.test_count_session",

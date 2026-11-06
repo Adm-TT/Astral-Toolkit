@@ -7,8 +7,6 @@
 规则在 labels / classify / materials / quality / mix / listing / reverse，这里留取数据、还没拆的排版和旧名字。
 """
 
-import re
-
 from ..contracts.textkeys import (
     blueprint_norm as _fold_name,
     blueprint_search_norm as _search_norm,
@@ -38,6 +36,7 @@ laser_total = _quality.laser_total
 mix_plan = _mix.mix_plan
 parse_mods = _reverse.parse_mods
 craft_text = _reverse.craft_text
+_clean_title = _labels.clean_title
 
 
 def stats(bp, qualities):
@@ -240,10 +239,6 @@ def browse(
         limit=limit,
         mat=mat,
     )
-
-
-def _clean_title(t: str) -> str:
-    return re.sub(r"~mission\([^)]*\)", "[地点]", t)
 
 
 def describe(bp, with_locations: bool = True) -> str:

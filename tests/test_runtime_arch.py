@@ -1091,6 +1091,130 @@ def test_only_trade_shell_imports_catalog_presenter():
     )
 
 
+# ---------------------------------------------------------------- CR-B4：制造 / 维科洛的用例、排版、接口
+_CRAFTING_PRESENTER_MODULES = {
+    "astral_toolkit.app.presenters.crafting",
+    "astral_toolkit.app.presenters.wikelo",
+}
+
+
+def _crafting_presenter_bad_imports(source):
+    """制造 / 维科洛排版不许的 import：照物品查询排版那张表，crafting 下只放行纯规则文件。"""
+    pkg = "astral_toolkit.app.presenters"
+    bad = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.ImportFrom):
+            module = _textkeys_resolve_from(node, pkg)
+            for alias in node.names:
+                full = f"{module}.{alias.name}"
+                if module in _CRAFTING_RULE_MODULES or full in _CRAFTING_RULE_MODULES:
+                    continue
+                if _forbidden([module, full], _CATALOG_PRESENTER_FORBIDDEN):
+                    bad.append(f"{module}: {alias.name}")
+        elif isinstance(node, ast.Import):
+            bad += [
+                a.name
+                for a in node.names
+                if _forbidden([a.name], _CATALOG_PRESENTER_FORBIDDEN)
+            ]
+    return bad + _dynamic_imports(source)
+
+
+def test_crafting_presenters_only_format():
+    """制造 / 维科洛排版（CR-B4）只排版：不取数据，不碰任务 / 运行环境 / 设置；crafting 下只许拿纯规则文件。"""
+    for name in ("crafting", "wikelo"):
+        source = (_ROOT / "app" / "presenters" / f"{name}.py").read_text(
+            encoding="utf-8"
+        )
+        assert _crafting_presenter_bad_imports(source) == [], name
+    assert (
+        _crafting_presenter_bad_imports(
+            "from ...crafting.labels import GEAR_ZH\nfrom ...crafting import quality, wikelo_rules\n"
+        )
+        == []
+    )
+    for bad in (
+        "from ...crafting import crafting\n",
+        "from ...crafting.wikelo import load\n",
+        "from ...tasks import crafting\n",
+        "from ...gamedata import crafting\n",
+        "from ...mining.locations import where\n",
+        "from ...trade.console import material_source\n",
+        "def f():\n    from ...runtime.session import Tick\n",
+        "import threading\n",
+    ):
+        assert _crafting_presenter_bad_imports(bad), bad
+
+
+def test_crafting_use_cases_stay_below_app():
+    """制造 / 维科洛用例（CR-B4）不反向拿 app / runtime / bootstrap，也不动态导入。"""
+    for name in ("crafting", "wikelo"):
+        source = (_ROOT / "tasks" / f"{name}.py").read_text(encoding="utf-8")
+        assert _catalog_use_case_violations(source) == [], name
+
+
+def _crafting_presenter_imports(source, pkg):
+    hits = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.ImportFrom):
+            module = _textkeys_resolve_from(node, pkg)
+            for alias in node.names:
+                hits += [
+                    m
+                    for m in (module, f"{module}.{alias.name}")
+                    if m in _CRAFTING_PRESENTER_MODULES
+                ]
+        elif isinstance(node, ast.Import):
+            hits += [
+                a.name for a in node.names if a.name in _CRAFTING_PRESENTER_MODULES
+            ]
+    return hits
+
+
+def test_only_goals_shell_imports_crafting_presenters():
+    """CR-B4 过渡：tasks 里只有 tasks/goals.py 旧壳能 import 制造 / 维科洛排版；B5、B6 删壳后收紧成一个都不许。"""
+    pkg = "astral_toolkit.tasks"
+    assert _crafting_presenter_imports(
+        "from ..app.presenters import crafting as p", pkg
+    )
+    assert _crafting_presenter_imports(
+        "from ..app.presenters.wikelo import present_search", pkg
+    )
+    assert (
+        _crafting_presenter_imports("from ..app.presenters import catalog", pkg) == []
+    )
+    bad = []
+    for path in (_ROOT / "tasks").rglob("*.py"):
+        sub = ".".join(("astral_toolkit", *path.relative_to(_ROOT).parent.parts))
+        if _crafting_presenter_imports(path.read_text(encoding="utf-8"), sub):
+            rel = path.relative_to(_ROOT).as_posix()
+            if rel != "tasks/goals.py":
+                bad.append(rel)
+    assert bad == [], bad
+
+
+def test_api_route_names_unique():
+    """接口名在 app/api 各模块之间不许重复：router 按模块名合表，后加载的会悄悄盖掉前面的（CR-B4 起制造 / 维科洛接口单独成文件）。"""
+    import importlib
+    import pkgutil
+
+    from astral_toolkit.app import api
+
+    seen, dup = {}, []
+    for m in sorted(pkgutil.iter_modules(api.__path__), key=lambda m: m.name):
+        if m.name in ("router", "__init__"):
+            continue
+        mod = importlib.import_module(f"{api.__name__}.{m.name}")
+        for name in getattr(mod, "ROUTES", None) or {}:
+            if name in seen:
+                dup.append(f"{name}: {seen[name]} / {m.name}")
+            seen[name] = m.name
+    assert dup == [], dup
+    assert (
+        seen.get("craft_detail") == "crafting" and seen.get("wikelo_detail") == "wikelo"
+    )
+
+
 _F8_FORBIDDEN_IMPORTS = (
     "astral_toolkit.tasks.trade",
     "astral_toolkit.crafting.loot",
