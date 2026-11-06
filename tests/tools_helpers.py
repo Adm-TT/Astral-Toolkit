@@ -1,12 +1,11 @@
 """test_tools_*.py 几个文件共用的造数据帮手（从 test_tools.py 拆出，CL-C3）。不是测试文件，run_all 不跑它"""
 
-from astral_toolkit.crafting import shops
 import json
 
 
 def _shops_db(monkeypatch, tmp_path, data, starmap=None, copy=()):
     """商店查询走游戏数据层（批 1）：把假商店表写成 shops.json、在临时目录建库，只把库目录指过去；
-    paths.DATA 不动（别的数据照旧读真实 data/）。shops._data 也照旧换掉，给还在用 load() 的地方。
+    paths.DATA 不动（别的数据照旧读真实 data/）。
     starmap：假星图（批 2 起 find_point 走库），给了就一起写成 starmap.json 建进库；copy：再拷进去一起建库的源文件"""
     from astral_toolkit import gamedata
     from astral_toolkit.core import paths
@@ -36,7 +35,6 @@ def _shops_db(monkeypatch, tmp_path, data, starmap=None, copy=()):
     monkeypatch.setattr(
         _build, "gamedata_dir", lambda: src / "gamedata"
     )  # _build 在 import 时绑了名字：清理旧库的 glob 不能扫到真实 data/gamedata（控制台复审第 11 条）
-    monkeypatch.setattr(shops, "_data", data)
     real = paths.DATA
     paths.DATA = src  # 只在建库这一下读临时目录的源
     try:

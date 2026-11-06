@@ -2,10 +2,10 @@
 
 数据来自 UEX（玩家众包的商店价格，CIG 3.20 以后游戏文件里没有商店数据，所有 Item Finder 都靠众包，
 可能有缺漏；finder.cstone.space 同理）。按物品类别把所有商店价格拉一份缓存在 shops.json，
-菜单 5 更新，超过 7 天第一次查时自动更新。
+「更新数据」时更新（run.update：先下 AT 数据包，不通才用这里的 update 直接从 UEX 拉）。
+查询都走游戏数据库（gamedata/shops），不再直接读这个文件（CL-C4 删了 load）。
 """
 
-import json
 import re
 import time
 from pathlib import Path
@@ -17,12 +17,9 @@ from ..core.paths import DATA  # noqa: E402
 
 CACHE = DATA / "shops.json"
 BASE = "https://api.uexcorp.uk/2.0/"
-MAX_AGE = 7 * 86400
 FMT = 2  # 缓存格式版本：2 = 每条价格带结构化位置（按远近排序要用）
 # UEX 的物品类别（type=item），商品（矿物等）不在这里，矿物看「找矿点」和精炼/卖价
 SKIP_CATEGORIES = {36, 37, 87}
-
-_data = None
 
 
 def _get(path, params=None):
@@ -116,35 +113,12 @@ def update(progress=print):
     from .. import gamedata
     from ..core.paths import write_json
 
-    global _data
     # 只把写文件这一步放进更新边界（拿数据目录写锁，退出时重建游戏数据库）：联网那一两分钟不占着锁
     with gamedata.updating():
         write_json(CACHE, data, separators=(",", ":"))
-        _data = data
     if progress:
         progress(f"商店数据已更新：{len(items)} 种物品，{len(rows)} 条商店价格")
     return data
-
-
-def load(auto_update=True):
-    global _data
-    if _data is None and CACHE.exists():
-        _data = json.loads(CACHE.read_text(encoding="utf-8"))
-    if auto_update and (
-        _data is None
-        or time.time() - _data.get("fetched", 0) > MAX_AGE
-        or _data.get("fmt") != FMT
-    ):
-        print(
-            "商店数据"
-            + ("未下载" if _data is None else "需要更新")
-            + "，从 UEX 更新（约 1–2 分钟）…"
-        )
-        try:
-            update()
-        except Exception as e:
-            print(f"更新失败（{e}），" + ("使用旧数据" if _data else "暂时无法查询"))
-    return _data or {"items": {}, "rows": []}
 
 
 def _folded_items():
@@ -170,6 +144,16 @@ def _rows_for(item_id):
         return gd_shops.rows_for_item(item_id)
     except GamedataError:
         return ()
+
+
+def item_record(item_id):
+    """商店数据里这件的 [英文名, 类别]：按 str(编号) 对，和以前读 shops.json 的 items[str(编号)] 一样；
+    没有这件、库建不出来 → None（CL-C4 起 crafting/acquire.info 用它，替代 load()["items"]）"""
+    key = str(item_id)
+    for iid, en, cat, _ in _folded_items():
+        if str(iid) == key:
+            return [en, cat]
+    return None
 
 
 def find(query, limit=12):

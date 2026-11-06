@@ -92,9 +92,8 @@ def info(
             item_id = hit["shop"]
     else:
         item_id = resolve(name_en, name_zh, item_id)
-    items = shops.load(auto_update=False)["items"]
     name, category = _rules.name_and_category(
-        items.get(str(item_id)) if item_id is not None else None,
+        shops.item_record(item_id) if item_id is not None else None,
         item_id,
         name_en,
         name_zh,

@@ -384,11 +384,6 @@ def test_station_at_uses_lagrange_rows(monkeypatch, tmp_path):
     ]
     _setup(monkeypatch, tmp_path, **_shops_with_rows(row))
     monkeypatch.setattr(
-        shops,
-        "load",
-        lambda *a, **k: (_ for _ in ()).throw(AssertionError("不该读 JSON")),
-    )
-    monkeypatch.setattr(
         shops, "shop_point", lambda f: {"i": "ARC_L1"} if f[4] == "Station X" else None
     )
     monkeypatch.setattr(
@@ -610,7 +605,6 @@ def test_shops_update_runs_inside_updating(monkeypatch, tmp_path):
         ]
 
     monkeypatch.setattr(shops, "_get", fake_get)
-    monkeypatch.setattr(shops, "_data", None)
     shops.update(progress=None)
     assert state["n"] == 1 and len(state["writes"]) == 1 and state["writes"][0][1]
 
@@ -630,12 +624,7 @@ def _shop_setup(monkeypatch, tmp_path):
         [200, "Shop W", "Pyro · W", 1100.0, 0.0, "4.10", _F2],
     ]
     _setup(monkeypatch, tmp_path, **_shops_with_rows(*rows))
-    # 查询路径一律不许再读 shops.json（load 只留给更新流程）
-    monkeypatch.setattr(
-        shops,
-        "load",
-        lambda *a, **k: (_ for _ in ()).throw(AssertionError("查询读了 JSON")),
-    )
+    # 查询路径不读 shops.json（CL-C4 起 shops.load 都删了，原来在这里看守它不被调用）
     return shops
 
 
