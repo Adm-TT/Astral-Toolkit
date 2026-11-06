@@ -572,22 +572,12 @@ def test_refresh_total_timeout(tmp_path, monkeypatch):
     assert r.state == "offline"
 
 
-def test_cli_stock_line_units(tmp_path):
-    from astral_toolkit.trade.console import Trade, _cli_line, ore_item
+def test_ore_item_tells_ore_from_gear():
+    """矿按 SCU 记、别的按个：库存手动入库（tasks/stock）用 ore_item 判断（命令行入库那半 F 段 B3 删了）"""
+    from astral_toolkit.trade.console import ore_item
 
-    t = Trade(tmp_path, providers=[])
     ore, gun = Item("q", "Quantainium (Raw)"), Item("g", "FR-86")
-    t.catalog.upsert([ore, gun])
     assert ore_item(ore) and not ore_item(gun)
-    l = _cli_line(t, ore, "0.495", "", "X")  # noqa: E741
-    assert (l.key.unit, l.quantity) == (
-        "uSCU",
-        495000,
-    )  # 矿：SCU → uSCU，和窗口里同一行
-    l = _cli_line(t, gun, "2", "500", "X")  # noqa: E741
-    assert (l.key.unit, l.quantity, l.key.quality) == ("unit", 2, "exact:500")
-    with pytest.raises(ValueError):
-        _cli_line(t, gun, "1.5", "", "X")  # 按个的不能有小数
 
 
 def test_trade_dir_follows_install_not_env(tmp_path, monkeypatch):

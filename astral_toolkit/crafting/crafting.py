@@ -5,7 +5,7 @@
 - 扫描联动：扫到的矿石各成分品质，够做多少蓝图
 
 规则在 labels / classify / materials / quality / mix / listing / reverse，这里留取数据、还没拆的排版和旧名字。
-describe、header、uses_report、ask 是取数据 + 排版，外面（命令行、目标、F8、物品查询）还在用，crafting 又不能反过来 import app：命令行 ask 删掉、这些调用方都走用例以后再挪进排版文件。
+describe、header、uses_report 是取数据 + 排版，外面（目标、F8、物品查询）还在用，crafting 又不能反过来 import app：这些调用方都走用例以后再挪进排版文件（命令行 ask 2026-11-06 删了，F 段 B3）。
 """
 
 from ..contracts.textkeys import blueprint_norm, blueprint_search_norm
@@ -329,48 +329,6 @@ def curves_for(mineral: str):
 def quality_hints(composition) -> list:
     """扫描联动：[(矿物, 百分比, 品质)] → 每种矿的品质对制造意味着什么（分段门槛最重要，如发电机能量格）"""
     return _quality.quality_hints(composition, curves_for, uses, material_zh)
-
-
-def ask():
-    """交互：输入物品名查蓝图，或输入矿名反查用途"""
-    from ..mining.locations import _match_zh
-    from ..mining.data import SIGNATURES
-
-    en_minerals = {k.lower(): k for k in SIGNATURES}
-    print(
-        "输入想造的东西（中文或英文，可只输一部分，如 螺旋 II / Helix），"
-        "或输入矿名反查能造什么（如 砬兰石）。直接回车退出。\n"
-    )
-    while True:
-        try:
-            raw = input("> ").strip()
-        except EOFError:
-            return
-        if not raw:
-            return
-        mineral = en_minerals.get(raw.lower()) or (
-            _match_zh(raw) if len(raw) <= 6 else None
-        )
-        found = search(raw)
-        if mineral and not any(
-            bp["z"] == raw or bp["n"].lower() == raw.lower() for bp in found
-        ):
-            print(uses_report(mineral), end="\n\n")
-            continue
-        if not found:
-            print("没找到，换个关键词试试（中文名或英文名的一部分都行）\n")
-        elif len(found) == 1:
-            print(describe(found[0]), end="\n\n")
-        else:
-            print(f"找到 {len(found)} 个，输入序号查看：")
-            for i, bp in enumerate(found, 1):
-                print(
-                    f"  {i}. {display_name(bp)}｜"
-                    f"{_labels.GEAR_ZH.get((bp['g'], bp['t']), bp['t'])}"
-                )
-            pick = input("序号> ").strip()
-            if pick.isdigit() and 1 <= int(pick) <= len(found):
-                print(describe(found[int(pick) - 1]), end="\n\n")
 
 
 def mix_targets(bp):

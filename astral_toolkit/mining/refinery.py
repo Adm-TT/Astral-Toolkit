@@ -115,11 +115,6 @@ def refined_plan(bag: dict, prices=None, refineries=None):
     return out
 
 
-def sell_plan(bag: dict):
-    """每种矿卖去哪个城市：[(矿物, 城市, 单价)]"""
-    return [(m, *reversed(best_price(m))) for m in bag if m != INERT]
-
-
 def unpriced(bag: dict):
     return [m for m in bag if m != INERT and not best_price(m)[0]]
 

@@ -9,7 +9,6 @@ from astral_toolkit.trade.models import (
     PriceKey,
     PriceStats,
     ProviderResult,
-    ImportRow,
 )
 from astral_toolkit.ocr import OcrToken
 import time
@@ -61,45 +60,11 @@ class Scm:
         return ProviderResult("scm", "empty", message="没有挂牌")
 
 
-def feed(monkeypatch, answers):
-    it = iter(answers)
-    monkeypatch.setattr(C, "_input", lambda prompt="": next(it))
-
-
-def test_price_flow_chinese(tmp_path, monkeypatch):
+def test_trade_lookup_chinese(tmp_path):
+    """查价（窗口、F8 都走 Trade.lookup）：中文名两家都查得到（原来夹在命令行查价那条测试里，F 段 B3 拆出来）"""
     t = C.Trade(tmp_path, [Uex(), Scm()])
-    feed(monkeypatch, ["1", "650", ""])
-    C.price_flow(t, "科力晶")
     items, _ = t.lookup("科力晶")
     assert {i.id for i in items} == {"uex:4741", "scm:43475"}
-    item = t.catalog.get("uex:4741")
-    lines = t.price_lines(item, t.prices(item, "q3"))
-    assert any("均价 5,000" in l and "最低 4,200" in l for l in lines)  # noqa: E741
-
-
-def test_manual_import_and_undo(tmp_path, monkeypatch):
-    t = C.Trade(tmp_path, [Uex(), Scm()])
-    feed(monkeypatch, ["Carinite", "1", "12", "650", "", "Area18 仓库", "y"])
-    C.manual_import(t)
-    stock = t.inventory.list_stock()
-    assert (
-        stock[0].quantity == 12
-        and stock[0].key.quality == "exact:650"
-        and stock[0].key.location == "Area18 仓库"
-    )
-    assert any("12" in l for l in t.stock_lines())  # noqa: E741
-    feed(monkeypatch, ["1"])
-    C.history_flow(t)
-    assert not t.inventory.list_stock()
-
-
-def test_review_requires_fix(tmp_path, monkeypatch):
-    t = C.Trade(tmp_path, [Uex(), Scm()])
-    t.catalog.upsert([Item("uex:4741", "Carinite")])
-    rows = [ImportRow("科力晶", "uex:4741", None, "exact:650")]
-    feed(monkeypatch, ["", "改 1", "", "5", "", ""])  # 缺数量不让过 → 改成 5 → 确认
-    out = C.review_rows(t, rows)
-    assert out[0].quantity == 5 and out[0].confirmed
 
 
 def test_quality_parse():
@@ -376,27 +341,6 @@ def test_wikelo_data_and_lookup():
         asg[0], lambda n: "可买：某店" if n == "ASD Secure Drive" else ""
     )
     assert "× 50 个" in text and "可买：某店" in text
-
-
-def test_console_commands(monkeypatch, tmp_path):
-    if not wikelo.OUT.exists():
-        pytest.skip("没有维科洛数据")
-    fake_shops(monkeypatch, tmp_path)
-    out = []
-    monkeypatch.setattr(
-        "builtins.print", lambda *a, **k: out.append(" ".join(map(str, a)))
-    )
-    monkeypatch.setattr(C, "_input", lambda prompt="": "1")
-    C.finder_flow("SureGrip S1")
-    assert any("4,500" in l for l in out)  # noqa: E741
-    out.clear()
-    C.wikelo_flow(
-        "Asgard"
-    )  # 船名中文与否看玩家装的汉化包（有的包船名不翻译），这里用英文名
-    assert any("Asgard" in l or "阿斯加德" in l for l in out) and any(  # noqa: E741
-        "Wikelo Favor" in l or "维科洛" in l
-        for l in out  # noqa: E741
-    )  # noqa: E741
 
 
 # ======================================================================
@@ -1221,31 +1165,6 @@ def test_mask_overlay_blacks_out_hud():
         255,
     )
     assert img.getpixel((35, 15)) == (255, 255, 255)
-
-
-def test_hud_prices_fall_back_when_no_minimum():
-    """UEX 常常没有最低价：用均价，再没有用 7 天均价，并标明是哪种价"""
-    from decimal import Decimal as D
-    from types import SimpleNamespace as N
-    from astral_toolkit.trade.console import hud_prices
-
-    st = lambda src, mn, mean, wk: N(  # noqa: E731
-        key=N(source=src), minimum=mn, mean=mean, week_mean=wk
-    )  # noqa: E731
-    r = lambda src, *s: N(source=src, stats=s)  # noqa: E731
-    assert (
-        hud_prices(
-            [
-                r("uex", st("uex", None, D(15000), None)),
-                r("scm", st("scm", D(9500), D(11000), None)),
-            ]
-        )
-        == "UEX 均价 15,000；SCM 最低 9,500"
-    )
-    assert (
-        hud_prices([r("uex", st("uex", None, None, D(14000)))]) == "UEX 7天均价 14,000"
-    )
-    assert hud_prices([r("uex"), r("scm")]).startswith("暂无报价")
 
 
 def test_log_location_learns_ids_and_follows_moves(monkeypatch, tmp_path):
