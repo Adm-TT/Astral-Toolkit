@@ -884,18 +884,20 @@ def test_close_bundle_closes_the_open_bundle(monkeypatch, tmp_path):
     monkeypatch.setattr(
         loot_details, "_zip", {"z": None, "mtime": None, "version": None}
     )
-    assert loot_details.from_zip("u1", "4.10.2LIVE") == {"a": 1}
-    opened = loot_details._zip["z"]
-    assert opened is not None and opened.fp is not None
-    loot_details.close_bundle()
-    assert opened.fp is None
-    assert loot_details._zip == {"z": None, "mtime": None, "version": None}
-    assert loot_details.from_zip("u1", "4.10.2LIVE") == {"a": 1}  # 重新打开
-    loot_details.close_bundle()
+    try:
+        assert loot_details.from_zip("u1", "4.10.2LIVE") == {"a": 1}
+        opened = loot_details._zip["z"]
+        assert opened is not None and opened.fp is not None
+        loot_details.close_bundle()
+        assert opened.fp is None
+        assert loot_details._zip == {"z": None, "mtime": None, "version": None}
+        assert loot_details.from_zip("u1", "4.10.2LIVE") == {"a": 1}  # 重新打开
+    finally:
+        loot_details.close_bundle()  # 断言没过也关上：Windows 上开着的文件删不掉
 
 
 def test_loot_update_version_order(monkeypatch, tmp_path):
-    """更新掉落索引取版本的先后：站点最新 → 本机索引里的 → 4.10.2LIVE；清单里没写版本就用取到的这个"""
+    """更新掉落索引取版本的先后：传进来的 → 站点最新 → 本机索引里的 → 4.10.2LIVE；清单里没写版本就用取到的这个"""
     import json
 
     from astral_toolkit.infrastructure.providers import loot_site
@@ -912,11 +914,11 @@ def test_loot_update_version_order(monkeypatch, tmp_path):
         urls.append(url)
         return {} if url.endswith("manifest.json") else []
 
-    def version(latest):
+    def version(latest, given=None):
         monkeypatch.setattr(loot_site, "latest_version", lambda: latest)
         monkeypatch.setattr(loot_index, "_index", None)
         urls.clear()
-        got = loot_index.update(progress=None)["version"]
+        got = loot_index.update(given, progress=None)["version"]
         assert urls == [
             f"{loot_site.BASE}{got}/manifest.json",
             f"{loot_site.BASE}{got}/search.json",
@@ -927,7 +929,8 @@ def test_loot_update_version_order(monkeypatch, tmp_path):
     index.write_text(
         json.dumps({"version": "4.10.9LIVE", "rows": []}), encoding="utf-8"
     )
-    assert version("4.11.0LIVE") == "4.11.0LIVE"  # 站点最新优先
+    assert version("4.11.0LIVE", "4.12.0PTU") == "4.12.0PTU"  # 传进来的最优先
+    assert version("4.11.0LIVE") == "4.11.0LIVE"  # 再是站点最新
     assert version(None) == "4.10.9LIVE"  # 站点取不到：本机索引里的
     index.unlink()
     assert version(None) == "4.10.2LIVE"  # 都没有：默认
