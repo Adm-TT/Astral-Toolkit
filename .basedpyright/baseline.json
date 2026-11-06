@@ -82,30 +82,6 @@
         ],
         "./astral_toolkit/crafting/acquire.py": [
             {
-                "code": "reportOperatorIssue",
-                "range": {
-                    "startColumn": 23,
-                    "endColumn": 40,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportOperatorIssue",
-                "range": {
-                    "startColumn": 51,
-                    "endColumn": 68,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportOperatorIssue",
-                "range": {
-                    "startColumn": 62,
-                    "endColumn": 79,
-                    "lineCount": 1
-                }
-            },
-            {
                 "code": "reportIndexIssue",
                 "range": {
                     "startColumn": 8,
