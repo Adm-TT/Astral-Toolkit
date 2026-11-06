@@ -1071,7 +1071,9 @@ def test_catalog_use_cases_stay_below_app():
     for path in files:
         source = path.read_text(encoding="utf-8")
         pkg = ".".join(("astral_toolkit", *path.relative_to(_ROOT).parent.parts))
-        if path.parent.name == "catalog_queries":  # 包算错了相对导入会解析到别处，就漏查了
+        if (
+            path.parent.name == "catalog_queries"
+        ):  # 包算错了相对导入会解析到别处，就漏查了
             assert pkg == "astral_toolkit.tasks.catalog_queries", pkg
         assert _catalog_use_case_violations(source, pkg) == [], path.name
     sub = "astral_toolkit.tasks.catalog_queries"
@@ -1093,20 +1095,38 @@ def test_catalog_use_cases_stay_below_app():
 
 
 def test_catalog_queries_import_starts_no_thread():
-    """导入物品查询内部实现不起线程、不建索引：搜索预热线程由 bootstrap 起（目录迁移章程 §9，Q1）"""
+    """导入物品查询内部实现不起线程（一闪就结束的也算）、不开库、不建索引：搜索预热线程由 bootstrap 起
+    （目录迁移章程 §9，Q1）。tasks、gamedata 包先导入好，只看 catalog_queries 自己导入时做了什么"""
     code = (
         "import threading\n"
-        "n = threading.active_count()\n"
+        "import astral_toolkit.tasks, astral_toolkit.catalog.search\n"
+        "import astral_toolkit.gamedata as g\n"
+        "started, touched = [], []\n"
+        "_start = threading.Thread.start\n"
+        "threading.Thread.start = lambda self: (started.append(self.name), _start(self))[1]\n"
+        "g.ensure = lambda *a, **k: touched.append('ensure')\n"
+        "g.snapshot = lambda *a, **k: touched.append('snapshot')\n"
         "import astral_toolkit.tasks.catalog_queries.search as s\n"
-        "print(threading.active_count() == n, s._cache._has)\n"
+        "print(started, touched, s._cache._has)\n"
     )
-    assert _run(code) == "True False"
+    assert _run(code) == "[] [] False"
+
+
+def test_catalog_queries_code_starts_no_threads():
+    """查询内部实现里不自己起线程（预热线程由 bootstrap 起，Q1）：静态查 threading.Thread(…)，函数里起的也算"""
+    files = sorted((_ROOT / "tasks" / "catalog_queries").rglob("*.py"))
+    assert len(files) >= 2, files
+    for path in files:
+        assert _thread_starts_in_source(path.read_text(encoding="utf-8")) == [], (
+            path.name
+        )
 
 
 def test_crafting_reaches_up_into_tasks_only_where_listed():
     """crafting 在 tasks 下层，不该反过来导入 tasks（目录迁移章程：兼容只许有明确调用者和删除批次），只许减不许加：
     acquire → 物品搜索是 Q1 搬走搜索后留的临时边，Q3 把 acquire 搬进 catalog_queries 时删；
-    goals → tasks.trade 是老的，目标业务这轮不动。字符串导入也不许绕。"""
+    goals → tasks.trade 是老的，目标业务这轮不动。字符串导入（__import__ / import_module）本项目的模块一律算，
+    往上往下都不许，免得绕过这条。"""
     allowed = {
         "acquire.py": {
             "astral_toolkit.tasks.catalog_queries.search",

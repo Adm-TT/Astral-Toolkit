@@ -1044,9 +1044,9 @@ def test_query_while_new_content_is_published(monkeypatch, tmp_path):
 
 
 def test_build_index_builds_once_when_warmup_and_search_overlap(monkeypatch):
-    """预热线程和玩家搜索撞在一起：同一资料版本只建一份索引，后来的等先来的建完直接用（目录迁移章程 §7.1）"""
+    """预热线程和玩家搜索撞在一起：建索引时拿着锁，后来的等先来的建完、直接用缓存里那份，
+    同一资料版本只建一份（目录迁移章程 §7.1）"""
     import threading
-    import time
     from contextlib import contextmanager
     from types import SimpleNamespace
 
@@ -1057,10 +1057,11 @@ def test_build_index_builds_once_when_warmup_and_search_overlap(monkeypatch):
     def snap():
         yield SimpleNamespace(data_version=7)
 
-    gate, built = threading.Event(), []
+    entered, gate, built = threading.Event(), threading.Event(), []
 
     def slow(s):
         built.append(s.data_version)
+        entered.set()
         gate.wait(5)
         return {"rows": [], "by_char": {}, "by_tri": {}, "by_en": {}}
 
@@ -1069,13 +1070,15 @@ def test_build_index_builds_once_when_warmup_and_search_overlap(monkeypatch):
     monkeypatch.setattr(IS, "_cache", _VC())
     monkeypatch.setattr(IS, "_index_from", slow)
     got = []
-    threads = [
-        threading.Thread(target=lambda: got.append(IS.build_index())) for _ in range(2)
-    ]
-    for t in threads:
-        t.start()
-    time.sleep(0.2)  # 两个都进去了：一个在建，一个在等
+    first = threading.Thread(target=lambda: got.append(IS.build_index()))
+    second = threading.Thread(target=lambda: got.append(IS.build_index()))
+    first.start()
+    assert entered.wait(5)
+    assert IS._build_lock.locked()  # 建的时候拿着锁
+    second.start()
+    second.join(0.3)
+    assert second.is_alive() and built == [7]  # 后来的在等，没有再建一份
     gate.set()
-    for t in threads:
-        t.join(5)
+    first.join(5)
+    second.join(5)
     assert built == [7] and len(got) == 2 and got[0] is got[1]

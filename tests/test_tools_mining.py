@@ -268,7 +268,6 @@ def test_live_scan_resumes_after_restart(monkeypatch, tmp_path):
     from astral_toolkit.app.engines import pos as pos_engine
     from astral_toolkit.core import settings
     from astral_toolkit.core.perfmon import monitor
-    from astral_toolkit.tasks.catalog_queries import search as itemsearch
     from astral_toolkit.runtime.session import StopAttempt
     from astral_toolkit.tasks import mining as t_mining, system as t_sys
     from tests.bootstrap_helpers import app_for_test
@@ -291,9 +290,7 @@ def test_live_scan_resumes_after_restart(monkeypatch, tmp_path):
         monkeypatch.setattr(cls, "start", lambda self: None)
     monkeypatch.setattr(monitor, "start", lambda: None)  # 不起 perfmon 常驻线程
     monkeypatch.setattr(OCR, "warmup", lambda: None)  # 不预热 OCR
-    monkeypatch.setattr(
-        itemsearch, "build_index", lambda: None
-    )  # 预热线程照起，但不建搜索索引
+    monkeypatch.setattr(bootstrap, "_warm_search_index", lambda: None)  # 不预热搜索索引
     monkeypatch.setattr(gamedata, "warm_up", lambda: None)  # 不建游戏数据库
     monkeypatch.setattr(t_sys, "_online_loop", lambda *a: None)  # 测试里不联网检查更新
     # 新的一份（装配时登记的更新服务也用这份，所以在装配前换）：不永久置 loop；不补发真实反馈
