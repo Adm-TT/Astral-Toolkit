@@ -408,6 +408,40 @@ def test_canonical_and_zh_for_unchanged(monkeypatch, tmp_path):
     assert new[1][:2] == ["医疗笔", "医疗 笔"]
 
 
+def test_canonical_en_l_as_i_fallback(monkeypatch):
+    """RD-B2：F8 英文行把导弹名里的罗马数字 III 认成 Ill（l 和 I 认混）。英文名、中文名都没精确对上时，
+    英文名 l 当 i 再精确比一次；两个不同名字折到一起的不猜；精确的照旧在前；标题带的「库精确」不算它"""
+    from astral_toolkit.trade import names
+
+    t = {
+        "逮捕者 III 导弹": "Arrester III Missile",
+        "点火 II 导弹": "Ignite II Missile",
+        "点火 II-G 导弹": "Ignite II-G Missile",
+        "甲": "Lima",
+        "乙": "Iima",
+    }
+    monkeypatch.setattr(names, "table", lambda: t)
+    arrester = ("逮捕者 III 导弹", "Arrester III Missile")
+    assert names.canonical("逮捕者川导弹", "ArresterIll Missile") == arrester
+    assert names.canonical("逮捕者川导弹", "ArresterIllMissile") == arrester
+    assert names.canonical("", "IgniteIl Missile") == (
+        "点火 II 导弹",
+        "Ignite II Missile",
+    )
+    assert names.canonical("", "lgnite ll-G Missile") == (
+        "点火 II-G 导弹",
+        "Ignite II-G Missile",
+    )
+    assert names.canonical("", "Lima") == ("甲", "Lima")  # 精确的在前
+    assert names.canonical("", "IIMA") == ("乙", "Iima")
+    assert names.canonical("", "Ilma") is None  # Lima、Iima 折到一起：不猜
+    assert names.canonical("点火 II 导弹", "ArresterIll Missile") == (
+        "点火 II 导弹",
+        "Ignite II Missile",
+    )  # 中文名精确在 l 当 i 前面
+    assert names.canonical_exact("逮捕者川导弹", "ArresterIll Missile") is None
+
+
 def test_suggest_tie_order_follows_table(monkeypatch, tmp_path):
     from astral_toolkit.trade import names
 

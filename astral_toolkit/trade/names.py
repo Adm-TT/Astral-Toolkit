@@ -5,7 +5,11 @@ UEX 只认英文名；游戏是中文界面，截图识别和手动搜索得到�
 
 import re
 
-from ..contracts.textkeys import fold_en as _fold_en, norm_zh as _norm_zh
+from ..contracts.textkeys import (
+    fold_en as _fold_en,
+    fold_en_loose as _fold_en_loose,
+    norm_zh as _norm_zh,
+)
 
 CJK = re.compile(r"[一-鿿]")
 _PAREN = re.compile(r"\s*[（(][^）)]*[）)]\s*")
@@ -84,6 +88,21 @@ def _build_index(t):
     return zh_map, en_map
 
 
+def _loose_en() -> dict:
+    """{英文名 l 当 i 折叠（contracts.textkeys.fold_en_loose）: (中文, 英文)}；两个不同的名字折到一起的键记 None（不猜）。
+    跟着 _index() 那份英文表缓存"""
+    _, en_map = _index()
+    return _cache("loose_en").get_for(en_map, lambda: _build_loose_en(en_map))
+
+
+def _build_loose_en(en_map):
+    out = {}
+    for k, v in en_map.items():
+        lk = _fold_en_loose(k)
+        out[lk] = v if out.get(lk, v) == v else None
+    return out
+
+
 _BILINGUAL = re.compile(r'^(.*[一-鿿）)])\s*([A-Za-z][A-Za-z0-9 \-\'".()/&]*)$')
 
 
@@ -157,7 +176,8 @@ def _closest(keys, target, floor):
 
 def canonical(zh="", en=""):
     """OCR 认出的名字 → 汉化包里的标准 (中文名, 英文名)；对不上返回 None。
-    顺序：拆开中英连写 → 矿物（精确）→ 英文名精确 → 中文名精确 → 英文名近似 → 矿名错一个字 → 中文名近似（错一两个字、丢一个字）"""
+    顺序：拆开中英连写 → 矿物（精确）→ 英文名精确 → 中文名精确 → 英文名 l 当 i 精确 → 英文名近似 → 矿名错一个字
+    → 中文名近似（错一两个字、丢一个字）"""
     zh, en = (zh or "").strip(), (en or "").strip()
     if zh and not en:
         zh, en = split_bilingual(zh)
@@ -169,6 +189,10 @@ def canonical(zh="", en=""):
         return en_map[_fold_en(en)]
     if zh and _norm_zh(zh) in zh_map:
         return zh_map[_norm_zh(zh)]
+    if en:  # 英文行 l 和 I 认混（导弹名里的罗马数字 III 认成 Ill，RD-B2 2026-11-06）：l 当 i 再精确比一次
+        hit = _loose_en().get(_fold_en_loose(en))
+        if hit:
+            return hit
     if en and len(_fold_en(en)) >= 6:
         k = _closest(en_map, _fold_en(en), 0.9)
         if k:
