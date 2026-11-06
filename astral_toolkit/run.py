@@ -1,8 +1,9 @@
 """Windows 启动器：.bat 只调用这里，中文提示都放在 Python 里输出
 （.bat 里写中文会因为编码问题被 cmd 读乱）
 
-python -m astral_toolkit.run            打开主菜单（AT）
-python -m astral_toolkit.run install | live | demo | update | where | craft | nav
+python -m astral_toolkit.run            打开 AT（窗口）
+python -m astral_toolkit.run install | update | restart
+（命令行版：老菜单、交易 / 导航 / 找矿点 / 制造 / 实时读屏命令 2026-11-06 删了，F 段 B3）
 """
 
 import subprocess
@@ -167,7 +168,7 @@ def install():
         exe = build()
     except Exception as e:
         print(
-            f"（生成 Dubhe.exe 没成功：{e}，可以用 .venv\\Scripts\\python.exe -m astral_toolkit.run console）"
+            f"（生成 Dubhe.exe 没成功：{e}，可以用 .venv\\Scripts\\python.exe -m astral_toolkit.run 打开）"
         )
     if ocr and not _onnx_ok():
         ocr = False
@@ -176,52 +177,6 @@ def install():
         print("✅ 安装完成，以后双击「Dubhe.exe」就能用" if exe else "✅ 安装完成")
     else:
         print("❌ 有组件没装上，把这个窗口截图发给作者（游戏 ID：Adm_TT）")
-
-
-def live():
-    print("进游戏后在采矿模式下扫描石头，结果会显示在这里。按 Ctrl+C 退出\n")
-    from .mining import screen
-
-    sys.argv = ["screen"]
-    screen.main()
-
-
-def demo():
-    from . import demo as d
-
-    d.main()
-
-
-def where():
-    from .mining.locations import ask
-
-    ask()
-
-
-def craft():
-    from .crafting.crafting import ask
-
-    ask()
-
-
-class Relaunched(Exception):
-    """已经用管理员身份另开了窗口，这个窗口退出"""
-
-
-def nav():
-    from .navigation.navigate import ask
-
-    ask()
-
-
-def trade():
-    from .trade.console import ask
-
-    ask()
-
-
-def assist():
-    print("辅助：无（1.1.2 起 AT 不再模拟按键）")
 
 
 def run_entry(name):
@@ -377,20 +332,7 @@ def update(direct=False, web_ok=()):
     }
 
 
-MENU = [
-    ("1", "实时读屏（信号 + 扫描 + 破碎方案 + 精炼 + 制造提示）", live),
-    ("2", "找矿点：想挖什么矿，去哪挖", where),
-    ("3", "制造：查蓝图要什么矿 / 某种矿能做什么", craft),
-    ("4", "手动输入扫描数据", demo),
-    ("5", "更新数据（汉化 + 矿价 + 制造 + 星图 + 商店 + 掉落）", update),
-    ("6", "导航：去没有量子信标的地点（洞穴、残骸、自定义路标）", nav),
-    ("7", "游戏辅助（1.1.2 起已删除）", assist),
-    ("8", "交易：查价 / 哪里买 / 维科洛兑换 / 库存（游戏里 F8 识别物品）", trade),
-    ("0", "退出", None),
-]
-
-
-def menu(console=False, restart=False):
+def menu(restart=False):
     from .core import paths
 
     try:
@@ -416,65 +358,17 @@ def menu(console=False, restart=False):
         print("没能用管理员身份打开（可能点了「否」）。热键在游戏里会失效。")
         if not _single_instance():  # 没换成功：把锁拿回来，继续用普通身份
             return
-    try:
-        if console:
-            _menu_loop()
-        else:
-            from .app.server import main as window
+    from .app.server import main as window
 
-            window(restart=restart)
-    except Relaunched:
-        pass
-
-
-def console_menu():
-    """老的命令行菜单（窗口打不开时备用）：python -m astral_toolkit.run console"""
-    menu(console=True)
-
-
-def _menu_loop():
-    from .mining.data import GAME_VERSION
-
-    while True:
-        print("\n" + "=" * 50)
-        print(f"  AT · 游戏数据 {GAME_VERSION}")
-        print("=" * 50)
-        for key, title, _ in MENU:
-            print(f"  {key}. {title}")
-        choice = input("\n选择功能序号 > ").strip()
-        action = next((fn for key, _, fn in MENU if key == choice), "missing")
-        if action is None:
-            return
-        if action == "missing":
-            print("没有这个选项")
-            continue
-        print()
-        try:
-            action()
-        except Relaunched:
-            raise
-        except KeyboardInterrupt:
-            print("\n（已返回菜单）")
-        except Exception:
-            traceback.print_exc()
-            print("出错了，把这个窗口截图发给作者（游戏 ID：Adm_TT）")
+    window(restart=restart)
 
 
 ENTRIES = {
     "menu": menu,
     "restart": lambda: menu(restart=True),
-    "console": console_menu,
     "install": install,
-    "live": live,
-    "demo": demo,
     "update": update,
     "prices": update,
-    "where": where,
-    "craft": craft,
-    "trade": trade,
-    "nav": lambda: __import__(
-        "astral_toolkit.navigation.navigate", fromlist=["ask"]
-    ).ask(),
 }
 
 
@@ -511,11 +405,11 @@ if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "menu"
     if silent:
         try:
-            (nav if cmd == "nav" else ENTRIES[cmd])()
+            ENTRIES[cmd]()
         except Exception:
             traceback.print_exc()
             _error_box(
                 "助手出错了。错误已记进日志（设置页可导出），发给作者（游戏 ID：Adm_TT）看看。"
             )
         sys.exit(0)
-    (nav if cmd == "nav" else ENTRIES[cmd])()
+    ENTRIES[cmd]()

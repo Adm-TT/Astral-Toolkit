@@ -188,7 +188,7 @@ class _StopProxy:
 
 
 class _Live:
-    """实时读屏：和命令行版同样的投票逻辑，结果推给窗口和悬浮窗"""
+    """实时读屏：投票逻辑在 mining/screen（vote / enqueue_rock），结果推给窗口和悬浮窗"""
 
     # ---- 会话循环要的类属性（设计稿 v3 §2.2）
     name = "live"

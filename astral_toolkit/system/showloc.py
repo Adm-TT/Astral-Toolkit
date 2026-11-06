@@ -206,7 +206,7 @@ def game_elevated():
         return None
 
 
-def relaunch_as_admin(entry="nav"):
+def relaunch_as_admin(entry="menu"):
     """用管理员身份另开一个窗口直接进某个功能（会弹出 Windows 的确认框）"""
     from ..core.paths import FROZEN, ROOT
 

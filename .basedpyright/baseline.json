@@ -306,16 +306,6 @@
                 }
             }
         ],
-        "./astral_toolkit/demo.py": [
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 32,
-                    "endColumn": 63,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./astral_toolkit/mining/data.py": [
             {
                 "code": "reportCallIssue",
@@ -758,14 +748,6 @@
                     "endColumn": 78,
                     "lineCount": 1
                 }
-            },
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 21,
-                    "endColumn": 30,
-                    "lineCount": 1
-                }
             }
         ],
         "./astral_toolkit/mining/signals.py": [
@@ -1128,40 +1110,6 @@
                 }
             }
         ],
-        "./astral_toolkit/navigation/navigate.py": [
-            {
-                "code": "reportOptionalMemberAccess",
-                "range": {
-                    "startColumn": 18,
-                    "endColumn": 21,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportOptionalMemberAccess",
-                "range": {
-                    "startColumn": 19,
-                    "endColumn": 22,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportOptionalMemberAccess",
-                "range": {
-                    "startColumn": 18,
-                    "endColumn": 21,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportOptionalMemberAccess",
-                "range": {
-                    "startColumn": 22,
-                    "endColumn": 25,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./astral_toolkit/navigation/transit.py": [
             {
                 "code": "reportArgumentType",
@@ -1436,14 +1384,6 @@
                 "range": {
                     "startColumn": 8,
                     "endColumn": 18,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportCallIssue",
-                "range": {
-                    "startColumn": 12,
-                    "endColumn": 20,
                     "lineCount": 1
                 }
             }

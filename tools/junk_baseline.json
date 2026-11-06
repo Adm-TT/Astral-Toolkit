@@ -10,7 +10,9 @@
   "astral_toolkit/gamedata/items.py::names_of": "数据层物品接口（GD-B1）：一件物品的所有名字（别名、汉化名），新库存 / ATA 认名字要用；没用上之前留着",
   "astral_toolkit/navigation/lifts_geom.py::AREA_GATE_M": "私有解包工具 tools/unpack_lifts.py 在用（不在仓库里，检查看不到）",
   "astral_toolkit/navigation/lifts_geom.py::tm_local": "私有解包工具 tools/unpack_lifts.py 在用（不在仓库里，检查看不到）",
-  "astral_toolkit/navigation/lifts_geom.py::worst_place_gate": "私有解包工具 tools/unpack_lifts.py 在用（不在仓库里，检查看不到）"
+  "astral_toolkit/navigation/lifts_geom.py::worst_place_gate": "私有解包工具 tools/unpack_lifts.py 在用（不在仓库里，检查看不到）",
+  "astral_toolkit/trade/parser.py::parse_inventory": "老库存截图入库的解析：唯一调用方命令行「截图」2026-11-06 删了（F 段 B3）；库存冻着，删不删等新库存的输入模块定，test_trade 锁着行为",
+  "astral_toolkit/trade/pricing.py::value_stock": "老库存参考估值：唯一调用方命令行「库存」（Trade.stock_lines）2026-11-06 删了（F 段 B3）；库存冻着，删不删等新库存定，test_trade 锁着行为"
  },
  "dead": [],
  "test_only": [
@@ -82,8 +84,7 @@
   "astral_toolkit/crafting/__init__.py": 2,
   "astral_toolkit/crafting/shops.py": 1,
   "astral_toolkit/mining/laser.py": 1,
-  "astral_toolkit/mining/locations.py": 1,
-  "astral_toolkit/mining/screen.py": 3,
+  "astral_toolkit/mining/screen.py": 1,
   "astral_toolkit/mining/signals.py": 1,
   "astral_toolkit/navigation/waypoints.py": 1,
   "astral_toolkit/selftest.py": 1,

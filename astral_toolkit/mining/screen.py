@@ -1,15 +1,11 @@
-"""读屏主程序（Windows，本地离线）
-
-python -m astral_toolkit.mining.screen            实时读屏，扫描结果一变就输出推荐
-python -m astral_toolkit.mining.screen 截图.png   用截图测试识别效果
+"""读屏核心（Windows，本地离线）：找扫描 / 货舱面板、识别、多帧投票；窗口的实时读屏（app/engines/live.py）调这里。
+命令行版（python -m astral_toolkit.mining.screen）2026-11-06 删了（F 段 B3）。
 
 读取区域按屏幕比例定位，1080p / 1440p / 4K 都适用；区域故意取得比面板大，
 面板位置有点偏移也没关系，真正定位靠标签文字（见 parse.py）。
 """
 
 import re
-import sys
-import time
 
 # 复用统一 OCR 模块的底层检测与单行识别器
 from ..ocr import raw_detector as _ocr, raw_recognizer as _recognize
@@ -888,105 +884,6 @@ def panel_seen(scan, raw=None):
     return labeled or named >= 2
 
 
-def report(scan, bag):
-    """控制台打印完整结果；返回给悬浮窗用的简短文字"""
-    from ..core.i18n import mineral_zh
-    from .laser import recommend
-    from .data import best_price
-
-    print("\n" + "=" * 60)
-    rock = mineral_zh(scan.main_mineral) if scan.main_mineral else "?"
-    diff = f"｜游戏评级：{scan.difficulty}" if scan.difficulty else ""
-    print(
-        f"{rock}｜质量 {scan.mass:,.0f} kg｜抗性 {scan.resistance:g}%｜不稳定性 {scan.instability:g}{diff}"
-    )
-    hud = [
-        f"{rock}｜{scan.mass:,.0f} kg｜抗性 {scan.resistance:g}%｜不稳定 {scan.instability:g}"
-    ]
-    from .refinery import refined_plan
-    from ..core.i18n import method_zh, station_zh
-
-    minerals = {
-        k: v
-        for k, v in scan.minerals_scu().items()
-        if k not in ("Inert Materials", "?")
-    }
-    if minerals:
-        print(
-            "  成分："
-            + "，".join(f"{mineral_zh(k)} {v:.2f} SCU" for k, v in minerals.items())
-        )
-        for n_, (method, station, value, rscu, fee, hours) in enumerate(
-            refined_plan(minerals)
-        ):
-            if n_ == 0:
-                hud.append(
-                    f"精炼后值 {value:,.0f} aUEC（建议：{method_zh(method)}，{station_zh(station)}精炼）"
-                )
-            print(
-                f"  精炼后净值 ≈ {value:,.0f} aUEC｜{method_zh(method)} @ {station_zh(station)}"
-                f"｜得 {rscu:.2f} SCU，精炼费 {fee:,.0f}，约 {hours:.1f} 小时"
-            )
-        sells = "，".join(
-            f"{mineral_zh(k)}→{best_price(k)[1] or '无收购'}" for k in minerals
-        )
-        print(f"  卖到：{sells}")
-        try:
-            from ..crafting.crafting import quality_hints
-
-            for h in quality_hints(scan.composition):
-                print("  制造：" + h)
-        except Exception as e:  # 制造数据缺失不影响读屏
-            print(f"  （制造提示出错：{e}）")
-    plans = recommend(scan.mass, scan.resistance, scan.instability)
-    for i, p in enumerate(plans, 1):
-        print(f"  {i}. {p.summary()}")
-    if plans:
-        hud.insert(1, plans[0].short())
-    contents, used, cap = bag
-    bag_text = ""
-    if used is not None:
-        print(
-            f"矿袋 {used:g}/{cap:g} SCU："
-            + "，".join(f"{mineral_zh(k)} {v:g}" for k, v in contents.items())
-        )
-        bag_text = f"{used:g}/{cap:g} SCU\n" + "，".join(
-            f"{mineral_zh(k)} {v:g}" for k, v in contents.items()
-        )
-    return "\n".join(hud), bag_text
-
-
-def main():
-    if len(sys.argv) > 1:
-        from PIL import Image
-        from .parse import rows  # noqa: F401
-
-        img = Image.open(sys.argv[1]).convert("RGB")
-        print(f"截图尺寸 {img.size}")
-        scan_lines, bag_lines = find_panels(img)
-        print("--- 扫描面板 ---")
-        for line in scan_lines:
-            print("  " + line)
-        print("--- 货舱面板 ---")
-        for line in bag_lines:
-            print("  " + line)
-        scan, bag = analyse(img)
-        print("--- 解析结果 ---")
-        print(scan, bag, sep="\n")
-        print(
-            "自检："
-            + (
-                "通过"
-                if scan.valid
-                else f"不通过（成分合计 {sum(p for _, p, _ in scan.composition):.2f}%）"
-            )
-        )
-        if scan.complete:
-            report(scan, bag)
-        return
-    live()
-
-
 def _same_rock(a, b):
     """是不是同一块石头：质量差 1% 以内，抗性也对得上（只看质量的话，两块差不多重的石头会混进同一个投票队列）"""
     if not (a.mass and b.mass and abs(a.mass - b.mass) / b.mass < 0.01):
@@ -998,102 +895,6 @@ def _same_rock(a, b):
     ):
         return False
     return True
-
-
-def live():
-    """实时读屏。同一块石头连续多帧投票，结果稳定了才输出一次；识别记录写进 userdata/logs/live_log.txt，
-    每块新石头的画面存进 userdata/shots/live/，方便之后排查"""
-    import collections
-    from pathlib import Path  # noqa: F401
-    from ..core import paths
-
-    root = paths.ROOT
-    shots = paths.shots("live")
-    log = open(paths.log("live_log.txt"), "a", encoding="utf-8")
-    recent = collections.deque(maxlen=VOTE_FRAMES)
-    from ..app.overlay import hud
-
-    ov = hud()
-    print("读屏中… 在采矿模式下扫描石头即可。按 Ctrl+C 退出")
-    if ov.ok:
-        print(
-            "结果也会显示在右上角悬浮窗（游戏要用无边框窗口模式；按住可拖动，双击暂时隐藏）"
-        )
-    try:
-        _live_loop(root, shots, log, recent, ov)
-    finally:
-        for k in ("信号", "扫描", "矿袋"):
-            ov.clear(k)
-
-
-def _live_loop(root, shots, log, recent, ov):
-    last_key = None
-    sig_prev, sig_shown = None, None
-    from ..system.showloc import game_front
-
-    while True:
-        # 和采矿助手引擎（app/engines/live.py）一样：游戏不在最前面不认（别的窗口里的「质量: 12431」会被当成面板）；
-        # 扫描面板开着时不认信号（石头质量会被当成信号）。2026-10-31 审查：命令行版以前没跟上这两条
-        if game_front() is False:
-            ov.sleep(min(INTERVAL, 0.25))
-            continue
-        img = grab()
-        t0 = time.time()
-        scan, bag = analyse(img)
-        raw = LAST_RAW.get("scan") if LAST_RAW.get("t", 0) >= t0 else None
-        # 雷达信号：连续两帧看到同一组信号才输出，变了再输出
-        try:
-            from .signals import find_signatures, describe_all
-
-            sigs = (
-                frozenset()
-                if panel_seen(scan, raw)
-                else frozenset(v for v, *_ in find_signatures(img))
-            )
-            if sigs and sigs == sig_prev and sigs != sig_shown:
-                sig_shown = sigs
-                print("\n" + "-" * 60)
-                lines = describe_all(find_signatures(img))
-                for line in lines:
-                    print("  " + line)
-                ov.set(
-                    "信号",
-                    "\n".join(
-                        l.split("｜精炼后")[0].replace("信号 ", "")
-                        for l in lines[:4]  # noqa: E741
-                    ),
-                )  # noqa: E741
-                log.write(f"{time.strftime('%F %T')} SIG {sorted(sigs)}\n")
-                log.flush()
-            sig_prev = sigs
-        except Exception as e:
-            print(f"（信号识别出错：{e}）")
-        if not scan.valid:
-            ov.sleep(INTERVAL)
-            continue
-        enqueue_rock(recent, scan, bag)
-        if len(recent) < 2:
-            ov.sleep(INTERVAL)
-            continue
-        best, stable = vote([r[0] for r in recent])
-        key = (round(best.mass), best.resistance, best.instability)
-        if stable and key != last_key:
-            last_key = key
-            stamp = time.strftime("%H%M%S")
-            text, bag_text = report(best, recent[-1][1])
-            ov.set("扫描", text)
-            if bag_text:
-                ov.set("矿袋", bag_text)
-            log.write(f"{time.strftime('%F %T')} {best} {recent[-1][1]}\n")
-            log.flush()
-            try:
-                img.save(shots / f"{stamp}.png")
-                old = sorted(shots.glob("*.png"))[:-20]  # 只留最近 20 张
-                for f in old:
-                    f.unlink()
-            except OSError:
-                pass
-        ov.sleep(INTERVAL)
 
 
 def _mode(vals):
@@ -1282,7 +1083,3 @@ def enqueue_rock(queue, scan, bag=None):
         cleared = True
     queue.append((scan, bag))
     return cleared
-
-
-if __name__ == "__main__":
-    main()

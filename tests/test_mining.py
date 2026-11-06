@@ -386,14 +386,6 @@ def test_crafting_dataset_and_links():
                     assert name in data.SIGNATURES, name
 
 
-def test_menu_has_all_features():
-    from astral_toolkit.run import MENU
-
-    titles = " ".join(t for _, t, _ in MENU)
-    for word in ("实时读屏", "找矿点", "制造", "更新数据", "导航", "交易"):
-        assert word in titles
-
-
 def _nav_data():
     from astral_toolkit.navigation import navigate as n
 

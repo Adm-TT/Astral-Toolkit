@@ -67,7 +67,7 @@ def main():
         if cmd == "admin":
             run.run_entry(args[1] if len(args) > 1 else "menu")
         else:
-            (run.nav if cmd == "nav" else run.ENTRIES.get(cmd, run.ENTRIES["menu"]))()
+            run.ENTRIES.get(cmd, run.ENTRIES["menu"])()
     except SystemExit:
         raise
     except Exception:
