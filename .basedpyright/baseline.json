@@ -106,40 +106,6 @@
                 }
             }
         ],
-        "./astral_toolkit/crafting/crafting.py": [
-            {
-                "code": "reportCallIssue",
-                "range": {
-                    "startColumn": 12,
-                    "endColumn": 55,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 23,
-                    "endColumn": 54,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportOptionalOperand",
-                "range": {
-                    "startColumn": 43,
-                    "endColumn": 45,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportGeneralTypeIssues",
-                "range": {
-                    "startColumn": 21,
-                    "endColumn": 25,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./astral_toolkit/crafting/goals.py": [
             {
                 "code": "reportGeneralTypeIssues",
@@ -262,6 +228,44 @@
                 "range": {
                     "startColumn": 7,
                     "endColumn": 20,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./astral_toolkit/crafting/materials.py": [
+            {
+                "code": "reportOptionalOperand",
+                "range": {
+                    "startColumn": 43,
+                    "endColumn": 45,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./astral_toolkit/crafting/quality.py": [
+            {
+                "code": "reportCallIssue",
+                "range": {
+                    "startColumn": 12,
+                    "endColumn": 55,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 23,
+                    "endColumn": 54,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./astral_toolkit/crafting/reverse.py": [
+            {
+                "code": "reportGeneralTypeIssues",
+                "range": {
+                    "startColumn": 21,
+                    "endColumn": 25,
                     "lineCount": 1
                 }
             }
