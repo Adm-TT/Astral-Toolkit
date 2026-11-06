@@ -416,6 +416,85 @@ def test_listing_reverse_and_classify_rules_are_pure(monkeypatch):
     assert tier_calls == ["OreA"]
 
 
+def test_solve_slots_signs():
+    """CR-C1：显示符号核过的（SHOWN_SIGN）带符号比；没核过的绝对值一样、符号相反时不报 exact；
+    几档在说明框上一模一样（台阶）照旧报最低档；说明框上是 0、算出来正好是 0 都不算一种符号"""
+    assert reverse.SHOWN_SIGN == {
+        "冲击力": 1,
+        "后坐力冲击": 1,
+        "后坐力平滑度": -1,
+        "后坐力操控": -1,
+    }
+
+    def bp(*slots):
+        return _bp(
+            "S", "反推", "fpsgear", "weapons", "rifle", "u", "M", 1, True, list(slots)
+        )
+
+    def tiers(name):
+        return {"OreA": (0, 500, 1000), "OreB": (0, 300, 1000)}[name]
+
+    def solve(b, *mods):
+        res = reverse.solve_slots(b, list(mods), tiers, _mat_zh)
+        assert res is not None
+        return [x["q"] for x in res["slots"]], res["exact"]
+
+    a = [("r", "OreA", 1, 1)]
+    b = [("r", "OreB", 1, 1)]
+    # 射速 0 档 -10%、1000 档 +10%；平滑度、后坐力冲击 0 档 +40%、1000 档 -40%；冲击力 0 档 -20%、1000 档 +20%
+    fire = ("Barrel", a, [("Fire Rate", 0, 1000, 0.9, 1.1, False)])
+    smooth = ("Frame", a, [("Recoil Smoothness", 0, 1000, 1.4, 0.6, False)])
+    kick = ("Frame", a, [("Recoil Kick", 0, 1000, 1.4, 0.6, False)])
+    force = ("Barrel", a, [("Impact Force", 0, 1000, 0.8, 1.2, False)])
+
+    # 射速没核过：0 档、1000 档都对得上 → 不报 exact（以前报 0 档）
+    assert solve(bp(fire), ("射速", 10.0, True, "Fire Rate")) == ([0], False)
+    # 平滑度说明框上是反的：+40% 是曲线 -40%，即 1000 档
+    assert solve(bp(smooth), ("后坐力平滑度", 40.0, True, "Recoil Smoothness")) == (
+        [1000],
+        True,
+    )
+    assert solve(bp(smooth), ("后坐力平滑度", -40.0, True, "Recoil Smoothness")) == (
+        [0],
+        True,
+    )
+    # 后坐力冲击和曲线一样：-40% 是 1000 档
+    assert solve(bp(kick), ("后坐力冲击", -40.0, True, "Recoil Kick")) == ([1000], True)
+    # 冲击力核过；同是 Impact Force 的「激光功率」没核过
+    assert solve(bp(force), ("冲击力", 20.0, True, "Impact Force")) == ([1000], True)
+    assert solve(bp(force), ("激光功率", 20.0, True, "Impact Force")) == ([0], False)
+    # 差 0.1 不算对上（说明框两位小数，门槛 0.02）
+    assert solve(bp(force), ("冲击力", 20.1, True, "Impact Force")) == ([1000], False)
+    # 核过的那项带符号定下来；没核过的那项只有一档对得上（300 档 -4%，没有 700 档）→ exact
+    two = bp(force, ("Cabling", b, [("Fire Rate", 0, 1000, 0.9, 1.1, False)]))
+    assert solve(
+        two, ("冲击力", 20.0, True, "Impact Force"), ("射速", 4.0, True, "Fire Rate")
+    ) == (
+        [1000, 300],
+        True,
+    )
+    # 台阶：0 档、300 档都是 +10%，符号也一样 → 说明框上分不出，报最低档、照样 exact
+    step = (
+        "Cabling",
+        b,
+        [
+            ("Fire Rate", 0, 600, 1.1, 1.1, False),
+            ("Fire Rate", 600, 1000, 1.1, 1.3, False),
+        ],
+    )
+    assert solve(bp(step), ("射速", 10.0, True, "Fire Rate")) == ([0], True)
+    # 很平的曲线：0 档 -0.01%、500 档 0、1000 档 +0.01% 都在门槛里。说明框 +0.01 → 有正有负，分不出；
+    # 说明框是 0 → 不看符号，差最小的 500 档；算出来正好 0 的不算一种符号（0 档 0、500 档 +0.01、1000 档 +0.02）
+    tiny = ("Barrel", a, [("Fire Rate", 0, 1000, 0.9999, 1.0001, False)])
+    assert solve(bp(tiny), ("射速", 0.01, True, "Fire Rate")) == ([0], False)
+    assert solve(bp(tiny), ("射速", 0.0, True, "Fire Rate")) == ([500], True)
+    up = ("Barrel", a, [("Fire Rate", 0, 1000, 1.0, 1.0002, False)])
+    assert solve(bp(up), ("射速", 0.01, True, "Fire Rate")) == ([500], True)
+    # 算出来不到 0.005 的也不算：0 档 -0.004（说明框上是 0.00）、500 档 +0.003、1000 档 +0.01
+    near = ("Barrel", a, [("Fire Rate", 0, 1000, 0.99996, 1.0001, False)])
+    assert solve(bp(near), ("射速", 0.01, True, "Fire Rate")) == ([1000], True)
+
+
 def test_old_names_are_aliases():
     from astral_toolkit.crafting import crafting as C
 

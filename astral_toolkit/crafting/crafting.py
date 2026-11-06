@@ -380,8 +380,8 @@ def mix_targets(bp):
 
 def solve_slots(bp, mods):
     """按说明框里的加成倒推每个材料槽的品质：每个槽只在这种材料的固定几档品质里找（quality_tiers），
-    同一属性几个槽都影响时各槽百分比相加（和制造终端一致，那把枪验证过）。
-    返回 {"slots": [{idx, slot, mat, q}], "avg": 平均品质, "exact": 每个属性都对得上（差 ≤0.02）}；对不上返回 None"""
+    同一属性几个槽都影响时各槽百分比相加（和制造终端一致，那把枪验证过）。正负号怎么比、exact 什么意思见
+    crafting.reverse.solve_slots。返回 {"slots": [{idx, slot, mat, q}], "avg": 平均品质, "exact": …}；对不上返回 None"""
     from ..mining.quality_tiers import tiers
 
     return _reverse.solve_slots(bp, mods, tiers, material_zh)
