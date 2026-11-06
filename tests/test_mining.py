@@ -1161,6 +1161,7 @@ def test_quality_one_table_and_name_forms():
         "Tungsten (Pure)",
         "Tungsten Ore",
         "tungsten raw",
+        "Tungsten (Pure) Ore",
     ):
         assert quality.tier_values(name) == quality.tier_values("Tungsten"), name
         assert quality.tier_of(name, 858) == ("B", 5, 7), name

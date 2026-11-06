@@ -59,11 +59,11 @@ _SUFFIXES = (" (ore)", " (raw)", " (pure)", " ore", " raw")
 
 
 def _key(material):
-    """矿名 → TIERS 里的写法：不分大小写，去掉 (Ore) / (Raw) / (Pure) / Ore / Raw 后缀；认不出返回 None"""
+    """矿名 → TIERS 里的写法：不分大小写，去掉 (Ore) / (Raw) / (Pure) / Ore / Raw 后缀（叠着的一直剥到没有，
+    「Tungsten (Pure) Ore」也认得）；认不出返回 None"""
     low = str(material or "").strip().lower()
-    for suffix in _SUFFIXES:
-        if low.endswith(suffix):
-            low = low[: -len(suffix)]
+    while suffix := next((s for s in _SUFFIXES if low.endswith(s)), None):
+        low = low[: -len(suffix)]
     low = {"ice": "pressurized ice"}.get(low, low)  # 制造表里叫 Ice（审查 2026-10-28）
     return _LOWER.get(low)
 
