@@ -1,8 +1,11 @@
 """一件东西怎么弄到：商店买（按离你远近推荐 3 处）→ 买不到就推荐能买到的原型/同系列 → 掉落 → 维科洛用途
 
-游戏里 F8 识别、物品查询、维科洛材料来源都用这里。这里只管查数据（商店、物品查询、掉落、维科洛、蓝图、当前位置）；
-怎么挑、怎么拼成详情字典在 catalog/acquire.py（IQ-C2 拆开）。命令行「哪买」2026-11-06 删了，
-它用的整段文字版（text / buy_lines）也跟着删了。
+游戏里 F8 识别、物品查询、维科洛材料来源都用这里。IQ-C2 把 info 里不夹着取数据的组合规则（挑同款、「哪都没有」、
+要不要查掉落、各块的样子、详情字典骨架）搬到 catalog/acquire.py，这里查数据（商店、物品查询、掉落、维科洛、蓝图、
+当前位置）。还夹着取数据、留在这里的规则：_buy_rows（有位置、算得出距离就给最近 3 处，不然给最便宜 3 处）、
+resolve（名字找物品 id 的先后）、material_source / loot_source（维科洛材料来源那一句），
+随搬目录那批（crafting/shops 这些的取数据归位）一起处理，见待做。
+命令行「哪买」2026-11-06 删了，它用的整段文字版（text / buy_lines）也跟着删了。
 """
 
 import re as _re
@@ -66,10 +69,12 @@ def ships_with(name):
 def info(
     name_en="", name_zh="", item_id=None, show_loot=True, exact=False, loot_online=True
 ):
-    """{name, category, buyable, here, buy, buy_total, variants, sell, loot, wikelo, nowhere, craft}
+    """一件东西的详情字典，键和顺序见 catalog/acquire.empty_facts（name、zh、category、id、here、buyable、buy、
+    buy_total、variants、sell、loot、wikelo、nowhere、craft、desc、aka、ships、how）。
     exact=True：从物品查询搜索结果点进来的，英文名是准的，不再按中文名去模糊找（以前会找成别的东西）；
     nowhere：商店和掉落数据里都没有（只有汉化包里有名字）；craft：这种东西有制造蓝图时的蓝图。
-    这里只查数据；挑哪几件同款、算不算「哪都没有」、要不要查掉落、各块怎么拼，见 catalog/acquire.py"""
+    这里按原来的先后查数据；挑同款、「哪都没有」、要不要查掉落、各块的样子见 catalog/acquire.py，
+    买点那块（_buy_rows）还在这里"""
     from ..navigation.position import current
 
     here = None

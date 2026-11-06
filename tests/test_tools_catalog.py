@@ -243,7 +243,8 @@ def test_limited_variant_recommends_base(monkeypatch, tmp_path):
 
 def test_info_wires_lookups_into_facts(monkeypatch, tmp_path):
     """info 只取数据、交给规则拼（IQ-C2）：名字和类别以商店数据为准、当前位置、不是精确点进来时按商店名字查描述、
-    精确命中但掉落数据里没有这件时不查掉落、最像的同款候选是配件时照样推荐原型"""
+    维科洛用途按传进来的英文名查、精确命中但掉落数据里没有这件时不查掉落、
+    排在前面的同款候选是配件时照样推荐原型、是不是配件按商店里这件的名字判断"""
     from astral_toolkit.crafting import itemsearch
 
     setup(monkeypatch, tmp_path)
@@ -270,10 +271,21 @@ def test_info_wires_lookups_into_facts(monkeypatch, tmp_path):
         "lookup",
         lambda name: entry if name == "MaxLift Tractor Beam" else None,
     )
+    used = []
+    monkeypatch.setattr(
+        wikelo,
+        "uses",
+        lambda en, zh="": (
+            used.append((en, zh))
+            or [({"t": "T1", "rz": "", "rewards": ["R1", "R2", "R3"]}, 2, "个")]
+        ),
+    )
     d = acquire.info("maxlift tractor beam", "", 1700)
     assert (d["name"], d["category"]) == ("MaxLift Tractor Beam", "Tractor Beams")
     assert d["here"] == {"label": "在 十字军 开过库存", "minutes": 2}
     assert (d["desc"], d["aka"]) == ("说明", ["别名"])
+    assert used == [("maxlift tractor beam", "")]
+    assert d["wikelo"] == [{"title": "T1", "q": 2, "u": "个", "reward": "R1、R2"}]
     assert d["loot"] == {"groups": ["测试掉落"]} and asked == ["maxlift tractor beam"]
     asked.clear()
     d2 = acquire.info("MaxLift Tractor Beam", "", exact=True)
@@ -283,13 +295,67 @@ def test_info_wires_lookups_into_facts(monkeypatch, tmp_path):
         shops,
         "variants",
         lambda name, limit=0: [
-            (1701, "MaxLift Tractor Beam Battery", 0.9),
-            (1700, "MaxLift Tractor Beam", 0.8),
+            (1701, "MaxLift Tractor Beam Battery", "Attachments"),
+            (1702, "MaxLift Tractor Beam Magazine", "Attachments"),
+            (1703, "MaxLift Tractor Beam Cap", "Attachments"),
+            (1700, "MaxLift Tractor Beam", "Tractor Beams"),
         ][:limit],
     )
     d3 = acquire.info('MaxLift-II "Keelback" Tractor Beam', "", 1800)
-    # 最像的是配件：跳过它，照样推荐原型
+    # 排在前面的几件是配件：跳过它们，照样推荐原型（所以候选要多取几件）
     assert [v["id"] for v in d3["variants"]] == [1700]
+    # 传进来的名字带 Battery，但商店里这件不是电池：照样不推配件
+    d4 = acquire.info("MaxLift Battery", "", 1800)
+    assert [v["id"] for v in d4["variants"]] == [1700]
+
+
+def test_info_nowhere_brings_blueprint(monkeypatch, tmp_path):
+    """「哪都没有」（物品查询精确命中、商店和掉落数据里都没有、不随船自带、没有来源说明）才去查制造蓝图，
+    蓝图的 key 和显示名不对调；随船自带就不算「哪都没有」、也不查蓝图；商店里没有这件时名字先用英文名（IQ-C2）"""
+    from astral_toolkit.crafting import crafting as C
+    from astral_toolkit.crafting import itemsearch
+
+    setup(monkeypatch, tmp_path)
+    monkeypatch.setattr(position, "current", lambda: None)
+    monkeypatch.setattr(
+        itemsearch,
+        "lookup",
+        lambda name: {
+            "shop": None,
+            "has_data": False,
+            "loot": False,
+            "desc": "",
+            "aka": [],
+        },
+    )
+    ships = []
+    monkeypatch.setattr(acquire, "ships_with", lambda name: ships)
+    monkeypatch.setattr(wikelo, "source_note", lambda name: "")
+    asked = []
+    bp = {"d": 0, "src": [("任务A", 1), ("任务B", 2)], "nsrc": 2}
+    monkeypatch.setattr(
+        C, "for_item", lambda en="", zh="": asked.append((en, zh)) or bp
+    )
+    monkeypatch.setattr(C, "bp_key", lambda b: "key-1")
+    monkeypatch.setattr(C, "display_name", lambda b: "蓝图名")
+    d = acquire.info("Rare Thing", "稀有物", exact=True)
+    assert (
+        d["name"] == "Rare Thing"
+        and d["nowhere"] is True
+        and asked == [("Rare Thing", "稀有物")]
+    )
+    assert d["craft"] == {
+        "key": "key-1",
+        "name": "蓝图名",
+        "unlocked": False,
+        "missions": ["任务A", "任务B"],
+        "nsrc": 2,
+    }
+    ships.append("Aurora")  # 随船自带：不算「哪都没有」，也不去查蓝图
+    asked.clear()
+    d2 = acquire.info("Rare Thing", "稀有物", exact=True)
+    assert d2["nowhere"] is False and d2["craft"] is None and asked == []
+    assert d2["ships"] == ["Aurora"]
 
 
 def test_loot_summary():

@@ -1,7 +1,7 @@
 """物品查询用例交给展示层的结果（IQ-B5）：不可变，只放值，不取数据、不排版。
 
 用例在 tasks/catalog.py，排版在 app/presenters/catalog.py。facts：crafting.acquire.info 给的详情字典
-（取数据在 crafting/acquire，挑同款、拼字典的规则在 catalog/acquire，IQ-C2 拆开）。"""
+（IQ-C2 起取数据在 crafting/acquire，大部分组合规则在 catalog/acquire；买点那块还在 crafting/acquire，见那边说明）。"""
 
 from dataclasses import dataclass
 from typing import Any

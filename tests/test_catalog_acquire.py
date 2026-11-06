@@ -5,10 +5,10 @@ from astral_toolkit.catalog import acquire as A
 
 def test_pick_variants_skips_accessories_unless_item_is_one():
     cands = [
-        (1, "MaxLift Tractor Beam Battery", 0.9),
-        (2, "MaxLift Tractor Beam", 0.8),
-        (3, "MaxLift Tractor Beam Mk2", 0.7),
-        (4, "Other", 0.1),
+        (1, "MaxLift Tractor Beam Battery", "Attachments"),
+        (2, "MaxLift Tractor Beam", "Tractor Beams"),
+        (3, "MaxLift Tractor Beam Mk2", "Tractor Beams"),
+        (4, "Other", "Misc"),
     ]
     assert [
         v[0] for v in A.pick_variants('MaxLift-II "Keelback" Tractor Beam', cands)
@@ -53,6 +53,7 @@ def test_desc_and_aka():
 def test_here_sell_craft_and_wikelo_shapes():
     assert A.here_summary(None) is None
     assert A.here_summary({"label": "NB", "age": 125}) == {"label": "NB", "minutes": 2}
+    assert A.here_summary({"label": "NB", "age": 179})["minutes"] == 2  # 往下取整
     assert A.sell_summary([]) is None
     assert A.sell_summary([(9000, "Shop", "Place"), (100, "B", "C")]) == {
         "price": 9000,
