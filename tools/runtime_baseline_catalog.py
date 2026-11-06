@@ -270,6 +270,7 @@ class _Sandbox:
         from astral_toolkit.tasks.system import about as about_mod
         from astral_toolkit.system import train_data
         from astral_toolkit.trade import console as console_mod
+        from astral_toolkit.trade import inspector as inspector_mod
 
         self.hover = hover_mod
         self._old_last_hover = _safe_deepcopy(hover_mod._last_hover)
@@ -289,7 +290,7 @@ class _Sandbox:
         self._patch(hover_mod.bus, "publish", self._publish)
         self._patch(hover_mod.bus, "runtime_log", self._runtime_log)
         self._patch(hover_mod.bus, "update_preview", _named_noop("update_preview"))
-        self._patch(console_mod, "_hover_log", _named_noop("_hover_log"))
+        self._patch(inspector_mod, "_hover_log", _named_noop("_hover_log"))
         self._patch(train_data, "from_tooltip", _named_noop("from_tooltip"))
         self._patch(run_records, "record", _return_none)
         self._patch(about_mod, "data_names_ready", self._names_ready)

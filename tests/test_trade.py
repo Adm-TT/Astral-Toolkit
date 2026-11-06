@@ -960,7 +960,7 @@ def test_inventory_cell_labels_real_screens():
 def test_tooltip_zh_only_medal_not_description():
     """2026-10-27 F8 反馈：勋章 / 计算板说明框只有中文名、最下面是「容量：1.00SCU」。以前按「容量」往上找，
     把说明最后一截「越。」当成名字；只有中文名的也查不到英文名"""
-    from astral_toolkit.trade.console import tooltip_pick
+    from astral_toolkit.trade.inspector import tooltip_pick
     from astral_toolkit.trade.names import canonical
 
     toks = [

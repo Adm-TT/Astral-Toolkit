@@ -1222,6 +1222,8 @@ _F8_FORBIDDEN_IMPORTS = (
     "astral_toolkit.crafting.wikelo",
     "astral_toolkit.trade.console.match_tooltip",
     "astral_toolkit.trade.console.hud_market",
+    "astral_toolkit.trade.matching.match_tooltip",
+    "astral_toolkit.trade.market_text.hud_market",
 )
 _F8_FORBIDDEN_CALLS = ("trade", "match_tooltip", "add_alias", "_market_rows")
 
@@ -1246,6 +1248,8 @@ def test_f8_reaches_item_query_through_links():
         "def f():\n    from ..crafting.crafting import craft_text\n",
         "def f():\n    from ..trade.console import hud_market\n",
         "from ..trade.console import match_tooltip",
+        "from ..trade.matching import match_tooltip",
+        "def f():\n    from ..trade.market_text import hud_market\n",
         "t = trade()",
         "C.match_tooltip(t, zh, en)",
         't.catalog.add_alias(1, "甲")',
@@ -1341,7 +1345,6 @@ _B6_OLD_ALIASES = {
     f"{_B6_CRAFTING}.laser_total": {"tasks/goals.py"},
     f"{_B6_CRAFTING}.parse_mods": {"trade/inspector.py"},
     f"{_B6_CRAFTING}.craft_text": {"tasks/stock.py"},
-    f"{_B6_WIKELO}.describe": {"trade/console.py"},
 }
 _B6_DELETED = {
     f"{_B6_CRAFTING}.{name}"
@@ -1365,6 +1368,7 @@ _B6_DELETED = {
 } | {
     f"{_B6_WIKELO}.{name}"
     for name in (
+        "describe",
         "note_for",
         "req_label",
         "_same",
@@ -1513,7 +1517,7 @@ def test_crafting_old_names_whitelist():
         "parse_mods",
         "craft_text",
     }
-    assert _b6_rule_aliases(_ROOT / "crafting/wikelo.py") == {"describe"}
+    assert _b6_rule_aliases(_ROOT / "crafting/wikelo.py") == set()
 
     allowed = _B6_OLD_ALIASES
     for path in _ROOT.rglob("*.py"):
@@ -1667,3 +1671,135 @@ def test_live_engine_does_not_start_its_own_scan_loop():
     ):
         assert _thread_starts_in_source(bad), bad
     assert "SessionLoop(" in source, "采矿助手要接会话循环"
+
+
+_FS_B1_CONSOLE = "astral_toolkit.trade.console"
+_FS_B1_OLD_ALIASES = {
+    f"{_FS_B1_CONSOLE}._cursor_on_image": {"astral_toolkit/app/engines/count.py"},
+    f"{_FS_B1_CONSOLE}.SOURCE_ZH": {"astral_toolkit/tasks/goals.py"},
+    f"{_FS_B1_CONSOLE}.material_source": {"astral_toolkit/crafting/goals.py"},
+}
+_FS_B1_DELETED = {
+    f"{_FS_B1_CONSOLE}.{name}"
+    for name in (
+        "STATE_ZH",
+        "hud_market",
+        "_money",
+        "_group",
+        "_fold",
+        "_similar",
+        "match_tooltip",
+        "_match_names",
+        "VK",
+        "loot_source",
+        "_hover_log",
+        "tooltip_pick",
+        "tooltip_name",
+        "plausible_name",
+    )
+}
+
+
+def _fs_b1_scope_refs(nodes, pkg, targets, outer, refs):
+    """一层作用域里从 trade.console 拿名字的地方：直接 import 的、以及先拿 console 模块再取属性的。"""
+    bindings = dict(outer)
+    own, inner, todo = [], [], list(nodes)
+    while todo:
+        node = todo.pop()
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            inner.append(node)
+            continue
+        own.append(node)
+        todo.extend(ast.iter_child_nodes(node))
+    for node in own:
+        if isinstance(node, ast.Import):
+            for a in node.names:
+                if a.asname:
+                    bindings[a.asname] = a.name
+                else:
+                    root = a.name.split(".")[0]
+                    bindings[root] = root
+        elif isinstance(node, ast.ImportFrom):
+            mod = _b6_import_from_module(node, pkg)
+            for a in node.names:
+                if a.name == "*":
+                    continue
+                full = f"{mod}.{a.name}" if mod else a.name
+                if full in targets:
+                    refs.add(full)
+                local = a.asname or a.name
+                if full == "astral_toolkit" or full.startswith("astral_toolkit."):
+                    bindings[local] = full
+                else:
+                    bindings.pop(local, None)
+    for node in own:
+        if isinstance(node, ast.Attribute):
+            full = _b6_attr_name(node, bindings)
+            if full in targets:
+                refs.add(full)
+        elif (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "getattr"
+            and len(node.args) >= 2
+            and isinstance(node.args[1], ast.Constant)
+            and isinstance(node.args[1].value, str)
+        ):
+            obj = node.args[0]
+            base = (
+                _b6_attr_name(obj, bindings)
+                if isinstance(obj, ast.Attribute)
+                else bindings.get(obj.id)
+                if isinstance(obj, ast.Name)
+                else None
+            )
+            if base and f"{base}.{node.args[1].value}" in targets:
+                refs.add(f"{base}.{node.args[1].value}")
+    for node in inner:
+        _fs_b1_scope_refs(node.body, pkg, targets, bindings, refs)
+
+
+def _fs_b1_console_refs(source, pkg, targets):
+    refs = set()
+    _fs_b1_scope_refs(ast.parse(source).body, pkg, targets, {}, refs)
+    return refs
+
+
+def test_fs_b1_console_old_names():
+    """FS-B1：旧总入口只剩库存那半边；搬走的名字不许再从 trade.console 拿。"""
+    all_targets = set(_FS_B1_OLD_ALIASES) | _FS_B1_DELETED
+    project = _ROOT.parent
+    for root in (_ROOT, project / "tools"):
+        for path in root.rglob("*.py"):
+            rel = path.relative_to(project).as_posix()
+            refs = _fs_b1_console_refs(
+                path.read_text(encoding="utf-8"), _b6_pkg(path, root), all_targets
+            )
+            for ref in refs:
+                assert rel in _FS_B1_OLD_ALIASES.get(ref, set()), (rel, ref)
+
+    for bad, want in (
+        (
+            "from astral_toolkit.trade.console import _hover_log\n",
+            f"{_FS_B1_CONSOLE}._hover_log",
+        ),
+        (
+            "from astral_toolkit.trade import console as C\nC.hud_market([])\n",
+            f"{_FS_B1_CONSOLE}.hud_market",
+        ),
+        (
+            "def f():\n    from ..trade.console import match_tooltip\n",
+            f"{_FS_B1_CONSOLE}.match_tooltip",
+        ),
+        (
+            "from astral_toolkit.trade import console as C\nC._cursor_on_image(x)\n",
+            f"{_FS_B1_CONSOLE}._cursor_on_image",
+        ),
+        (
+            "from astral_toolkit.trade.console import material_source\n",
+            f"{_FS_B1_CONSOLE}.material_source",
+        ),
+    ):
+        assert _fs_b1_console_refs(bad, "astral_toolkit.tasks", all_targets) == {
+            want
+        }, bad

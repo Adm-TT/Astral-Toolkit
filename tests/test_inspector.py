@@ -131,10 +131,6 @@ class TestItemInspector(unittest.TestCase):
             plausible_name,
             _is_anchor,
         )
-        from astral_toolkit.trade.console import tooltip_pick as console_tooltip_pick
-
-        # 确保向后兼容重导出一致
-        self.assertIs(tooltip_pick, console_tooltip_pick)
 
         # 测试锚点行识别
         self.assertTrue(_is_anchor("体积：13000 uSCU"))
@@ -173,17 +169,17 @@ class TestItemInspector(unittest.TestCase):
         self.assertIsNone(tooltip_pick(chat, (960, 540))[0])
 
     def test_fold_deduplication(self):
-        # console._fold 在 names._fold_en 的基础上再把 l 统一成 i：OCR 常把罗马数字 II 认成 ll，
+        # matching._fold 在 names._fold_en 的基础上再把 l 统一成 i：OCR 常把罗马数字 II 认成 ll，
         # 比较 OCR 认出的名字和市场名字时要当成一样（1.1.1 的行为）；所以和 _fold_en 不再完全相同
-        from astral_toolkit.trade.console import _fold as console_fold
+        from astral_toolkit.trade.matching import _fold as matching_fold
         from astral_toolkit.trade.names import _fold_en
 
         self.assertEqual(
-            console_fold("P4-AR Rifle (Custom)"),
+            matching_fold("P4-AR Rifle (Custom)"),
             _fold_en("P4-AR Rifle (Custom)").replace("l", "i"),
         )
-        self.assertEqual(console_fold("Omnisky II"), "omniskyii")
-        self.assertEqual(console_fold("Omnisky ll"), console_fold("Omnisky II"))
+        self.assertEqual(matching_fold("Omnisky II"), "omniskyii")
+        self.assertEqual(matching_fold("Omnisky ll"), matching_fold("Omnisky II"))
         self.assertEqual(_fold_en("Omnisky ll"), "omniskyll")  # names._fold_en 本身不变
 
 

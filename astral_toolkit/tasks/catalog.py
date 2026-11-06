@@ -104,10 +104,10 @@ class MarketSession:
         self._t = trade
 
     def match(self, zh, en):
-        """说明框里的名字 → (物品或 None, 候选列表)：trade.console.match_tooltip 原样（先本机目录，没有才联网搜）"""
-        from ..trade import console
+        """说明框里的名字 → (物品或 None, 候选列表)：trade.matching.match_tooltip 原样（先本机目录，没有才联网搜）"""
+        from ..trade import matching
 
-        return console.match_tooltip(self._t, zh, en)
+        return matching.match_tooltip(self._t, zh, en)
 
     def remember_alias(self, item_id, zh):
         """把汉化包里的标准中文名记成这件物品的别名（写玩家库）"""
@@ -133,7 +133,7 @@ def market_rows(item_id, tier):
 
 
 def market_hud_text(results):
-    """报价写成悬浮窗「市场」那一行：trade.console.hud_market 原样"""
-    from ..trade.console import hud_market
+    """报价写成悬浮窗「市场」那一行：trade.market_text.hud_market 原样"""
+    from ..trade.market_text import hud_market
 
     return hud_market(results)

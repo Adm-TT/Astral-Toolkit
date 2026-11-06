@@ -178,10 +178,6 @@ def test_old_uses_text_passes_chinese_name(monkeypatch):
     assert wikelo.uses_text("", "杰金矿石") == "维科洛兑换要用：杰金样本（20）"
 
 
-def test_old_names_are_same_objects():
-    assert wikelo.describe is wikelo_rules.describe
-
-
 def test_req_label_only_pairs_real_chinese_names():
     """BF-2：汉化包没译的（中文名那栏还是英文、或者「[…]」属性行）只写英文，不写两遍"""
     assert (

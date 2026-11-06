@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from astral_toolkit.tasks import catalog as C
 from astral_toolkit.tasks import hover as Hv
 from astral_toolkit.tasks import trade as T
-from astral_toolkit.trade import console
+from astral_toolkit.trade import market_text, matching
 
 
 def test_open_market_reuses_one_trade_for_session(monkeypatch):
@@ -38,7 +38,7 @@ def test_open_market_reuses_one_trade_for_session(monkeypatch):
         match_calls.append((trade, zh, en))
         return "匹配结果"
 
-    monkeypatch.setattr(console, "match_tooltip", fake_match_tooltip)
+    monkeypatch.setattr(matching, "match_tooltip", fake_match_tooltip)
 
     session = C.open_market()
     assert session.match("中", "en") == "匹配结果"
@@ -91,7 +91,7 @@ def test_market_rows_and_hud_text_forward(monkeypatch):
         hud_calls.append(results)
         return "市场行情"
 
-    monkeypatch.setattr(console, "hud_market", fake_hud)
+    monkeypatch.setattr(market_text, "hud_market", fake_hud)
     assert C.market_hud_text(expected_results) == "市场行情"
     assert len(hud_calls) == 1 and hud_calls[0] is expected_results
 

@@ -166,7 +166,8 @@ def _hover_lines(info, en, zh):
 
 def _hover_more(seq, at, zh, en, info, quality=None, canon=True):
     """后台：对上玩家市场里的物品、查价、查掉落，查到一样补一样（悬浮窗和窗口都更新）"""
-    from ..trade import console as C  # 只拿名字小工具 has_chinese / _fold，不碰 Trade
+    from ..trade.matching import _fold
+    from ..trade.names import has_chinese  # 只拿名字小工具，不碰 Trade
 
     links = _need_links()
     out = {"at": at, "seq": seq}
@@ -178,7 +179,7 @@ def _hover_more(seq, at, zh, en, info, quality=None, canon=True):
     if _last_hover.get("seq") != seq:  # 已经又按了一次 F8：这次的结果不要了
         return
     if (
-        item is not None and zh and C.has_chinese(zh) and canon
+        item is not None and zh and has_chinese(zh) and canon
     ):  # 只记汉化包里的标准名（认错的字不记，免得库存里显示错名）
         try:
             m.remember_alias(item.id, zh)
@@ -191,11 +192,7 @@ def _hover_more(seq, at, zh, en, info, quality=None, canon=True):
         else []
     )
     # 认出的英文名有错字、本机没对上商店数据时：用市场里的标准英文名再查一次
-    if (
-        item is not None
-        and info.get("id") is None
-        and C._fold(item.name) != C._fold(en)
-    ):
+    if item is not None and info.get("id") is None and _fold(item.name) != _fold(en):
         try:
             better = item_info(item.name, zh, loot=False)
             if better.get("id") is not None:
@@ -255,7 +252,7 @@ def hover_once(img=None):
     """F8：认出鼠标指着的物品，马上把名字和本机数据（哪里买、维科洛、制造）显示到悬浮窗；
     要联网的（玩家市场价、掉落）放到后台，查到了再补上。以前要等联网全查完才显示，慢好几秒"""
     from ..mining.screen import grab
-    from ..trade import console as C
+    from ..trade import inspector as _insp
 
     t0 = time.time()
     _last_hover.clear()
@@ -277,7 +274,7 @@ def hover_once(img=None):
     t1 = time.time()
     bus.publish("hover", {"state": "working"})
     _item_hud("识别中…", 30)  # 按下就有反应
-    cx, cy = C._cursor_on_image(img) if WIN else (img.width // 2, img.height // 2)
+    cx, cy = _insp._cursor_on_image(img) if WIN else (img.width // 2, img.height // 2)
     res = (
         inspect_item(img, (cx, cy), whole_screen=False)
         if own
@@ -292,7 +289,9 @@ def hover_once(img=None):
         )
         time.sleep(RETRY_WAIT)
         img2 = grab()
-        cur2 = C._cursor_on_image(img2) if WIN else (img2.width // 2, img2.height // 2)
+        cur2 = (
+            _insp._cursor_on_image(img2) if WIN else (img2.width // 2, img2.height // 2)
+        )
         res2 = inspect_item(img2, cur2)
         if res2 is not None or res is None:
             img, (cx, cy), res = img2, cur2, res2
@@ -309,7 +308,7 @@ def hover_once(img=None):
         bus.publish("hover", {"state": "miss", "msg": msg})
         _item_hud("未识别到物品\n鼠标停在物品上，等说明框出现后再按", 10)
         threading.Thread(
-            target=C._hover_log,
+            target=_insp._hover_log,
             args=(img, [], None, f"识别 {(t2 - t1) * 1000:.0f}ms"),
             daemon=True,
         ).start()
@@ -402,7 +401,7 @@ def hover_once(img=None):
         name="hover-more",
     ).start()
     threading.Thread(
-        target=C._hover_log, args=(img, tokens, name, note), daemon=True
+        target=_insp._hover_log, args=(img, tokens, name, note), daemon=True
     ).start()
     if res.get(
         "canon"

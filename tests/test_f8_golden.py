@@ -20,7 +20,9 @@ from astral_toolkit.tasks import hover as Hv
 from astral_toolkit.tasks import trade as T
 from astral_toolkit.system import train_data
 from astral_toolkit.tasks.system import about
-from astral_toolkit.trade import console as C
+from astral_toolkit.trade import inspector as trade_inspector
+from astral_toolkit.trade import market_text as trade_market_text
+from astral_toolkit.trade import matching as trade_matching
 from astral_toolkit.trade.models import Item
 
 
@@ -231,9 +233,9 @@ def _install(
     monkeypatch.setattr(Hv, "threading", _thread_namespace(calls))
     monkeypatch.setattr(about, "data_names_ready", lambda: data_ready)
     monkeypatch.setattr(run_records, "record", lambda *args, **kwargs: None)
-    monkeypatch.setattr(C, "_hover_log", _hover_log)
-    monkeypatch.setattr(C, "match_tooltip", fake_match)
-    monkeypatch.setattr(C, "hud_market", fake_hud_market)
+    monkeypatch.setattr(trade_inspector, "_hover_log", _hover_log)
+    monkeypatch.setattr(trade_matching, "match_tooltip", fake_match)
+    monkeypatch.setattr(trade_market_text, "hud_market", fake_hud_market)
     monkeypatch.setattr(train_data, "from_tooltip", from_tooltip)
     monkeypatch.setattr(wikelo_mod, "load", wikelo_load or (lambda: []))
     monkeypatch.setattr(wikelo_rules, "_same", wikelo_same or (lambda a, b: a == b))
