@@ -4,7 +4,7 @@
 要不要查掉落、各块的样子、详情字典骨架）搬到 catalog/acquire.py，这里查数据（商店、物品查询、掉落、维科洛、蓝图、
 当前位置）。还夹着取数据、留在这里的规则：_buy_rows（有位置、算得出距离就给最近 3 处，不然给最便宜 3 处）、
 resolve（名字找物品 id 的先后）、material_source / loot_source（维科洛材料来源那一句），
-随搬目录那批（crafting/shops 这些的取数据归位）一起处理，见待做。
+目录迁移 Q3 把 acquire 搬进 tasks/catalog_queries 时一起处理（商店那部分 Q2 已搬完）。
 命令行「哪买」2026-11-06 删了，它用的整段文字版（text / buy_lines）也跟着删了。
 """
 

@@ -5,7 +5,7 @@
 原 crafting/acquire.info 里不夹着取数据的规则搬到这里；查商店、物品查询、掉落、维科洛、蓝图、当前位置留在旧文件。
 还夹着取数据、留在 crafting/acquire 的规则：买点给最近 3 处还是最便宜 3 处（_buy_rows，按条件才去查）、
 名字找物品 id 的先后（resolve）、维科洛材料来源那一句（material_source / loot_source）；
-随搬目录那批（crafting/shops 这些的取数据归位）一起处理，见待做。
+目录迁移 Q3 把 acquire 搬进 tasks/catalog_queries 时一起处理（商店那部分 Q2 已搬完）。
 catalog 不读文件、不联网、不碰全局缓存（和 catalog/shops.py、catalog/loot.py 一样）。
 """
 

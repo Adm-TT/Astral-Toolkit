@@ -767,14 +767,6 @@ _PRODUCT_CODE_KEY_MODULES = {
     "astral_toolkit.trade.gamekey": {"_fold"},
     "astral_toolkit.trade.names": {"_fold_en", "_norm_zh"},
 }
-_PRODUCT_CODE_KEY_DEFINERS = {
-    "crafting/crafting.py",
-    "tasks/catalog_queries/shops.py",
-    "crafting/loot.py",
-    "crafting/wikelo.py",
-    "trade/gamekey.py",
-    "trade/names.py",
-}
 
 
 def _product_code_module_aliases(tree, package):
@@ -856,8 +848,6 @@ def test_product_code_takes_name_keys_from_contracts():
     bad = []
     for path in files:
         rel = path.relative_to(_ROOT).as_posix()
-        if rel in _PRODUCT_CODE_KEY_DEFINERS:
-            continue
         for hit in _product_code_key_imports(
             path.read_text(encoding="utf-8"), _textkeys_package_for(path)
         ):
@@ -1127,14 +1117,20 @@ def test_catalog_use_cases_stay_below_app():
 
 def test_catalog_queries_import_starts_no_thread():
     """导入物品查询内部实现不起线程（一闪就结束的也算）、不开库、不建库、不建索引：搜索预热线程由 bootstrap 起
-    （目录迁移章程 §9，Q1）。tasks、gamedata 包先导入好，只看 catalog_queries 自己导入时做了什么；
-    先确认被测模块还没被别处带进来，不然这条什么都测不到"""
+    （目录迁移章程 §9，Q1）。按目录逐个查 catalog_queries 包和下面每个模块（Q2 起；后面搬进来的自动算上）。
+    tasks、gamedata 包先导入好，只看 catalog_queries 自己导入时做了什么；
+    先确认被测模块都还没被别处带进来，不然这条什么都测不到"""
     code = (
-        "import sqlite3, sys, threading\n"
+        "import importlib, pkgutil, sqlite3, sys, threading\n"
+        "from pathlib import Path\n"
         "import astral_toolkit.tasks, astral_toolkit.catalog.search\n"
         "import astral_toolkit.gamedata as g\n"
         "import astral_toolkit.gamedata._ready as ready\n"
-        "fresh = 'astral_toolkit.tasks.catalog_queries.search' not in sys.modules\n"
+        "pkg = 'astral_toolkit.tasks.catalog_queries'\n"
+        "here = Path(astral_toolkit.tasks.__file__).parent / 'catalog_queries'\n"
+        "names = sorted(m.name for m in pkgutil.iter_modules([str(here)]))\n"
+        "mods = [pkg] + [pkg + '.' + n for n in names]\n"
+        "fresh = all(m not in sys.modules for m in mods)\n"
         "started, touched = [], []\n"
         "_start = threading.Thread.start\n"
         "threading.Thread.start = lambda self: (started.append(self.name), _start(self))[1]\n"
@@ -1142,10 +1138,15 @@ def test_catalog_queries_import_starts_no_thread():
         "g.snapshot = lambda *a, **k: touched.append('snapshot')\n"
         "ready.ensure = lambda *a, **k: touched.append('ready')\n"
         "sqlite3.connect = lambda *a, **k: touched.append('connect')\n"
-        "import astral_toolkit.tasks.catalog_queries.search as s\n"
-        "print(fresh, started, touched, s._cache._has)\n"
+        "for m in mods:\n"
+        "    importlib.import_module(m)\n"
+        "s = sys.modules[pkg + '.search']\n"
+        "print(fresh, started, touched, s._cache._has, ','.join(names))\n"
     )
-    assert _run(code) == "True [] [] False"
+    out = _run(code)
+    flags, _, names = out.rpartition(" ")
+    assert flags == "True [] [] False", out
+    assert {"search", "shops"} <= set(names.split(",")), out
 
 
 _THREAD_MAKERS = ("Thread", "Timer", "ThreadPoolExecutor", "ProcessPoolExecutor")
@@ -1184,7 +1185,7 @@ def test_catalog_queries_code_starts_no_threads():
 
 def test_crafting_reaches_up_into_tasks_only_where_listed():
     """crafting 在 tasks 下层，不该反过来导入 tasks（目录迁移章程：兼容只许有明确调用者和删除批次），只许减不许加：
-    acquire → 物品搜索是 Q1 搬走搜索后留的临时边，Q3 把 acquire 搬进 catalog_queries 时删；
+    acquire → 物品搜索（Q1）、商店查询（Q2）是搬走以后留的临时边，Q3 把 acquire 搬进 catalog_queries 时删；
     goals → tasks.trade 是老的，目标业务这轮不动。字符串导入（__import__ / import_module）本项目的模块一律算，
     往上往下都不许，免得绕过这条。"""
     allowed = {
