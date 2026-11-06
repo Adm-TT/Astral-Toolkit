@@ -19,11 +19,9 @@ TYPE_ZH = {
     "Wikelo - Other Items": "装备/物品",
     "Collection": "收集",
 }
-# 旧名字：B5 换调用方、B6 删
-note_for = _rules.note_for
-req_label = _rules.req_label
+# 旧名字：只留给还冻着的调用方（test_runtime_arch 管着）
+# trade/console：F 段拆 Trade 总入口、它改走 tasks/wikelo + 排版时删
 describe = _rules.describe
-_same = _rules._same
 
 
 def make_data(merged_path, names_path):
@@ -50,8 +48,8 @@ def make_data(merged_path, names_path):
             any_en.setdefault(m.group(2).strip().lower(), m.group(1).strip())
 
     def zh_of(name, key=None):
-        if note_for(name):
-            return note_for(name)[0]
+        if _rules.note_for(name):
+            return _rules.note_for(name)[0]
         z = text(key) if key else ""
         if z:  # 「幽影 臂甲 ASD 版\nGeist Armor Arms ASD Edition」→ 只留中文名（2026-10-28 改用和蓝图一样的 _strip_en，不在第一个英文字母处截断）
             from .build_crafting import _strip_en

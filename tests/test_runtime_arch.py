@@ -1324,6 +1324,271 @@ def test_b5_callers_use_new_homes():
         assert _b5_violations(bad, "astral_toolkit.tasks"), bad
 
 
+_B6_RULE_ROOTS = {
+    "_labels",
+    "_quality",
+    "_reverse",
+    "_classify",
+    "_materials",
+    "_mix",
+    "_listing",
+    "_rules",
+}
+_B6_CRAFTING = "astral_toolkit.crafting.crafting"
+_B6_WIKELO = "astral_toolkit.crafting.wikelo"
+_B6_OLD_ALIASES = {
+    f"{_B6_CRAFTING}.slot_zh": {"crafting/goals.py", "tasks/goals.py"},
+    f"{_B6_CRAFTING}.laser_total": {"tasks/goals.py"},
+    f"{_B6_CRAFTING}.parse_mods": {"trade/inspector.py"},
+    f"{_B6_CRAFTING}.craft_text": {"tasks/stock.py"},
+    f"{_B6_WIKELO}.describe": {"trade/console.py"},
+}
+_B6_DELETED = {
+    f"{_B6_CRAFTING}.{name}"
+    for name in (
+        "GEAR_ZH",
+        "SUB_ZH",
+        "PROP_KEY",
+        "LOWER_BETTER",
+        "prop_zh",
+        "category_zh",
+        "part_of",
+        "needs",
+        "group_mods",
+        "curve_value",
+        "curve_text",
+        "mix_plan",
+        "_clean_title",
+        "_fold_name",
+        "_search_norm",
+    )
+} | {
+    f"{_B6_WIKELO}.{name}"
+    for name in (
+        "note_for",
+        "req_label",
+        "_same",
+    )
+}
+# crafting/__init__.py 有 from .crafting import *：经包拿（astral_toolkit.crafting.名字）也算
+# 这三个模块谁都不许 import *（crafting/__init__.py 自己那一句除外）
+_B6_STAR_FORBIDDEN = {_B6_CRAFTING, _B6_WIKELO, "astral_toolkit.crafting"}
+_B6_PKG = "astral_toolkit.crafting"
+_B6_OLD_ALIASES.update(
+    {
+        k.replace(_B6_CRAFTING, _B6_PKG): v
+        for k, v in list(_B6_OLD_ALIASES.items())
+        if k.startswith(_B6_CRAFTING + ".")
+    }
+)
+_B6_DELETED |= {
+    k.replace(_B6_CRAFTING, _B6_PKG)
+    for k in _B6_DELETED
+    if k.startswith(_B6_CRAFTING + ".")
+}
+
+
+def _b6_import_from_module(node, pkg):
+    if node.level:
+        base = pkg.split(".")
+        base = base[: len(base) - node.level + 1]
+        return ".".join(base + ([node.module] if node.module else []))
+    return node.module or ""
+
+
+def _b6_rule_aliases(path):
+    out = set()
+    for node in ast.parse(path.read_text(encoding="utf-8")).body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target, value = node.targets[0], node.value
+        elif isinstance(node, ast.AnnAssign):
+            target, value = node.target, node.value
+        else:
+            continue
+        if (
+            isinstance(target, ast.Name)
+            and isinstance(value, ast.Attribute)
+            and isinstance(value.value, ast.Name)
+            and value.value.id in _B6_RULE_ROOTS
+        ):
+            out.add(target.id)
+    return out
+
+
+def _b6_attr_name(node, bindings):
+    parts = []
+    cur = node
+    while isinstance(cur, ast.Attribute):
+        parts.append(cur.attr)
+        cur = cur.value
+    if not isinstance(cur, ast.Name):
+        return None
+    root = bindings.get(cur.id, cur.id)
+    if root != "astral_toolkit" and not root.startswith("astral_toolkit."):
+        return None
+    parts.append(root)
+    return ".".join(reversed(parts))
+
+
+def _b6_scope_refs(nodes, pkg, targets, outer, refs, stars=False):
+    """一层作用域（模块 / 函数 / 类）：先收这一层自己的 import（不进里层的函数、类），再查这一层的「模块.名字」；
+    里层各算一层、看得见外层的绑定。不同函数里同一个名字绑到不同模块时不会串"""
+    bindings = dict(outer)
+    own, inner, todo = [], [], list(nodes)
+    while todo:
+        node = todo.pop()
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            inner.append(node)
+            continue
+        own.append(node)
+        todo.extend(ast.iter_child_nodes(node))
+    for node in own:
+        if isinstance(node, ast.Import):
+            for a in node.names:
+                if a.asname:
+                    bindings[a.asname] = a.name
+                else:
+                    root = a.name.split(".")[0]
+                    bindings[root] = root
+        elif isinstance(node, ast.ImportFrom):
+            mod = _b6_import_from_module(node, pkg)
+            for a in node.names:
+                if a.name == "*":
+                    # 名字全带进来就查不清谁用了旧名字：stars=True 那一圈专门查
+                    if stars and mod in _B6_STAR_FORBIDDEN:
+                        refs.add(f"{mod}.*")
+                    continue
+                full = f"{mod}.{a.name}" if mod else a.name
+                if full in targets:
+                    refs.add(full)
+                local = a.asname or a.name
+                if full == "astral_toolkit.crafting" or full.startswith(
+                    "astral_toolkit.crafting."
+                ):
+                    bindings[local] = full
+                else:
+                    bindings.pop(local, None)  # 这一层把这个名字绑到了别处
+    for node in own:
+        if isinstance(node, ast.Attribute):
+            full = _b6_attr_name(node, bindings)
+            if full in targets:
+                refs.add(full)
+        elif (  # getattr(模块, "名字") 也算
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "getattr"
+            and len(node.args) >= 2
+            and isinstance(node.args[1], ast.Constant)
+            and isinstance(node.args[1].value, str)
+        ):
+            obj = node.args[0]
+            base = (
+                _b6_attr_name(obj, bindings)
+                if isinstance(obj, ast.Attribute)
+                else bindings.get(obj.id)
+                if isinstance(obj, ast.Name)
+                else None
+            )
+            if base and f"{base}.{node.args[1].value}" in targets:
+                refs.add(f"{base}.{node.args[1].value}")
+    for node in inner:
+        _b6_scope_refs(node.body, pkg, targets, bindings, refs, stars)
+
+
+def _b6_old_refs(source, pkg, targets, stars=False):
+    refs = set()
+    _b6_scope_refs(ast.parse(source).body, pkg, targets, {}, refs, stars)
+    return refs
+
+
+def _b6_pkg(path, root):
+    return ".".join([root.name, *path.relative_to(root).parts[:-1]])
+
+
+def test_crafting_old_names_whitelist():
+    """CR-B6：旧名字只剩白名单，删掉的谁都不许再拿。"""
+    assert _b6_rule_aliases(_ROOT / "crafting/crafting.py") == {
+        "slot_zh",
+        "laser_total",
+        "parse_mods",
+        "craft_text",
+    }
+    assert _b6_rule_aliases(_ROOT / "crafting/wikelo.py") == {"describe"}
+
+    allowed = _B6_OLD_ALIASES
+    for path in _ROOT.rglob("*.py"):
+        rel = path.relative_to(_ROOT).as_posix()
+        if rel in ("crafting/crafting.py", "crafting/wikelo.py"):
+            continue
+        refs = _b6_old_refs(
+            path.read_text(encoding="utf-8"), _b6_pkg(path, _ROOT), set(allowed)
+        )
+        for ref in refs:
+            assert rel in allowed[ref], (rel, ref)
+
+    for root in (_ROOT, _ROOT.parent / "tests", _ROOT.parent / "tools"):
+        for path in root.rglob("*.py"):
+            refs = _b6_old_refs(
+                path.read_text(encoding="utf-8"), _b6_pkg(path, root), _B6_DELETED
+            )
+            assert not refs, (path, refs)
+
+    for root in (_ROOT, _ROOT.parent / "tests", _ROOT.parent / "tools"):
+        for path in root.rglob("*.py"):
+            if path == _ROOT / "crafting" / "__init__.py":
+                continue
+            stars = _b6_old_refs(
+                path.read_text(encoding="utf-8"), _b6_pkg(path, root), set(), stars=True
+            )
+            assert not stars, (path, stars)  # 只剩 import * 那种（targets 是空的）
+
+    all_targets = set(allowed) | _B6_DELETED
+    for bad, want in (
+        (
+            "from astral_toolkit.crafting.crafting import slot_zh\n",
+            f"{_B6_CRAFTING}.slot_zh",
+        ),
+        (
+            "from astral_toolkit.crafting import wikelo as w\nw.describe(x)\n",
+            f"{_B6_WIKELO}.describe",
+        ),
+        (
+            "import astral_toolkit.crafting as c\nc.wikelo.describe(x)\n",
+            f"{_B6_WIKELO}.describe",
+        ),
+        (
+            "from astral_toolkit.crafting.wikelo import note_for\n",
+            f"{_B6_WIKELO}.note_for",
+        ),
+        (
+            "from astral_toolkit import crafting as c\nc.mix_plan(1, 2, [])\n",
+            f"{_B6_PKG}.mix_plan",
+        ),
+        (
+            "from astral_toolkit.crafting import GEAR_ZH\n",
+            f"{_B6_PKG}.GEAR_ZH",
+        ),
+    ):
+        assert _b6_old_refs(bad, "astral_toolkit.tasks", all_targets) == {want}, bad
+    assert _b6_old_refs(
+        "from astral_toolkit.crafting import *\n",
+        "astral_toolkit.tasks",
+        set(),
+        stars=True,
+    ) == {"astral_toolkit.crafting.*"}
+    assert _b6_old_refs(
+        "from astral_toolkit.crafting import crafting as C\ngetattr(C, 'GEAR_ZH')\n",
+        "astral_toolkit.tasks",
+        all_targets,
+    ) == {f"{_B6_CRAFTING}.GEAR_ZH"}
+    # 两个函数里同一个名字 c 绑到不同模块：各认各的，不串
+    two_scopes = (
+        "def f():\n    from astral_toolkit.crafting import mix as c\n    return c.mix_plan\n\n"
+        "def g():\n    from astral_toolkit import crafting as c\n    return c.by_key\n"
+    )
+    assert _b6_old_refs(two_scopes, "astral_toolkit.tasks", all_targets) == set()
+
+
 _MUTABLE = (
     ast.Dict,
     ast.List,

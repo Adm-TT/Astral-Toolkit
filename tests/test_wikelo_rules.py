@@ -179,7 +179,4 @@ def test_old_uses_text_passes_chinese_name(monkeypatch):
 
 
 def test_old_names_are_same_objects():
-    assert wikelo.note_for is wikelo_rules.note_for
-    assert wikelo.req_label is wikelo_rules.req_label
     assert wikelo.describe is wikelo_rules.describe
-    assert wikelo._same is wikelo_rules._same

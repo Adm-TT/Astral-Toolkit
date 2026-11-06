@@ -11,6 +11,8 @@ from astral_toolkit.contracts.textkeys import blueprint_norm, blueprint_search_n
 from astral_toolkit.core import i18n
 from astral_toolkit.crafting import crafting as C
 from astral_toolkit.crafting import itemstats
+from astral_toolkit.crafting import quality
+from astral_toolkit.crafting import reverse
 from astral_toolkit.gamedata import crafting as gd_crafting
 from astral_toolkit.gamedata._types import GamedataError
 from astral_toolkit.gamedata.crafting import Blueprints
@@ -1778,11 +1780,11 @@ def test_crafting_helpers(monkeypatch):
         ]
         assert C.craft_slots(GATED) == []
 
-        assert C.craft_text(
+        assert reverse.craft_text(
             [{"slot": "枪管", "q": 500}, {"slot": "线缆", "q": 1000}]
         ) == ("枪管 500 · 线缆 1000")
-        assert C.craft_text([]) == ""
-        assert C.craft_text([{"slot": "核心", "q": 500}]) == "核心 500"
+        assert reverse.craft_text([]) == ""
+        assert reverse.craft_text([{"slot": "核心", "q": 500}]) == "核心 500"
 
         assert [(C.bp_key(bp), q, m) for bp, q, m in C.uses("MineralA")] == [
             ("Test Rifle", 5, 1),
@@ -1862,7 +1864,7 @@ def test_crafting_helpers(monkeypatch):
             ("Fire Rate", 0, 1000, 0.9, 1.1, False),
             ("Impact Force", 0, 500, 1.0, 1.2, False),
         ]
-        grouped = C.group_mods(mods)
+        grouped = quality.group_mods(mods)
         assert grouped == {
             "Impact Force": [
                 (0, 500, 1.0, 1.2, False),
@@ -1871,32 +1873,32 @@ def test_crafting_helpers(monkeypatch):
             "Fire Rate": [(0, 1000, 0.9, 1.1, False)],
         }
         segs = grouped["Impact Force"]
-        assert C.curve_value(segs, 500) == 1.2
-        assert C.curve_value(segs, -1) == 1.0
-        assert C.curve_value(segs, 1001) == 1.5
-        assert round(C.curve_value(segs, 750), 4) == 1.35
+        assert quality.curve_value(segs, 500) == 1.2
+        assert quality.curve_value(segs, -1) == 1.0
+        assert quality.curve_value(segs, 1001) == 1.5
+        assert round(quality.curve_value(segs, 750), 4) == 1.35
 
-        assert C.laser_total(LASER) == (
+        assert quality.laser_total(LASER) == (
             "激光功率合计：发射器 + 汇流排 两个槽的加成相加，品质都 0 时 ×0.70、"
             "都 500 时 ×1.10（和商店买的一样）、都 1000 时 ×1.50。"
             "「采矿助手」页的配置里可以填自造矿头的品质，破碎方案按自造的功率算"
         )
-        assert C.laser_total(LASER, {0: 0, 1: 0}) == {
+        assert quality.laser_total(LASER, {0: 0, 1: 0}) == {
             "name": "激光功率",
             "mult": 0.7,
             "text": "激光功率合计 -30.0%（发射器 -20.0% + 汇流排 -10.0%）",
         }
-        assert C.laser_total(LASER, {0: 1000, 1: 1000}) == {
+        assert quality.laser_total(LASER, {0: 1000, 1: 1000}) == {
             "name": "激光功率",
             "mult": 1.5,
             "text": "激光功率合计 +50.0%（发射器 +20.0% + 汇流排 +30.0%）",
         }
-        assert C.laser_total(LASER, {0: 500}) == {
+        assert quality.laser_total(LASER, {0: 500}) == {
             "name": "激光功率",
             "mult": None,
             "text": "激光功率合计：汇流排的品质还没填",
         }
-        assert C.laser_total(WEAPON) is None
+        assert quality.laser_total(WEAPON) is None
     finally:
         G.clear_caches()
 
@@ -1913,7 +1915,7 @@ def test_parse_mods_and_solve_slots(monkeypatch):
             SimpleNamespace(box=(0, 90, 10, 10), text="射速：200rpm"),
             SimpleNamespace(box=(0, 110, 10, 10), text="未知：+1"),
         ]
-        assert C.parse_mods(tokens) == [
+        assert reverse.parse_mods(tokens) == [
             ("冲击力", 17.5, True, "Impact Force"),
             ("后坐力操控", -5.0, True, "Recoil Handling"),
             ("后坐力冲击", -1.5, False, "Recoil Kick"),

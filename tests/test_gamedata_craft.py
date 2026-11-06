@@ -165,7 +165,10 @@ def test_blueprints_rows_keys_and_norms(monkeypatch, tmp_path):
             blueprint_search_norm(r[3]),
         ), r[7]
     # 查询那边（crafting.for_item / search）用的也是这两个函数，不另写一份
-    assert C._fold_name is blueprint_norm and C._search_norm is blueprint_search_norm
+    assert (
+        C.blueprint_norm is blueprint_norm
+        and C.blueprint_search_norm is blueprint_search_norm
+    )
 
 
 def test_blueprint_keys_split_on_punctuation(monkeypatch, tmp_path):
@@ -196,6 +199,11 @@ def test_blueprint_keys_split_on_punctuation(monkeypatch, tmp_path):
         blueprint_search_norm("Main Power-Plant_MK2"),
         blueprint_search_norm("主发电机（B） 型"),
     )
+    from astral_toolkit.crafting import crafting as C
+
+    # 查询那边各用各的键：search 按 search 键（留连字符）找，for_item 按 for_item 键（去标点）找
+    assert [b["n"] for b in C.search("Power-Plant")] == ["Main Power-Plant_MK2"]
+    assert (C.for_item("main power plant mk2") or {}).get("n") == "Main Power-Plant_MK2"
 
 
 def test_blueprints_slots_src_json_roundtrip(monkeypatch, tmp_path):

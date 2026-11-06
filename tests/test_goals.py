@@ -878,7 +878,9 @@ def test_crafted_item_qualities_from_bonus(monkeypatch, tmp_path):
             ["1.00SCU", [1399, 953, 61, 18]],
         ]
     ]
-    mods = C.parse_mods(toks)
+    from astral_toolkit.crafting import reverse
+
+    mods = reverse.parse_mods(toks)
     assert [m[0] for m in mods] == [
         "冲击力",
         "后坐力冲击",
