@@ -416,10 +416,33 @@ _RUNTIME_FORBIDDEN = (
 )
 
 
+# 允许清单（R1 审查）：runtime 里绑到名字上的本项目模块只许 runtime 自己、contracts、core.run_records（lifecycle 写退出记录）；
+# 先拿包再取属性（from ... import core → core.capture）、没列进上面禁止清单的包（update、run……）也挡得住
+_RUNTIME_ALLOWED = (
+    "astral_toolkit.runtime",
+    "astral_toolkit.contracts",
+    "astral_toolkit.core.run_records",
+)
+
+
+def _runtime_bound_outside(source, pkg):
+    out = []
+    for m in _bound_modules(source, pkg):
+        if m != "astral_toolkit" and not m.startswith("astral_toolkit."):
+            continue  # 标准库、第三方
+        if not any(m == a or m.startswith(a + ".") for a in _RUNTIME_ALLOWED):
+            out.append(m)
+    return out
+
+
 def _runtime_violations(source, pkg="astral_toolkit.runtime"):
     mods = list(_imports_in_source(source, pkg))
     dynamic = [d for d in _dynamic_imports(source) if d != "open"]
-    return _forbidden(mods, _RUNTIME_FORBIDDEN) + dynamic
+    return (
+        _forbidden(mods, _RUNTIME_FORBIDDEN)
+        + dynamic
+        + _runtime_bound_outside(source, pkg)
+    )
 
 
 def test_runtime_layer_stays_below_app():
@@ -450,17 +473,25 @@ def test_runtime_layer_stays_below_app():
         "from ...tasks import position",
         "from ...app import bus",
         "from ... import bootstrap",
+        "from ... import core\ncore.capture.game_area()\n",
+        "import astral_toolkit.core as core\n",
+        "import astral_toolkit\n",
+        "from ...update import data_pack",
+        "from ... import run",
     ):
         assert _runtime_violations(bad, workers), bad
     for ok in (
         "from ...contracts.position import PositionRead",
         "from ..session import Session",
+        "from ...core import run_records",
+        "import threading\nfrom collections.abc import Callable\n",
     ):
         assert _runtime_violations(ok, workers) == [], ok
 
 
 def test_position_worker_import_is_light():
-    """导入定位线程不带进读屏、界面、业务（R1）；连定位分析一起导入也不起线程"""
+    """导入定位线程（runtime/workers/position）不带进 navigation、app、tasks、system（R1）；
+    再导入定位分析（tasks/position，属于 tasks 层，带进 tasks 包是允许的）也不起线程"""
     code = (
         "import sys, threading\n"
         "n = threading.active_count()\n"

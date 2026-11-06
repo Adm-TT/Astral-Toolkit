@@ -41,6 +41,7 @@ def _worker(reader=None, **kw):
     kw.setdefault("label_of", lambda location: "")
     kw.setdefault("system_of", lambda g, **k: None)
     kw.setdefault("locate", lambda g, **k: None)
+    kw.setdefault("enabled", True)
     return posmod.PositionWorker(_Reader() if reader is None else reader, **kw)
 
 
@@ -272,13 +273,24 @@ class _StopOnWait(threading.Event):
 
 def _drive(w, timeout=5.0):
     """在后台线程里跑一遍线程循环，最多等 timeout 秒：循环停不下来就叫停、判失败，不把整个测试卡死"""
-    t = threading.Thread(target=w._run, daemon=True)
+    errors = []
+
+    def run():
+        try:
+            w._run()
+        except (
+            BaseException
+        ) as e:  # 线程里没接住的异常也算失败（不然线程死了也像是停了）
+            errors.append(e)
+
+    t = threading.Thread(target=run, daemon=True)
     t.start()
     t.join(timeout)
     stuck = t.is_alive()
     w.stop_ev.set()
     t.join(1.0)
     assert not stuck, "线程循环没停下来"
+    assert errors == [], errors
 
 
 def _run_once(info=None, **kw):
@@ -374,7 +386,9 @@ def test_bootstrap_wires_position_analysis_and_bus(monkeypatch):
     monkeypatch.setattr(bus, "publish", lambda topic, data: sent.append((topic, data)))
     p = bootstrap._pos_service("test", None, status=lambda: {"s": 1})
     assert (p._label_of, p._system_of, p._locate) == (T.label_of, T.system_of, T.locate)
-    assert (p._calibrated, p._foreground) == (T.glyphs_ready, showloc.game_foreground)
+    assert p._calibrated is T.glyphs_ready
+    monkeypatch.setattr(showloc, "game_foreground", lambda: "现取的")
+    assert p._foreground() == "现取的"  # 每次现取 showloc 里的，换了函数也用新的
     assert p._enabled is (sys.platform == "win32")
     p._publish(force=True)
     assert p._log is not None

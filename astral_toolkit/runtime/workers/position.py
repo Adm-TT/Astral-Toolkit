@@ -10,7 +10,7 @@ PositionWorker 一直在后台读游戏右上角的调试信息（r_DisplayInfo 
 - foreground：游戏在不在最前面（判断出错当在）；calibrated：字模学好没有（判断出错当没好）
 - label_of / system_of / locate：地点中文名、属于哪个星系、离哪最近（tasks/position.py）
 - publish_status：推一次状态给窗口（不给就不推）；log：写一行到窗口日志；fine_timer：读得快时调 Windows 等待精度（None = 不调）
-- enabled：这台机器能不能读右上角（只有 Windows 能）
+- enabled：这台机器能不能读右上角（只有 Windows 能；必须给，原来模块里的 WIN 一直把关）
 
 LogWatchWorker 每 5 秒看一眼游戏日志（read_log 给最后一次的地点或 None），变了就推一次状态。
 """
@@ -52,7 +52,7 @@ class PositionWorker:
         publish_status: Callable[[], None] | None = None,
         log: Callable[[str], None] | None = None,
         fine_timer: Callable[[bool], None] | None = None,
-        enabled: bool = True,
+        enabled: bool,
     ):
         self.reader: Any = reader
         self._foreground = foreground

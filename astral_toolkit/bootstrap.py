@@ -203,15 +203,19 @@ def _pos_service(mode: str, view: Any, status=None) -> PositionWorker:
 
     from .app import bus
     from .navigation.displayinfo import Reader
-    from .system.showloc import game_foreground
+    from .system import showloc
     from .tasks import position as position_tasks
+
+    def foreground() -> bool:
+        # 每次现取（原来线程开始时才 import；测试、重载换了函数也用新的）
+        return showloc.game_foreground()
 
     def log(line: str) -> None:
         bus.publish("log", {"task": "displayinfo", "line": line})
 
     return PositionWorker(
         Reader(every=1.0, debug=_debug_on(view)),
-        foreground=game_foreground,
+        foreground=foreground,
         calibrated=position_tasks.glyphs_ready,
         label_of=position_tasks.label_of,
         system_of=position_tasks.system_of,

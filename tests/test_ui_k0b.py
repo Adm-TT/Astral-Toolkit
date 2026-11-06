@@ -869,7 +869,7 @@ def test_bus_live_output_sets_switch_without_reading_runtime(monkeypatch):
 def test_runtime_does_not_import_app():
     root = Path(__file__).resolve().parents[1]
     pattern = re.compile(
-        r"from\s+\.\.app\b|from\s+astral_toolkit\.app\b|import\s+astral_toolkit\.app\b"
+        r"from\s+\.{2,}app\b|from\s+astral_toolkit\.app\b|import\s+astral_toolkit\.app\b"
     )
     bad = []
     for path in (root / "astral_toolkit" / "runtime").rglob("*.py"):

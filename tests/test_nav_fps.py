@@ -164,6 +164,7 @@ def test_position_loop_reads_at_requested_fps_and_switches_fine_timer(monkeypatc
         system_of=lambda g, **k: None,
         locate=lambda g, **k: None,
         fine_timer=fine.append,
+        enabled=True,
     )
     seen = []
 
