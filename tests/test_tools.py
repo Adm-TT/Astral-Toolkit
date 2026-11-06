@@ -944,21 +944,24 @@ def test_first_run_agreement(monkeypatch, tmp_path):
     from astral_toolkit.bootstrap import status_sources
     from astral_toolkit.core import settings
     from astral_toolkit.tasks import system as t_sys
-    from tests.bootstrap_helpers import bind_for_test, app_for_test
+    from tests.bootstrap_helpers import app_for_test
 
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
     started = []
     with app_for_test() as app:
-        with bind_for_test(
-            t_sys,
-            status_sources(app),
-            lambda: started.append("bg") or True,
-        ):
-            assert settings.load()["agreed"] is False
-            assert "error" in t_sys.agree("本软件是免费的")  # 差一个字都不行
-            assert settings.load()["agreed"] is False and not started
-            t_sys.agree(" 本软件是免费软件 ")
-            assert settings.load()["agreed"] is True and started == ["bg"]
+        sources = status_sources(app)
+
+        def start():
+            started.append("bg")
+            return True
+
+        assert settings.load()["agreed"] is False
+        assert "error" in t_sys.agree(
+            sources, start, text="本软件是免费的"
+        )  # 差一个字都不行
+        assert settings.load()["agreed"] is False and not started
+        t_sys.agree(sources, start, text=" 本软件是免费软件 ")
+        assert settings.load()["agreed"] is True and started == ["bg"]
 
 
 def test_live_scan_updates_when_read_gets_more_complete(monkeypatch, tmp_path):
@@ -1085,12 +1088,14 @@ def test_status_keeps_displayinfo_place_when_reader_goes_stale():
     """切屏后右上角暂时读不到，位置还显示死局空间站，不跳回别的；游戏日志里有更新的地点才换。
     2026-10-26 起不导航也一直读右上角（实时位置）：右上角读到的比日志新就用右上角的"""
     import time
+    from astral_toolkit import bootstrap
     from astral_toolkit.tasks import system as t_sys
     from tests.bootstrap_helpers import app_for_test
 
     with app_for_test() as app:
         import astral_toolkit.navigation.position as P
 
+        sources = bootstrap.status_sources(app)
         old = P.current, P.from_log, app.pos.label, app.nav.target
         try:
             app.nav.target = {"n": "测试目标"}
@@ -1102,17 +1107,17 @@ def test_status_keeps_displayinfo_place_when_reader_goes_stale():
                 "sys": "Pyro",
             }
             P.from_log = lambda *a, **k: (time.time() - 3600, "死局空间站", {})
-            assert t_sys.status()["position"]["label"] == "死局空间站"
+            assert t_sys.status(sources)["position"]["label"] == "死局空间站"
             P.current = lambda *a, **k: {
                 "label": "鼠巢空间站",
                 "age": 2.0,
                 "sys": "Pyro",
             }  # 后来在别处开了库存
             P.from_log = lambda *a, **k: (time.time() - 2, "鼠巢空间站", {})
-            assert t_sys.status()["position"]["label"] == "鼠巢空间站"
+            assert t_sys.status(sources)["position"]["label"] == "鼠巢空间站"
             app.nav.target = None  # 不导航也一样：右上角刚读到的比日志新，用右上角的
             app.pos.label = (time.time(), "死局空间站")
-            assert t_sys.status()["position"]["label"] == "死局空间站"
+            assert t_sys.status(sources)["position"]["label"] == "死局空间站"
         finally:
             P.current, P.from_log, app.pos.label, app.nav.target = old
 
@@ -1940,6 +1945,7 @@ def test_export_logs(monkeypatch, tmp_path):
 
 def test_live_scan_resumes_after_restart(monkeypatch, tmp_path):
     """原矿扫描开着时 AT 重启 / 升级：重启后自动接着扫（以前重启后就关了，信号识别也跟着没了）"""
+    from astral_toolkit import bootstrap
     from astral_toolkit import gamedata
     from astral_toolkit import ocr as OCR
     from astral_toolkit.app.engines import hover as hover_engine
@@ -1981,13 +1987,13 @@ def test_live_scan_resumes_after_restart(monkeypatch, tmp_path):
     with app_for_test() as app:
         t_mining.live_start(app.live)  # 命令层只负责开会话（这里被换成记录调用）
         started.clear()
-        t_sys.start_background()  # 模拟重启：live_on 开着 → 接着扫
+        bootstrap.start(app)  # 模拟重启：live_on 开着 → 接着扫
         assert started == [1]
     settings.update(live_on=False)
     with app_for_test() as app:  # 关着的时候重启：不自动开
         t_mining.live_stop(app.live)
         started.clear()
-        t_sys.start_background()
+        bootstrap.start(app)
         assert not started and not settings.load()["live_on"]
 
 
@@ -2787,6 +2793,7 @@ def test_space_fix_dedupe_and_session(monkeypatch, tmp_path):
 
 def test_hotkey_conflicts(monkeypatch):
     """物品识别热键不能设成记路标 / 一键定位的键；已有冲突要明确说哪个失效"""
+    from astral_toolkit import bootstrap
     from astral_toolkit.core import settings
     from astral_toolkit.tasks import system as t_sys
     from astral_toolkit.app import bus
@@ -2804,15 +2811,21 @@ def test_hotkey_conflicts(monkeypatch):
 
     from tests.bootstrap_helpers import app_for_test
 
-    # RT-B7：set_settings 会推一次 status()，tasks.system 要先绑定
-    with app_for_test():
-        assert "一键定位" in t_sys.set_settings(trade_capture_key="F9")["error"]
-        assert "记录路标" in t_sys.set_settings(trade_capture_key="f7")["error"]
+    # RT-B7：set_settings 会推一次状态：用这个 app 的状态源
+    with app_for_test() as app:
+        sources = bootstrap.status_sources(app)
+        assert (
+            "一键定位" in t_sys.set_settings(sources, trade_capture_key="F9")["error"]
+        )
+        assert (
+            "记录路标" in t_sys.set_settings(sources, trade_capture_key="f7")["error"]
+        )
         assert store["trade_capture_key"] == "F8"
         assert (
-            t_sys.set_settings(trade_capture_key="f11")["trade_capture_key"] == "F11"
+            t_sys.set_settings(sources, trade_capture_key="f11")["trade_capture_key"]
+            == "F11"
         )  # F5 采矿助手、F6 盘点也占着（1.6.57）
-        assert "盘点" in t_sys.set_settings(trade_capture_key="F6")["error"]
+        assert "盘点" in t_sys.set_settings(sources, trade_capture_key="F6")["error"]
         assert t_sys.hotkey_conflicts(store) == []
         w = t_sys.hotkey_conflicts({**store, "trade_capture_key": "F9"})
         assert len(w) == 1 and "一键定位" in w[0] and "/showlocation" in w[0]
@@ -3693,6 +3706,7 @@ def test_feedback_report_bundle(monkeypatch, tmp_path):
     存成 userdata\\feedback\\<时间>_<类型>（文件夹 + zip）；导出把所有 zip 再打包到桌面；清空"""
     import json, zipfile  # noqa: E401, F811
     from PIL import Image
+    from astral_toolkit import bootstrap
     from astral_toolkit.core import paths
     from astral_toolkit.mining import screen
     from astral_toolkit.tasks import (
@@ -3741,12 +3755,16 @@ def test_feedback_report_bundle(monkeypatch, tmp_path):
     from astral_toolkit.runtime.results import MINING_SIGNALS, ResultStore
 
     results = ResultStore()
-    with app_for_test(results=results):
+    with app_for_test(results=results) as app:
+        sources = bootstrap.status_sources(app)
         assert results.accept(
             MINING_SIGNALS, {"view": {}, "values": [44336]}, 1, 0, 1, 0.0, 0.0
         )
         r = t_sys.feedback_report(
-            kind="signal", note="屏幕是 33,000", img=Image.new("RGB", (64, 32))
+            sources,
+            kind="signal",
+            note="屏幕是 33,000",
+            img=Image.new("RGB", (64, 32)),
         )
         d = tmp_path / "feedback"
         assert (
@@ -3778,7 +3796,7 @@ def test_feedback_report_bundle(monkeypatch, tmp_path):
         )
         with zipfile.ZipFile(folder.with_suffix(".zip")) as z:
             assert any(n.endswith("屏幕.png") for n in z.namelist())
-        t_sys.feedback_report(kind="坏类型", img=Image.new("RGB", (8, 8)))
+        t_sys.feedback_report(sources, kind="坏类型", img=Image.new("RGB", (8, 8)))
         rows = t_sys.feedback_list()
         assert len(rows) == 2 and rows[0]["name"].endswith(
             "_auto"
@@ -3804,7 +3822,7 @@ def test_feedback_report_bundle(monkeypatch, tmp_path):
             settings, "update", lambda **kw: (store.update(kw), dict(store))[1]
         )
         monkeypatch.setattr(bus, "publish", lambda *a, **k: None)
-        r = t_sys.set_settings(trade_capture_key="F10")
+        r = t_sys.set_settings(sources, trade_capture_key="F10")
         assert "问题反馈" in r.get("error", ""), r
         assert store["trade_capture_key"] == "F8"  # 冲突时不保存
 
@@ -4098,6 +4116,7 @@ def test_item_desc_and_alias_from_wiki(monkeypatch, tmp_path):
 
 def test_ore_log_record_and_hotkeys(monkeypatch, tmp_path):
     """1.6.70 原矿记录：记最近一块矿（窗口里点的不带坐标）、删除能撤销；所有热键都能改，原矿记录键能清掉"""
+    from astral_toolkit import bootstrap
     from astral_toolkit.mining import ore_log
     from astral_toolkit.core import settings
     from astral_toolkit.tasks import navigation as t_nav, system as t_sys
@@ -4115,7 +4134,8 @@ def test_ore_log_record_and_hotkeys(monkeypatch, tmp_path):
     from tests.bootstrap_helpers import app_for_test
 
     # RT-B7：结果仓库从装配入口注入（以前改 _M.results）
-    with app_for_test(results=results):
+    with app_for_test(results=results) as app:
+        sources = bootstrap.status_sources(app)
         assert "error" in t_nav.ore_record()
         _view = {
             "rock": "塔兰导电石",
@@ -4169,13 +4189,13 @@ def test_ore_log_record_and_hotkeys(monkeypatch, tmp_path):
         monkeypatch.setattr(
             settings, "update", lambda **kw: (store.update(kw), dict(store))[1]
         )
-        assert t_sys.set_settings(live_key="f4")["live_key"] == "F4"
-        assert "盘点" in t_sys.set_settings(ore_key="F6")["error"]
+        assert t_sys.set_settings(sources, live_key="f4")["live_key"] == "F4"
+        assert "盘点" in t_sys.set_settings(sources, ore_key="F6")["error"]
         assert (
-            t_sys.set_settings(ore_key="F11")["ore_key"] == "F11"
-            and t_sys.set_settings(ore_key="")["ore_key"] == ""
+            t_sys.set_settings(sources, ore_key="F11")["ore_key"] == "F11"
+            and t_sys.set_settings(sources, ore_key="")["ore_key"] == ""
         )
-        assert "F1–F12" in t_sys.set_settings(mark_key="Q")["error"]
+        assert "F1–F12" in t_sys.set_settings(sources, mark_key="Q")["error"]
         w = t_sys.hotkey_conflicts({**store, "mark_key": "F7", "ore_key": "F7"})
         assert len(w) == 1 and "原矿记录" in w[0] and "记录路标" in w[0]
 

@@ -1,7 +1,7 @@
 """F8 物品识别 / 热键（_Hover）
 
 用到的函数 / 变量直接到它们所在的模块取，运行时才取，避免互相 import：
-_T("mining").xxx = tasks/mining.py，_H().xxx = app/hud_state.py，self._live / self._count = 构造时注入的引擎，self._links = F8 物品查询接线（HoverLinks，F 段 B5）。
+_T("mining").xxx = tasks/mining.py，_H().xxx = app/hud_state.py，self._live / self._count = 构造时注入的引擎，self._links = F8 物品查询接线（HoverLinks，F 段 B5），self._feedback = 问题反馈（bootstrap 接好状态源的 feedback_report，F 段 B5）。
 用到：WIN, _hotkey_values, _live, _note_hud, count_toggle, feedback_report, fix_here, hover_once, item_key_pressed, live_start, live_stop, mark_here, ore_record, settings_key
 """
 
@@ -32,10 +32,11 @@ def _H():
 class _Hover:
     GAME_ONLY = ("trade_capture_key", "count_key")  # 只在星际公民在最前面时才响应的热键
 
-    def __init__(self, *, live, count, links):
+    def __init__(self, *, live, count, links, feedback):
         self._live = live
         self._count = count
         self._links = links
+        self._feedback = feedback
         self.thread = None
         self.busy = False
         self.label = {}  # 热键名 → 当前绑定的键（如 trade_capture_key → F8）
@@ -191,7 +192,7 @@ class _Hover:
 
     def _report(self):
         try:
-            return _T("system").feedback_report(kind="auto")
+            return self._feedback(kind="auto")
         finally:
             self.busy = False
 

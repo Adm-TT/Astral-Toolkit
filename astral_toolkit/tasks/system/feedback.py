@@ -12,7 +12,7 @@ from pathlib import Path
 
 from ...app import bus
 from ...runtime.results import MINING_SCAN, MINING_SIGNALS
-from .common import WIN, _hud, _need_status, _note_hud
+from .common import WIN, StatusSources, _hud, _note_hud
 
 
 @dataclass(frozen=True)
@@ -98,7 +98,7 @@ def _scrub(text):
     )
 
 
-def feedback_report(kind="auto", note="", img=None):
+def feedback_report(sources: StatusSources, /, kind="auto", note="", img=None):
     """一键反馈：现在的整屏截图 + 最近几帧采矿助手截图 + OCR 原文 + 当时显示的结果 + 日志尾巴，打成一个文件夹和 zip
     放在 userdata\\feedback\\。kind：scan（矿物认错）/ signal（信号不对）/ item（F8 认错）/ auto"""
     from ...core import paths
@@ -133,7 +133,7 @@ def feedback_report(kind="auto", note="", img=None):
 
     from .. import hover as _hv, navigation as _nv
 
-    src = _need_status()
+    src = sources
     last_hover = _hv.last_hover()
     live_running = src.live_running()
     live_paused = src.live_paused()

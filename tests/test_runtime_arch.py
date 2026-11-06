@@ -275,7 +275,7 @@ def test_tasks_mining_import_creates_no_engine():
         "values = [\n"
         "    navigation._nav, navigation._pos,\n"
         "    navigation._game_events, navigation._results,\n"
-        "    count._count, common._status, common._start,\n"
+        "    count._count,\n"
         "    lifecycle_gate._CLOSING, ui_stream._SOURCES,\n"
         "]\n"
         "print(threading.active_count(),\n"
@@ -1950,6 +1950,14 @@ def test_fs_b4_bus_split():
 _FS_B5_GONE = {
     "mining.py": {"_live", "_UNBOUND", "bind", "_need_live"},
     "hover.py": {"_links", "_UNBOUND", "bind", "_need_links"},
+    "system/common.py": {
+        "_status",
+        "_start",
+        "_UNBOUND",
+        "bind",
+        "_need_status",
+        "_need_start",
+    },
 }
 _FS_B5_FIRST_ARG = {
     "mining.py": {
@@ -1964,6 +1972,10 @@ _FS_B5_FIRST_ARG = {
         "_hover_lines": "links",
         "_hover_more": "links",
     },
+    "system/status.py": {"status": "sources*"},
+    "system/feedback.py": {"feedback_report": "sources*"},
+    "system/settings.py": {"set_settings": "sources*"},
+    "system/about.py": {"agree": "sources*"},
 }
 _FS_B5_BOUND = {
     "mining.py": {
@@ -1973,6 +1985,7 @@ _FS_B5_BOUND = {
         "set_mining_gadgets",
     },
     "vision.py": {"hover_trigger"},
+    "system.py": {"status", "feedback_report", "set_settings", "agree"},
 }
 
 
@@ -2024,7 +2037,7 @@ def _fs_b5_first_arg_bad(source, expected):
     return bad
 
 
-def _fs_b5_bind_all_refs(source, mods=("mining", "hover")):
+def _fs_b5_bind_all_refs(source, mods=("mining", "hover", "system")):
     tree = ast.parse(source)
     fn = next(
         (
@@ -2089,6 +2102,11 @@ def test_fs_b5_tasks_without_module_binding():
         source = (_ROOT / "tasks" / name).read_text(encoding="utf-8")
         assert not (_fs_b5_defined_names(source) & gone), name
         assert not _fs_b5_globals(source), name
+
+    settings_source = (_ROOT / "tasks" / "system" / "settings.py").read_text(
+        encoding="utf-8"
+    )
+    assert "start_background" not in settings_source
 
     for name, expected in _FS_B5_FIRST_ARG.items():
         source = (_ROOT / "tasks" / name).read_text(encoding="utf-8")

@@ -15,7 +15,7 @@ from .about import (
     open_source_site,
     third_party_licenses,
 )
-from .common import WIN, StatusSources, _hud, _note_hud, bind
+from .common import WIN, StatusSources, _hud, _note_hud
 from .feedback import (
     _fb_dir,
     _scrub,
@@ -31,7 +31,6 @@ from .settings import (
     quit,
     set_settings,
     show,
-    start_background,
     update_data,
 )
 from .status import _desktop, _gridtext_status, export_logs, status
@@ -48,7 +47,6 @@ from .upgrade import (
 
 __all__ = [
     "status",
-    "bind",
     "StatusSources",
     "upgrade_check",
     "upgrade_online",
@@ -69,7 +67,6 @@ __all__ = [
     "agree",
     "show",
     "quit",
-    "start_background",
     "hotkey_conflicts",
     "VPK_PREV",
 ]

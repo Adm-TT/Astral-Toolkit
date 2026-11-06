@@ -1,11 +1,8 @@
 """实时位置读取（右上角调试信息，_Pos）和日志位置跟踪（_LogWatch）
 
-用到的函数 / 变量直接到它们所在的模块取，运行时才取，避免互相 import：
-_T("mining").xxx = tasks/mining.py，_H().xxx = app/hud_state.py。
-用到：WIN, _nav, status
+推状态用 bootstrap 给的 status 回调（F 段 B5；不给就不推，测试里单独造的位置服务）。
 """
 
-import importlib
 import sys
 import threading
 import time
@@ -26,11 +23,6 @@ def _zone_base(info):
         "",
         ((info or {}).get("inner_zone") or "").strip(),
     )
-
-
-def _T(name):
-    """astral_toolkit.tasks 里的模块（运行时才取，避免互相 import）"""
-    return importlib.import_module(f"astral_toolkit.tasks.{name}")
 
 
 @dataclass(frozen=True)
@@ -67,9 +59,10 @@ class _Pos:
     MAX_FPS = 30  # 谁要再快也按 30（设置页最高档；60 档实测只读到约 31 次，老大 11-05 改成 5–30）
     CALIB_EVERY = 2.0  # 字模还没校准好：每 2 秒用识别引擎认一次来学（一般 3～5 次就好，好了就停）；读不到会自己放慢
 
-    def __init__(self, *, debug=None, fine_timer=None):
+    def __init__(self, *, debug=None, fine_timer=None, status=None):
         from ...navigation.displayinfo import Reader
 
+        self._status = status
         self.reader: Any = Reader(every=1.0, debug=debug)
         self.latest: Any = (
             0.0,
@@ -286,7 +279,8 @@ class _Pos:
             force or now - self._pub_at >= 1.0
         ):  # 坐标每秒变好几次，窗口一秒刷一次就够；地点变了马上刷
             self._pub_at = now
-            bus.publish("status", _T("system").status())
+            if self._status is not None:
+                bus.publish("status", self._status())
 
     def _run(self):
         from ...navigation import navigate as n, gridtext
@@ -346,7 +340,8 @@ class _LogWatch:
 
     EVERY = 5.0
 
-    def __init__(self):
+    def __init__(self, *, status=None):
+        self._status = status
         self.thread = None
         self.last = None
         self.stop_ev = threading.Event()
@@ -380,7 +375,8 @@ class _LogWatch:
                 now = (hit[0], hit[1]) if hit else None
                 if now != self.last:
                     self.last = now
-                    bus.publish("status", _T("system").status())
+                    if self._status is not None:
+                        bus.publish("status", self._status())
             except Exception:
                 pass
             if self.stop_ev.wait(self.EVERY):

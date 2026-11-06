@@ -162,6 +162,7 @@ def test_hover_shell_starts_and_stops(monkeypatch):
         live=SimpleNamespace(running=lambda: False),
         count=SimpleNamespace(running=lambda: False),
         links=None,
+        feedback=None,
     )
     hover.start()
     assert started.wait(2.0)

@@ -24,7 +24,7 @@
   "astral_toolkit/trade/pricing.py::aggregate"
  ],
  "dup": [
-  "astral_toolkit/app/engines/count.py::_T | astral_toolkit/app/engines/hover.py::_T | astral_toolkit/app/engines/live.py::_T | astral_toolkit/app/engines/pos.py::_T",
+  "astral_toolkit/app/engines/count.py::_T | astral_toolkit/app/engines/hover.py::_T | astral_toolkit/app/engines/live.py::_T",
   "astral_toolkit/trade/debug_shots.py::_debug_on | astral_toolkit/trade/inspector.py::_debug_on"
  ],
  "facade": [

@@ -105,10 +105,8 @@ def test_old_files_not_cleaned(monkeypatch, tmp_path):
     import importlib
 
     from astral_toolkit.core import paths
-    from astral_toolkit.tasks import system as system_task
     from astral_toolkit.tasks.system import upgrade as U
     from astral_toolkit.tasks.system.common import StatusSources
-    from tests.bootstrap_helpers import bind_for_test
 
     S = importlib.import_module("astral_toolkit.tasks.system.status")
 
@@ -143,8 +141,7 @@ def test_old_files_not_cleaned(monkeypatch, tmp_path):
 
     assert C.check(force=True) is None
     U.upgrade_check()
-    with bind_for_test(system_task, sources, lambda: False):
-        S.status()
+    S.status(sources)
     assert kill.exists()
     assert (user / "upgrade" / "旧目录").is_dir()
     assert oldzip.exists()

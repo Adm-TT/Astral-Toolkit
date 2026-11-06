@@ -20,6 +20,7 @@ def test_nav_fps_value_is_clamped():
 
 def test_set_settings_saves_clamped_nav_fps_and_restyles(monkeypatch, tmp_path):
     import astral_toolkit.tasks.system.settings as system_settings
+    from astral_toolkit import bootstrap
     from astral_toolkit.tasks.system.settings import set_settings
     from tests.bootstrap_helpers import app_for_test
 
@@ -31,13 +32,25 @@ def test_set_settings_saves_clamped_nav_fps_and_restyles(monkeypatch, tmp_path):
             restyles.append(True)
 
     monkeypatch.setattr(system_settings, "_hud", lambda: Hud())
-    # set_settings 存完会推一次状态：换成空的，不去初始化识别引擎（显卡）
-    monkeypatch.setattr("astral_toolkit.tasks.system.status.status", lambda: {})
-    with app_for_test():
-        assert set_settings(nav_fps=100)["nav_fps"] == 30
-        assert set_settings(nav_fps=3)["nav_fps"] == 5
+    # set_settings 存完会推一次状态：换成只记下状态源的，不去初始化识别引擎（显卡）
+    seen = []
+    monkeypatch.setattr(
+        "astral_toolkit.tasks.system.status.status",
+        lambda sources: seen.append(sources) or {"marker": 1},
+    )
+    sent = []
+    monkeypatch.setattr(
+        system_settings.bus, "publish", lambda kind, data: sent.append((kind, data))
+    )
+    with app_for_test() as app:
+        sources = bootstrap.status_sources(app)
+        assert set_settings(sources, nav_fps=100)["nav_fps"] == 30
+        assert set_settings(sources, nav_fps=3)["nav_fps"] == 5
         assert restyles
         assert settings.load()["nav_fps"] == 5
+    # F 段 B5c：每次改完推的状态，用的是传进来的这份状态源
+    assert seen == [sources, sources]
+    assert sent.count(("status", {"marker": 1})) == 2
 
 
 def test_settings_page_has_nav_fps_control():

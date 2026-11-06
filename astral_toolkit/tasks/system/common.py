@@ -24,40 +24,6 @@ class StatusSources:
     results: Any
 
 
-_status: StatusSources | None = None
-_start: Callable[[], bool] | None = None
-_UNBOUND = "tasks.system 未绑定：先调用 bind(sources, start_background)"
-
-
-def bind(
-    sources: StatusSources,
-    start_background: Callable[[], bool],
-    *,
-    replace: bool = False,
-) -> None:
-    """组装处调用一次；两个参数一起绑，没绑之前 status / feedback / 设置页启动都不工作"""
-    global _status, _start
-    if (_status is not None or _start is not None) and not replace:
-        raise RuntimeError(
-            "tasks.system 已绑定：生产只绑一次；测试用 replace=True 并在用完后恢复"
-        )
-    _status, _start = sources, start_background
-
-
-def _need_status() -> StatusSources:
-    sources = _status
-    if sources is None:
-        raise RuntimeError(_UNBOUND)
-    return sources
-
-
-def _need_start() -> Callable[[], bool]:
-    start = _start
-    if start is None:
-        raise RuntimeError(_UNBOUND)
-    return start
-
-
 def _hud():
     try:
         from ...app.overlay import hud

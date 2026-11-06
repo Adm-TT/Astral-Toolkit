@@ -881,10 +881,8 @@ def test_zip_in_downloads_not_scanned(monkeypatch, tmp_path):
     import importlib
 
     from astral_toolkit.core import paths
-    from astral_toolkit.tasks import system as system_task
     from astral_toolkit.tasks.system import upgrade as U
     from astral_toolkit.tasks.system.common import StatusSources
-    from tests.bootstrap_helpers import bind_for_test
 
     S = importlib.import_module("astral_toolkit.tasks.system.status")
     from astral_toolkit.update import vpk
@@ -919,8 +917,7 @@ def test_zip_in_downloads_not_scanned(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(S, "_gridtext_status", lambda: {})
     monkeypatch.setattr(S, "WIN", False)
-    with bind_for_test(system_task, sources, lambda: False):
-        st = S.status()
+    st = S.status(sources)
     assert "new_version" not in st
     assert "Dubhe_9.9.9.zip" not in json.dumps(st, ensure_ascii=False, default=str)
 
