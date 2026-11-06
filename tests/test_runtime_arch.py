@@ -1095,31 +1095,60 @@ def test_catalog_use_cases_stay_below_app():
 
 
 def test_catalog_queries_import_starts_no_thread():
-    """导入物品查询内部实现不起线程（一闪就结束的也算）、不开库、不建索引：搜索预热线程由 bootstrap 起
-    （目录迁移章程 §9，Q1）。tasks、gamedata 包先导入好，只看 catalog_queries 自己导入时做了什么"""
+    """导入物品查询内部实现不起线程（一闪就结束的也算）、不开库、不建库、不建索引：搜索预热线程由 bootstrap 起
+    （目录迁移章程 §9，Q1）。tasks、gamedata 包先导入好，只看 catalog_queries 自己导入时做了什么；
+    先确认被测模块还没被别处带进来，不然这条什么都测不到"""
     code = (
-        "import threading\n"
+        "import sqlite3, sys, threading\n"
         "import astral_toolkit.tasks, astral_toolkit.catalog.search\n"
         "import astral_toolkit.gamedata as g\n"
+        "import astral_toolkit.gamedata._ready as ready\n"
+        "fresh = 'astral_toolkit.tasks.catalog_queries.search' not in sys.modules\n"
         "started, touched = [], []\n"
         "_start = threading.Thread.start\n"
         "threading.Thread.start = lambda self: (started.append(self.name), _start(self))[1]\n"
         "g.ensure = lambda *a, **k: touched.append('ensure')\n"
         "g.snapshot = lambda *a, **k: touched.append('snapshot')\n"
+        "ready.ensure = lambda *a, **k: touched.append('ready')\n"
+        "sqlite3.connect = lambda *a, **k: touched.append('connect')\n"
         "import astral_toolkit.tasks.catalog_queries.search as s\n"
-        "print(started, touched, s._cache._has)\n"
+        "print(fresh, started, touched, s._cache._has)\n"
     )
-    assert _run(code) == "[] [] False"
+    assert _run(code) == "True [] [] False"
+
+
+_THREAD_MAKERS = ("Thread", "Timer", "ThreadPoolExecutor", "ProcessPoolExecutor")
+
+
+def _thread_makers_in_source(source):
+    """起线程 / 线程池的调用，按被调的名字认：threading.Thread、from threading import Thread、
+    __import__('threading').Thread、Timer、concurrent.futures 的池子都算"""
+    out = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Call):
+            f = node.func
+            name = f.attr if isinstance(f, ast.Attribute) else getattr(f, "id", "")
+            if name in _THREAD_MAKERS:
+                out.append(name)
+    return out
 
 
 def test_catalog_queries_code_starts_no_threads():
-    """查询内部实现里不自己起线程（预热线程由 bootstrap 起，Q1）：静态查 threading.Thread(…)，函数里起的也算"""
+    """查询内部实现里不自己起线程、线程池（预热线程由 bootstrap 起，Q1）：怎么导入的都算，函数里起的也算。
+    Q2、Q3 搬进来的并发下载要用线程池的话，按文件、按函数写明放行和理由，不整目录放开"""
     files = sorted((_ROOT / "tasks" / "catalog_queries").rglob("*.py"))
     assert len(files) >= 2, files
     for path in files:
-        assert _thread_starts_in_source(path.read_text(encoding="utf-8")) == [], (
+        assert _thread_makers_in_source(path.read_text(encoding="utf-8")) == [], (
             path.name
         )
+    for bad in (
+        "import threading\nthreading.Thread(target=f).start()\n",
+        "from threading import Thread\ndef f():\n    Thread(target=g).start()\n",
+        "__import__('threading').Timer(1, f).start()\n",
+        "from concurrent.futures import ThreadPoolExecutor\nThreadPoolExecutor(4)\n",
+    ):
+        assert _thread_makers_in_source(bad), bad
 
 
 def test_crafting_reaches_up_into_tasks_only_where_listed():
