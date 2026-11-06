@@ -475,7 +475,7 @@ def test_lift_rows_skip_bad_station(monkeypatch, tmp_path):
 
 def test_pos_zone_change_counts_as_moved():
     """进电梯站着不动：区域名变成轿厢也算变了（导航要马上提示选哪站）；轿厢的随机编号变了不算"""
-    from astral_toolkit.app.engines import pos
+    from astral_toolkit.runtime.workers import position as pos
 
     a = {"inner_zone": "TransitCarriage elev util 904902949036"}
     assert pos._zone_base(a) == pos._zone_base(
@@ -691,7 +691,8 @@ def test_no_synthetic_input_in_nav_files():
         root / "tasks" / "navigation.py",
         root / "app" / "overlay.py",
         root / "app" / "engines" / "nav.py",
-        root / "app" / "engines" / "pos.py",
+        root / "runtime" / "workers" / "position.py",
+        root / "tasks" / "position.py",
         root / "app" / "hud_state.py",
         root / "app" / "api" / "navigation.py",
     ] + sorted((root / "navigation").glob("*.py"))
@@ -868,9 +869,9 @@ def test_read_forward_returns_end_of_last_full_line(monkeypatch, tmp_path):
 def test_pos_hints_use_latest_read_even_when_hovering():
     """悬停不动（坐标没变）时线索也要在：按最近一次读到的算，不按坐标最后一次变化算（复审 2026-10-31）"""
     import time as _t
-    from astral_toolkit.app.engines.pos import _Pos
+    from astral_toolkit.runtime.workers.position import PositionWorker
 
-    p = object.__new__(_Pos)
+    p = object.__new__(PositionWorker)
     import threading
 
     p._lock = threading.Lock()  # 跳过 __init__ 的替身：补上 RT-B5b 起 hints() 要用的锁
