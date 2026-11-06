@@ -21,7 +21,7 @@ def fold_en_loose(s):
 
 
 def fold_mixed_loose(s):
-    """名字比较键：小写、l 当 i、只留 a-z0-9 和汉字；crafting.loot、crafting.wikelo 和 gamedata 掉落 / wiki / 维科洛在用。"""
+    """名字比较键：小写、l 当 i、只留 a-z0-9 和汉字；tasks/catalog_queries/loot、crafting.wikelo 和 gamedata 掉落 / wiki / 维科洛在用。"""
     return re.sub(r"[^a-z0-9一-鿿]", "", (s or "").lower().replace("l", "i"))
 
 

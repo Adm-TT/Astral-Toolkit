@@ -15,7 +15,7 @@ def _loot_src(rows, **extra):
 
 
 def test_loot_rows_order_and_fold(monkeypatch, tmp_path):
-    from astral_toolkit.crafting.loot import _fold
+    from astral_toolkit.tasks.catalog_queries.loot import _fold
     from astral_toolkit.gamedata import loot as T
 
     _setup(
@@ -53,7 +53,7 @@ def test_loot_rows_cached_per_version(monkeypatch, tmp_path):
 
 
 def test_loot_exact_ignores_empty_keys(monkeypatch, tmp_path):
-    from astral_toolkit.crafting.loot import _fold
+    from astral_toolkit.tasks.catalog_queries.loot import _fold
     from astral_toolkit.gamedata import loot as T
 
     _setup(
@@ -95,7 +95,7 @@ def test_loot_by_cls_prefix_underscore_is_literal(monkeypatch, tmp_path):
 
 
 def test_wiki_classes_includes_alt_and_drops_empty(monkeypatch, tmp_path):
-    from astral_toolkit.crafting.loot import _fold
+    from astral_toolkit.tasks.catalog_queries.loot import _fold
     from astral_toolkit.gamedata import loot as T
 
     _setup(
@@ -141,7 +141,7 @@ def test_index_meta_three_states(monkeypatch, tmp_path):
 
 def test_loot_topic_uses_outer_snapshot(monkeypatch, tmp_path):
     import astral_toolkit.gamedata as G
-    from astral_toolkit.crafting.loot import _fold
+    from astral_toolkit.tasks.catalog_queries.loot import _fold
     from astral_toolkit.gamedata import loot as T
 
     _setup(monkeypatch, tmp_path)
@@ -241,7 +241,7 @@ def _legacy_find(tmp_path, name_en="", name_zh=""):
     import json
 
     from astral_toolkit.catalog.loot import VARIANT as _VARIANT
-    from astral_toolkit.crafting.loot import _fold
+    from astral_toolkit.tasks.catalog_queries.loot import _fold
 
     f = tmp_path / "loot_index.json"
     idx = json.loads(f.read_text(encoding="utf-8")) if f.exists() else None
@@ -297,7 +297,7 @@ def _legacy_find(tmp_path, name_en="", name_zh=""):
 
 
 def test_find_equals_legacy_on_sample(monkeypatch, tmp_path):
-    from astral_toolkit.crafting import loot
+    from astral_toolkit.tasks.catalog_queries import loot
 
     _find_setup(monkeypatch, tmp_path)
     nonempty = 0
@@ -311,7 +311,7 @@ def test_find_equals_legacy_on_sample(monkeypatch, tmp_path):
 def test_find_exact_prefers_wiki_class_then_non_variant_then_n_desc(
     monkeypatch, tmp_path
 ):
-    from astral_toolkit.crafting import loot
+    from astral_toolkit.tasks.catalog_queries import loot
 
     _find_setup(monkeypatch, tmp_path)
     ids = lambda hits: [h[0] for h in hits]  # noqa: E731
@@ -329,7 +329,7 @@ def test_find_exact_prefers_wiki_class_then_non_variant_then_n_desc(
 
 def test_find_refreshes_after_rebuild_without_clear_caches(monkeypatch, tmp_path):
     import astral_toolkit.gamedata as G
-    from astral_toolkit.crafting import loot
+    from astral_toolkit.tasks.catalog_queries import loot
 
     _find_setup(monkeypatch, tmp_path)
     assert loot.find("Brand New Thing") == []
@@ -346,7 +346,7 @@ def test_find_refreshes_after_rebuild_without_clear_caches(monkeypatch, tmp_path
 def test_find_empty_when_no_index_or_db_unavailable(monkeypatch, tmp_path):
     import astral_toolkit.gamedata as G
     from astral_toolkit.core import paths
-    from astral_toolkit.crafting import loot
+    from astral_toolkit.tasks.catalog_queries import loot
 
     _find_setup(monkeypatch, tmp_path)
     (tmp_path / "loot_index.json").unlink()
@@ -359,14 +359,15 @@ def test_find_empty_when_no_index_or_db_unavailable(monkeypatch, tmp_path):
 
 
 def test_find_does_not_read_json(monkeypatch, tmp_path):
-    from astral_toolkit.crafting import loot
+    from astral_toolkit.tasks.catalog_queries import loot
+    from astral_toolkit.update import loot as loot_index
     from astral_toolkit.tasks.catalog_queries import search as itemsearch
 
     def boom(*a, **kw):
         raise AssertionError("查询路径不该再读 JSON")
 
     _find_setup(monkeypatch, tmp_path)
-    monkeypatch.setattr(loot, "load_index", boom)
+    monkeypatch.setattr(loot_index, "load_index", boom)
     assert not hasattr(
         itemsearch, "wiki_items"
     )  # 读 JSON 的那份收口 2 删了；类名走 gamedata.names.wiki_classes
@@ -380,7 +381,7 @@ def test_find_does_not_read_json(monkeypatch, tmp_path):
 
 def test_wiki_classes_swallows_db_errors(monkeypatch, tmp_path):
     from astral_toolkit.core import paths
-    from astral_toolkit.crafting import loot
+    from astral_toolkit.tasks.catalog_queries import loot
 
     _find_setup(monkeypatch, tmp_path)
     monkeypatch.setattr(paths, "DATA", tmp_path / "empty")
@@ -388,7 +389,7 @@ def test_wiki_classes_swallows_db_errors(monkeypatch, tmp_path):
 
 
 def test_clear_caches_still_safe(monkeypatch, tmp_path):
-    from astral_toolkit.crafting import loot
+    from astral_toolkit.tasks.catalog_queries import loot
     from astral_toolkit.update import data_pack, uex
 
     _find_setup(monkeypatch, tmp_path)
@@ -406,23 +407,26 @@ def test_clear_caches_still_safe(monkeypatch, tmp_path):
 
 def _detail_env(monkeypatch, tmp_path):
     """明细相关路径都换到 tmp_path；_from_zip / _get 换成记录器（不联网、不读真实整包）"""
-    from astral_toolkit.crafting import loot
+    from astral_toolkit.infrastructure.persistence import loot_details
+    from astral_toolkit.infrastructure.providers import loot_site
+    from astral_toolkit.tasks.catalog_queries import loot
+    from astral_toolkit.update import loot as loot_index
 
     rec = {"zip": [], "get": []}
-    monkeypatch.setattr(loot, "DETAILS", tmp_path / "loot_details.zip")
-    monkeypatch.setattr(loot, "CACHE_DIR", tmp_path / "loot")
-    monkeypatch.setattr(loot, "INDEX", tmp_path / "loot_index.json")
-    monkeypatch.setattr(loot, "_index", None)
+    monkeypatch.setattr(loot_details, "DETAILS", tmp_path / "loot_details.zip")
+    monkeypatch.setattr(loot_details, "CACHE_DIR", tmp_path / "loot")
+    monkeypatch.setattr(loot_index, "INDEX", tmp_path / "loot_index.json")
+    monkeypatch.setattr(loot_index, "_index", None)
     monkeypatch.setattr(loot, "_failed", {})
     monkeypatch.setattr(
-        loot, "_from_zip", lambda u, v: rec["zip"].append((u, v)) or None
+        loot_details, "from_zip", lambda u, v: rec["zip"].append((u, v)) or None
     )
 
     def get(url, timeout=60):
         rec["get"].append(url)
         return {"url": url}
 
-    monkeypatch.setattr(loot, "_get", get)
+    monkeypatch.setattr(loot_site, "get_json", get)
     return rec
 
 
@@ -430,7 +434,8 @@ def test_detail_version_from_meta_matches_legacy(monkeypatch, tmp_path):
     import json
 
     import astral_toolkit.gamedata as G
-    from astral_toolkit.crafting import loot
+    from astral_toolkit.infrastructure.providers import loot_site
+    from astral_toolkit.tasks.catalog_queries import loot
     from tests.minipytest import raises
 
     _setup(monkeypatch, tmp_path)
@@ -455,11 +460,13 @@ def test_detail_version_from_meta_matches_legacy(monkeypatch, tmp_path):
         G.rebuild()
         u = f"u{i}"
         want = legacy_version()
-        assert loot.detail(u, online=True) == {"url": f"{loot.BASE}{want}/q/{u}.json"}
+        assert loot.detail(u, online=True) == {
+            "url": f"{loot_site.BASE}{want}/q/{u}.json"
+        }
         assert rec["zip"][-1] == (u, want)
         assert (tmp_path / "loot" / f"{want}_{u}.json").exists()
         assert loot.detail(u, online=False) == {
-            "url": f"{loot.BASE}{want}/q/{u}.json"
+            "url": f"{loot_site.BASE}{want}/q/{u}.json"
         }  # 读缓存
     _write_min_sources(tmp_path, **{"loot_index.json": {"version": 4.1, "rows": []}})
     G.rebuild()
@@ -468,7 +475,7 @@ def test_detail_version_from_meta_matches_legacy(monkeypatch, tmp_path):
 
 
 def test_detail_online_write_not_in_updating(monkeypatch, tmp_path):
-    from astral_toolkit.crafting import loot
+    from astral_toolkit.tasks.catalog_queries import loot
     from tests.test_gamedata_b1 import _count_updating
 
     _setup(monkeypatch, tmp_path)
@@ -480,21 +487,22 @@ def test_detail_online_write_not_in_updating(monkeypatch, tmp_path):
 
 
 def test_detail_does_not_read_index_json(monkeypatch, tmp_path):
-    from astral_toolkit.crafting import loot
+    from astral_toolkit.tasks.catalog_queries import loot
+    from astral_toolkit.update import loot as loot_index
 
     def boom(*a, **kw):
         raise AssertionError("detail 不该再读 loot_index.json")
 
     _setup(monkeypatch, tmp_path)
     rec = _detail_env(monkeypatch, tmp_path)
-    monkeypatch.setattr(loot, "load_index", boom)
+    monkeypatch.setattr(loot_index, "load_index", boom)
     assert loot.detail("u1", online=True)
     assert rec["zip"] == [("u1", "4.10.2LIVE")]
 
 
 def test_detail_default_version_when_db_unavailable(monkeypatch, tmp_path):
     from astral_toolkit.core import paths
-    from astral_toolkit.crafting import loot
+    from astral_toolkit.tasks.catalog_queries import loot
 
     _setup(monkeypatch, tmp_path)
     rec = _detail_env(monkeypatch, tmp_path)
@@ -528,7 +536,7 @@ _ROCKS = [
 
 
 def _fake_details(monkeypatch):
-    from astral_toolkit.crafting import loot
+    from astral_toolkit.tasks.catalog_queries import loot
 
     seen = []
 
@@ -544,7 +552,7 @@ def _mine(key, online):
     """mine_info 的结果，断言不是 None（类型检查要知道下面能取下标）"""
     from typing import Any
 
-    from astral_toolkit.crafting import loot
+    from astral_toolkit.tasks.catalog_queries import loot
 
     d = loot.mine_info(key, online=online)
     assert d is not None
@@ -573,7 +581,8 @@ def test_mine_info_online_downloads_when_no_index(monkeypatch, tmp_path):
     import json
 
     import astral_toolkit.gamedata as G
-    from astral_toolkit.crafting import loot
+    from astral_toolkit.tasks.catalog_queries import loot
+    from astral_toolkit.update import loot as loot_index
 
     _setup(monkeypatch, tmp_path, **_loot_src(_ROCKS))
     (tmp_path / "loot_index.json").unlink()
@@ -589,10 +598,10 @@ def test_mine_info_online_downloads_when_no_index(monkeypatch, tmp_path):
             (tmp_path / "loot_index.json").write_text(
                 json.dumps(data, ensure_ascii=False), encoding="utf-8"
             )
-        loot._index = data
+        loot_index._index = data
         return data
 
-    monkeypatch.setattr(loot, "update", update)
+    monkeypatch.setattr(loot_index, "update", update)
     assert loot.mine_info("carinite", online=False) is None and calls == []
     d = _mine("carinite", online=True)
     assert calls == [1] and d["groups"][0]["regions"] == ["区域-r1"]
@@ -600,7 +609,8 @@ def test_mine_info_online_downloads_when_no_index(monkeypatch, tmp_path):
 
 def test_mine_info_none_when_download_fails(monkeypatch, tmp_path):
     import astral_toolkit.gamedata as G
-    from astral_toolkit.crafting import loot
+    from astral_toolkit.tasks.catalog_queries import loot
+    from astral_toolkit.update import loot as loot_index
 
     _setup(monkeypatch, tmp_path)
     (tmp_path / "loot_index.json").unlink()
@@ -610,32 +620,33 @@ def test_mine_info_none_when_download_fails(monkeypatch, tmp_path):
     def update(version=None, progress=print):
         raise OSError("断网")
 
-    monkeypatch.setattr(loot, "update", update)
+    monkeypatch.setattr(loot_index, "update", update)
     assert loot.mine_info("carinite", online=True) is None
 
 
 def test_mine_info_empty_rows_does_not_download(monkeypatch, tmp_path):
-    from astral_toolkit.crafting import loot
+    from astral_toolkit.update import loot as loot_index
 
     _setup(monkeypatch, tmp_path, **_loot_src([]))
     _detail_env(monkeypatch, tmp_path)
     calls = []
-    monkeypatch.setattr(loot, "update", lambda *a, **kw: calls.append(1))
+    monkeypatch.setattr(loot_index, "update", lambda *a, **kw: calls.append(1))
     d = _mine("carinite", online=True)
     assert calls == [] and d["groups"] == [] and d["more"] == 0
 
 
 def test_mine_info_none_when_db_unavailable(monkeypatch, tmp_path):
     from astral_toolkit.core import paths
-    from astral_toolkit.crafting import loot
+    from astral_toolkit.tasks.catalog_queries import loot
+    from astral_toolkit.update import loot as loot_index
 
     _setup(monkeypatch, tmp_path, **_loot_src(_ROCKS))
     _detail_env(monkeypatch, tmp_path)
     monkeypatch.setattr(paths, "DATA", tmp_path / "empty")
     calls = []
-    monkeypatch.setattr(loot, "update", lambda *a, **kw: calls.append("update"))
+    monkeypatch.setattr(loot_index, "update", lambda *a, **kw: calls.append("update"))
     monkeypatch.setattr(
-        loot, "load_index", lambda *a, **kw: calls.append("load_index")
+        loot_index, "load_index", lambda *a, **kw: calls.append("load_index")
     )  # 连读本地索引也不该走到（不然 _detail_env 指的那份文件在，这条会空过）
     assert loot.mine_info("carinite", online=False) is None
     assert loot.mine_info("carinite", online=True) is None
@@ -709,21 +720,25 @@ def test_info_equal_legacy_on_sample(monkeypatch, tmp_path):
     import json
 
     from astral_toolkit.catalog.loot import PLACED
-    from astral_toolkit.crafting import loot
+    from astral_toolkit.infrastructure.persistence import loot_details
+    from astral_toolkit.infrastructure.providers import loot_site
+    from astral_toolkit.tasks.catalog_queries import loot
 
     _find_setup(monkeypatch, tmp_path)
     monkeypatch.setattr(
-        loot,
+        loot_details,
         "DETAILS",
         _details_zip(tmp_path / "loot_details.zip", "4.10.2LIVE", _DETAILS),
     )
-    monkeypatch.setattr(loot, "CACHE_DIR", tmp_path / "loot")
-    monkeypatch.setattr(loot, "_zip", {"z": None, "mtime": None, "version": None})
+    monkeypatch.setattr(loot_details, "CACHE_DIR", tmp_path / "loot")
+    monkeypatch.setattr(
+        loot_details, "_zip", {"z": None, "mtime": None, "version": None}
+    )
 
     def no_net(*a, **kw):
         raise OSError("断网")
 
-    monkeypatch.setattr(loot, "_get", no_net)
+    monkeypatch.setattr(loot_site, "get_json", no_net)
     inputs = [
         ("Citadel Core", ""),
         ("Combat Knife", ""),
@@ -752,7 +767,7 @@ def test_info_equal_legacy_on_sample(monkeypatch, tmp_path):
         loot, "_index_meta", lambda: {"version": legacy_version["version"]}
     )
     old = run()
-    loot.close_bundle()
+    loot_details.close_bundle()
     assert new == old
     found = [d for d in new if d and "groups" in d]
     groups = [g for d in found for g in d["groups"]]
@@ -765,30 +780,31 @@ def test_info_equal_legacy_on_sample(monkeypatch, tmp_path):
 
 
 def test_loot_update_still_inside_updating(monkeypatch, tmp_path):
-    from astral_toolkit.crafting import loot
+    from astral_toolkit.infrastructure.providers import loot_site
+    from astral_toolkit.update import loot as loot_index
     from tests.test_gamedata_b1 import _count_updating
 
     _setup(monkeypatch, tmp_path)
-    monkeypatch.setattr(loot, "INDEX", tmp_path / "loot_index.json")
-    monkeypatch.setattr(loot, "_index", None)
-    monkeypatch.setattr(loot, "latest_version", lambda: "4.10.3LIVE")
+    monkeypatch.setattr(loot_index, "INDEX", tmp_path / "loot_index.json")
+    monkeypatch.setattr(loot_index, "_index", None)
+    monkeypatch.setattr(loot_site, "latest_version", lambda: "4.10.3LIVE")
     monkeypatch.setattr(
-        loot,
-        "_get",
+        loot_site,
+        "get_json",
         lambda url, timeout=60: (
             {"version": "4.10.3LIVE"} if url.endswith("manifest.json") else []
         ),
     )
     state = _count_updating(monkeypatch)
-    data = loot.update(progress=None)
+    data = loot_index.update(progress=None)
     assert state["n"] == 1 and state["writes"] == [(tmp_path / "loot_index.json", True)]
-    assert data == {"version": "4.10.3LIVE", "rows": []} and loot._index is data
+    assert data == {"version": "4.10.3LIVE", "rows": []} and loot_index._index is data
 
 
 def test_load_index_still_available_for_batch6(monkeypatch, tmp_path):
-    from astral_toolkit.crafting import loot
+    from astral_toolkit.update import loot as loot_index
 
     _setup(monkeypatch, tmp_path)
-    monkeypatch.setattr(loot, "INDEX", tmp_path / "loot_index.json")
-    monkeypatch.setattr(loot, "_index", None)
-    assert loot.load_index(False) == _MIN_SOURCES["loot_index.json"]
+    monkeypatch.setattr(loot_index, "INDEX", tmp_path / "loot_index.json")
+    monkeypatch.setattr(loot_index, "_index", None)
+    assert loot_index.load_index(False) == _MIN_SOURCES["loot_index.json"]

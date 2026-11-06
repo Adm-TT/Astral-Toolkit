@@ -61,7 +61,7 @@ def _data_versions():
             else ""
         )
     try:
-        from ...crafting.loot import load_index
+        from ...update.loot import load_index
 
         idx = load_index(False)
         out["loot"] = (idx or {}).get("version", "")

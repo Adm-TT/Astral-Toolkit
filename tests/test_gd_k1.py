@@ -249,23 +249,24 @@ def test_localization_rebuild_db_rebuilt_even_if_crafting_build_fails(
 
 
 def test_loot_update_runs_inside_updating(monkeypatch, tmp_path):
-    from astral_toolkit.crafting import loot
+    from astral_toolkit.infrastructure.providers import loot_site
+    from astral_toolkit.update import loot as loot_index
 
     _setup(monkeypatch, tmp_path)
     state = _count_updating(monkeypatch)
-    monkeypatch.setattr(loot, "INDEX", tmp_path / "loot_index.json")
-    monkeypatch.setattr(loot, "latest_version", lambda: "4.10")
+    monkeypatch.setattr(loot_index, "INDEX", tmp_path / "loot_index.json")
+    monkeypatch.setattr(loot_site, "latest_version", lambda: "4.10")
     monkeypatch.setattr(
-        loot,
-        "_get",
+        loot_site,
+        "get_json",
         lambda url, timeout=60: (
             {"version": "4.10"} if url.endswith("manifest.json") else []
         ),
     )
-    monkeypatch.setattr(loot, "_index", None)
-    loot.update(progress=None)
+    monkeypatch.setattr(loot_index, "_index", None)
+    loot_index.update(progress=None)
     assert state["n"] == 1 and len(state["writes"]) == 1 and state["writes"][0][1]
-    assert loot._index == {"version": "4.10", "rows": []}
+    assert loot_index._index == {"version": "4.10", "rows": []}
 
 
 def test_itemsearch_sees_new_aliases_after_localization_rebuild(monkeypatch, tmp_path):
@@ -322,7 +323,7 @@ def test_make_data_pack_web_ok_names_starmap_too(monkeypatch, tmp_path):
 
     from astral_toolkit import run
     from astral_toolkit.core import paths
-    from astral_toolkit.crafting import loot
+    from astral_toolkit.update import loot as loot_index
     from astral_toolkit.update import data_pack
     from tests.minipytest import raises
 
@@ -331,9 +332,9 @@ def test_make_data_pack_web_ok_names_starmap_too(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(paths, "DATA", tmp_path)
     monkeypatch.setattr(
-        loot, "load_index", lambda auto=True: {}
-    )  # loot.INDEX 是 import 时绑的真实路径：别读真实 data/
-    monkeypatch.setattr(loot, "_index", None)
+        loot_index, "load_index", lambda auto=True: {}
+    )  # loot_index.INDEX 是 import 时绑的真实路径：别读真实 data/
+    monkeypatch.setattr(loot_index, "_index", None)
     monkeypatch.setattr(sys, "path", list(sys.path))  # runpy 会往 sys.path 插一条
     (tmp_path / "starmap.json").write_text(
         json.dumps({"source": "starmap.space"}), encoding="utf-8"

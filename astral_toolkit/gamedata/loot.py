@@ -1,8 +1,8 @@
 """掉落 topic：loot_index.json 的 rows（loot_rows 表，6 列原样 + 导入时算好的折叠键）、wiki_items.json 的游戏类名
 （wiki_classes 表）、掉落索引的版本（meta 键 loot_index_meta）
 
-挑选、排序、变体过滤这些业务逻辑留在 crafting/loot.py，这里只管查。顺序一律按导入顺序（source_order）。
-掉落明细（loot_details.zip、data/loot/*.json）不入库，crafting/loot.py 照旧按需读文件。"""
+挑选、排序、变体过滤这些业务逻辑在 catalog/loot.py，一次查询的步骤在 tasks/catalog_queries/loot.py，这里只管查。顺序一律按导入顺序（source_order）。
+掉落明细（loot_details.zip、data/loot/*.json）不入库，照旧按需读文件（infrastructure/persistence/loot_details.py）。"""
 
 import json
 from dataclasses import dataclass

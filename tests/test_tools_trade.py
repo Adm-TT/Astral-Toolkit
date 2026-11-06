@@ -307,7 +307,7 @@ def test_hover_overlay_updates_before_network(monkeypatch, tmp_path):
     )  # 后台线程不开真实库存库、没有联网的价格源
     # 照生产接法：市场会话、报价、掉落走 tasks/catalog
     monkeypatch.setattr(
-        "astral_toolkit.crafting.loot.info", lambda *a, **k: {}
+        "astral_toolkit.tasks.catalog_queries.loot.info", lambda *a, **k: {}
     )  # 掉落查询也不联网
     shown = []
 

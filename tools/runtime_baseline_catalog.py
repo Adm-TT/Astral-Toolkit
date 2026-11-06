@@ -262,7 +262,7 @@ class _Sandbox:
     def __enter__(self):
         from astral_toolkit.core import net as net_mod
         from astral_toolkit.core import run_records
-        from astral_toolkit.crafting import loot as loot_mod
+        from astral_toolkit.infrastructure.providers import loot_site as loot_mod
         from astral_toolkit.update import shops as shops_mod
         from astral_toolkit.navigation import position as position_mod
         from astral_toolkit.tasks import hover as hover_mod
@@ -277,7 +277,7 @@ class _Sandbox:
         self._old_last_hover = _safe_deepcopy(hover_mod._last_hover)
 
         self._patch(net_mod, "read", _offline)
-        self._patch(loot_mod, "_get", _offline)
+        self._patch(loot_mod, "get_json", _offline)
         self._patch(shops_mod, "_get", _offline)
         self._patch(console_mod, "datetime", _FakeDatetime)
         self._patch(trade_mod, "_item_hud", self._trade_hud)

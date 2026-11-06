@@ -85,17 +85,18 @@ def main(argv):
                 "AT_SRC_DIR": src,
             },  # 合并这份仓库（不是别的签出）
         )
-    from astral_toolkit.crafting import loot
+    from astral_toolkit.infrastructure.persistence import loot_details
+    from astral_toolkit.update import loot
 
     idx = loot.load_index(False) or {}
     if (
         "--no-loot" not in argv
         and idx.get("version")
-        and loot.details_version() != idx["version"]
+        and loot_details.details_version() != idx["version"]
     ):
         # 游戏版本变了（掉落数据有新版本）：全速抓一遍所有物品的掉落明细（用户 2026-10-26 定），约 1.3 万件
         print(
-            f"掉落数据有新版本 {idx['version']}（整包是 {loot.details_version() or '无'}），开始抓取掉落明细…"
+            f"掉落数据有新版本 {idx['version']}（整包是 {loot_details.details_version() or '无'}），开始抓取掉落明细…"
         )
         try:
             loot.crawl_details()

@@ -6,7 +6,8 @@ from typing import Any
 from astral_toolkit import gamedata
 from astral_toolkit.catalog.results import ItemInfo, LootLookup
 from astral_toolkit.core import i18n
-from astral_toolkit.crafting import acquire, loot
+from astral_toolkit.crafting import acquire
+from astral_toolkit.tasks.catalog_queries import loot
 from astral_toolkit.tasks.catalog_queries import search as itemsearch
 from astral_toolkit.tasks import catalog as C
 from astral_toolkit.tasks import goals as G

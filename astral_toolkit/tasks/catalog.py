@@ -2,7 +2,7 @@
 
 - search_items：搜索列表（catalog_queries.search.find 的行原样，最多 30 条）
 - get_item_info：一件物品的详情（acquire.info + 中文名 + 目标提示）→ ItemInfo
-- get_item_loot：掉落（crafting.loot.info，会上网）→ LootLookup，出错不抛
+- get_item_loot：掉落（catalog_queries.loot.info，会上网）→ LootLookup，出错不抛
 - MarketSession / open_market / market_rows / market_hud_text：玩家市场（IQ-B6：F8 用 Trade 只经这里，报价留 F 段）
 详情一次查询钉一个游戏数据快照（_pinned）；掉落不另钉（见 get_item_loot）。窗口物品查询页经 app/api/trade.py 调这里；
 tasks/trade.py 的 item_search 是旧壳（库存联想、全局搜索还在调），也转到这里。
@@ -83,10 +83,10 @@ def get_item_info(name="", zh="", id=None, loot=True, exact=False):
 def get_item_loot(name="", zh=""):
     """物品查询里掉落那一块：明细本机没有时窗口在后面单独调这个（会上网，最多等 15 秒，不挡别的）。
     不另钉快照：loot.info 自己分步钉（找物品、副本矿各钉一个）；副本矿缺掉落索引时会下载索引、重建库，再开新快照读
-    新版本，外面钉着旧快照就读不到（见 crafting/loot.mine_info）。出错不抛：异常放进 LootLookup.error，
+    新版本，外面钉着旧快照就读不到（见 catalog_queries/loot.mine_info）。出错不抛：异常放进 LootLookup.error，
     展示层写成「掉落数据出错：…」"""
     try:
-        from ..crafting.loot import info as loot_info
+        from .catalog_queries.loot import info as loot_info
 
         return LootLookup(loot=loot_info(name, zh))
     except Exception as e:

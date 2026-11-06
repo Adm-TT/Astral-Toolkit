@@ -5,7 +5,7 @@ import time
 from astral_toolkit.tasks.catalog_queries import shops
 from astral_toolkit.update import shops as shop_prices
 from astral_toolkit.crafting import wikelo
-from astral_toolkit.crafting import loot
+from astral_toolkit.tasks.catalog_queries import loot
 from astral_toolkit.crafting import acquire
 from astral_toolkit.navigation import position
 from astral_toolkit.gamedata._cache import VersionCache as _VC
@@ -530,11 +530,12 @@ def test_wikelo_detail_sticky_and_names_clean():
 def test_wikelo_materials_all_have_source(monkeypatch):
     """每样维科洛材料都要有「去哪弄」：商店 / 挖矿 / 特殊说明 / 开箱掉落（用户 2026-10-23：不知道就查，补齐为止）"""
     import pytest
-    from astral_toolkit.crafting import wikelo, loot
+    from astral_toolkit.crafting import wikelo
+    from astral_toolkit.update import loot as loot_index
     from astral_toolkit.crafting.acquire import material_source
 
     cs = wikelo.load()
-    if not cs or not loot.load_index(False):
+    if not cs or not loot_index.load_index(False):
         pytest.skip("没有维科洛 / 掉落数据")
     names = {r["n"] for c in cs for r in c["req"]}
     missing = [n for n in sorted(names) if not material_source(n)]

@@ -1,7 +1,7 @@
 """助手窗口和后台：网页服务、任务日志、热键、首次运行、单实例、反馈、更新、免责声明、性能（从 test_tools.py 拆出，CL-C3）"""
 
 from astral_toolkit.update import shops
-from astral_toolkit.crafting import loot
+from astral_toolkit.update import loot
 
 
 def test_app_task_log_routing():
