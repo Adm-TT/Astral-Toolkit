@@ -1,0 +1,165 @@
+"""维科洛纯规则（CR-B3）：不读库、不读文件；旧名字还从 crafting.wikelo 拿。"""
+
+from astral_toolkit.crafting import wikelo, wikelo_rules
+from astral_toolkit.gamedata import wikelo as gd_wikelo
+from astral_toolkit.trade import names
+
+_ORE = {
+    "id": "ore",
+    "type": "收集",
+    "t": "杰金样本",
+    "te": "Jaclium Sample",
+    "rz": "杰金奖励",
+    "rewards": [],
+    "req": [{"n": "Jaclium (Ore)", "z": "杰金矿石", "q": 20, "u": "个"}],
+    "systems": [],
+}
+_RECOMB = {
+    "id": "recomb",
+    "type": "装备/物品",
+    "t": "重组样本兑换",
+    "te": "Recombination Exchange",
+    "rz": "",
+    "rewards": ["重组奖励"],
+    "req": [{"n": "RCMBNT-XTL", "z": "重组样本", "q": 5, "u": "个"}],
+    "systems": [],
+}
+_PLAIN = {
+    "id": "plain",
+    "type": "载具",
+    "t": "极地巡逻车",
+    "te": "Polaris Rover",
+    "rz": "极地涂装 巡逻车",
+    "rewards": [],
+    "req": [{"n": "Polaris Bit", "z": "Polaris 点数", "q": 15, "u": "个"}],
+    "systems": ["Pyro"],
+}
+_ROWS = [_ORE, _RECOMB, _PLAIN]
+_RCMBNT_NOTE = (
+    "玛瑙设施（Onyx Facility）任务里在终端合成：催化剂 XTL/PWL/RGL 配反应物，"
+    "做出的样本送到设施货梯"
+)
+
+
+def test_wikelo_rules_are_pure(monkeypatch):
+    """外部取数入口全换成抛错，纯规则照常算。"""
+
+    def boom(*a, **k):
+        raise AssertionError("纯规则不该查库 / 读汉化包")
+
+    for name in ("contracts", "requiring", "print_places"):
+        monkeypatch.setattr(gd_wikelo, name, boom)
+    monkeypatch.setattr(names, "canonical_exact", boom)
+
+    req = _ORE["req"][0]
+    assert wikelo_rules.note_for("RCMBNT-XTL") == ("重组样本", _RCMBNT_NOTE)
+    assert wikelo_rules.req_label(req) == "杰金矿石（Jaclium (Ore)）"
+    assert wikelo_rules.uses(
+        "Jaclium (Ore)", "杰金矿石", [(_ORE, req)], boom, boom
+    ) == [(_ORE, 20, "个")]
+    assert wikelo_rules.search(lambda: _ROWS, "") == _ROWS
+    assert wikelo_rules.search(lambda: _ROWS, "杰金") == [_ORE]
+    assert wikelo_rules.source_note("RCMBNT-XTL", boom) == _RCMBNT_NOTE
+    assert wikelo_rules.describe(_ORE) == (
+        "【杰金样本】收集｜换：杰金奖励\n  · 杰金矿石（Jaclium (Ore)） × 20 个"
+    )
+    assert wikelo_rules.uses_text([(_PLAIN, 15, "个"), (_ORE, 20, "个")]) == (
+        "维科洛兑换要用：极地巡逻车（15），杰金样本（20）"
+    )
+    assert wikelo_rules.uses_text([]) == ""
+
+
+def test_uses_equal_hit_does_not_load_or_check_full_name():
+    calls = []
+
+    def load():
+        calls.append("load")
+        return _ROWS
+
+    def is_full():
+        calls.append("is_full")
+        return True
+
+    req = _ORE["req"][0]
+    got = wikelo_rules.uses("Jaclium (Ore)", "杰金矿石", [(_ORE, req)], load, is_full)
+    assert got == [(_ORE, 20, "个")]
+    assert calls == []
+
+
+def test_full_name_only_matches_ore_suffix():
+    calls = []
+
+    def load():
+        calls.append("load")
+        return _ROWS
+
+    def is_full():
+        calls.append("is_full")
+        return True
+
+    assert wikelo_rules.uses("Polar", "极地", [], load, is_full) == []
+    assert calls == ["is_full", "load"]
+
+    calls.clear()
+    assert wikelo_rules.uses("Jaclium", "杰金", [], load, is_full) == [(_ORE, 20, "个")]
+    assert calls == ["is_full", "load"]
+
+
+def test_truncated_name_is_loosened_when_not_full():
+    assert wikelo_rules._same("abc", "abcdef") is False
+    assert wikelo_rules._same("abcd", "abcdef") is True
+
+    calls = []
+
+    def load():
+        calls.append("load")
+        return _ROWS
+
+    def is_full():
+        calls.append("is_full")
+        return False
+
+    got = wikelo_rules.uses("Polaris Bi", "", [], load, is_full)
+    assert got == [(_PLAIN, 15, "个")]
+    assert calls == ["is_full", "load"]
+
+
+def test_source_note_notes_does_not_call_print_spots():
+    def print_spots(_name):
+        raise AssertionError("命中 NOTES 不该查打印地点")
+
+    assert wikelo_rules.source_note("RCMBNT-XTL", print_spots) == _RCMBNT_NOTE
+
+
+def test_source_note_uses_print_spots():
+    seen = []
+
+    def print_spots(name):
+        seen.append(name)
+        return ["地点 A", "", "地点 B"]
+
+    assert wikelo_rules.source_note("某个物品", print_spots) == "打印：地点 A；地点 B"
+    assert seen == ["某个物品"]
+    assert (
+        wikelo_rules.source_note("DCHS-99", lambda _name: [])
+        == "派罗争夺区（Contested Zone）内打印"
+    )
+
+
+def test_old_uses_text_passes_chinese_name(monkeypatch):
+    """旧名字 wikelo.uses_text(英文名, 中文名) 把中文名也传给 uses：只靠中文名对上的兑换也要列出来"""
+
+    def requiring(norm_en, norm_zh, snap=None):
+        return [(_ORE, _ORE["req"][0])] if norm_zh == "杰金矿石" else []
+
+    monkeypatch.setattr(gd_wikelo, "requiring", requiring)
+    monkeypatch.setattr(names, "canonical_exact", lambda zh, en: None)
+    monkeypatch.setattr(wikelo, "load", lambda: _ROWS)
+    assert wikelo.uses_text("", "杰金矿石") == "维科洛兑换要用：杰金样本（20）"
+
+
+def test_old_names_are_same_objects():
+    assert wikelo.note_for is wikelo_rules.note_for
+    assert wikelo.req_label is wikelo_rules.req_label
+    assert wikelo.describe is wikelo_rules.describe
+    assert wikelo._same is wikelo_rules._same
