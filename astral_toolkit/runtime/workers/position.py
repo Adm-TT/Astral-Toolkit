@@ -1,23 +1,31 @@
-"""实时位置读取（右上角调试信息，_Pos）和日志位置跟踪（_LogWatch）
+"""定位工作线程（目录迁移章程 R1：原 app/engines/pos.py 的 _Pos / _LogWatch 搬来）
 
-推状态用 bootstrap 给的 status 回调（F 段 B5；不给就不推，测试里单独造的位置服务）。
+PositionWorker 一直在后台读游戏右上角的调试信息（r_DisplayInfo 2）：有就随时知道你在哪，导航、路标、「离你最近的买点」都用它。
+它是「当前位置」的唯一持有者：最后读到的坐标、地点、星系、离哪最近，以及读右上角的快慢。
+2026-10-26 起：字模识别（gridtext）几毫秒认一次，游戏在最前面就每 0.2 秒读一次（BASE_FPS）；有模块要更快（导航帧数）就按它要的，最高 30（NV-B5）；
+字模还没学好时（第一次用、换了分辨率）用识别引擎认，每 2 秒一次来校准，导航时 1 秒一次。
+
+怎么读、怎么认、往哪发都由 bootstrap 接进来（章程 §6），本模块不导入界面、业务、游戏数据和读屏实现：
+- reader：读右上角的读取器（navigation.displayinfo.Reader；调试模式开关在它身上）
+- foreground：游戏在不在最前面（判断出错当在）；calibrated：字模学好没有（判断出错当没好）
+- label_of / system_of / locate：地点中文名、属于哪个星系、离哪最近（tasks/position.py）
+- publish_status：推一次状态给窗口（不给就不推）；log：写一行到窗口日志；fine_timer：读得快时调 Windows 等待精度（None = 不调）
+- enabled：这台机器能不能读右上角（只有 Windows 能）
+
+LogWatchWorker 每 5 秒看一眼游戏日志（read_log 给最后一次的地点或 None），变了就推一次状态。
 """
 
-import sys
+import re
 import threading
 import time
-from dataclasses import dataclass
+from collections.abc import Callable
 from typing import Any
 
-from .. import bus
-
-WIN = sys.platform == "win32"
+from ...contracts.position import PositionRead, PositionSnapshot
 
 
 def _zone_base(info):
     """最里层 Zone 名去掉末尾带数字的那一截（轿厢、机库的随机编号每次不一样，字模还可能把数字认成字母）"""
-    import re
-
     return re.sub(
         r"[\s_]+[0-9A-Za-z]*\d[0-9A-Za-z]*$",
         "",
@@ -25,45 +33,36 @@ def _zone_base(info):
     )
 
 
-@dataclass(frozen=True)
-class PositionSnapshot:
-    """一次锁内复制出来的位置快照；兼容字段供 status / mining / 旧测试过渡用"""
-
-    current: Any
-    latest: Any
-    read_at: float
-    label: Any
-    system: Any
-    fast: bool
-    reader_active: bool
-    reader_ok_at: float
-    here: Any = None
-
-
-@dataclass(frozen=True)
-class PositionRead:
-    """read_now() 的同步读结果：给 _where_now 这类非要马上读一次的地方用"""
-
-    ok_at: float
-    info: dict
-    global_: tuple | None
-
-
-class _Pos:
-    """一直在后台读游戏右上角的调试信息（r_DisplayInfo 2）：有就随时知道你在哪，导航、路标、「离你最近的买点」都用它。
-    2026-10-26 起：字模识别（gridtext）几毫秒认一次，游戏在最前面就每 0.2 秒读一次（BASE_FPS）；有模块要更快（导航帧数）就按它要的，最高 30（NV-B5）；顶栏位置是实时的；
-    字模还没学好时（第一次用、换了分辨率）用识别引擎认，每 2 秒一次来校准，导航时 1 秒一次
-    debug：调试模式开没开（无参函数），交给读右上角的 Reader，开着才写 di_log / di_fail（NV-B5）"""
+class PositionWorker:
+    """后台读右上角的线程和当前位置。debug 开关、读法在 reader 上；分析和发布见模块说明"""
 
     BASE_FPS = 5  # 平时（没人要更快）字模读右上角每秒 5 次 = 以前的 0.2 秒一次
     MAX_FPS = 30  # 谁要再快也按 30（设置页最高档；60 档实测只读到约 31 次，老大 11-05 改成 5–30）
     CALIB_EVERY = 2.0  # 字模还没校准好：每 2 秒用识别引擎认一次来学（一般 3～5 次就好，好了就停）；读不到会自己放慢
 
-    def __init__(self, *, debug=None, fine_timer=None, status=None):
-        from ...navigation.displayinfo import Reader
-
-        self._status = status
-        self.reader: Any = Reader(every=1.0, debug=debug)
+    def __init__(
+        self,
+        reader: Any,
+        *,
+        foreground: Callable[[], Any],
+        calibrated: Callable[[], Any],
+        label_of: Callable[[Any], Any],
+        system_of: Callable[..., Any],
+        locate: Callable[..., Any],
+        publish_status: Callable[[], None] | None = None,
+        log: Callable[[str], None] | None = None,
+        fine_timer: Callable[[bool], None] | None = None,
+        enabled: bool = True,
+    ):
+        self.reader: Any = reader
+        self._foreground = foreground
+        self._calibrated = calibrated
+        self._label_of = label_of
+        self._system_of = system_of
+        self._locate = locate
+        self._publish_status = publish_status
+        self._log = log
+        self._enabled = enabled
         self.latest: Any = (
             0.0,
             None,
@@ -95,7 +94,7 @@ class _Pos:
         self._pub_at = 0.0
 
     def start(self):
-        if WIN and (self.thread is None or not self.thread.is_alive()):
+        if self._enabled and (self.thread is None or not self.thread.is_alive()):
             self.stop_ev.clear()
             self.thread = threading.Thread(
                 target=self._run, daemon=True, name="displayinfo"
@@ -143,7 +142,7 @@ class _Pos:
             self.reader.misses = 0
 
     def read_now(self, force=True):
-        """在调用线程同步读一次；和 pos 线程共用一把 reader 锁（_where_now 用）"""
+        """在调用线程同步读一次；和定位线程共用一把 reader 锁（_where_now 用）"""
         with self._reader_lock:
             if force:
                 self.reader.poll(force=True)
@@ -213,21 +212,19 @@ class _Pos:
         except Exception:
             pass
 
-    def _absorb(self, n, ok_at, info):
+    def _absorb(self, ok_at, info):
         g = tuple(info["global"])
         fast = bool(info.get("fast"))
         label_changed = False
         if info.get("location"):
-            from ...navigation.position import display_label
-
-            lab = display_label(info["location"])
+            lab = self._label_of(info["location"])
             with self._lock:
                 old = self.label[1]
                 self.label = (time.time(), lab or old)
                 label_changed = bool(lab and lab != old)
         sysname = None
         try:
-            sysname = n.system_of(
+            sysname = self._system_of(
                 info["global"],
                 zone=info.get("zone"),
                 location=info.get("location"),
@@ -256,7 +253,7 @@ class _Pos:
         if need_publish:
             here = None
             try:
-                here = n.locate(
+                here = self._locate(
                     g,
                     when=info.get("t"),
                     local=info.get("local"),
@@ -279,26 +276,21 @@ class _Pos:
             force or now - self._pub_at >= 1.0
         ):  # 坐标每秒变好几次，窗口一秒刷一次就够；地点变了马上刷
             self._pub_at = now
-            if self._status is not None:
-                bus.publish("status", self._status())
+            if self._publish_status is not None:
+                self._publish_status()
 
     def _run(self):
-        from ...navigation import navigate as n, gridtext
-        from ...system.showloc import game_foreground
-
         was = False
         while not self.stop_ev.is_set():
             ready = False
             nap = 0.2
             try:
                 try:
-                    fg = game_foreground()
+                    fg = self._foreground()
                 except Exception:
                     fg = True
                 try:
-                    from ...core.capture import game_area
-
-                    ready = gridtext.ready(game_area()["height"])
+                    ready = self._calibrated()
                 except Exception:
                     pass
                 navigating = self._navigating()
@@ -317,7 +309,7 @@ class _Pos:
                 nap = self._nap(ready, next_at)
                 info = info or {}
                 if ok_at != seen and info.get("global"):
-                    self._absorb(n, ok_at, info)
+                    self._absorb(ok_at, info)
                 active_changed = reader_active != was
                 was = reader_active
                 with self._lock:
@@ -327,21 +319,27 @@ class _Pos:
                 if active_changed:
                     self._publish(force=True)
             except Exception as e:
-                bus.publish(
-                    "log", {"task": "displayinfo", "line": f"右上角识别失败：{e}"}
-                )
+                if self._log is not None:
+                    self._log(f"右上角识别失败：{e}")
             self.stop_ev.wait(nap)
         self._fine(False)
 
 
-class _LogWatch:
+class LogWatchWorker:
     """每 5 秒看一眼游戏日志有没有变长；变长了只读新增的几行，位置变了就推给窗口。
-    （只看文件大小，几乎不占资源；玩家除非退出游戏或死亡，很少一下子跑很远，5 秒够用）"""
+    （只看文件大小，几乎不占资源；玩家除非退出游戏或死亡，很少一下子跑很远，5 秒够用）
+    read_log：最后一次的地点（(时间, 地点名, …) 或 None）；publish_status：推一次状态（不给就不推）"""
 
     EVERY = 5.0
 
-    def __init__(self, *, status=None):
-        self._status = status
+    def __init__(
+        self,
+        *,
+        read_log: Callable[[], Any],
+        publish_status: Callable[[], None] | None = None,
+    ):
+        self._read_log = read_log
+        self._publish_status = publish_status
         self.thread = None
         self.last = None
         self.stop_ev = threading.Event()
@@ -367,16 +365,14 @@ class _LogWatch:
         return not thread.is_alive()
 
     def _run(self):
-        from ...navigation.position import from_log
-
         while not self.stop_ev.is_set():
             try:
-                hit = from_log()
+                hit = self._read_log()
                 now = (hit[0], hit[1]) if hit else None
                 if now != self.last:
                     self.last = now
-                    if self._status is not None:
-                        bus.publish("status", self._status())
+                    if self._publish_status is not None:
+                        self._publish_status()
             except Exception:
                 pass
             if self.stop_ev.wait(self.EVERY):

@@ -401,6 +401,18 @@ _RUNTIME_FORBIDDEN = (
     "astral_toolkit.app",
     "astral_toolkit.tasks",
     "astral_toolkit.gamedata",
+    "astral_toolkit.bootstrap",
+    # 目录迁移章程 §9：工作线程要的读屏、分析、平台判断由 bootstrap 接进来，不直接拿这些混着读屏 / 资料 / 业务的实现；
+    # 以后要用里面的纯值、纯计算，按符号单独放行，不整包豁免
+    "astral_toolkit.navigation",
+    "astral_toolkit.mining",
+    "astral_toolkit.trade",
+    "astral_toolkit.crafting",
+    "astral_toolkit.system",
+    "astral_toolkit.ocr",
+    "astral_toolkit.infrastructure",
+    "astral_toolkit.core.capture",
+    "astral_toolkit.core.settings",
 )
 
 
@@ -411,11 +423,15 @@ def _runtime_violations(source, pkg="astral_toolkit.runtime"):
 
 
 def test_runtime_layer_stays_below_app():
-    """runtime/ 是新层：不依赖界面、业务和游戏数据（架构稿 §4.3、§11.3）"""
+    """runtime/ 是新层：不依赖界面、业务和游戏数据（架构稿 §4.3、§11.3），也不直接拿读屏、资料、业务的具体实现
+    （目录迁移章程 §9）；runtime/workers 这些子目录按各自的包算相对导入，函数里 import、字符串导入一样查"""
     files = list((_ROOT / "runtime").rglob("*.py"))
-    assert files
+    assert any(f.parent.name == "workers" for f in files), files
     for f in files:
-        assert _runtime_violations(f.read_text(encoding="utf-8")) == [], f.name
+        pkg = ".".join(("astral_toolkit", *f.relative_to(_ROOT).parent.parts))
+        if f.parent.name == "workers":  # 包算错了相对导入会解析到别处，就漏查了
+            assert pkg == "astral_toolkit.runtime.workers", pkg
+        assert _runtime_violations(f.read_text(encoding="utf-8"), pkg) == [], f.name
     for bad in (
         "from ..app import bus",
         "from astral_toolkit.tasks import mining",
@@ -423,6 +439,38 @@ def test_runtime_layer_stays_below_app():
         "import importlib\nimportlib.import_module('astral_toolkit.app')",
     ):
         assert _runtime_violations(bad), bad
+    workers = "astral_toolkit.runtime.workers"
+    for bad in (
+        "from ...navigation import navigate",
+        "def f():\n    from ...navigation.displayinfo import Reader\n",
+        "from ...system.showloc import game_foreground",
+        "from ...core.capture import game_area",
+        "from ...mining import screen",
+        "from ...trade import console",
+        "from ...tasks import position",
+        "from ...app import bus",
+        "from ... import bootstrap",
+    ):
+        assert _runtime_violations(bad, workers), bad
+    for ok in (
+        "from ...contracts.position import PositionRead",
+        "from ..session import Session",
+    ):
+        assert _runtime_violations(ok, workers) == [], ok
+
+
+def test_position_worker_import_is_light():
+    """导入定位线程不带进读屏、界面、业务（R1）；连定位分析一起导入也不起线程"""
+    code = (
+        "import sys, threading\n"
+        "n = threading.active_count()\n"
+        "import astral_toolkit.runtime.workers.position\n"
+        "heavy = ('astral_toolkit.navigation', 'astral_toolkit.app', 'astral_toolkit.tasks', 'astral_toolkit.system')\n"
+        "a = sorted(m for m in sys.modules if m.startswith(heavy))\n"
+        "import astral_toolkit.tasks.position\n"
+        "print(threading.active_count() == n, a)\n"
+    )
+    assert _run(code) == "True []"
 
 
 _INFRA_FORBIDDEN = (

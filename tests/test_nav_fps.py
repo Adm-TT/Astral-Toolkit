@@ -153,16 +153,18 @@ def test_position_loop_reads_at_requested_fps_and_switches_fine_timer(monkeypatc
     """位置线程：字模好了按要的帧数读；读得比平时快时打开等待精度，停下关掉（控制台补：_run 的接线）"""
     import time
 
-    from astral_toolkit.app.engines import pos as posmod
+    from astral_toolkit.runtime.workers import position as posmod
 
-    monkeypatch.setattr("astral_toolkit.system.showloc.game_foreground", lambda: True)
-    monkeypatch.setattr("astral_toolkit.navigation.gridtext.ready", lambda h: True)
-    monkeypatch.setattr(
-        "astral_toolkit.core.capture.game_area",
-        lambda: {"left": 0, "top": 0, "width": 1920, "height": 1080},
-    )
     fine = []
-    p = posmod._Pos(fine_timer=fine.append)
+    p = posmod.PositionWorker(
+        None,
+        foreground=lambda: True,
+        calibrated=lambda: True,
+        label_of=lambda location: "",
+        system_of=lambda g, **k: None,
+        locate=lambda g, **k: None,
+        fine_timer=fine.append,
+    )
     seen = []
 
     class Reader:

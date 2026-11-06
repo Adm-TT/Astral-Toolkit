@@ -23,7 +23,6 @@ from .app.engines.nav import (
     NavLinks,
     marker_diag,
 )
-from .app.engines.pos import _LogWatch, _Pos
 from .app.output import BusOutput
 from .runtime.lifecycle import (
     Lifecycle,
@@ -34,6 +33,7 @@ from .runtime.lifecycle import (
     StopReport,
 )
 from .runtime.results import ResultStore
+from .runtime.workers.position import LogWatchWorker, PositionWorker
 
 if TYPE_CHECKING:
     from .app.api.router import Api
@@ -183,9 +183,53 @@ def _fine_timer(mode: str) -> Callable[[bool], None] | None:
     return timer.fine
 
 
-def _pos_service(mode: str, view: Any, status=None) -> _Pos:
-    """位置服务（NV-B5）：调试模式开关交给读右上角的 Reader；desktop 读得快时调 Windows 等待精度"""
-    return _Pos(debug=_debug_on(view), fine_timer=_fine_timer(mode), status=status)
+def _status_publisher(status: Callable[[], Any] | None) -> Callable[[], None] | None:
+    """位置、日志里的地点变了推一次状态给窗口（每次现读状态）；没给状态源就不推"""
+    if status is None:
+        return None
+    from .app import bus
+
+    def publish() -> None:
+        bus.publish("status", status())
+
+    return publish
+
+
+def _pos_service(mode: str, view: Any, status=None) -> PositionWorker:
+    """位置服务（NV-B5；R1 起线程在 runtime/workers/position，读屏、分析、推状态都在这里接进去）：
+    读右上角的 Reader 带上调试模式开关；认地点、算星系、离哪最近、字模学好没有用 tasks/position；
+    desktop 读得快时调 Windows 等待精度；只有 Windows 读得了右上角"""
+    import sys
+
+    from .app import bus
+    from .navigation.displayinfo import Reader
+    from .system.showloc import game_foreground
+    from .tasks import position as position_tasks
+
+    def log(line: str) -> None:
+        bus.publish("log", {"task": "displayinfo", "line": line})
+
+    return PositionWorker(
+        Reader(every=1.0, debug=_debug_on(view)),
+        foreground=game_foreground,
+        calibrated=position_tasks.glyphs_ready,
+        label_of=position_tasks.label_of,
+        system_of=position_tasks.system_of,
+        locate=position_tasks.locate,
+        publish_status=_status_publisher(status),
+        log=log,
+        fine_timer=_fine_timer(mode),
+        enabled=sys.platform == "win32",
+    )
+
+
+def _logwatch_service(status=None) -> LogWatchWorker:
+    """游戏日志位置跟踪（R1 起线程在 runtime/workers/position）：读日志用 tasks/position，地点变了推状态"""
+    from .tasks import position as position_tasks
+
+    return LogWatchWorker(
+        read_log=position_tasks.last_log_place, publish_status=_status_publisher(status)
+    )
 
 
 def _nav_links(view: Any) -> NavLinks:
@@ -325,7 +369,7 @@ def build(
     hover = _Hover(
         live=live, count=count, links=hover_links, feedback=feedback, nav=nav_deps
     )
-    logwatch = _LogWatch(status=status_now)
+    logwatch = _logwatch_service(status_now)
 
     app = DesktopApp(
         results=results,
