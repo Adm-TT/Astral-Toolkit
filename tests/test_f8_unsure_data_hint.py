@@ -19,7 +19,7 @@ def test_data_names_ready_needs_pack_and_loc(monkeypatch):
 
 
 def _stub_unsure_hover(monkeypatch, *, library_ready: bool):
-    from astral_toolkit.app import bus
+    from astral_toolkit.app import bus, preview
     from astral_toolkit.tasks.system import about
     import astral_toolkit.tasks.hover as Hv
 
@@ -29,7 +29,7 @@ def _stub_unsure_hover(monkeypatch, *, library_ready: bool):
         bus, "publish", lambda ch, payload: events.append((ch, payload))
     )
     monkeypatch.setattr(bus, "runtime_log", lambda *a, **k: None)
-    monkeypatch.setattr(bus, "update_preview", lambda *a, **k: None)
+    monkeypatch.setattr(preview, "update_preview", lambda *a, **k: None)
     monkeypatch.setattr(Hv, "_item_hud", lambda text, *a, **k: hud.append(text))
     monkeypatch.setattr(about, "data_names_ready", lambda: library_ready)
     monkeypatch.setattr(

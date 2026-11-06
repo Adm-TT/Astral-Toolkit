@@ -14,6 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from . import bus
+from . import preview
 from . import ui_stream
 from .http_writes import WRITES
 
@@ -151,7 +152,7 @@ class Handler(BaseHTTPRequestHandler):
 
         qs = parse_qs(urlparse(self.path).query)
         full = qs.get("full", ["0"])[0] == "1"
-        data, meta = bus.get_preview_bytes(full=full)
+        data, meta = preview.get_preview_bytes(full=full)
         if data:
             self.send_response(200)
             self.send_header("Content-Type", "image/jpeg")

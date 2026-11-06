@@ -526,7 +526,7 @@ def _register(app: DesktopApp) -> None:
         # - feedback-retry：最长一次网络请求 60 s，退出预算内等不到就放弃
         # - overlay：没有停止入口，随进程退出
         # - tray：server 退出前已 remove
-        # - bus.run_task 临时任务：按需线程，不纳入常驻服务
+        # - task_runner.run_task 临时任务：按需线程，不纳入常驻服务
         # - 导航 here-watch / halo：B5b 会话内的事
         # - shell-watch / winid：窗口 / 单实例外围
         # - displayinfo-loc：RT-B5b 地点行 OCR 短线程（几百毫秒，daemon）

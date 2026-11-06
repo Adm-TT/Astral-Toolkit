@@ -626,13 +626,15 @@ def test_app_scan_view_and_manual():
 def test_app_task_log_routing():
     import queue as _q
     import sys
-    from astral_toolkit.app import bus
+    from astral_toolkit.app import bus, task_runner
 
     old = sys.stdout
-    bus.install_router()
+    task_runner.install_router()
     q = bus.subscribe()
     try:
-        bus.run_task("t1", lambda: print("你好\n第二行") or 7, title="测试").join(3)
+        task_runner.run_task(
+            "t1", lambda: print("你好\n第二行") or 7, title="测试"
+        ).join(3)
         got = []
         while True:
             try:
@@ -1648,7 +1650,7 @@ def test_ship_signature_match():
 def test_update_log_reaches_window(monkeypatch):
     """更新数据时几个源并行下载：各线程的输出都要进窗口的更新记录"""
     import sys
-    from astral_toolkit.app import bus
+    from astral_toolkit.app import bus, task_runner
     import astral_toolkit.run as run
     from astral_toolkit.update import localization, uex
     from astral_toolkit.crafting import build_crafting, shops, loot
@@ -1675,9 +1677,9 @@ def test_update_log_reaches_window(monkeypatch):
         G, "rebuild", lambda: None
     )  # 收尾 clear_caches 会补建游戏数据库：不碰真实 data/
     old = sys.stdout
-    bus.install_router()
+    task_runner.install_router()
     try:
-        bus.run_task("update", run.update, title="更新数据").join()
+        task_runner.run_task("update", run.update, title="更新数据").join()
     finally:
         sys.stdout = old
     lines = [m["line"] for k, m in logs if k == "log"]

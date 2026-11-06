@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from . import bus
+from . import bus, task_runner
 from . import http_server, instance, launcher, ui_stream
 from .. import bootstrap
 
@@ -116,7 +116,7 @@ def _exit_sequence(
 def main(open_ui=True, port=0, restart=False):
     if open_ui and not instance._single_instance(restart):
         return
-    bus.install_router()
+    task_runner.install_router()
     from ..core.perf import lower_priority
 
     lower_priority()

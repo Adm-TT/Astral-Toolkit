@@ -1,6 +1,7 @@
 """运行结构的依赖检查（架构稿 §4.3、§11.3，RT-B1 / RT-B2）：领域计算不碰运行环境，呈现层不取数据，导入不创建引擎"""
 
 import ast
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -1824,3 +1825,124 @@ def test_fs_b2_market_users_do_not_hold_trade():
             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
         }
         assert "trade" not in calls, fn.name
+
+
+_FS_B4_MOVED = {
+    "update_preview",
+    "get_preview_bytes",
+    "install_router",
+    "current_task",
+    "adopt_task",
+    "run_task",
+    "run_task_once",
+    "task_running",
+    "_running",
+}
+_FS_B4_BUS_NAMES = _FS_B4_MOVED | {
+    "_preview_thumb_bytes",
+    "_preview_full_bytes",
+    "_preview_meta",
+    "_last_preview_t",
+    "_preview_lock",
+    "_task",
+    "_router_guard",
+    "_Router",
+    "_run_lock",
+    "_run_seq",
+    "_run_seq_lock",
+    "_next_run_id",
+}
+
+
+def _fs_b4_bus_refs(source):
+    refs = set()
+    for node in ast.walk(ast.parse(source)):
+        if (
+            isinstance(node, ast.Attribute)
+            and node.attr in _FS_B4_MOVED
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "bus"
+        ):
+            refs.add(node.attr)
+        elif (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "getattr"
+            and len(node.args) >= 2
+            and isinstance(node.args[0], ast.Name)
+            and node.args[0].id == "bus"
+            and isinstance(node.args[1], ast.Constant)
+            and node.args[1].value in _FS_B4_MOVED
+        ):
+            refs.add(node.args[1].value)
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            m = re.fullmatch(r"(?:\w+\.)*bus\.(\w+)", node.value.strip())
+            if m and m.group(1) in _FS_B4_MOVED:
+                refs.add(m.group(1))
+    return refs
+
+
+def _fs_b4_direct_bus_imports(source, names=("publish", "runtime_log")):
+    """from (.|..app.|astral_toolkit.app.)bus import 名字：names 里的那些"""
+    refs = set()
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        mod = node.module or ""
+        if not (mod == "bus" and node.level == 1 or mod.endswith("app.bus")):
+            continue
+        for alias in node.names:
+            if alias.name in names:
+                refs.add(alias.name)
+    return refs
+
+
+def test_fs_b4_bus_split():
+    """FS-B4：截图预览、后台任务从 bus 拆出；调用方按新模块取，不准再走 bus。"""
+    tree = ast.parse((_ROOT / "app" / "bus.py").read_text(encoding="utf-8"))
+    defined = set()
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            defined.add(node.name)
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    defined.add(target.id)
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            defined.add(node.target.id)
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):  # 转出来的也算
+            for alias in node.names:
+                defined.add(alias.asname or alias.name.split(".")[0])
+    assert not (defined & _FS_B4_BUS_NAMES)
+    assert {"publish", "runtime_log"} <= defined
+
+    project = _ROOT.parent
+    bad = []
+    for root in (_ROOT, project / "tools"):
+        for path in root.rglob("*.py"):
+            rel = path.relative_to(project).as_posix()
+            source = path.read_text(encoding="utf-8")
+            for name in _fs_b4_bus_refs(source):
+                bad.append((rel, name))
+            for name in _fs_b4_direct_bus_imports(source, _FS_B4_BUS_NAMES):
+                bad.append((rel, name))
+    assert not bad, bad
+
+    for name in ("preview.py", "task_runner.py"):
+        path = _ROOT / "app" / name
+        assert not _fs_b4_direct_bus_imports(path.read_text(encoding="utf-8")), name
+
+    assert _fs_b4_bus_refs("from . import bus\nbus.run_task('x', f)\n") == {"run_task"}
+    assert _fs_b4_bus_refs("from . import bus\ngetattr(bus, 'update_preview')\n") == {
+        "update_preview"
+    }
+    assert _fs_b4_bus_refs('"astral_toolkit.app.bus.install_router"') == {
+        "install_router"
+    }
+    assert _fs_b4_direct_bus_imports("from .bus import runtime_log\n") == {
+        "runtime_log"
+    }
+    assert _fs_b4_direct_bus_imports(
+        "from ...app.bus import run_task, publish\n", _FS_B4_BUS_NAMES
+    ) == {"run_task"}
+    assert not _fs_b4_bus_refs('"""见 bus.run_task 拆出去的说明"""')

@@ -13,7 +13,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from ..app import bus
+from ..app import bus, preview
 from ..trade.inspector import inspect_item, _read_tooltip, HOVER_REGION  # noqa: F401
 
 WIN = sys.platform == "win32"
@@ -266,7 +266,7 @@ def hover_once(img=None):
     t_grab = time.time()
     # 异步更新右下角截图预览，避免在关键路径上阻塞 50~150ms 的双重 JPEG 压缩与缩放
     threading.Thread(
-        target=bus.update_preview,
+        target=preview.update_preview,
         args=(img,),
         kwargs={"source": "hover", "force": True},
         daemon=True,

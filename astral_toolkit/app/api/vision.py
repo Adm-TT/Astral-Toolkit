@@ -5,14 +5,14 @@ F8 物品悬停识别、F6 盘点。
 hover_trigger 例外：实现直接写在本文件。
 """
 
-from .. import bus
+from .. import task_runner
 from ...tasks import count as _count
 from ...tasks import hover as _hover
 
 
 def hover_trigger():
     """手动触发一次 F8 物品悬停识别；F8 热键那次还没识别完就不再起（同一个任务名，见 engines/hover.py）"""
-    th = bus.run_task_once("hover", _hover.hover_once, title="F8物品识别")
+    th = task_runner.run_task_once("hover", _hover.hover_once, title="F8物品识别")
     return th if th is not None else {"error": "F8 正在识别中，请稍候"}
 
 

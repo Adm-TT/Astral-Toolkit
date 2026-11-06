@@ -424,7 +424,7 @@ def test_drain_and_bye_ends_activities_then_waits_for_queues(monkeypatch):
 
 
 def test_run_task_once_single_flight():
-    from astral_toolkit.app import bus
+    from astral_toolkit.app import task_runner
 
     entered = threading.Event()
     release = threading.Event()
@@ -435,14 +435,14 @@ def test_run_task_once_single_flight():
         return "ok"
 
     task_id = "x_ui_single_flight"
-    first = bus.run_task_once(task_id, work, title="单飞测试")
+    first = task_runner.run_task_once(task_id, work, title="单飞测试")
     assert first is not None
     assert entered.wait(2)
-    assert bus.run_task_once(task_id, lambda: "no") is None
+    assert task_runner.run_task_once(task_id, lambda: "no") is None
     release.set()
     first.join(2)
     assert not first.is_alive()
-    second = bus.run_task_once(task_id, lambda: "again")
+    second = task_runner.run_task_once(task_id, lambda: "again")
     assert second is not None
     second.join(2)
     assert not second.is_alive()
@@ -450,13 +450,13 @@ def test_run_task_once_single_flight():
 
 def test_update_runs_get_distinct_monotonic_ids(monkeypatch):
     ui = _reset(monkeypatch)
-    from astral_toolkit.app import bus
+    from astral_toolkit.app import task_runner
 
-    with bus._run_seq_lock:
-        bus._run_seq = 0
+    with task_runner._run_seq_lock:
+        task_runner._run_seq = 0
     _, q = _subscribe(ui, 20)
     for _ in range(2):
-        thread = bus.run_task("update", lambda: None, title="更新")
+        thread = task_runner.run_task("update", lambda: None, title="更新")
         thread.join(2)
         assert not thread.is_alive()
     events = []

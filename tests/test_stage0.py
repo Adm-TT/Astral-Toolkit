@@ -237,7 +237,7 @@ def _run_main(monkeypatch, tmp_path, shell):
     from astral_toolkit import bootstrap
     from astral_toolkit.app import (
         server,
-        bus,
+        task_runner,
         overlay,
         tray,
         winid,
@@ -318,7 +318,7 @@ def _run_main(monkeypatch, tmp_path, shell):
     monkeypatch.setattr(winid, "profile_pids", lambda *a, **k: set())
     monkeypatch.setattr(instance, "_single_instance", lambda restart=False: True)
     monkeypatch.setattr(http_server, "Server", FakeServer)
-    monkeypatch.setattr(bus, "install_router", lambda: None)
+    monkeypatch.setattr(task_runner, "install_router", lambda: None)
     monkeypatch.setattr(perf, "lower_priority", lambda: None)
     monkeypatch.setattr(overlay, "hud", lambda: None)
     monkeypatch.setattr(tray, "Tray", FakeTray)
