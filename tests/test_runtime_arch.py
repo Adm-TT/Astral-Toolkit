@@ -1803,3 +1803,24 @@ def test_fs_b1_console_old_names():
         assert _fs_b1_console_refs(bad, "astral_toolkit.tasks", all_targets) == {
             want
         }, bad
+
+
+def test_fs_b2_market_users_do_not_hold_trade():
+    """FS-B2：市场接口、物品查询、F8 只经 tasks/trade.market()（trade/market.Market）拿目录、显示名、查价，碰不到库存"""
+    from astral_toolkit.trade.market import Market
+
+    assert not {"inventory", "db", "history", "market"} & set(vars(Market))
+    src = (_ROOT / "tasks" / "catalog.py").read_text(encoding="utf-8")
+    for bad in ("trade_tasks.trade(", ".inventory", ".db"):
+        assert bad not in src, bad
+    tree = ast.parse((_ROOT / "tasks" / "trade.py").read_text(encoding="utf-8"))
+    names = ("market_lookup", "market_prices", "_market_rows", "market_label")
+    fns = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in names]
+    assert len(fns) == len(names)
+    for fn in fns:
+        calls = {
+            n.func.id
+            for n in ast.walk(fn)
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+        }
+        assert "trade" not in calls, fn.name

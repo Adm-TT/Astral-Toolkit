@@ -215,8 +215,16 @@ def trade():
     return _trade
 
 
+def market():
+    """物品目录 + 玩家市场（不含库存）：市场接口、物品查询、F8 用这个，不拿整个 Trade（F 段 B2）。
+    每次现包一层，测试把 trade 换掉照样打得中"""
+    from ..trade.market import Market
+
+    return Market(trade())
+
+
 def market_lookup(q=""):
-    t = trade()
+    t = market()
     items, err = t.lookup(q)
     return {
         "err": err or "",
@@ -241,15 +249,20 @@ def market_prices(id="", quality="q0", op="sell"):
         if last_hover.get("id") == id:  # F8 认出的物品：接在买点/兑换/制造后面
             _item_hud("\n".join(last_hover["lines"] + ([market] if market else [])))
         elif market:  # 窗口里查的价
-            _item_hud(f"{trade().label(id)}\n{market}")
+            _item_hud(f"{market_label(id)}\n{market}")
     return out
+
+
+def market_label(id):
+    """物品的显示名（窗口查价那行悬浮窗用）"""
+    return market().label(id)
 
 
 def _market_rows(id, quality="q0", op="sell"):
     """(窗口用的价格表, 原始结果)；没有这个物品返回 ({error}, None)"""
     from ..trade.market_text import _group, _money, SOURCE_ZH, STATE_ZH
 
-    t = trade()
+    t = market()
     item = t.catalog.get(id)
     if not item:
         return {"error": "未找到此物品"}, None
@@ -426,6 +439,7 @@ __all__ = [
     "item_search",
     "nav_shop",
     "trade",
+    "market",
     "market_lookup",
     "market_prices",
     "_market_rows",
