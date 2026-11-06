@@ -321,22 +321,24 @@ def test_showloc_hotkey_and_new_here_do_not_double_save(monkeypatch):
     已经在等时不再挂「请输入」提示；拿到坐标后提示马上收起"""
     from astral_toolkit.system import showloc
     from astral_toolkit.tasks import navigation as nav
+    from tests.bootstrap_helpers import nav_deps
 
     started, notes = [], []
-    monkeypatch.setattr(nav, "_start_here_watch", lambda: started.append(1))
+    deps = nav_deps()
+    monkeypatch.setattr(nav, "_start_here_watch", lambda _deps: started.append(1))
     monkeypatch.setattr(nav, "_note_hud", lambda sec, text, secs=6: notes.append(text))
     monkeypatch.setattr(nav, "_HERE", {"name": None, "until": 0.0, "thread": None})
     assert showloc._WAITING.acquire(blocking=False)
     try:
         r = nav.waypoint_add(
-            "一键定位在等", here=True
+            deps, "一键定位在等", here=True
         )  # 锁被一键定位 / 原矿记录占着：照常起盯剪贴板（第 3 轮复审）
         assert isinstance(r, dict) and r.get("pending") and started
         started.clear()
         monkeypatch.setattr(
             nav, "_MARKING", {"on": True}
         )  # 热键记路标在等：名字交给它，不另起
-        r = nav.waypoint_add("测试点", here=True)
+        r = nav.waypoint_add(deps, "测试点", here=True)
         assert isinstance(r, dict)
         assert r.get("pending") and not started and nav._HERE["name"] == "测试点"
         monkeypatch.setattr(
@@ -349,7 +351,7 @@ def test_showloc_hotkey_and_new_here_do_not_double_save(monkeypatch):
         showloc._WAITING.release()
     nav._HERE["name"] = None
     nav._MARKING["on"] = False
-    nav.waypoint_add("测试点2", here=True)
+    nav.waypoint_add(deps, "测试点2", here=True)
     assert started  # 没人在等：照常盯剪贴板
     monkeypatch.setattr(
         showloc,

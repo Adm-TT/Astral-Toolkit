@@ -105,7 +105,7 @@ def test_closing_gate_f5_f6(monkeypatch):
             count_task, "count_toggle", lambda: calls.append("count") or {"ok": True}
         )
 
-        h = hover._Hover(live=live, count=count, links=None, feedback=None)
+        h = hover._Hover(live=live, count=count, links=None, feedback=None, nav=None)
         h._toggle_live()
         assert calls == []
         assert notes[-1] == ("采矿助手", "正在退出")
@@ -130,16 +130,18 @@ def test_closing_gate_navigation_and_writes(monkeypatch):
     from astral_toolkit.app.engines.hover import _Hover
     from astral_toolkit.tasks import navigation
 
+    deps: Any = SimpleNamespace()
     with _closing_gate(True):
-        assert navigation.nav_start("x").get("error") == "正在退出"
-        assert navigation.nav_near("mine").get("error") == "正在退出"
-        assert navigation.mark_here().get("error") == "正在退出"
+        assert navigation.nav_start(deps, "x").get("error") == "正在退出"
+        assert navigation.nav_near(deps, "mine").get("error") == "正在退出"
+        assert navigation.mark_here(deps).get("error") == "正在退出"
 
         h = _Hover(
             live=SimpleNamespace(running=lambda: False),
             count=SimpleNamespace(running=lambda: False),
             links=None,
             feedback=None,
+            nav=None,
         )
         assert h._mark().get("error") == "正在退出"
         assert h._fix().get("error") == "正在退出"

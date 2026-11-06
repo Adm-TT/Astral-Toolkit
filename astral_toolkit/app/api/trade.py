@@ -1,7 +1,7 @@
 """交易 Controller（2026-10-30 重构阶段 1）
 
 物品查询三个接口（item_search / item_info / item_loot）调 tasks/catalog.py 的用例，结果交 app/presenters/catalog.py 排版（IQ-B5）；
-其余接口收关键字参数，原样转给 tasks/trade.py 里同名函数。
+其余接口收关键字参数，原样转给 tasks/trade.py 里同名函数；商店导航 nav_shop 要导航后台对象，由 bound(nav_deps) 给，bootstrap.routes 接（F 段 B5）。
 只做转发，不加校验（校验留在 tasks 里，改行为要 NGU 定）。router 自动收集文件末尾的 ROUTES。
 """
 
@@ -26,10 +26,6 @@ def item_loot(**kw):
     return _present.present_item_loot(_catalog.get_item_loot(**kw))
 
 
-def nav_shop(**kw):
-    return _t.nav_shop(**kw)
-
-
 def trade(**kw):
     return _t.trade(**kw)
 
@@ -50,12 +46,20 @@ def mineral_info(**kw):
     return _t.mineral_info(**kw)
 
 
+def bound(nav_deps):
+    """要导航后台对象的接口（F 段 B5）：物品查询里点商店「导航」，用这个 app 的 NavDeps"""
+
+    def nav_shop(**kw):
+        return _t.nav_shop(nav_deps, **kw)
+
+    return {"nav_shop": nav_shop}
+
+
 ROUTES = {
     "search": search,
     "item_search": item_search,
     "item_info": item_info,
     "item_loot": item_loot,
-    "nav_shop": nav_shop,
     "trade": trade,
     "market_lookup": market_lookup,
     "market_prices": market_prices,

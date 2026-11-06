@@ -58,6 +58,7 @@ class DesktopApp:
     cam_filter: Any
     steady: Any
     hover_links: Any
+    nav_deps: Any
     state: dict = field(default_factory=dict, compare=False)
 
 
@@ -232,6 +233,7 @@ def build(
     mode: str = "desktop", *, overrides: Mapping[str, Any] | None = None
 ) -> DesktopApp:
     """造对象、登记服务；desktop 模式最后再做全局绑定。"""
+    from .tasks import navigation as navigation_tasks
     from .tasks import system as system_tasks
 
     if mode not in ("desktop", "test"):
@@ -273,6 +275,14 @@ def build(
     def feedback(**kw):
         return system_tasks.feedback_report(sources, **kw)
 
+    # nav_deps 要等导航引擎造好才有，采矿读屏的线程要到 lifecycle.start_all 才起，
+    # 所以 where_now / area_now 也在这里现读。
+    def where_now():
+        return navigation_tasks._where_now(nav_deps)
+
+    def area_now():
+        return navigation_tasks._area_now(nav_deps)
+
     pos = _pos_service(mode, view, status=status_now)
     links = _nav_links(view)
     cam_filter = _CamFilter(log=links.log)
@@ -285,6 +295,8 @@ def build(
         closing=lifecycle.is_closing,
         foreground=options.get("foreground"),
         grab=options.get("grab"),
+        where_now=where_now,
+        area_now=area_now,
     )
     nav = _Nav(
         pos,
@@ -297,6 +309,9 @@ def build(
         marker=_nav_marker(pos, live, mode, view),
         links=links,
     )
+    nav_deps = navigation_tasks.NavDeps(
+        nav=nav, pos=pos, game_events=game_events, results=results
+    )
     count = _Count(
         results,
         output=output,
@@ -307,7 +322,9 @@ def build(
         worker=options.get("count_worker"),
     )
     hover_links = _hover_links()
-    hover = _Hover(live=live, count=count, links=hover_links, feedback=feedback)
+    hover = _Hover(
+        live=live, count=count, links=hover_links, feedback=feedback, nav=nav_deps
+    )
     logwatch = _LogWatch(status=status_now)
 
     app = DesktopApp(
@@ -324,6 +341,7 @@ def build(
         cam_filter=cam_filter,
         steady=steady,
         hover_links=hover_links,
+        nav_deps=nav_deps,
         state={"warmups_enabled": True},
     )
     sources = status_sources(app)
@@ -334,16 +352,13 @@ def build(
 
 
 def bind_all(app: DesktopApp, *, replace: bool = False) -> None:
-    """把所有全局绑定一次接好；生产只调一次，测试用 replace=True 后自行恢复。"""
+    """把剩下的全局绑定一次接好（盘点冻着、lifecycle_gate、ui_stream、导航数据层的位置线索）；
+    tasks 的采矿 / F8 / 系统 / 导航 F 段 B5 起不再绑，由 routes 和引擎构造时直接拿对象。"""
     from .app import lifecycle_gate, ui_stream
     from .navigation import navigate as navigate_data
     from .tasks import count as count_tasks
-    from .tasks import navigation as navigation_tasks
 
     navigate_data.HINTS = app.pos.hints
-    navigation_tasks.bind(
-        app.nav, app.pos, app.game_events, app.results, replace=replace
-    )
     count_tasks.bind(app.count, replace=replace)
     lifecycle_gate.bind_closing(app.lifecycle.is_closing, replace=replace)
     ui_stream.bind_switches(app.live, app.nav, app.pos, replace=replace)
@@ -351,16 +366,20 @@ def bind_all(app: DesktopApp, *, replace: bool = False) -> None:
 
 def routes(app: DesktopApp) -> Api:
     """这个 app 的接口表（F 段 B5，架构稿 §12.3「路由直接持有对象」）：不用后台对象的照旧是各 Controller 的 ROUTES；
-    要后台对象的由这里把这个 app 的对象交给 Controller 的 bound（采矿：实时读屏；F8：HoverLinks；系统：状态源和启动回调）。server.main 交给网页服务"""
+    要后台对象的由这里把这个 app 的对象交给 Controller 的 bound（采矿：实时读屏；F8：HoverLinks；系统：状态源和启动回调；导航和物品查询的商店导航：NavDeps）。server.main 交给网页服务"""
     from .app.api import mining as mining_api
+    from .app.api import navigation as navigation_api
     from .app.api import router
     from .app.api import system as system_api
+    from .app.api import trade as trade_api
     from .app.api import vision as vision_api
 
     return router.Api(
         {
             **router.routes(),
             **mining_api.bound(app.live),
+            **navigation_api.bound(app.nav_deps),
+            **trade_api.bound(app.nav_deps),
             **vision_api.bound(app.hover_links),
             **system_api.bound(status_sources(app), lambda: start(app)),
         }

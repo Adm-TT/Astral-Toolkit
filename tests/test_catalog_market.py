@@ -6,6 +6,7 @@ from astral_toolkit.tasks import catalog as C
 from astral_toolkit.tasks import hover as Hv
 from astral_toolkit.tasks import trade as T
 from astral_toolkit.trade import market_text, matching
+from tests.bootstrap_helpers import nav_deps
 
 
 def test_open_market_reuses_one_trade_for_session(monkeypatch):
@@ -178,6 +179,11 @@ def test_hover_more_stops_when_market_cannot_open(monkeypatch):
     assert calls == []
 
 
+_DEPS = (
+    nav_deps()
+)  # 商店导航的导航后台对象：这里导航不真开始，只看是不是原样交到 _start_nav（F 段 B5）
+
+
 def _nav_fakes(monkeypatch, search_hits):
     """nav_shop 用的星图换成假的；导航不真的开始，只记下导去哪"""
     from astral_toolkit.navigation import navigate as N
@@ -201,7 +207,8 @@ def _nav_fakes(monkeypatch, search_hits):
     def row(hit):
         return {"key": hit["n"], "label": hit["n"]}
 
-    def start(place):
+    def start(deps, place):
+        assert deps is _DEPS, deps
         started.append(place)
 
     monkeypatch.setattr(T, "_nav_objects", lambda: (row, Places(), start))
@@ -213,10 +220,10 @@ def test_nav_shop_does_not_guess_a_spot_on_a_planet(monkeypatch):
     started = _nav_fakes(
         monkeypatch, {"Hurston": [{"n": "Hurston Dynamics Showroom", "b": "Hurston"}]}
     )
-    assert T.nav_shop(shop="Shop - X", place="Stanton · Hurston") == {
+    assert T.nav_shop(_DEPS, shop="Shop - X", place="Stanton · Hurston") == {
         "error": "UEX 上这家店只写了在「Hurston」，没写是哪个站、城或前哨，导航不了"
     }
-    assert T.nav_shop(shop="Shop - X", place="Pyro") == {
+    assert T.nav_shop(_DEPS, shop="Shop - X", place="Pyro") == {
         "error": "UEX 上这家店只写了在「Pyro」，没写是哪个站、城或前哨，导航不了"
     }
     assert started == []
@@ -233,11 +240,11 @@ def test_nav_shop_search_fallback_takes_only_exact_names(monkeypatch):
             "Odd Place": [{"n": "Odd Place Annex", "b": "Pyro4"}],
         },
     )
-    assert T.nav_shop(shop="Shop - A", place="Pyro · Checkmate Station") == {
+    assert T.nav_shop(_DEPS, shop="Shop - A", place="Pyro · Checkmate Station") == {
         "key": "Checkmate",
         "label": "Checkmate",
     }
-    assert T.nav_shop(shop="Shop - B", place="Pyro · Pyro IV · Odd Place") == {
+    assert T.nav_shop(_DEPS, shop="Shop - B", place="Pyro · Pyro IV · Odd Place") == {
         "error": "导航数据里没有这个地点"
     }
     assert started == ["Checkmate"]
@@ -247,7 +254,7 @@ def test_nav_shop_grimhex_full_name(monkeypatch):
     """BF-2：UEX 写 Green Imperial Housing Exchange，星图叫 Grim HEX"""
     started = _nav_fakes(monkeypatch, {})
     place = "Stanton · Crusader · Yela · Green Imperial Housing Exchange"
-    assert T.nav_shop(shop="Shop - C", place=place) == {
+    assert T.nav_shop(_DEPS, shop="Shop - C", place=place) == {
         "key": "Grim HEX",
         "label": "Grim HEX",
     }

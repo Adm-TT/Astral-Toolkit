@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from typing import Any
 
 from astral_toolkit import bootstrap
 from astral_toolkit.app import lifecycle_gate, ui_stream
 from astral_toolkit.navigation import navigate
-from astral_toolkit.tasks import count, navigation
+from astral_toolkit.tasks import count
+from astral_toolkit.tasks.navigation import NavDeps
 
 _BINDINGS = (
-    (navigation, ("_nav", "_pos", "_game_events", "_results")),
     (count, ("_count",)),
     (lifecycle_gate, ("_CLOSING",)),
     (ui_stream, ("_SOURCES",)),
@@ -60,3 +61,10 @@ def app_for_test(**overrides):
             except Exception:
                 pass
         restore_bindings(saved)
+
+
+def nav_deps(
+    nav: Any = None, pos: Any = None, game_events: Any = None, results: Any = None
+) -> NavDeps:
+    """测试用的导航后台对象（F 段 B5）：只给用得到的那几样，其余是 None；假对象、None 都能塞，类型检查不拦"""
+    return NavDeps(nav=nav, pos=pos, game_events=game_events, results=results)

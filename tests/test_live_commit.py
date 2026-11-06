@@ -179,8 +179,8 @@ def test_stop_between_analyze_and_commit_publishes_nothing(monkeypatch, tmp_path
         from tests.bootstrap_helpers import app_for_test
 
         # RT-B7：结果仓库从装配入口注入（以前改 _M.results）
-        with app_for_test(results=live.results):
-            assert "暂无扫描结果" in t_nav.ore_record()["error"]
+        with app_for_test(results=live.results) as app:
+            assert "暂无扫描结果" in t_nav.ore_record(app.nav_deps)["error"]
     finally:
         _finish(live, q, gate)
 
