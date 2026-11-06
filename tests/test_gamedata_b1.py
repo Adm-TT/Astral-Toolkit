@@ -615,9 +615,11 @@ def test_shops_update_writes_nothing_when_a_category_fails(monkeypatch, tmp_path
     from astral_toolkit.update import shops
 
     _setup(monkeypatch, tmp_path)
-    state = _count_updating(monkeypatch)  # 写文件换成记一笔：写没写看 state["writes"]
-    # 万一真写也只落在临时目录
-    monkeypatch.setattr(shops, "CACHE", tmp_path / "shops.json")
+    state = _count_updating(monkeypatch)  # 经 paths.write_json 写的记一笔
+    # 旧表：不经 write_json、直接写这个文件的也要抓到
+    cache = tmp_path / "old_shops.json"
+    cache.write_text('{"old": true}', encoding="utf-8")
+    monkeypatch.setattr(shops, "CACHE", cache)
 
     def fake_get(path, params=None):
         if path == "categories":
@@ -637,6 +639,7 @@ def test_shops_update_writes_nothing_when_a_category_fails(monkeypatch, tmp_path
     else:
         raise AssertionError("有一类下载失败却没报错")
     assert "1 类下载失败" in err and "Gear：断网" in err
+    assert cache.read_text(encoding="utf-8") == '{"old": true}'
     assert state["n"] == 0 and state["writes"] == []
 
 

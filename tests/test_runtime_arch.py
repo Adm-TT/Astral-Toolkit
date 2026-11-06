@@ -1117,18 +1117,19 @@ def test_catalog_use_cases_stay_below_app():
 
 def test_catalog_queries_import_starts_no_thread():
     """导入物品查询内部实现不起线程（一闪就结束的也算）、不开库、不建库、不建索引：搜索预热线程由 bootstrap 起
-    （目录迁移章程 §9，Q1）。按目录逐个查 catalog_queries 包和下面每个模块（Q2 起；后面搬进来的自动算上）。
+    （目录迁移章程 §9，Q1）。按目录逐个查 catalog_queries 包和下面每个模块、子包里的模块也算（Q2 起；后面搬进来的自动算上）。
     tasks、gamedata 包先导入好，只看 catalog_queries 自己导入时做了什么；
     先确认被测模块都还没被别处带进来，不然这条什么都测不到"""
     code = (
-        "import importlib, pkgutil, sqlite3, sys, threading\n"
+        "import importlib, sqlite3, sys, threading\n"
         "from pathlib import Path\n"
         "import astral_toolkit.tasks, astral_toolkit.catalog.search\n"
         "import astral_toolkit.gamedata as g\n"
         "import astral_toolkit.gamedata._ready as ready\n"
         "pkg = 'astral_toolkit.tasks.catalog_queries'\n"
         "here = Path(astral_toolkit.tasks.__file__).parent / 'catalog_queries'\n"
-        "names = sorted(m.name for m in pkgutil.iter_modules([str(here)]))\n"
+        "files = (p.relative_to(here).with_suffix('').parts for p in here.rglob('*.py'))\n"
+        "names = sorted({'.'.join(f[:-1] if f[-1] == '__init__' else f) for f in files} - {''})\n"
         "mods = [pkg] + [pkg + '.' + n for n in names]\n"
         "fresh = all(m not in sys.modules for m in mods)\n"
         "started, touched = [], []\n"
