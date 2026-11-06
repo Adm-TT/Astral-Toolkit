@@ -217,27 +217,79 @@ def test_log_location(monkeypatch, tmp_path):
 
 
 def test_limited_variant_recommends_base(monkeypatch, tmp_path):
+    """限定版买不到：推荐能买到的同款（不推配件），同款的买点按离你远近排；能买的照常给买点、卖价、掉落"""
     setup(monkeypatch, tmp_path)
     monkeypatch.setattr(
         position, "current", lambda: dict(POINTS[2], label="在 十字军 开过库存", age=0)
     )
     monkeypatch.setattr(
-        loot, "text", lambda en="", zh="", top=5: "  掉落（测试）：\n    ASD：1.06%"
+        loot, "info", lambda en="", zh="", **kw: {"groups": ["测试掉落"]}
     )
-    out = acquire.text('MaxLift-II "Keelback" Tractor Beam', "", 1800)
-    assert (
-        "商店买不到" in out
-        and "MaxLift Tractor Beam（3 处有卖）" in out
-        and "Battery" not in out
+    d = acquire.info('MaxLift-II "Keelback" Tractor Beam', "", 1800)
+    assert not d["buyable"] and d["buy"] == []
+    names = [v["name"] for v in d["variants"]]
+    assert "MaxLift Tractor Beam" in names and not any("Battery" in n for n in names)
+    v = d["variants"][names.index("MaxLift Tractor Beam")]
+    shops_in = [r["shop"] for r in v["buy"]]
+    assert v["total"] == 3
+    assert shops_in.index("Shop Orison") < shops_in.index(
+        "Shop NB"
+    )  # 在十字军，奥里森最近
+    assert d["loot"] == {"groups": ["测试掉落"]}
+    d2 = acquire.info("MaxLift Tractor Beam", "", 1700)  # 能买 + 也有掉落：两个都给
+    assert d2["buyable"] and d2["buy_total"] == 3 and d2["variants"] == []
+    assert d2["loot"] == {"groups": ["测试掉落"]} and d2["sell"]["price"] == 9000
+
+
+def test_info_wires_lookups_into_facts(monkeypatch, tmp_path):
+    """info 只取数据、交给规则拼（IQ-C2）：名字和类别以商店数据为准、当前位置、不是精确点进来时按商店名字查描述、
+    精确命中但掉落数据里没有这件时不查掉落、最像的同款候选是配件时照样推荐原型"""
+    from astral_toolkit.crafting import itemsearch
+
+    setup(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        position,
+        "current",
+        lambda: dict(POINTS[2], label="在 十字军 开过库存", age=130),
     )
-    assert out.index("Shop Orison") < out.index("Shop NB")  # 在十字军，奥里森最近
-    assert "掉落" in out
-    out2 = acquire.text("MaxLift Tractor Beam", "", 1700)  # 能买 + 也有掉落：两个都显示
-    assert (
-        "商店有卖（共 3 处）" in out2
-        and "掉落" in out2
-        and "卖给商店最高：9,000" in out2
+    asked = []
+    monkeypatch.setattr(
+        loot,
+        "info",
+        lambda en="", zh="", **kw: asked.append(en) or {"groups": ["测试掉落"]},
     )
+    entry = {
+        "shop": 1700,
+        "has_data": True,
+        "loot": False,
+        "desc": "说明",
+        "aka": ("别名",),
+    }
+    monkeypatch.setattr(
+        itemsearch,
+        "lookup",
+        lambda name: entry if name == "MaxLift Tractor Beam" else None,
+    )
+    d = acquire.info("maxlift tractor beam", "", 1700)
+    assert (d["name"], d["category"]) == ("MaxLift Tractor Beam", "Tractor Beams")
+    assert d["here"] == {"label": "在 十字军 开过库存", "minutes": 2}
+    assert (d["desc"], d["aka"]) == ("说明", ["别名"])
+    assert d["loot"] == {"groups": ["测试掉落"]} and asked == ["maxlift tractor beam"]
+    asked.clear()
+    d2 = acquire.info("MaxLift Tractor Beam", "", exact=True)
+    assert d2["id"] == 1700 and d2["loot"] is None and asked == []
+    assert not d2["nowhere"] and d2["buyable"]
+    monkeypatch.setattr(
+        shops,
+        "variants",
+        lambda name, limit=0: [
+            (1701, "MaxLift Tractor Beam Battery", 0.9),
+            (1700, "MaxLift Tractor Beam", 0.8),
+        ][:limit],
+    )
+    d3 = acquire.info('MaxLift-II "Keelback" Tractor Beam', "", 1800)
+    # 最像的是配件：跳过它，照样推荐原型
+    assert [v["id"] for v in d3["variants"]] == [1700]
 
 
 def test_loot_summary():

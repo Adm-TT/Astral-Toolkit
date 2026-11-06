@@ -1,120 +1,15 @@
 """一件东西怎么弄到：商店买（按离你远近推荐 3 处）→ 买不到就推荐能买到的原型/同系列 → 掉落 → 维科洛用途
 
-游戏里 F8 识别、物品查询、维科洛材料来源都用这里（「哪买」命令行 2026-11-06 删了）。
+游戏里 F8 识别、物品查询、维科洛材料来源都用这里。这里只管查数据（商店、物品查询、掉落、维科洛、蓝图、当前位置）；
+怎么挑、怎么拼成详情字典在 catalog/acquire.py（IQ-C2 拆开）。命令行「哪买」2026-11-06 删了，
+它用的整段文字版（text / buy_lines）也跟着删了。
 """
 
-import re
 import re as _re
 
+from ..catalog import acquire as _rules
 from ..contracts.textkeys import fold_en_loose
 from . import shops
-
-
-_ACCESSORY = {"battery", "magazine", "mag", "cap", "ammo", "canister", "charge"}
-
-
-def _words(s):
-    return set(re.findall(r"[a-z]+", (s or "").lower()))
-
-
-def _variants(name):
-    extra_ok = _words(name) & _ACCESSORY
-    return [
-        v
-        for v in shops.variants(name, limit=6)
-        if not ((_words(v[1]) & _ACCESSORY) - extra_ok)
-    ][:2]
-
-
-def buy_lines(item_id, here, top=3):
-    rows = shops.nearest(item_id, here, top) if here else []
-    lines = []
-    if rows and rows[0][0] != float("inf"):
-        from ..navigation.position import fmt_distance
-
-        lines += [
-            f"    {fmt_distance(d)}｜{p:,.0f} aUEC｜{shop}｜{place}"
-            for d, p, shop, place in rows
-        ]
-    else:
-        buy, _ = shops.where(item_id)
-        lines += [f"    {p:,.0f} aUEC｜{shop}｜{place}" for p, shop, place in buy[:top]]
-    return lines
-
-
-def text(name_en="", name_zh="", item_id=None, show_loot=True):
-    """完整说明（多行）。item_id 是商店数据里的物品 id，没有就按名字找"""
-    from ..navigation.position import current
-
-    lines = []
-    here = None
-    try:
-        here = current()
-    except Exception:
-        pass
-    if item_id is None and (name_en or name_zh):
-        hits = shops.find(name_en or name_zh, limit=3)
-        exact = (
-            [h for h in hits if fold_en_loose(h[1]) == fold_en_loose(name_en)]
-            if name_en
-            else hits[:1]
-        )
-        if exact:
-            item_id = exact[0][0]
-    pos_note = ""
-    if here:
-        pos_note = (
-            f"（按离当前位置远近排：{here['label']}"
-            + (f"，{int(here['age'] // 60)} 分钟前" if here["age"] > 600 else "")
-            + "）"
-        )
-    if item_id is not None and shops.buyable(item_id):
-        buy, _ = shops.where(item_id)
-        lines.append(
-            f"  商店有卖（共 {len(buy)} 处）{pos_note or '（最便宜的在前；开过库存后会按远近排）'}："
-        )
-        lines += buy_lines(item_id, here)
-    else:
-        name = name_en or (
-            shops.load(auto_update=False)["items"].get(str(item_id), [""])[0]
-            if item_id
-            else ""
-        )
-        vs = _variants(name) if name else []
-        if vs:
-            lines.append("  这件是限定/特殊版本，商店买不到。能买到的同款：")
-            for iid, vname, _ in vs:
-                buy, _ = shops.where(iid)
-                lines.append(f"  · {vname}（{len(buy)} 处有卖）{pos_note}")
-                lines += buy_lines(iid, here)
-        else:
-            lines.append("  商店买不到，也没找到能买的同款")
-    if item_id is not None:
-        _, sell = shops.where(item_id)
-        if sell:
-            p, shop, place = sell[0]
-            lines.append(f"  卖给商店最高：{p:,.0f} aUEC｜{shop}｜{place}")
-    if show_loot:
-        try:
-            from .loot import text as loot_text
-
-            t = loot_text(name_en, name_zh)
-            if t:
-                lines.append(t)
-        except Exception as e:
-            lines.append(f"  （掉落数据出错：{e}）")
-    try:
-        from .wikelo import uses_text
-
-        w = uses_text(name_en, name_zh)
-        if w:
-            lines.append("  " + w)
-    except Exception:
-        pass
-    return "\n".join(lines)
-
-
-# ---------------------------------------------------------------- 窗口用的结构化版本
 
 
 def _buy_rows(item_id, here, top=3):
@@ -173,7 +68,8 @@ def info(
 ):
     """{name, category, buyable, here, buy, buy_total, variants, sell, loot, wikelo, nowhere, craft}
     exact=True：从物品查询搜索结果点进来的，英文名是准的，不再按中文名去模糊找（以前会找成别的东西）；
-    nowhere：商店和掉落数据里都没有（只有汉化包里有名字）；craft：这种东西有制造蓝图时的蓝图"""
+    nowhere：商店和掉落数据里都没有（只有汉化包里有名字）；craft：这种东西有制造蓝图时的蓝图。
+    这里只查数据；挑哪几件同款、算不算「哪都没有」、要不要查掉落、各块怎么拼，见 catalog/acquire.py"""
     from ..navigation.position import current
 
     here = None
@@ -192,10 +88,11 @@ def info(
     else:
         item_id = resolve(name_en, name_zh, item_id)
     items = shops.load(auto_update=False)["items"]
-    name, category = (
-        (items.get(str(item_id)) or [name_en or name_zh, ""])
-        if item_id is not None
-        else (name_en or name_zh, "")
+    name, category = _rules.name_and_category(
+        items.get(str(item_id)) if item_id is not None else None,
+        item_id,
+        name_en,
+        name_zh,
     )
     ships = ships_with(name_en or name) or ships_with(name)
     try:
@@ -204,65 +101,34 @@ def info(
         how = source_note(name_en or name) or source_note(name)
     except Exception:
         how = ""
-    out = {
-        "name": name,
-        "zh": name_zh,
-        "category": category,
-        "id": item_id,
-        "here": None,
-        "buyable": False,
-        "buy": [],
-        "buy_total": 0,
-        "variants": [],
-        "sell": None,
-        "loot": None,
-        "wikelo": [],
-        "nowhere": bool(hit) and not hit["has_data"] and not ships and not how,
-        "craft": None,
-        "desc": "",
-        "aka": [],
-        "ships": ships,
-        "how": how,
-    }
-    if not hit:
+    out = _rules.empty_facts(
+        name, name_zh, category, item_id, _rules.is_nowhere(hit, ships, how), ships, how
+    )
+    if hit:
+        entry = hit
+    else:
         from .itemsearch import lookup
 
-        hit2 = lookup(name)
-        if hit2:
-            out["desc"], out["aka"] = (
-                hit2.get("desc") or "",
-                list(hit2.get("aka") or []),
-            )
-    else:
-        out["desc"], out["aka"] = (
-            hit.get("desc") or "",
-            list(hit.get("aka") or []),
-        )  # 描述：wiki 的游戏官方中文说明（1.6.49）
-    if hit and not hit["loot"]:
-        show_loot = False  # 掉落数据里没有这件：不去模糊找别的东西的掉落
+        entry = lookup(name)
+    out["desc"], out["aka"] = _rules.desc_and_aka(
+        entry
+    )  # 描述：wiki 的游戏官方中文说明（1.6.49）
     if out["nowhere"]:
         try:
             from .crafting import for_item, bp_key, display_name
 
             bp = for_item(name_en, name_zh)
             if bp:
-                out["craft"] = {
-                    "key": bp_key(bp),
-                    "name": display_name(bp),
-                    "unlocked": bool(bp["d"]),
-                    "missions": [t for t, *_ in bp["src"][:3]],
-                    "nsrc": bp["nsrc"],
-                }
+                out["craft"] = _rules.craft_summary(bp, bp_key(bp), display_name(bp))
         except Exception:
             pass
-    if here:
-        out["here"] = {"label": here["label"], "minutes": int(here["age"] // 60)}
+    out["here"] = _rules.here_summary(here)
     if item_id is not None and shops.buyable(item_id):
         out["buyable"] = True
         out["buy_total"] = len(shops.where(item_id)[0])
         out["buy"] = _buy_rows(item_id, here)
     elif name:
-        for iid, vname, _ in _variants(name):
+        for iid, vname, _ in _rules.pick_variants(name, shops.variants(name, limit=6)):
             out["variants"].append(
                 {
                     "id": iid,
@@ -272,11 +138,8 @@ def info(
                 }
             )
     if item_id is not None:
-        _, sell = shops.where(item_id)
-        if sell:
-            p, shop, place = sell[0]
-            out["sell"] = {"price": p, "shop": shop, "place": place}
-    if show_loot:
+        out["sell"] = _rules.sell_summary(shops.where(item_id)[1])
+    if _rules.shows_loot(show_loot, hit):
         try:
             from .loot import info as loot_info
 
@@ -286,15 +149,7 @@ def info(
     try:
         from .wikelo import uses
 
-        out["wikelo"] = [
-            {
-                "title": c["t"],
-                "q": q,
-                "u": u,
-                "reward": c["rz"] or "、".join(c["rewards"][:2]),
-            }
-            for c, q, u in uses(name_en or name, name_zh)[:8]
-        ]
+        out["wikelo"] = _rules.wikelo_rows(uses(name_en or name, name_zh))
     except Exception:
         pass
     return out
