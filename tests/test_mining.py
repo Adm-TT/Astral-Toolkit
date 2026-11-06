@@ -1170,6 +1170,9 @@ def test_quality_one_table_and_name_forms():
     assert len(quality.TIER_VALUES) == len(quality.TIERS) == 36
     for k, values in quality.TIER_VALUES.items():
         assert values == [*quality.TIERS[k], quality.PERFECT], k
+        assert quality.tier_values(k) is values, (
+            k
+        )  # 规范名认自己（合表后没有「原名直接命中」那条捷径了）
 
 
 def test_fix_by_tiers_counts_top_tier_when_renaming():
