@@ -2,7 +2,8 @@
 
 - 文件：userdata/logs/runrec_YYYY-MM-DD.log，默认保留 30 天
 - 只记启停/触发等过程，不记识别结果内容
-- 可选镜像到运行日志面板（bus.runtime_log）
+- 可选镜像到运行日志面板：装配（bootstrap.bind_all）用 set_ui_sink 接 bus.runtime_log，core 不再反过来 import 界面
+  （CL-C5）；没接（不是桌面程序）就只写文件
 """
 
 from __future__ import annotations
@@ -31,6 +32,14 @@ UI_TAGS = {
     "UPDATE": "UPDATE",
     "FEEDBACK": "SYS",
 }
+
+_ui_sink = None  # 装配接进来的 runtime_log(line, tag=, level=)，见 set_ui_sink
+
+
+def set_ui_sink(fn):
+    """装配时接「推一条到运行日志面板」的函数（bootstrap.bind_all）；record 写完文件顺手推一条"""
+    global _ui_sink
+    _ui_sink = fn
 
 
 def _logs_dir() -> Path:
@@ -117,13 +126,12 @@ def record(
         except Exception:
             pass  # 写不进文件（连 logs 目录都建不了）也别丢面板那条
 
-        if mirror_ui:
+        sink = _ui_sink
+        if mirror_ui and sink is not None:
             try:
-                from ..app import bus
-
                 tag = ui_tag or UI_TAGS.get(mod, mod)
                 ui_line = f"{act}{detail_str}"
-                bus.runtime_log(ui_line, tag=tag, level=level)
+                sink(ui_line, tag=tag, level=level)
             except Exception:
                 pass
     except Exception:

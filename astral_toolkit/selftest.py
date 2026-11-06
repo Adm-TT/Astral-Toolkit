@@ -26,7 +26,7 @@ MODULES = (
     "core.perf",
     "core.perfmon",
     "core.capture",
-    "crafting.itemsearch",
+    "tasks.catalog_queries.search",
     "crafting.shops",
     "crafting.loot",
     "update.localization",
@@ -136,9 +136,9 @@ def main():
         return f"{len(out)} 个数据文件可读"
 
     def search():
-        from .crafting import itemsearch
+        from .tasks.catalog_queries import search as item_search
 
-        r = itemsearch.find("霍夫斯泰德")
+        r = item_search.find("霍夫斯泰德")
         if not r:
             raise AssertionError("搜不到「霍夫斯泰德」")
         return f"「霍夫斯泰德」{len(r)} 条，第一条 {r[0]['zh']} {r[0]['en']}"

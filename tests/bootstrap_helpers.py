@@ -7,6 +7,7 @@ from typing import Any
 
 from astral_toolkit import bootstrap
 from astral_toolkit.app import lifecycle_gate, ui_stream
+from astral_toolkit.core import capture, run_records
 from astral_toolkit.navigation import navigate
 from astral_toolkit.tasks import count
 from astral_toolkit.tasks.navigation import NavDeps
@@ -16,6 +17,8 @@ _BINDINGS = (
     (lifecycle_gate, ("_CLOSING",)),
     (ui_stream, ("_SOURCES",)),
     (navigate, ("HINTS",)),
+    (capture, ("_overlay_state",)),  # CL-C5：bind_all 接的截图涂黑悬浮窗
+    (run_records, ("_ui_sink",)),  # CL-C5：bind_all 接的运行记录推面板
 )
 
 

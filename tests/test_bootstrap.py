@@ -207,6 +207,22 @@ def test_nav_marker_is_wired_by_bootstrap():
     assert marker._settings == view.all
 
 
+def test_bind_all_wires_core_to_ui(monkeypatch):
+    """bind_all 顺带把 core 的截图涂黑悬浮窗、运行记录推面板接上（CL-C5）；test 模式只 build 不接"""
+    from astral_toolkit.core import capture, run_records
+    from tests.bootstrap_helpers import app_for_test
+
+    monkeypatch.setattr(capture, "_overlay_state", None)  # 测完还原
+    monkeypatch.setattr(run_records, "_ui_sink", None)
+    app = bootstrap.build("test")
+    try:
+        assert capture._overlay_state is None and run_records._ui_sink is None
+    finally:
+        bootstrap.shutdown(app, budget=0.2)
+    with app_for_test():
+        assert capture._overlay_state is not None and run_records._ui_sink is not None
+
+
 def test_debug_mode_gates_nav_diagnostics(monkeypatch, tmp_path):
     from astral_toolkit.core import paths, settings
 
@@ -673,5 +689,41 @@ def test_logwatch_reads_game_log_through_tasks_position():
     try:
         assert app.logwatch._read_log is position_tasks.last_log_place
         assert app.pos._label_of is position_tasks.label_of
+    finally:
+        bootstrap.shutdown(app, budget=0.2)
+
+
+def test_search_warmup_thread_builds_index_in_background(monkeypatch):
+    """搜索预热（Q1 起线程由 bootstrap 起，搜索模块 import 时不起）：后台 daemon 线程、名字 search-warmup，
+    跑 _warm_search_index → tasks/catalog_queries/search.build_index；建索引出错不往外抛"""
+    from astral_toolkit.tasks.catalog_queries import search as item_search
+
+    made = {}
+    real = bootstrap.OneShot
+
+    def record(name, phase, thread=None, *, factory=None):
+        made[name] = factory
+        return real(name, phase, thread, factory=factory)
+
+    monkeypatch.setattr(bootstrap, "OneShot", record)
+    app = bootstrap.build("test")
+    try:
+        calls = []
+        monkeypatch.setattr(
+            item_search, "build_index", lambda: calls.append(threading.current_thread())
+        )
+        t = made["search-warmup"]()
+        t.join(5)
+        assert calls == [t] and t.daemon and t.name == "search-warmup"
+
+        def boom():
+            raise RuntimeError("坏了")
+
+        hooked = []
+        monkeypatch.setattr(item_search, "build_index", boom)
+        monkeypatch.setattr(threading, "excepthook", hooked.append)
+        t = made["search-warmup"]()
+        t.join(5)
+        assert hooked == [] and not t.is_alive()
     finally:
         bootstrap.shutdown(app, budget=0.2)
