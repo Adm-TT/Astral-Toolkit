@@ -1230,11 +1230,14 @@ def test_crafted_head_quality(tmp_path, monkeypatch):
     # 自造的功率更高 → 满功率能破更重的；方案、悬浮窗里标出「自造 +X%」
     from tests.bootstrap_helpers import app_for_test
 
-    # RT-B7：改配装会通知采矿助手重算，tasks.mining 要先绑定
-    with app_for_test():
-        t_mining.set_mining_gear("prospector", {"heads": [["helix_i", []]], "crew": 1})
+    # 改配装会通知采矿助手重算：把测试 app 的实时读屏传进去（F 段 B5）
+    with app_for_test() as app:
+        t_mining.set_mining_gear(
+            app.live, "prospector", {"heads": [["helix_i", []]], "crew": 1}
+        )
         plain = laser.evaluate(laser.loadout(), None, 9000, 30, 10)
         g = t_mining.set_mining_gear(
+            app.live,
             "prospector",
             {
                 "heads": [["helix_i", []]],
@@ -1274,7 +1277,9 @@ def test_crafted_head_quality(tmp_path, monkeypatch):
         )
         # 换回商店买的：功率回到原样
         t_mining.set_mining_gear(
-            "prospector", {"heads": [["helix_i", []]], "crew": 1, "craft": [None]}
+            app.live,
+            "prospector",
+            {"heads": [["helix_i", []]], "crew": 1, "craft": [None]},
         )
         assert laser.loadout()[0].max_power() == 3900
 
@@ -1530,9 +1535,9 @@ def test_gear_view_has_cards_and_summary(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
     from tests.bootstrap_helpers import app_for_test
 
-    # RT-B7：改配装会通知采矿助手重算，tasks.mining 要先绑定
-    with app_for_test():
-        g = t_mining.set_mining_gear(ship="mole")
+    # 改配装会通知采矿助手重算：把测试 app 的实时读屏传进去（F 段 B5）
+    with app_for_test() as app:
+        g = t_mining.set_mining_gear(app.live, ship="mole")
         mole = next(x for x in g["ships"] if x["key"] == "mole")
         assert (
             mole["is_default"]
@@ -1540,7 +1545,7 @@ def test_gear_view_has_cards_and_summary(monkeypatch, tmp_path):
             and {p["key"] for p in mole["presets"]} == {"factory", "author"}
         )
         base = mole["summary"]
-        g = t_mining.set_mining_gear(ship="mole", loadout=AUTHOR_MOLE)
+        g = t_mining.set_mining_gear(app.live, ship="mole", loadout=AUTHOR_MOLE)
         mole = next(x for x in g["ships"] if x["key"] == "mole")
         c0 = mole["cards"][0]
         assert (

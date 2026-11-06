@@ -21,7 +21,7 @@ from . import goals as _t_goals
 
 
 class _LiveLike(Protocol):
-    """采矿助手实际用到的实时读屏接口（B7 由 bootstrap 绑进来，不碰引擎单例）"""
+    """采矿助手实际用到的实时读屏接口（bootstrap 造好，接口层和 F5 热键拿着传进来，F 段 B5）"""
 
     def start(self) -> int | None: ...
 
@@ -33,27 +33,6 @@ class _LiveLike(Protocol):
 
     @property
     def prev_stop_pending(self) -> bool: ...
-
-
-_live: _LiveLike | None = None
-_UNBOUND = "tasks.mining 未绑定：先调用 bind(live)"
-
-
-def bind(live: _LiveLike, *, replace: bool = False) -> None:
-    """组装处调用一次（B7 由 bootstrap 完成）；导入本模块不再取引擎、不再有副作用"""
-    global _live
-    if _live is not None and not replace:
-        raise RuntimeError(
-            "tasks.mining 已绑定：生产只绑一次；测试用 replace=True 并在用完后恢复"
-        )
-    _live = live
-
-
-def _need_live() -> _LiveLike:
-    live = _live
-    if live is None:
-        raise RuntimeError(_UNBOUND)
-    return live
 
 
 def _goal_for(*args, **kwargs):
@@ -164,13 +143,12 @@ def scan_view(scan, bag, cut=False):
     return out
 
 
-def live_start():
+def live_start(live: _LiveLike, /):
     from ..app.lifecycle_gate import closing_error
 
     refused = closing_error()
     if refused:
         return refused
-    live = _need_live()
     if live.start() is None:
         if live.prev_stop_pending:  # 停止还没收尾：如实回「正在停止」
             return {"running": live.running(), "error": "正在停止，请稍候"}
@@ -178,8 +156,7 @@ def live_start():
     return {"running": live.running()}
 
 
-def live_stop():
-    live = _need_live()
+def live_stop(live: _LiveLike, /):
     attempt = live.stop()
     if attempt.timed_out:
         return {"running": live.running(), "error": "正在停止，旧线程还没退出"}
@@ -381,7 +358,7 @@ def mining_gear():
     return _gear()
 
 
-def set_mining_gear(ship="mole", loadout=None, reset=False):
+def set_mining_gear(live: _LiveLike, /, ship="mole", loadout=None, reset=False):
     """选船 / 保存这条船的配置（reset=True 恢复出厂配置）"""
     from ..core import settings
     from ..mining.data import SHIPS
@@ -395,11 +372,11 @@ def set_mining_gear(ship="mole", loadout=None, reset=False):
     elif loadout is not None:
         saved[ship] = clean_loadout(ship, loadout)
     settings.update(mining_ship=ship, mining_loadouts=saved)
-    _need_live().config_changed()
+    live.config_changed()
     return _gear()
 
 
-def set_mining_gadgets(keys=None):
+def set_mining_gadgets(live: _LiveLike, /, keys=None):
     """带了哪些手持工具（列表；空列表 = 一样都不带，破碎方案只给不贴的）"""
     from ..core import settings
     from ..mining.data import GADGETS
@@ -411,7 +388,7 @@ def set_mining_gadgets(keys=None):
     if bad:
         raise ValueError(f"没有这种手持工具：{'、'.join(sorted(bad))}")
     settings.update(mining_gadgets=[k for k in GADGETS if k in want])
-    _need_live().config_changed()
+    live.config_changed()
     return _gear()
 
 

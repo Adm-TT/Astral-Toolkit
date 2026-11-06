@@ -121,7 +121,9 @@ def main(open_ui=True, port=0, restart=False):
 
     lower_priority()
     app = bootstrap.build("desktop")
-    server = http_server.Server(("127.0.0.1", port), http_server.Handler)
+    server = http_server.Server(
+        ("127.0.0.1", port), http_server.Handler, api=bootstrap.routes(app)
+    )
     url = f"http://127.0.0.1:{server.server_address[1]}/#t={http_server.TOKEN}"
     launcher.STATE["url"] = url
     http_thread = threading.Thread(

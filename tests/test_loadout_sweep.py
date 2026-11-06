@@ -175,8 +175,8 @@ def test_every_loadout(monkeypatch, tmp_path):
     # 4) 通过窗口接口改配装 → 读回来一致
     from tests.bootstrap_helpers import app_for_test
 
-    # RT-B7：改配装会通知采矿助手重算，tasks.mining 要先绑定
-    with app_for_test():
+    # 改配装会通知采矿助手重算：把测试 app 的实时读屏传进去（F 段 B5）
+    with app_for_test() as app:
         for ship in SHIPS:
             for _ in range(20):
                 spec = SHIPS[ship]
@@ -201,7 +201,7 @@ def test_every_loadout(monkeypatch, tmp_path):
                         ]
                     )  # noqa: E702
                 lo = {"heads": heads, "crew": random.randint(1, spec["crew_max"])}
-                g = t_mining.set_mining_gear(ship=ship, loadout=lo)
+                g = t_mining.set_mining_gear(app.live, ship=ship, loadout=lo)
                 n_loadouts += 1  # noqa: E702
                 got = next(s for s in g["ships"] if s["key"] == ship)["loadout"]
                 if got != lo or g["ship"] != ship or not g["chosen"]:

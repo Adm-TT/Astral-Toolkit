@@ -100,7 +100,21 @@ def main():
         )  # 打包后接口表靠 pkgutil 收集，收不到所有接口都会 404（2026-10-30 审查）
 
         n = len(router.routes())
-        assert n >= 100 and "set_settings" in router.routes(), f"接口只收集到 {n} 个"
+        # 9 个 Controller 各挑一个不用后台对象的接口：都收到才算打包后 pkgutil 收全了；
+        # 要后台对象的接口（采矿开关等）在 bootstrap.routes(app) 里接，不在这张表（F 段 B5）
+        want = (
+            "about_info",
+            "craft_search",
+            "goals",
+            "scan_view",
+            "nav_search",
+            "stock",
+            "item_search",
+            "count_state",
+            "wikelo_search",
+        )
+        missing = [x for x in want if x not in router.routes()]
+        assert n >= 60 and not missing, f"接口只收集到 {n} 个，缺 {missing}"
         return f"{len(MODULES)} 个模块，{n} 个接口"
 
     def data_files():

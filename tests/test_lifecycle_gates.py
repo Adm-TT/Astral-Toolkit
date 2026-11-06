@@ -5,6 +5,7 @@ from __future__ import annotations
 import socket
 import threading
 import time
+from typing import Any
 
 
 def _closing_gate(closing=True):
@@ -71,12 +72,11 @@ def test_closing_gate_f5_f6(monkeypatch):
         def config_changed(self):
             pass
 
-    live = _Toggle()
+    live: Any = _Toggle()  # 替身：没有 start / stop
     count = _Toggle()
     with _closing_gate(True):
-        with bind_for_test(mining, live):
-            refused = mining.live_start()
-            assert isinstance(refused, dict) and refused.get("error") == "正在退出"
+        refused = mining.live_start(live)
+        assert isinstance(refused, dict) and refused.get("error") == "正在退出"
 
         with bind_for_test(count_task, count):
             refused = count_task.count_toggle()
@@ -94,9 +94,13 @@ def test_closing_gate_f5_f6(monkeypatch):
 
         calls = []
         monkeypatch.setattr(
-            mining, "live_start", lambda: calls.append("start") or {"ok": True}
+            mining,
+            "live_start",
+            lambda lv: calls.append(("start", lv is live)) or {"ok": True},
         )
-        monkeypatch.setattr(mining, "live_stop", lambda: calls.append("stop"))
+        monkeypatch.setattr(
+            mining, "live_stop", lambda lv: calls.append(("stop", lv is live))
+        )
         monkeypatch.setattr(
             count_task, "count_toggle", lambda: calls.append("count") or {"ok": True}
         )
@@ -108,7 +112,7 @@ def test_closing_gate_f5_f6(monkeypatch):
 
         live.is_running = True
         h._toggle_live()
-        assert calls[-1] == "stop"
+        assert calls[-1] == ("stop", True)
 
         count.is_running = False
         h._toggle_count()

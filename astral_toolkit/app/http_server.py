@@ -129,7 +129,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._ui_dismiss(raw)
             from .api import router  # 2026-10-30 阶段 0：接口统一走 router
 
-            if name not in router.routes():
+            # server.main 给的是这个 app 的全套；测试里直接起的 ThreadingHTTPServer 没有 api，就只有不用后台对象的那些
+            api = getattr(self.server, "api", None) or router.Api()
+            if name not in api.table:
                 return self._send(
                     404,
                     json.dumps(
@@ -143,7 +145,7 @@ class Handler(BaseHTTPRequestHandler):
                     200,
                     json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False),
                 )
-            self._send(200, json.dumps(router.call(name, args), ensure_ascii=False))
+            self._send(200, json.dumps(api.call(name, args), ensure_ascii=False))
         finally:
             WRITES.end_write(name)
 
@@ -301,6 +303,11 @@ class Handler(BaseHTTPRequestHandler):
 
 class Server(ThreadingHTTPServer):
     daemon_threads = True
+
+    def __init__(self, server_address, handler, *, api=None):
+        """api：接口表（router.Api，server.main 里 bootstrap.routes(app) 造，F 段 B5）；不给就只有不用后台对象的接口"""
+        self.api = api
+        super().__init__(server_address, handler)
 
     def handle_error(self, request, client_address):
         """窗口关掉/刷新时连接被断开是正常的，不往日志里写一大段错误"""

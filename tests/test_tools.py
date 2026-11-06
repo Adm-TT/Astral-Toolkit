@@ -1979,14 +1979,14 @@ def test_live_scan_resumes_after_restart(monkeypatch, tmp_path):
     monkeypatch.setattr(t_sys, "_online", {"info": None, "told": "", "fb_retry": True})
     # live_on 只由会话循环写（RT-B4 起命令层不再写）：这里直接摆开关，测 start_background 的门控
     settings.update(live_on=True)
-    with app_for_test():
-        t_mining.live_start()  # 命令层只负责开会话（这里被换成记录调用）
+    with app_for_test() as app:
+        t_mining.live_start(app.live)  # 命令层只负责开会话（这里被换成记录调用）
         started.clear()
         t_sys.start_background()  # 模拟重启：live_on 开着 → 接着扫
         assert started == [1]
     settings.update(live_on=False)
-    with app_for_test():  # 关着的时候重启：不自动开
-        t_mining.live_stop()
+    with app_for_test() as app:  # 关着的时候重启：不自动开
+        t_mining.live_stop(app.live)
         started.clear()
         t_sys.start_background()
         assert not started and not settings.load()["live_on"]
@@ -4190,7 +4190,9 @@ def test_gear_change_marks_live_for_recalc(monkeypatch, tmp_path):
     with app_for_test() as app:
         before = app.live.loop.config_rev
         t_mining.set_mining_gear(
-            ship="mole", loadout={"heads": [["helix_ii", []]] * 3, "crew": 2}
+            app.live,
+            ship="mole",
+            loadout={"heads": [["helix_ii", []]] * 3, "crew": 2},
         )
         assert app.live.loop.config_rev == before + 1
 

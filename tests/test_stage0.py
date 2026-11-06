@@ -88,6 +88,48 @@ def test_router_same_as_http():
     assert http["ok"] and b["ok"] and http["data"] == b["data"]
 
 
+def test_router_api_table():
+    """F 段 B5a：router.Api 一张接口表，返回格式和模块级 call 一样；不给表就是 routes()"""
+    from astral_toolkit.app.api import router
+
+    api = router.Api({"x_one": lambda: 1, "x_bad": lambda: 1 / 0})
+    assert api.call("x_one") == {"ok": True, "data": 1}
+    assert api.call("x_bad")["ok"] is False
+    assert api.call("about_info") == {"ok": False, "error": "没有 about_info"}
+    static = router.Api()
+    assert static.table is router.routes()
+    assert static.call("about_info") == router.call("about_info")
+
+
+def test_http_uses_server_api():
+    """F 段 B5a：网页服务优先用自己拿着的接口表（server.main 里 bootstrap.routes(app) 造）"""
+    import json
+    import urllib.error
+    import urllib.request
+    from astral_toolkit.app import http_server
+    from astral_toolkit.app.api import router
+
+    srv = http_server.Server(
+        ("127.0.0.1", 0), http_server.Handler, api=router.Api({"x_api": lambda: 7})
+    )
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{srv.server_address[1]}/api/"
+    headers = {"Content-Type": "application/json", "X-Token": http_server.TOKEN}
+    try:
+        req = urllib.request.Request(base + "x_api", data=b"{}", headers=headers)
+        assert json.loads(urllib.request.urlopen(req).read()) == {"ok": True, "data": 7}
+        req = urllib.request.Request(base + "about_info", data=b"{}", headers=headers)
+        try:
+            urllib.request.urlopen(req)
+        except urllib.error.HTTPError as e:
+            assert e.code == 404  # 这张表里没有 about_info
+        else:
+            raise AssertionError("about_info 不该在这张表里")
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
 def _raw_post(port, headers, body=b""):
     """手写一个 POST，返回状态行；5 秒没答复抛 socket.timeout（以前不带令牌也会先等着读完请求体）"""
     import socket
@@ -253,7 +295,8 @@ def _run_main(monkeypatch, tmp_path, shell):
     class FakeServer:
         server_address = ("127.0.0.1", 12345)
 
-        def __init__(self, *a):
+        def __init__(self, *a, **k):
+            assert "live_start" in k["api"].table
             calls.append("server_init")
 
         def serve_forever(self):
