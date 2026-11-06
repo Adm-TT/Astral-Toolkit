@@ -42,7 +42,8 @@ def test_open_market_reuses_one_trade_for_session(monkeypatch):
 
     session = C.open_market()
     assert session.match("中", "en") == "匹配结果"
-    assert match_calls == [(fake_trade, "中", "en")]
+    ((market, zh, en),) = match_calls  # FS-B2：经 Market 窄门，里面还是同一个 Trade
+    assert (zh, en) == ("中", "en") and market._t is fake_trade
 
     session.remember_alias("id1", "中")
     assert alias_calls == [("id1", "中")]

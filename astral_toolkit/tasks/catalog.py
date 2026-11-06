@@ -97,11 +97,11 @@ def get_item_loot(name="", zh=""):
 
 
 class MarketSession:
-    """一次 F8 后台补价用的玩家市场会话：开的时候取一次 Trade，对名字、记中文别名、显示名都用这一个
-    （和以前 _hover_more 里 t = trade() 之后一样）"""
+    """一次 F8 后台补价用的玩家市场会话：开的时候取一次市场（tasks/trade.market()，不含库存），
+    对名字、记中文别名、显示名都用这一个（和以前 _hover_more 里 t = trade() 之后一样）"""
 
-    def __init__(self, trade):
-        self._t = trade
+    def __init__(self, market):
+        self._t = market
 
     def match(self, zh, en):
         """说明框里的名字 → (物品或 None, 候选列表)：trade.matching.match_tooltip 原样（先本机目录，没有才联网搜）"""
@@ -114,15 +114,15 @@ class MarketSession:
         self._t.catalog.add_alias(item_id, zh)
 
     def label(self, item_id):
-        """物品的显示名：Trade.label 原样"""
+        """物品的显示名：Market.label（Trade.label 原样）"""
         return self._t.label(item_id)
 
 
 def open_market():
-    """开一个玩家市场会话：取 tasks/trade 的 Trade（第一次用才造，和以前一样；造不出来照旧抛出去）"""
+    """开一个玩家市场会话：取 tasks/trade.market()（Trade 第一次用才造，和以前一样；造不出来照旧抛出去）"""
     from . import trade as trade_tasks
 
-    return MarketSession(trade_tasks.trade())
+    return MarketSession(trade_tasks.market())
 
 
 def market_rows(item_id, tier):
