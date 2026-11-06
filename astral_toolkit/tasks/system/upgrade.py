@@ -3,7 +3,7 @@
 import threading
 import time
 
-from ...app import bus
+from ...app import bus, task_runner
 from .about import _version
 
 _online = {"info": None, "told": ""}
@@ -128,11 +128,11 @@ def upgrade_check(online=False):
 
 def _task_print():
     """给 Velopack 的进度回调用：它在 Velopack 自己的线程里调，那个线程不属于升级任务，print 进不了窗口"""
-    tid = bus.current_task()
+    tid = task_runner.current_task()
 
     def out(line):
-        if tid and bus.current_task() != tid:
-            bus.adopt_task(tid)
+        if tid and task_runner.current_task() != tid:
+            task_runner.adopt_task(tid)
         print(line)
 
     return out
@@ -189,7 +189,7 @@ def upgrade_online():
 
     if not _online.get("info") and not vpk.installed():
         return {"error": "未找到新版本，点击「检查更新」后重试"}
-    if bus.run_task_once("upgrade", _online_task, title="升级 AT") is None:
+    if task_runner.run_task_once("upgrade", _online_task, title="升级 AT") is None:
         return {"error": "正在升级，稍候"}
     return {"started": True}
 
@@ -202,6 +202,9 @@ def upgrade_rollback(path=""):
         return {"error": "只能回滚到安装版的上一版本"}
     if not vpk.installed():
         return {"error": "只有安装版能这样回滚"}
-    if bus.run_task_once("upgrade", _vpk_rollback_task, title="回滚 AT") is None:
+    if (
+        task_runner.run_task_once("upgrade", _vpk_rollback_task, title="回滚 AT")
+        is None
+    ):
         return {"error": "正在升级，稍候"}
     return {"started": True}

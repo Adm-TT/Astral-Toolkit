@@ -461,10 +461,10 @@ def grab():
     img = grab_screen()
     try:
         import threading
-        from ..app import bus
+        from ..app import preview
 
         threading.Thread(
-            target=bus.update_preview,
+            target=preview.update_preview,
             args=(img,),
             kwargs={"source": "live"},
             daemon=True,

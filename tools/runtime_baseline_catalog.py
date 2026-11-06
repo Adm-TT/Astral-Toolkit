@@ -289,7 +289,7 @@ class _Sandbox:
         self._patch(hover_mod, "threading", SimpleNamespace(Thread=self._thread))
         self._patch(hover_mod.bus, "publish", self._publish)
         self._patch(hover_mod.bus, "runtime_log", self._runtime_log)
-        self._patch(hover_mod.bus, "update_preview", _named_noop("update_preview"))
+        self._patch(hover_mod.preview, "update_preview", _named_noop("update_preview"))
         self._patch(inspector_mod, "_hover_log", _named_noop("_hover_log"))
         self._patch(train_data, "from_tooltip", _named_noop("from_tooltip"))
         self._patch(run_records, "record", _return_none)

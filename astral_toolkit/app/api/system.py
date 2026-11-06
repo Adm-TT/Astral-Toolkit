@@ -7,7 +7,7 @@ router 自动收集文件末尾的 ROUTES。
 """
 
 from ...tasks import system as _t
-from .. import bus
+from .. import bus, preview
 
 
 def status(**kw):
@@ -91,9 +91,9 @@ def runtime_capture_now():
     from ...core.capture import grab_screen
 
     img = grab_screen()
-    bus.update_preview(img, source="manual", force=True)
+    preview.update_preview(img, source="manual", force=True)
     bus.runtime_log("手动截取屏幕画面", tag="SCREEN", level="INFO")
-    _, meta = bus.get_preview_bytes(full=False)
+    _, meta = preview.get_preview_bytes(full=False)
     return meta
 
 

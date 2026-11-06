@@ -9,7 +9,7 @@ import importlib
 import sys
 import threading
 
-from .. import bus
+from .. import bus, task_runner
 from ..lifecycle_gate import is_closing
 
 WIN = sys.platform == "win32"
@@ -81,15 +81,17 @@ class _Hover:
             "trade_capture_key": (True, self._start_hover),
             "mark_key": (
                 False,
-                lambda: bus.run_task_once("mark", self._mark, title="记录路标"),
+                lambda: task_runner.run_task_once("mark", self._mark, title="记录路标"),
             ),
             "fix_key": (
                 False,
-                lambda: bus.run_task_once("fix", self._fix, title="一键定位"),
+                lambda: task_runner.run_task_once("fix", self._fix, title="一键定位"),
             ),
             "report_key": (
                 True,
-                lambda: bus.run_task("feedback", self._report, title="问题反馈"),
+                lambda: task_runner.run_task(
+                    "feedback", self._report, title="问题反馈"
+                ),
             ),
             "live_key": (
                 False,
@@ -105,7 +107,7 @@ class _Hover:
             ),
             "ore_key": (
                 False,
-                lambda: bus.run_task_once("ore", self._ore, title="原矿记录"),
+                lambda: task_runner.run_task_once("ore", self._ore, title="原矿记录"),
             ),
         }
         prev = {}
@@ -210,17 +212,23 @@ class _Hover:
     def _start_hover(self):
         """F8：和窗口里的「识别」接口共用同一个任务名，已经在识别就不再起第二个（两个同时跑会互相清掉 _last_hover）"""
         _H().item_key_pressed()
-        if bus.run_task_once("hover", self._recognize, title="识别物品") is None:
+        if (
+            task_runner.run_task_once("hover", self._recognize, title="识别物品")
+            is None
+        ):
             # 上一次可能刚识别完、线程还在发「完成」消息：另起个短线程等它一下再试，热键线程不跟着等
             threading.Thread(
                 target=self._retry_hover, daemon=True, name="hover-retry"
             ).start()
 
     def _retry_hover(self):
-        old = bus._running.get("hover")
+        old = task_runner._running.get("hover")
         if old is not None:
             old.join(0.3)
-        if bus.run_task_once("hover", self._recognize, title="识别物品") is None:
+        if (
+            task_runner.run_task_once("hover", self._recognize, title="识别物品")
+            is None
+        ):
             self.busy = False
             bus.runtime_log(
                 f"{self.label.get('trade_capture_key', 'F8')} 正在识别中，请稍候...",

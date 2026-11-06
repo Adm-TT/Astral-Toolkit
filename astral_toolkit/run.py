@@ -283,15 +283,15 @@ def update(direct=False, web_ok=()):
     )
 
     try:  # 在 AT 窗口里点「更新」时：几个下载线程的输出都要进窗口的更新记录
-        from .app import bus
+        from .app import task_runner
 
-        task = bus.current_task()
+        task = task_runner.current_task()
     except Exception:
-        bus, task = None, None
+        task_runner, task = None, None
 
     def run(job):
-        if bus and task:
-            bus.adopt_task(task)
+        if task_runner and task:
+            task_runner.adopt_task(task)
         title, fn = job
         print(f"—— 开始更新{title} ——")
         try:

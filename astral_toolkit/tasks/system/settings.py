@@ -2,7 +2,7 @@
 
 import re
 
-from ...app import bus
+from ...app import bus, task_runner
 from .common import _hud, _need_start
 
 # 游戏里的热键：(设置名, 默认键, 名字)。撞键时排在前面的生效（物品识别 > 记录路标 > 一键定位 > 问题反馈 > 采矿助手 > 盘点 > 原矿记录）；导航「一键定位」的冲突提示也用这一份
@@ -144,7 +144,7 @@ def update_data():
     from ...run import update
 
     if (
-        bus.run_task_once("update", update, title="更新数据") is None
+        task_runner.run_task_once("update", update, title="更新数据") is None
     ):  # 已经在更新：不再起第二份
         return {"started": False, "running": True}
     return {"started": True}
