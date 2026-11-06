@@ -118,12 +118,19 @@ def test_request_stop_does_not_confirm_until_the_thread_exits():
 
 
 def test_request_stop_is_idempotent_and_confirms_once():
-    loop, worker, out = make_loop()
+    # 两次按停止时线程得还在：卡在 tick 里按，两次都按完才放（11-06 全量偶发挂过一次：机器忙时第一次按完
+    # 假工作线程已经退完、状态变 STOPPED，第二次按成了「没有在跑的会话」，照 dev 又发一次确认）
+    gate = Gate()
+    worker = FakeWorker()
+    worker.gate = gate
+    loop, _, out = make_loop(worker)
     try:
         _started(loop, worker)
+        assert gate.entered.wait(WAIT)
         out.clear()
         loop.request_stop_current(StopInfo("user"))
         loop.request_stop_current(StopInfo("user"))
+        gate.release.set()
         assert loop.join(session_id=_current_id(loop))
         assert worker.last_stop_info.reason == "user"
         assert out.live_events() == [{"running": False}]
@@ -134,6 +141,7 @@ def test_request_stop_is_idempotent_and_confirms_once():
         assert worker.calls[-1][0] == "stop_ops" and worker.calls[-1][1] is None
         assert out.live_events() == [{"running": False}]
     finally:
+        gate.release.set()
         loop.request_stop_current(StopInfo("user"))
 
 

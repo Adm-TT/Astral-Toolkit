@@ -142,8 +142,13 @@ def search(load, text):
     return out
 
 
+_HAS_ZH = re.compile(r"[\u4e00-\u9fff]")
+
+
 def req_label(r):
-    return f"{r['z']}（{r['n']}）" if r["z"] else r["n"]
+    """「中文（English）」；汉化包没译的（中文名那栏还是英文，像 Argo ATLS，或者「[…]」那种属性行）
+    只写英文，不写成「Argo ATLS（Argo ATLS）」（BF-2）"""
+    return f"{r['z']}（{r['n']}）" if _HAS_ZH.search(r["z"] or "") else r["n"]
 
 
 def source_note(name, print_spots):

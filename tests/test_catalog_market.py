@@ -174,3 +174,79 @@ def test_hover_more_stops_when_market_cannot_open(monkeypatch):
         caught = str(e)
     assert caught == "玩家库打不开"
     assert calls == []
+
+
+def _nav_fakes(monkeypatch, search_hits):
+    """nav_shop 用的星图换成假的；导航不真的开始，只记下导去哪"""
+    from astral_toolkit.navigation import navigate as N
+
+    data = {
+        "bodies": {"Hurston": {}, "Yela": {}, "Pyro4": {}},
+        "pois": [{"n": "Grim HEX", "b": "Yela", "t": "Orbital Station"}],
+    }
+    monkeypatch.setattr(N, "load", lambda: data)
+    monkeypatch.setattr(N, "city_places", lambda: [])
+    monkeypatch.setattr(N, "amenity_targets", lambda kind, d: [])
+    monkeypatch.setattr(
+        N, "search", lambda q, d=None, limit=15: (list(search_hits.get(q, [])), None)
+    )
+    started = []
+
+    class Places(dict):
+        def __missing__(self, key):
+            return key
+
+    def row(hit):
+        return {"key": hit["n"], "label": hit["n"]}
+
+    def start(place):
+        started.append(place)
+
+    monkeypatch.setattr(T, "_nav_objects", lambda: (row, Places(), start))
+    return started
+
+
+def test_nav_shop_does_not_guess_a_spot_on_a_planet(monkeypatch):
+    """BF-2：UEX 只写了星球名 → 不导、说清楚（以前按名字搜，星球上随便一个点都搜得到，就导过去了）"""
+    started = _nav_fakes(
+        monkeypatch, {"Hurston": [{"n": "Hurston Dynamics Showroom", "b": "Hurston"}]}
+    )
+    assert T.nav_shop(shop="Shop - X", place="Stanton · Hurston") == {
+        "error": "UEX 上这家店只写了在「Hurston」，没写是哪个站、城或前哨，导航不了"
+    }
+    assert T.nav_shop(shop="Shop - X", place="Pyro") == {
+        "error": "UEX 上这家店只写了在「Pyro」，没写是哪个站、城或前哨，导航不了"
+    }
+    assert started == []
+
+
+def test_nav_shop_search_fallback_takes_only_exact_names(monkeypatch):
+    """BF-2：最后按名字搜只认一模一样的；「Checkmate Station」去掉 Station 后对上照样导"""
+    checkmate = [{"n": "Checkmate", "b": "Pyro4"}]
+    started = _nav_fakes(
+        monkeypatch,
+        {
+            "Checkmate Station": checkmate,
+            "Checkmate": checkmate,
+            "Odd Place": [{"n": "Odd Place Annex", "b": "Pyro4"}],
+        },
+    )
+    assert T.nav_shop(shop="Shop - A", place="Pyro · Checkmate Station") == {
+        "key": "Checkmate",
+        "label": "Checkmate",
+    }
+    assert T.nav_shop(shop="Shop - B", place="Pyro · Pyro IV · Odd Place") == {
+        "error": "导航数据里没有这个地点"
+    }
+    assert started == ["Checkmate"]
+
+
+def test_nav_shop_grimhex_full_name(monkeypatch):
+    """BF-2：UEX 写 Green Imperial Housing Exchange，星图叫 Grim HEX"""
+    started = _nav_fakes(monkeypatch, {})
+    place = "Stanton · Crusader · Yela · Green Imperial Housing Exchange"
+    assert T.nav_shop(shop="Shop - C", place=place) == {
+        "key": "Grim HEX",
+        "label": "Grim HEX",
+    }
+    assert started == ["Grim HEX"]

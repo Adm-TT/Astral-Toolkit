@@ -180,3 +180,15 @@ def test_old_uses_text_passes_chinese_name(monkeypatch):
 
 def test_old_names_are_same_objects():
     assert wikelo.describe is wikelo_rules.describe
+
+
+def test_req_label_only_pairs_real_chinese_names():
+    """BF-2：汉化包没译的（中文名那栏还是英文、或者「[…]」属性行）只写英文，不写两遍"""
+    assert (
+        wikelo_rules.req_label({"n": "Wikelo Favor", "z": "维科洛人情"})
+        == "维科洛人情（Wikelo Favor）"
+    )
+    assert wikelo_rules.req_label({"n": "Argo ATLS", "z": "Argo ATLS"}) == "Argo ATLS"
+    assert wikelo_rules.req_label({"n": "Some Part", "z": "[S1 Part]"}) == "Some Part"
+    assert wikelo_rules.req_label({"n": "Some Part", "z": ""}) == "Some Part"
+    assert wikelo_rules.req_label({"n": "Some Part", "z": None}) == "Some Part"
