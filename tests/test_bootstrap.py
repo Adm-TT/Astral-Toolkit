@@ -153,8 +153,8 @@ def test_build_desktop_binds_everything_to_this_app(monkeypatch):
             )
             assert (
                 app.hover._feedback is not None
-                and app.pos._status is not None
-                and app.logwatch._status is not None
+                and app.pos._publish_status is not None
+                and app.logwatch._publish_status is not None
             )
             assert lifecycle_gate._CLOSING == app.lifecycle.is_closing
             sources = ui_stream._SOURCES
@@ -601,7 +601,7 @@ def test_status_callbacks_read_this_app(monkeypatch):
     app = bootstrap.build("test")
     try:
         app.pos._publish(force=True)
-        app.logwatch._status()
+        app.logwatch._publish_status()
         app.hover._report()
         assert bootstrap.routes(app).call("status") == {"ok": True, "data": {}}
         assert got == [
@@ -679,6 +679,18 @@ def test_routes_hold_this_apps_live(monkeypatch):
         for app in apps:
             bootstrap.shutdown(app, budget=0.5)
     assert not real_grab_calls
+
+
+def test_logwatch_reads_game_log_through_tasks_position():
+    """位置的两个后台线程（R1 起在 runtime/workers/position）：读游戏日志、认地点都接 tasks/position"""
+    from astral_toolkit.tasks import position as position_tasks
+
+    app = bootstrap.build("test")
+    try:
+        assert app.logwatch._read_log is position_tasks.last_log_place
+        assert app.pos._label_of is position_tasks.label_of
+    finally:
+        bootstrap.shutdown(app, budget=0.2)
 
 
 def test_search_warmup_thread_builds_index_in_background(monkeypatch):

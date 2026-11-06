@@ -265,10 +265,10 @@ def test_live_scan_resumes_after_restart(monkeypatch, tmp_path):
     from astral_toolkit.app.engines import hover as hover_engine
     from astral_toolkit.app.engines import live as live_engine
     from astral_toolkit.app.engines import nav as nav_engine
-    from astral_toolkit.app.engines import pos as pos_engine
     from astral_toolkit.core import settings
     from astral_toolkit.core.perfmon import monitor
     from astral_toolkit.runtime.session import StopAttempt
+    from astral_toolkit.runtime.workers import position as pos_worker
     from astral_toolkit.tasks import mining as t_mining, system as t_sys
     from tests.bootstrap_helpers import app_for_test
 
@@ -283,8 +283,8 @@ def test_live_scan_resumes_after_restart(monkeypatch, tmp_path):
     )
     for cls in (
         hover_engine._Hover,
-        pos_engine._Pos,
-        pos_engine._LogWatch,
+        pos_worker.PositionWorker,
+        pos_worker.LogWatchWorker,
         nav_engine._GameEvents,
     ):
         monkeypatch.setattr(cls, "start", lambda self: None)
