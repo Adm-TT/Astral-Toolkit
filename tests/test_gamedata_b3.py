@@ -505,7 +505,9 @@ def test_wikelo_uses_prefix_rule_preserved(monkeypatch, tmp_path):
         assert got == want, (en, zh, got, want)
     cs = wikelo.load()
     assert wikelo.uses("Medpen")[0][0] is cs[1]  # 返回的是 load() 里那份对象
-    assert wikelo.uses_text("Medpen") == "维科洛兑换要用：要北极星？（10）"
+    assert [(c["t"], q, u) for c, q, u in wikelo.uses("Medpen")] == [
+        ("要北极星？", 10, "个")
+    ]
 
 
 def test_wikelo_search(monkeypatch, tmp_path):

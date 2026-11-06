@@ -254,38 +254,6 @@
                     "endColumn": 22,
                     "lineCount": 1
                 }
-            },
-            {
-                "code": "reportOperatorIssue",
-                "range": {
-                    "startColumn": 15,
-                    "endColumn": 32,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportGeneralTypeIssues",
-                "range": {
-                    "startColumn": 17,
-                    "endColumn": 28,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportGeneralTypeIssues",
-                "range": {
-                    "startColumn": 13,
-                    "endColumn": 24,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportOperatorIssue",
-                "range": {
-                    "startColumn": 7,
-                    "endColumn": 20,
-                    "lineCount": 1
-                }
             }
         ],
         "./astral_toolkit/crafting/materials.py": [

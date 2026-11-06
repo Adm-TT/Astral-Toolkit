@@ -173,7 +173,3 @@ def print_spots(name):
 
 def source_note(name):
     return _rules.source_note(name, print_spots)
-
-
-def uses_text(name_en, name_zh=""):
-    return _rules.uses_text(uses(name_en, name_zh))

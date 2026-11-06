@@ -207,12 +207,6 @@ def clear_caches():
         pass
     _clear("crafting.goals", "where_to_get")
     try:
-        from ..crafting import shops
-
-        shops._data = None  # 商店表（shops.load 只在 _data 为 None 时读文件）
-    except Exception:
-        pass
-    try:
         from .. import gamedata
 
         gamedata.refresh()  # 游戏数据库：关掉本线程旧连接，下次查询重读清单（数据层地基 2026-11-02）

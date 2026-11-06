@@ -500,7 +500,7 @@ def test_names_empty_when_db_unavailable(monkeypatch, tmp_path):
 
 def test_names_does_not_read_json_or_call_loaders(monkeypatch, tmp_path):
     import astral_toolkit.gamedata as G
-    from astral_toolkit.crafting import loot, shops
+    from astral_toolkit.crafting import loot
     from astral_toolkit.trade import names
 
     def boom(*a, **k):
@@ -510,7 +510,6 @@ def test_names_does_not_read_json_or_call_loaders(monkeypatch, tmp_path):
     G.ensure()
     for p in tmp_path.glob("*.json"):
         p.unlink()  # data/ 只剩 gamedata/
-    monkeypatch.setattr(shops, "load", boom)
     monkeypatch.setattr(loot, "load_index", boom)
     assert names.table()["医疗笔"] == "Medpen"
     assert names.canonical("", "Medpen") == ("医疗笔", "Medpen")

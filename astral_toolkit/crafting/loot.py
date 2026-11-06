@@ -459,37 +459,3 @@ def info(name_en="", name_zh="", top=5, online=True):
         "groups": rows,
         "more": more,
     }
-
-
-def text(name_en="", name_zh="", top=5):
-    """一段「哪里能开出来」的说明；没有掉落返回空字符串"""
-    d = info(name_en, name_zh, top)
-    if not d:
-        return ""
-    if "error" in d:
-        return "  " + d["error"]
-    if d.get("mine"):
-        if not d["groups"]:
-            return f"  {d['note']}"
-        lines = [f"  {d['note']}（{d['name']}，{d['src']}）："]
-        for g in d["groups"]:
-            lines.append(
-                f"    {g['p'] * 100:.2f}%｜"
-                + "、".join(g["regions"][:6])
-                + (f"｜{g['box']}" if g["box"] else "")
-            )
-        return "\n".join(lines)
-    lines = [f"  掉落（{d['name']}，scl.miao.network，单个箱子开出的最高概率）："]
-    for g in d["groups"]:
-        regions = g["regions"]
-        names = "、".join(regions[:6]) + (
-            f" 等 {len(regions)} 类" if len(regions) > 6 else ""
-        )
-        lines.append(
-            f"    {g['p'] * 100:.2f}%"
-            + (f"｜{g['box']}" + ("" if g.get("placed") else " 箱") if g["box"] else "")
-            + f"｜{names}"
-        )
-    if d["more"] > 0:
-        lines.append(f"    …还有 {d['more']} 类地点概率更低")
-    return "\n".join(lines)

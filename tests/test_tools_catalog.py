@@ -153,6 +153,7 @@ def setup(monkeypatch, tmp_path):
         data,
         starmap={"bodies": {}, "pois": [], "points": POINTS},
     )
+    return data
 
 
 def test_finder_cheapest_first(monkeypatch, tmp_path):
@@ -163,6 +164,15 @@ def test_finder_cheapest_first(monkeypatch, tmp_path):
     text = shops.where_text(1700)
     assert "没有这件东西的商店售卖记录" in text and "1,200" in text
     assert "Orison" in shops.where_by_name("SureGrip S1 Tractor Beam")
+
+
+def test_item_record_matches_shops_json_items(monkeypatch, tmp_path):
+    """商店里这件的 [英文名, 类别]：和以前读 shops.json 的 items[str(编号)] 一样，字符串编号也认；
+    没有的给 None（CL-C4 起 acquire.info 用它，替代 shops.load）"""
+    fake_shops(monkeypatch, tmp_path)
+    assert shops.item_record(1700) == ["MaxLift Tractor Beam", "Tractor Beams"]
+    assert shops.item_record("1600") == ["SureGrip S1 Tractor Beam", "Tractor Beams"]
+    assert shops.item_record(9999) is None and shops.item_record(None) is None
 
 
 def test_wikelo_data_and_lookup():
@@ -392,8 +402,8 @@ def test_loot_summary():
 
 
 def test_nearest_distinct_places_and_loot_grouping(monkeypatch, tmp_path):
-    setup(monkeypatch, tmp_path)
-    shops._data["rows"].append(
+    data = setup(monkeypatch, tmp_path)
+    data["rows"].append(
         [
             1700,
             "Shop NB 2",
@@ -404,7 +414,7 @@ def test_nearest_distinct_places_and_loot_grouping(monkeypatch, tmp_path):
             ["Stanton", "microTech", "", "", "", "New Babbage"],
         ]
     )
-    _shops_db(monkeypatch, tmp_path, shops._data)  # 加了一行：重建临时库
+    _shops_db(monkeypatch, tmp_path, data)  # 加了一行：重建临时库
     near = shops.nearest(1700, dict(POINTS[3], label="", age=0), 3)
     assert (
         len({r[3] for r in near}) == 3 and near[0][2] == "Shop NB 2"
@@ -422,12 +432,18 @@ def test_nearest_distinct_places_and_loot_grouping(monkeypatch, tmp_path):
     }
     monkeypatch.setattr(loot, "find", lambda en, zh: [("u", "X", "某物", 1)])
     monkeypatch.setattr(loot, "detail", lambda u, online=True: d)
-    t = loot.text("X")
-    assert (
-        "13.64%｜SoO" in t
-        and "1.06%｜Large 箱｜ASD、QV、Hathor" in t
-        and t.count("1.06%") == 1
+    got = loot.info("X")
+    groups = got["groups"] if got else None
+    assert isinstance(groups, list)
+    # 概率和箱子一样的三个地点合成一行；都是箱子里开的，不是刷在场景里
+    rows = sorted(
+        (round(g["p"], 4), g["box"] or "", g["placed"], tuple(g["regions"]))
+        for g in groups
     )
+    assert rows == [
+        (0.0106, "Large", False, ("ASD", "QV", "Hathor")),
+        (0.1364, "", False, ("SoO",)),
+    ], rows
 
 
 def test_log_location_found_far_back_and_updates(monkeypatch, tmp_path):
