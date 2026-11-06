@@ -279,16 +279,16 @@ def _zh_name(txt):
 
 
 def _tiers(name):
-    from .quality_tiers import TIERS
+    from .quality import TIER_VALUES as TIERS
 
     return TIERS.get({"Ice": "Pressurized Ice"}.get(name, name))
 
 
 def _fix_by_tiers(comp, rock):
-    """4.8 起每种矿只有固定几档品质（quality_tiers.py）。用它：
+    """4.8 起每种矿只有固定几档品质（quality.py 的 TIER_VALUES）。用它：
     ①矿名没认出来、但品质只对得上这块石头里某一种矿的档位 → 补上矿名（「8.23% ??? 588」，同石头里只有艾格瑞有 588）；
     ②品质多认了一位（「5882」）、和这种矿某一档只差一个字 → 改成那一档"""
-    from .quality_tiers import TIERS
+    from .quality import TIER_VALUES as TIERS
 
     owners = (  # noqa: E731
         lambda q: [  # noqa: E731

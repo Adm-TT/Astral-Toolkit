@@ -90,7 +90,7 @@ def _slot_material(opts):
 
 
 def solve_slots(bp, mods, tiers, material_zh):
-    """按说明框里的加成倒推每个材料槽的品质：每个槽只在这种材料的固定几档品质里找（quality_tiers），
+    """按说明框里的加成倒推每个材料槽的品质：每个槽只在这种材料的固定几档品质里找（mining/quality 的 tier_values），
     同一属性几个槽都影响时各槽百分比相加（和制造终端一致，那把枪验证过）。
     显示符号核过的属性（SHOWN_SIGN）带符号比，其余只比绝对值。
     返回 {"slots": [{idx, slot, mat, q}], "avg": 平均品质, "exact": 每个属性都对得上（差 ≤0.02），

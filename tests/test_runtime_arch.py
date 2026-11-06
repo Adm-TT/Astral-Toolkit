@@ -658,7 +658,7 @@ def test_crafting_rules_import_stdlib_contracts_or_each_other():
         "from .. import gamedata\n",
         "from . import crafting\n",
         "from .itemstats import base_value\n",
-        "from ..mining.quality_tiers import tiers\n",
+        "from ..mining.quality import tier_values\n",
         "from ..core.i18n import mineral_zh\n",
         "import astral_toolkit.gamedata\n",
         "def f():\n    import math\n",
