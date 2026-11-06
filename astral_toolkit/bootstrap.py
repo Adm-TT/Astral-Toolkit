@@ -182,9 +182,9 @@ def _fine_timer(mode: str) -> Callable[[bool], None] | None:
     return timer.fine
 
 
-def _pos_service(mode: str, view: Any) -> _Pos:
+def _pos_service(mode: str, view: Any, status=None) -> _Pos:
     """位置服务（NV-B5）：调试模式开关交给读右上角的 Reader；desktop 读得快时调 Windows 等待精度"""
-    return _Pos(debug=_debug_on(view), fine_timer=_fine_timer(mode))
+    return _Pos(debug=_debug_on(view), fine_timer=_fine_timer(mode), status=status)
 
 
 def _nav_links(view: Any) -> NavLinks:
@@ -232,6 +232,8 @@ def build(
     mode: str = "desktop", *, overrides: Mapping[str, Any] | None = None
 ) -> DesktopApp:
     """造对象、登记服务；desktop 模式最后再做全局绑定。"""
+    from .tasks import system as system_tasks
+
     if mode not in ("desktop", "test"):
         raise ValueError(f"mode 只支持 desktop / test：{mode!r}")
 
@@ -263,7 +265,15 @@ def build(
     # 常看的设置（调试模式、记号）：一份内存里的，存设置后自动重读（NV-B5）
     view = settings.View()
 
-    pos = _pos_service(mode, view)
+    # 状态源 sources 要等下面 app 造好才有；位置服务、读日志、反馈键的线程要到
+    # lifecycle.start_all 才起，那时已经有了，所以回调里现读。
+    def status_now():
+        return system_tasks.status(sources)
+
+    def feedback(**kw):
+        return system_tasks.feedback_report(sources, **kw)
+
+    pos = _pos_service(mode, view, status=status_now)
     links = _nav_links(view)
     cam_filter = _CamFilter(log=links.log)
     steady = _Steady()
@@ -297,8 +307,8 @@ def build(
         worker=options.get("count_worker"),
     )
     hover_links = _hover_links()
-    hover = _Hover(live=live, count=count, links=hover_links)
-    logwatch = _LogWatch()
+    hover = _Hover(live=live, count=count, links=hover_links, feedback=feedback)
+    logwatch = _LogWatch(status=status_now)
 
     app = DesktopApp(
         results=results,
@@ -316,6 +326,7 @@ def build(
         hover_links=hover_links,
         state={"warmups_enabled": True},
     )
+    sources = status_sources(app)
     _register(app)
     if mode == "desktop":
         bind_all(app)
@@ -328,23 +339,22 @@ def bind_all(app: DesktopApp, *, replace: bool = False) -> None:
     from .navigation import navigate as navigate_data
     from .tasks import count as count_tasks
     from .tasks import navigation as navigation_tasks
-    from .tasks import system as system_tasks
 
     navigate_data.HINTS = app.pos.hints
     navigation_tasks.bind(
         app.nav, app.pos, app.game_events, app.results, replace=replace
     )
     count_tasks.bind(app.count, replace=replace)
-    system_tasks.bind(status_sources(app), lambda: start(app), replace=replace)
     lifecycle_gate.bind_closing(app.lifecycle.is_closing, replace=replace)
     ui_stream.bind_switches(app.live, app.nav, app.pos, replace=replace)
 
 
 def routes(app: DesktopApp) -> Api:
     """这个 app 的接口表（F 段 B5，架构稿 §12.3「路由直接持有对象」）：不用后台对象的照旧是各 Controller 的 ROUTES；
-    要后台对象的由这里把这个 app 的对象交给 Controller 的 bound（采矿：实时读屏；F8：HoverLinks）。server.main 交给网页服务"""
+    要后台对象的由这里把这个 app 的对象交给 Controller 的 bound（采矿：实时读屏；F8：HoverLinks；系统：状态源和启动回调）。server.main 交给网页服务"""
     from .app.api import mining as mining_api
     from .app.api import router
+    from .app.api import system as system_api
     from .app.api import vision as vision_api
 
     return router.Api(
@@ -352,6 +362,7 @@ def routes(app: DesktopApp) -> Api:
             **router.routes(),
             **mining_api.bound(app.live),
             **vision_api.bound(app.hover_links),
+            **system_api.bound(status_sources(app), lambda: start(app)),
         }
     )
 

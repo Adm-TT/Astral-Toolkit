@@ -145,9 +145,14 @@ def test_build_desktop_binds_everything_to_this_app(monkeypatch):
             assert not hasattr(hover_tasks, "_links")
             assert app.hover_links.loot is catalog_tasks.get_item_loot
             assert app.hover._links is app.hover_links
-            status = system_common._status
-            assert status is not None and status.results is app.results
-            assert callable(system_common._start)
+            assert not hasattr(system_common, "_status") and not hasattr(
+                system_common, "_start"
+            )
+            assert (
+                app.hover._feedback is not None
+                and app.pos._status is not None
+                and app.logwatch._status is not None
+            )
             assert lifecycle_gate._CLOSING == app.lifecycle.is_closing
             sources = ui_stream._SOURCES
             assert sources is not None
@@ -313,11 +318,6 @@ def test_bind_all_and_task_binds_refuse_second_binding():
             "已绑定",
             lambda: nav_tasks.bind(app.nav, app.pos, app.game_events, app.results),
         )
-        _assert_error(
-            RuntimeError,
-            "已绑定",
-            lambda: system_tasks.bind(bootstrap.status_sources(app), lambda: False),
-        )
     assert snapshot_bindings() == before
 
 
@@ -338,11 +338,6 @@ def test_unbound_modules_raise_and_gate_stays_open():
             nav_tasks._need_results,
         ):
             _assert_error(RuntimeError, "未绑定", need)
-
-        system_common._status = None
-        system_common._start = None
-        _assert_error(RuntimeError, "未绑定", system_tasks.status)
-        _assert_error(RuntimeError, "未绑定", system_tasks.start_background)
 
         lifecycle_gate._CLOSING = None
         assert lifecycle_gate.is_closing() is False
@@ -454,9 +449,10 @@ def test_test_app_restores_previous_bindings():
 
 
 def test_routes_table_static_plus_bound(monkeypatch):
-    """F 段 B5a：bootstrap.routes(app) = 各 Controller 的 ROUTES + 要后台对象的 bound(...)；采矿那 4 个拿的是这个 app 的 live，F8 的拿这个 app 的 HoverLinks"""
+    """F 段 B5a：bootstrap.routes(app) = 各 Controller 的 ROUTES + 要后台对象的 bound(...)；采矿那 4 个拿的是这个 app 的 live，F8 的拿这个 app 的 HoverLinks，系统的拿这个 app 的状态源和启动回调"""
     from astral_toolkit.app.api import mining as mining_api
     from astral_toolkit.app.api import router
+    from astral_toolkit.app.api import system as system_api
     from astral_toolkit.app.api import vision as vision_api
 
     real_mining = mining_api.bound
@@ -471,24 +467,73 @@ def test_routes_table_static_plus_bound(monkeypatch):
         "bound",
         lambda links: seen_vision.append(links) or real_vision(links),
     )
+    real_system = system_api.bound
+    seen_system = []
+
+    def fake_system(sources, start):
+        seen_system.append((sources, start))
+        return real_system(sources, start)
+
+    monkeypatch.setattr(system_api, "bound", fake_system)
     app = bootstrap.build("test")
     try:
         api = bootstrap.routes(app)
         assert seen == [app.live]
         assert seen_vision == [app.hover_links]
+        assert len(seen_system) == 1
+        system_sources, system_start = seen_system[0]
+        assert system_sources.results is app.results
+        assert callable(system_start)
         static = router.routes()
-        bound = set(real_mining(app.live)) | set(real_vision(app.hover_links))
+        bound = (
+            set(real_mining(app.live))
+            | set(real_vision(app.hover_links))
+            | set(real_system(system_sources, system_start))
+        )
         assert bound == {
             "live_start",
             "live_stop",
             "set_mining_gear",
             "set_mining_gadgets",
             "hover_trigger",
+            "status",
+            "feedback_report",
+            "set_settings",
+            "agree",
         }
         assert not bound & set(static)
         assert set(api.table) == set(static) | bound
         for name in static:
             assert api.table[name] is static[name], name
+    finally:
+        bootstrap.shutdown(app, budget=0.2)
+
+
+def test_status_callbacks_read_this_app(monkeypatch):
+    """F 段 B5c：位置服务、读日志推的状态，反馈键的反馈，「status」接口，读的都是这个 app 的状态源"""
+    got = []
+    monkeypatch.setattr(
+        system_tasks,
+        "status",
+        lambda sources: got.append(("status", sources.results)) or {},
+    )
+    monkeypatch.setattr(
+        system_tasks,
+        "feedback_report",
+        lambda sources, **kw: got.append(("feedback", sources.results, kw)) or {},
+    )
+    app = bootstrap.build("test")
+    try:
+        app.pos._publish(force=True)
+        app.logwatch._status()
+        app.hover._report()
+        assert bootstrap.routes(app).call("status") == {"ok": True, "data": {}}
+        assert got == [
+            ("status", app.results),
+            ("status", app.results),
+            ("feedback", app.results, {"kind": "auto"}),
+            ("status", app.results),
+        ]
     finally:
         bootstrap.shutdown(app, budget=0.2)
 

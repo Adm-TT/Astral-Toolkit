@@ -29,16 +29,25 @@ _SYSTEM_API = [
     "runtime_clear_logs",
 ]
 
+_SYSTEM_BOUND = ("status", "feedback_report", "set_settings", "agree")
+
 
 def test_system_controller_routes():
-    """系统的每个接口名都由 app/api/system.py 接，名单和 Controller 的 ROUTES 一个不多一个不少"""
+    """系统的每个接口名都由 app/api/system.py 接；静态的在 ROUTES，要状态源 / 启动回调的由 bound 给"""
     from astral_toolkit.app.api import router, system as CY
 
     router.reset()
     r = router.routes()
-    for name in _SYSTEM_API:
+    bound = CY.bound(object(), object())
+    static = set(CY.ROUTES)
+    assert set(bound) == set(_SYSTEM_BOUND)
+    assert not static & set(bound)
+    assert static | set(bound) == set(_SYSTEM_API)
+    for name in static:
+        assert r[name] is CY.ROUTES[name], name
         assert r[name].__module__ == "astral_toolkit.app.api.system", name
-    assert sorted(CY.ROUTES) == sorted(_SYSTEM_API)
+    for name, fn in bound.items():
+        assert fn.__module__ == "astral_toolkit.app.api.system", name
 
 
 def test_system_tasks_no_services():
@@ -68,11 +77,12 @@ def test_system_router_roundtrip():
     )
 
 
-def test_system_start_background_uses_bound_callback():
-    """tasks.system.start_background 调用 bootstrap 绑进来的启动回调，并透传返回值"""
+def test_system_agree_uses_given_start(monkeypatch):
+    """tasks.system.agree 用调用方给的状态源和启动回调，先存设置、再起后台、再回状态"""
+    from astral_toolkit.core import settings
     from astral_toolkit.tasks import system as TY
+    from astral_toolkit.tasks.system.about import AGREE_TEXT
     from astral_toolkit.tasks.system.common import StatusSources
-    from tests.bootstrap_helpers import bind_for_test
 
     called = []
 
@@ -91,8 +101,11 @@ def test_system_start_background_uses_bound_callback():
         game_events_last=lambda: {},
         results=object(),
     )
-    with bind_for_test(TY, sources, start):
-        assert TY.start_background() is True
+    monkeypatch.setattr(settings, "update", lambda **kw: None)
+    monkeypatch.setattr(TY, "status", lambda src: {"src": src})
+    assert "error" in TY.agree(sources, start, text="本软件是免费的")
+    assert called == []
+    assert TY.agree(sources, start, text=AGREE_TEXT) == {"src": sources}
     assert called == [1]
 
 

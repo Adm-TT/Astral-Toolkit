@@ -2,6 +2,9 @@
 
 import time
 import webbrowser
+from collections.abc import Callable
+
+from .common import StatusSources
 
 REFERRAL_URL = "https://www.robertsspaceindustries.com/enlist?referral=STAR-4CNY-K3YT"
 
@@ -119,14 +122,13 @@ def open_referral():
     return {"ok": True}
 
 
-def agree(text=""):
+def agree(sources: StatusSources, start: Callable[[], bool], /, text=""):
     """第一次打开：必须一字不差地输入「本软件是免费软件」才能用"""
     from ...core import settings
-    from .settings import start_background
     from .status import status
 
     if (text or "").strip() != AGREE_TEXT:
         return {"error": f"需完整输入：{AGREE_TEXT}"}
     settings.update(agreed=True)
-    start_background()
-    return status()
+    start()
+    return status(sources)

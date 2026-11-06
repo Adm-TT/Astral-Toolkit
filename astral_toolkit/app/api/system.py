@@ -3,15 +3,12 @@
 运行状态、设置、在线更新与回滚、日志导出、问题反馈、关于页、窗口显示与退出的接口：
 收关键字参数，原样转给 tasks/system.py 里同名函数。只做转发，不加校验（校验留在 tasks 里，改行为要 NGU 定）。
 runtime_capture_now、runtime_clear_logs（实时监控页的手动截图、清日志）例外：实现直接写在本文件。
+运行状态、问题反馈、改设置、同意协议要这个 app 的状态源（同意协议还要启动回调）：bound(sources, start) 给，bootstrap.routes 接（F 段 B5）
 router 自动收集文件末尾的 ROUTES。
 """
 
 from ...tasks import system as _t
 from .. import bus, preview
-
-
-def status(**kw):
-    return _t.status(**kw)
 
 
 def upgrade_check(**kw):
@@ -30,10 +27,6 @@ def export_logs(**kw):
     return _t.export_logs(**kw)
 
 
-def feedback_report(**kw):
-    return _t.feedback_report(**kw)
-
-
 def feedback_list(**kw):
     return _t.feedback_list(**kw)
 
@@ -48,10 +41,6 @@ def feedback_clear(**kw):
 
 def overlay_move(**kw):
     return _t.overlay_move(**kw)
-
-
-def set_settings(**kw):
-    return _t.set_settings(**kw)
 
 
 def update_data(**kw):
@@ -72,10 +61,6 @@ def third_party_licenses(**kw):
 
 def open_referral(**kw):
     return _t.open_referral(**kw)
-
-
-def agree(**kw):
-    return _t.agree(**kw)
 
 
 def show(**kw):
@@ -103,24 +88,44 @@ def runtime_clear_logs():
     return {"ok": True}
 
 
+def bound(sources, start):
+    """要运行状态源 / 后台启动回调的接口（F 段 B5）：bootstrap.routes 把这个 app 的 status_sources(app)
+    和启动回调交进来，接口直接拿着，不经 tasks 模块级绑定"""
+
+    def status(**kw):
+        return _t.status(sources, **kw)
+
+    def feedback_report(**kw):
+        return _t.feedback_report(sources, **kw)
+
+    def set_settings(**kw):
+        return _t.set_settings(sources, **kw)
+
+    def agree(**kw):
+        return _t.agree(sources, start, **kw)
+
+    return {
+        "status": status,
+        "feedback_report": feedback_report,
+        "set_settings": set_settings,
+        "agree": agree,
+    }
+
+
 ROUTES = {
-    "status": status,
     "upgrade_check": upgrade_check,
     "upgrade_online": upgrade_online,
     "upgrade_rollback": upgrade_rollback,
     "export_logs": export_logs,
-    "feedback_report": feedback_report,
     "feedback_list": feedback_list,
     "feedback_export": feedback_export,
     "feedback_clear": feedback_clear,
     "overlay_move": overlay_move,
-    "set_settings": set_settings,
     "update_data": update_data,
     "about_info": about_info,
     "open_source_site": open_source_site,
     "third_party_licenses": third_party_licenses,
     "open_referral": open_referral,
-    "agree": agree,
     "show": show,
     "quit": quit,
     "runtime_capture_now": runtime_capture_now,

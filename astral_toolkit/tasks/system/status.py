@@ -7,10 +7,10 @@ import time
 import zipfile
 from pathlib import Path
 
-from .common import WIN, _need_status
+from .common import WIN, StatusSources
 
 
-def status():
+def status(sources: StatusSources, /):
     from ...core import settings
     from ...mining.data import GAME_VERSION
     from ...system import showloc
@@ -18,7 +18,7 @@ def status():
     from .settings import hotkey_conflicts
 
     cfg = settings.load()
-    src = _need_status()
+    src = sources
 
     live_running = src.live_running()
     live_paused = bool(live_running and src.live_paused())
