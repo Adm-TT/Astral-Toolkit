@@ -1,6 +1,6 @@
-"""掉落查询的纯规则：变体过滤、候选挑选、掉落明细汇总分组（原 crafting/loot.py 的计算部分）。
+"""掉落查询的纯规则：变体过滤、候选挑选、掉落明细汇总分组、认副本专属矿（原 crafting/loot.py 的计算部分）。
 
-只 import 标准库；gamedata、zip、缓存、联网留在 crafting/loot.py。
+只 import 标准库；查库、整包和缓存、联网在 tasks/catalog_queries/loot.py 和它用的下载 / 存取适配（目录迁移 Q3）。
 """
 
 import re
@@ -134,3 +134,35 @@ def ship_groups(pairs, top=5):
     shown = sum(len(r["regions"]) for r in rows)
     total = sum(len(v) for v in groups.values())
     return rows, max(0, total - shown)
+
+
+# ---------------------------------------------------------------- 副本专属矿（目录迁移 Q3 从 crafting/loot.py 搬来）
+# 不会从箱子里开出来，只能在副本里开采（用户 2026-10-24 告知；掉落站把手采物品挂在挖矿宝石掉落表上，
+# 那张表游戏文件里有、实际不刷）。值 = 开采点（可开采岩石）的类名前缀，排除的前缀
+INSTANCE_ORES = {
+    "carinite": ("mineablerock_fps_carinite", "mineablerock_fps_carinite_pure"),
+    "carinitepure": ("mineablerock_fps_carinite_pure", None),
+    "janalite": ("mineablerock_fps_janalite", None),
+    "jaclium": ("mineablerock_fps_jaclium", None),
+    "saldynium": ("mineablerock_fps_saldynium", None),
+}
+_INSTANCE_ZH = {
+    "科力晶": "carinite",
+    "科力晶（纯）": "carinitepure",
+    "科力晶(纯)": "carinitepure",
+    "纯科力晶": "carinitepure",
+    "纯净科力晶": "carinitepure",
+    "加纳石": "janalite",
+    "杰金": "jaclium",
+    "杰金矿石": "jaclium",
+    "烁迪银": "saldynium",
+    "烁迪银矿石": "saldynium",
+}
+
+
+def instance_ore(name_en="", name_zh=""):
+    """是不是副本专属矿：返回 INSTANCE_ORES 的键，不是返回 None"""
+    k = re.sub(r"[^a-z]", "", (name_en or "").lower().replace("(ore)", ""))
+    if k in INSTANCE_ORES:
+        return k
+    return _INSTANCE_ZH.get((name_zh or "").replace(" ", ""))

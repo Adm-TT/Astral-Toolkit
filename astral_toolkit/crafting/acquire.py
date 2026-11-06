@@ -22,6 +22,14 @@ def _shops():
     return shops
 
 
+def _loot():
+    """掉落查询（目录迁移 Q3 搬到 tasks/catalog_queries/loot）：调用时才取，和 _shops() 一样是临时往上调 tasks 的边，
+    本文件 Q3 收口时也搬过去以后删（门禁 test_crafting_reaches_up_into_tasks_only_where_listed 钉着）"""
+    from ..tasks.catalog_queries import loot
+
+    return loot
+
+
 def _buy_rows(item_id, here, top=3):
     if here:
         rows = _shops().nearest(item_id, here, top)
@@ -155,9 +163,7 @@ def info(
         out["sell"] = _rules.sell_summary(_shops().where(item_id)[1])
     if _rules.shows_loot(show_loot, hit):
         try:
-            from .loot import info as loot_info
-
-            out["loot"] = loot_info(name_en or name, name_zh, online=loot_online)
+            out["loot"] = _loot().info(name_en or name, name_zh, online=loot_online)
         except Exception as e:
             out["loot"] = {"error": f"掉落数据出错：{e}"}
     try:
@@ -197,9 +203,7 @@ def material_source(name_en):
 def loot_source(name_en, name_zh=""):
     """开箱掉落一句话（scl.miao.network 的掉落表）：概率最高的箱子在哪些地方；没有掉落返回空"""
     try:
-        from ..crafting.loot import info
-
-        d = info(
+        d = _loot().info(
             name_en, name_zh, top=2, online=False
         )  # 本机没有明细就算没有，不在页面里逐个材料联网等（细查 2026-10-28）
     except Exception:

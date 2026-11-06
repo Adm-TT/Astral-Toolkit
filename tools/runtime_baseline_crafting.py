@@ -258,11 +258,11 @@ class _Offline:
 
     def __enter__(self):
         from astral_toolkit.core import net as net_mod
-        from astral_toolkit.crafting import loot as loot_mod
+        from astral_toolkit.infrastructure.providers import loot_site as loot_mod
         from astral_toolkit.update import shops as shops_mod
 
         self._patch(net_mod, "read", _offline)
-        self._patch(loot_mod, "_get", _offline)
+        self._patch(loot_mod, "get_json", _offline)
         self._patch(shops_mod, "_get", _offline)
         return self
 

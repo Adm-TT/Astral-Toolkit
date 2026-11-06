@@ -534,6 +534,60 @@ def test_infrastructure_stays_below_app():
         assert _forbidden(mods, _INFRA_FORBIDDEN), source
 
 
+# 下载适配（providers）、本机存取适配（persistence）另外不许碰业务、数据层和更新流程（目录迁移章程 §3、Q3）
+_INFRA_ADAPTER_FORBIDDEN = _INFRA_FORBIDDEN + (
+    "astral_toolkit.gamedata",
+    "astral_toolkit.catalog",
+    "astral_toolkit.crafting",
+    "astral_toolkit.update",
+    "astral_toolkit.trade",
+    "astral_toolkit.mining",
+    "astral_toolkit.navigation",
+    "astral_toolkit.system",
+    "astral_toolkit.run",
+    "astral_toolkit.selftest",
+    "astral_toolkit.frozen_main",
+)
+
+
+def _infra_adapter_violations(source, pkg):
+    """适配层碰了不该碰的：禁用清单里的模块（函数里的 import 也算）、裸 import astral_toolkit 再走属性（等于绕开清单）"""
+    mods = list(_imports_in_source(source, pkg))
+    bare = [m for m in _bound_modules(source, pkg) if m in _BARE_FORBIDDEN]
+    return _forbidden(mods, _INFRA_ADAPTER_FORBIDDEN) + bare
+
+
+def test_infrastructure_adapters_stay_below_domain():
+    """下载 / 本机存取适配只管发请求、读写文件和资源：不碰业务、数据层和更新流程，也不自己起线程
+    （并行下载由调用方的更新流程起）。函数里的 import 也算"""
+    files = [
+        p
+        for d in ("providers", "persistence")
+        for p in sorted((_ROOT / "infrastructure" / d).rglob("*.py"))
+    ]
+    assert len(files) >= 4, files
+    for f in files:
+        rel = f.relative_to(_ROOT).as_posix()
+        source = f.read_text(encoding="utf-8")
+        pkg = ".".join(("astral_toolkit", *f.relative_to(_ROOT).parent.parts))
+        assert _infra_adapter_violations(source, pkg) == [], rel
+        assert _thread_makers_in_source(source) == [], rel
+    for bad in (
+        "from ...gamedata import loot",
+        "def f():\n    from ...update import loot\n",
+        "def f():\n    from ...crafting import acquire\n",
+        "from ...tasks.catalog_queries import loot",
+        "def f():\n    from ... import run\n    run.update()\n",
+        "import astral_toolkit\nastral_toolkit.gamedata.loot.rows()\n",
+    ):
+        assert _infra_adapter_violations(
+            bad, "astral_toolkit.infrastructure.providers"
+        ), bad
+    assert _thread_makers_in_source(
+        "from concurrent.futures import ThreadPoolExecutor\nThreadPoolExecutor(4)\n"
+    )
+
+
 def test_core_stays_below_app():
     """core/ 是基础工具：不反向依赖界面、用例、runtime 和装配入口（CL-C5 去掉了截图读悬浮窗、运行记录推面板
     这两处，改成装配接进来）。函数里的 import 也算"""
@@ -564,7 +618,7 @@ def _core_dynamic_up(source):
 
 
 _GAMEDATA_TEXTKEY_FORBIDDEN = (
-    ("astral_toolkit.crafting.loot", {"_fold"}),
+    ("astral_toolkit.tasks.catalog_queries.loot", {"_fold"}),
     ("astral_toolkit.crafting.wikelo", {"_fold"}),
     ("astral_toolkit.tasks.catalog_queries.shops", {"_fold"}),
     ("astral_toolkit.tasks.catalog_queries.search", {"en_key", "zh_key"}),
@@ -632,8 +686,9 @@ def test_gamedata_stops_reaching_into_crafting_and_trade():
         == "astral_toolkit.gamedata"
     )
     assert _gamedata_textkey_imports(
-        "def f():\n    from ..crafting.loot import _fold\n", "astral_toolkit.gamedata"
-    ) == ["astral_toolkit.crafting.loot: _fold"]
+        "def f():\n    from ..tasks.catalog_queries.loot import _fold\n",
+        "astral_toolkit.gamedata",
+    ) == ["astral_toolkit.tasks.catalog_queries.loot: _fold"]
     files = list((_ROOT / "gamedata").rglob("*.py"))
     assert files
     for path in files:
@@ -841,7 +896,7 @@ def test_gamedata_has_no_reverse_imports():
 _PRODUCT_CODE_KEY_MODULES = {
     "astral_toolkit.crafting.crafting": {"_fold_name", "_search_norm"},
     "astral_toolkit.tasks.catalog_queries.shops": {"_fold"},
-    "astral_toolkit.crafting.loot": {"_fold"},
+    "astral_toolkit.tasks.catalog_queries.loot": {"_fold"},
     "astral_toolkit.crafting.wikelo": {"_fold"},
     "astral_toolkit.trade.gamekey": {"_fold"},
     "astral_toolkit.trade.names": {"_fold_en", "_norm_zh"},
@@ -1120,6 +1175,7 @@ _CATALOG_QUERIES_FORBIDDEN = _CATALOG_USE_CASE_FORBIDDEN + (
     "astral_toolkit.crafting.acquire",
     "astral_toolkit.crafting.itemsearch",
     "astral_toolkit.crafting.shops",
+    "astral_toolkit.crafting.loot",
 )
 
 
@@ -1182,6 +1238,7 @@ def test_catalog_use_cases_stay_below_app():
         "from ...crafting.acquire import info",
         "from ...crafting import itemsearch",
         "def f():\n    from ...crafting.shops import where\n",
+        "def f():\n    from ...crafting.loot import detail\n",
     ):
         assert _catalog_use_case_violations(bad, sub), bad
     for bad in (
@@ -1229,12 +1286,23 @@ def test_catalog_queries_import_starts_no_thread():
     assert {"search", "shops"} <= set(names.split(",")), out
 
 
-_THREAD_MAKERS = ("Thread", "Timer", "ThreadPoolExecutor", "ProcessPoolExecutor")
+_THREAD_MAKERS = (
+    "Thread",
+    "Timer",
+    "ThreadPoolExecutor",
+    "ProcessPoolExecutor",
+    "ThreadPool",
+    "Pool",
+    "start_new_thread",
+    "to_thread",
+    "run_in_executor",
+)
 
 
 def _thread_makers_in_source(source):
     """起线程 / 线程池的调用，按被调的名字认：threading.Thread、from threading import Thread、
-    __import__('threading').Thread、Timer、concurrent.futures 的池子都算"""
+    __import__('threading').Thread、Timer、concurrent.futures 的池子、multiprocessing 的 Pool / ThreadPool、
+    _thread.start_new_thread、asyncio.to_thread、run_in_executor 都算；继承 Thread 的类也算（Q3a 审查补）"""
     out = []
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, ast.Call):
@@ -1242,6 +1310,12 @@ def _thread_makers_in_source(source):
             name = f.attr if isinstance(f, ast.Attribute) else getattr(f, "id", "")
             if name in _THREAD_MAKERS:
                 out.append(name)
+        elif isinstance(node, ast.ClassDef):
+            for b in node.bases:
+                if (
+                    b.attr if isinstance(b, ast.Attribute) else getattr(b, "id", "")
+                ) == "Thread":
+                    out.append(f"{node.name}(Thread)")
     return out
 
 
@@ -1259,13 +1333,20 @@ def test_catalog_queries_code_starts_no_threads():
         "from threading import Thread\ndef f():\n    Thread(target=g).start()\n",
         "__import__('threading').Timer(1, f).start()\n",
         "from concurrent.futures import ThreadPoolExecutor\nThreadPoolExecutor(4)\n",
+        "import _thread\n_thread.start_new_thread(f, ())\n",
+        "import asyncio\nasync def f():\n    await asyncio.to_thread(g)\n",
+        "from multiprocessing import Pool\nPool(2)\n",
+        "import threading\nclass W(threading.Thread):\n    pass\n",
     ):
         assert _thread_makers_in_source(bad), bad
+    assert (
+        _thread_makers_in_source("import threading\n_lock = threading.Lock()\n") == []
+    )
 
 
 def test_crafting_reaches_up_into_tasks_only_where_listed():
     """crafting 在 tasks 下层，不该反过来导入 tasks（目录迁移章程：兼容只许有明确调用者和删除批次），只许减不许加：
-    acquire → 物品搜索（Q1）、商店查询（Q2）是搬走以后留的临时边，Q3 把 acquire 搬进 catalog_queries 时删；
+    acquire → 物品搜索（Q1）、商店查询（Q2）、掉落查询（Q3a）是搬走以后留的临时边，Q3 把 acquire 搬进 catalog_queries 时删；
     goals → tasks.trade 是老的，目标业务这轮不动。字符串导入（__import__ / import_module）本项目的模块一律算，
     往上往下都不许，免得绕过这条。"""
     allowed = {
@@ -1274,6 +1355,7 @@ def test_crafting_reaches_up_into_tasks_only_where_listed():
             "astral_toolkit.tasks.catalog_queries.search.lookup",
             "astral_toolkit.tasks.catalog_queries",
             "astral_toolkit.tasks.catalog_queries.shops",
+            "astral_toolkit.tasks.catalog_queries.loot",
         },
         "goals.py": {"astral_toolkit.tasks.trade", "astral_toolkit.tasks.trade.trade"},
     }
@@ -1450,6 +1532,7 @@ def test_api_route_names_unique():
 _F8_FORBIDDEN_IMPORTS = (
     "astral_toolkit.tasks.trade",
     "astral_toolkit.crafting.loot",
+    "astral_toolkit.tasks.catalog_queries.loot",
     "astral_toolkit.crafting.crafting",
     "astral_toolkit.crafting.wikelo",
     "astral_toolkit.trade.console.match_tooltip",
@@ -1476,6 +1559,7 @@ def test_f8_reaches_item_query_through_links():
     for bad in (
         "from . import trade as _t_trade",
         "def f():\n    from ..crafting.loot import info\n",
+        "def f():\n    from .catalog_queries.loot import info\n",
         "def f():\n    from ..crafting import wikelo\n",
         "def f():\n    from ..crafting.crafting import craft_text\n",
         "def f():\n    from ..trade.console import hud_market\n",

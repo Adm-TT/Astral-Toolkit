@@ -18,7 +18,7 @@ class ItemInfo:
 
 @dataclass(frozen=True)
 class LootLookup:
-    """掉落那一块。loot：crafting.loot.info 原样的结果（None、pending、error 字典都原样）；取的时候抛了异常：error 是那个异常"""
+    """掉落那一块。loot：tasks/catalog_queries/loot.info 原样的结果（None、pending、error 字典都原样）；取的时候抛了异常：error 是那个异常"""
 
     loot: Any = None
     error: Exception | None = None

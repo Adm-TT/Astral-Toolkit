@@ -191,7 +191,7 @@ def clear_caches():
     # 不用在这清；下面 gamedata.refresh() 让下次查询重读清单就够了（收口 2 删掉了对它们的空操作 _clear 行）
     _clear("mining.laser", "head_blueprint", "craft_slots")
     try:
-        from ..crafting import loot
+        from . import loot
 
         loot._index = None  # 掉落索引（load_index 只给更新流程读文件用）
     except Exception:
@@ -329,24 +329,24 @@ def _restore(table, order):
 
 def _update_loot(info, progress):
     """掉落明细整包：本地版本和数据包里的不一样才下载（约 25 MB），下载后检查是压缩包、版本对得上再替换"""
-    from ..crafting import loot
+    from ..infrastructure.persistence import loot_details
 
     lt = info.get("loot")
     if not lt:
         return
-    cur = loot.details_version()
+    cur = loot_details.details_version()
     if cur == lt["version"]:
         return
     tmp = Path(tempfile.mkdtemp(prefix="at_lootdl_"))
     try:
         z = tmp / lt["file"]
         _download(lt, z, progress)
-        if loot.details_version(z) != lt["version"]:
+        if loot_details.details_version(z) != lt["version"]:
             raise ValueError("掉落明细整包版本不符")
         DATA.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(z, DATA / ".loot_details.zip.new")
-        loot.close_bundle()  # Windows：正在读的文件不能替换
-        (DATA / ".loot_details.zip.new").replace(loot.DETAILS)
+        loot_details.close_bundle()  # Windows：正在读的文件不能替换
+        (DATA / ".loot_details.zip.new").replace(loot_details.DETAILS)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     progress(f"掉落明细已更新：{cur or '无'} → {lt['version']}")
@@ -417,12 +417,12 @@ def make(out_dir, date=None):
         "sha256": U._sha256(zp),
         "urls": urls,
     }
-    from ..crafting import loot
+    from ..infrastructure.persistence import loot_details
 
-    lv = loot.details_version()
+    lv = loot_details.details_version()
     if lv:  # 掉落明细整包：单独一个文件，和数据包放在同一个发行版里
         lname = f"AT_loot_{lv}.zip"
-        shutil.copyfile(loot.DETAILS, out_dir / lname)
+        shutil.copyfile(loot_details.DETAILS, out_dir / lname)
         m["loot"] = {
             "version": lv,
             "file": lname,

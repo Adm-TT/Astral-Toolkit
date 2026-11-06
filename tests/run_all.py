@@ -31,7 +31,9 @@ from astral_toolkit.core import paths as _paths  # noqa: E402
 # import 时把 DATA 下的路径绑成模块常量的模块，趁 paths.DATA 还是真实目录先导入一遍：
 # 以前 crafting/loot 第一次 import 发生在 test_mining 里某条把 DATA 换成临时目录的测试中（经 position → places.code_zh → ensure →
 # 建库 → import_loot），INDEX / DETAILS 从此绑在临时目录，test_wikelo_materials_all_have_source 在库已建好时总被跳过（收口 2，待做 ㉑）
-import astral_toolkit.crafting.loot  # noqa: E402, F401
+# 目录迁移 Q3 起掉落索引 INDEX 在 update/loot、明细整包 DETAILS 和缓存 CACHE_DIR 在 infrastructure/persistence/loot_details
+import astral_toolkit.update.loot  # noqa: E402, F401
+import astral_toolkit.infrastructure.persistence.loot_details  # noqa: E402, F401
 import astral_toolkit.update.shops  # noqa: E402, F401
 import astral_toolkit.crafting.wikelo  # noqa: E402, F401
 import astral_toolkit.update.localization  # noqa: E402, F401

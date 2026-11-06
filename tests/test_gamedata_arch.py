@@ -83,7 +83,7 @@ def test_reused_rules_are_pure(monkeypatch):
         norm_zh as _norm_zh,
         zh_key,
     )
-    from astral_toolkit.crafting.loot import _fold as loot_fold
+    from astral_toolkit.tasks.catalog_queries.loot import _fold as loot_fold
     from astral_toolkit.crafting.wikelo import _fold as wikelo_fold
     from astral_toolkit.navigation.names import _norm
     from astral_toolkit.navigation.starmap import fix_points

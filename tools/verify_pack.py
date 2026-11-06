@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from astral_toolkit.update import data_pack as P, update_check as U  # noqa: E402
-from astral_toolkit.crafting import loot  # noqa: E402
+from astral_toolkit.infrastructure.persistence import loot_details  # noqa: E402
 
 
 def rounds():
@@ -32,7 +32,7 @@ def _host(url):
 def check(which, mhost, dhost):
     """只用这一个来源验证一遍；成功返回 True。临时换掉的东西在 finally 里还原"""
     tmp = Path(tempfile.mkdtemp(prefix=f"at_verify_{which}_"))
-    saved = (P.DATA, P.STAMP, P.manifest_urls, U._open, loot.DETAILS)
+    saved = (P.DATA, P.STAMP, P.manifest_urls, U._open, loot_details.DETAILS)
     real_urls, real_open = P.manifest_urls, U._open
     allowed = {mhost, dhost}
 
@@ -44,14 +44,14 @@ def check(which, mhost, dhost):
         return real_open(url, timeout)
 
     try:
-        P.DATA, P.STAMP, loot.DETAILS = (
+        P.DATA, P.STAMP, loot_details.DETAILS = (
             tmp,
             tmp / "data_pack.json",
             tmp / "loot_details.zip",
         )
         P.manifest_urls = lambda: [(w, u) for w, u in real_urls() if _host(u) == mhost]
         U._open = only_open
-        loot.close_bundle()
+        loot_details.close_bundle()
         info, err = P.fetch()
         if info:  # 下载地址也只留这一处
             info["urls"] = [u for u in info["urls"] if _host(u) == dhost]
@@ -72,12 +72,14 @@ def check(which, mhost, dhost):
         )
         t = time.time()
         P._update_loot(info, print)
-        print(f"   掉落明细整包：{loot.details_version()}，{time.time() - t:.1f} 秒")
+        print(
+            f"   掉落明细整包：{loot_details.details_version()}，{time.time() - t:.1f} 秒"
+        )
         idx = json.loads(
             (tmp / "loot_index.json").read_text(encoding="utf-8")
         )  # 刚装进临时目录的那份
         u = idx["rows"][0][0]
-        ok = bool(loot._from_zip(u, idx["version"]))
+        ok = bool(loot_details.from_zip(u, idx["version"]))
         print(
             f"   从整包读一件掉落明细（{idx['rows'][0][5] or idx['rows'][0][1]}）：",
             "成功" if ok else "失败",
@@ -87,8 +89,8 @@ def check(which, mhost, dhost):
         print("   出错：", e)
         return False
     finally:
-        loot.close_bundle()
-        P.DATA, P.STAMP, P.manifest_urls, U._open, loot.DETAILS = saved
+        loot_details.close_bundle()
+        P.DATA, P.STAMP, P.manifest_urls, U._open, loot_details.DETAILS = saved
 
 
 def main(argv):

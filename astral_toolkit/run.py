@@ -239,9 +239,9 @@ def update(direct=False, web_ok=()):
     这几处都连不上才改从各数据网站直接下载（矿价、商店 UEX，蓝图 scmdb，星图 starmap.space，掉落 scl.miao.network）。
     direct=True：跳过数据包、直接从各网站下载（作者发布数据包前用，tools/make_data_pack.py）。
     web_ok：本机是游戏数据版也照样从网站下的模块名（make_data_pack 下了 starmap.space 后会用数据构建脚本重新合并，只取自转相位和玩家补充的点）"""
-    from .crafting import build_crafting, loot
+    from .crafting import build_crafting
     from .navigation import navigate
-    from .update import data_pack, localization, shops, uex
+    from .update import data_pack, localization, loot, shops, uex
 
     sources = (
         ("矿价和精炼站加成（UEX）", uex.refresh),

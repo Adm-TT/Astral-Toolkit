@@ -112,7 +112,8 @@ def test_unreachable_returns_none_and_run_falls_back(monkeypatch, tmp_path):
     assert P.update(progress=lambda *_: None) is None
     from astral_toolkit import run
     from astral_toolkit.update import uex, localization
-    from astral_toolkit.crafting import build_crafting, loot
+    from astral_toolkit.crafting import build_crafting
+    from astral_toolkit.update import loot as loot_index
     from astral_toolkit.update import shops
     from astral_toolkit.navigation import navigate
 
@@ -123,7 +124,7 @@ def test_unreachable_returns_none_and_run_falls_back(monkeypatch, tmp_path):
         (build_crafting, "update"),
         (navigate, "update"),
         (shops, "update"),
-        (loot, "update"),
+        (loot_index, "update"),
     ):
         monkeypatch.setattr(
             mod, fn, (lambda n: lambda *a, **k: called.append(n))(mod.__name__)
@@ -190,33 +191,41 @@ def _loot_zip(path, version, items):
 
 def test_loot_detail_reads_bundle_first(monkeypatch, tmp_path):
     """掉落明细先查整包，版本对得上才用；整包里没有的才联网"""
-    from astral_toolkit.crafting import loot
+    from astral_toolkit.infrastructure.persistence import loot_details
+    from astral_toolkit.infrastructure.providers import loot_site
+    from astral_toolkit.tasks.catalog_queries import loot
 
     monkeypatch.setattr(
-        loot,
+        loot_details,
         "DETAILS",
         _loot_zip(tmp_path / "loot_details.zip", "4.10.2LIVE", {"u1": {"a": 1}}),
     )
-    monkeypatch.setattr(loot, "CACHE_DIR", tmp_path / "loot")
-    monkeypatch.setattr(loot, "_zip", {"z": None, "mtime": None, "version": None})
+    monkeypatch.setattr(loot_details, "CACHE_DIR", tmp_path / "loot")
+    monkeypatch.setattr(
+        loot_details, "_zip", {"z": None, "mtime": None, "version": None}
+    )
     monkeypatch.setattr(loot, "_index_meta", lambda: {"version": "4.10.2LIVE"})
     monkeypatch.setattr(
-        loot, "_get", lambda *a, **k: (_ for _ in ()).throw(OSError("不该联网"))
+        loot_site,
+        "get_json",
+        lambda *a, **k: (_ for _ in ()).throw(OSError("不该联网")),
     )
-    assert loot.detail("u1") == {"a": 1} and loot.details_version() == "4.10.2LIVE"
+    assert (
+        loot.detail("u1") == {"a": 1} and loot_details.details_version() == "4.10.2LIVE"
+    )
     monkeypatch.setattr(
-        loot, "_get", lambda url, timeout=60: {"net": url.endswith("u2.json")}
+        loot_site, "get_json", lambda url, timeout=60: {"net": url.endswith("u2.json")}
     )
     assert loot.detail("u2") == {"net": True}  # 整包里没有：现查
     monkeypatch.setattr(loot, "_index_meta", lambda: {"version": "4.11.0LIVE"})
-    monkeypatch.setattr(loot, "_get", lambda url, timeout=60: {"new": True})
+    monkeypatch.setattr(loot_site, "get_json", lambda url, timeout=60: {"new": True})
     assert loot.detail("u1") == {"new": True}  # 游戏版本变了：旧整包不用
 
 
 def test_data_pack_downloads_loot_bundle_only_when_version_changes(
     monkeypatch, tmp_path
 ):
-    from astral_toolkit.crafting import loot
+    from astral_toolkit.infrastructure.persistence import loot_details
 
     data, m = _pack(tmp_path, {"shops.json": "{}"})
     lz = _loot_zip(
@@ -242,10 +251,10 @@ def test_data_pack_downloads_loot_bundle_only_when_version_changes(
 
     real = U._open
     monkeypatch.setattr(U, "_open", lambda url, t: (hits.append(url), real(url, t))[1])
-    monkeypatch.setattr(loot, "DETAILS", tmp_path / "data" / "loot_details.zip")
+    monkeypatch.setattr(loot_details, "DETAILS", tmp_path / "data" / "loot_details.zip")
     assert P.update(progress=lambda *_: None) is True
     assert (
-        loot.details_version() == "4.10.2LIVE"
+        loot_details.details_version() == "4.10.2LIVE"
         and sum("AT_loot" in h for h in hits) == 1
     )
     assert (
@@ -257,11 +266,12 @@ def test_data_pack_downloads_loot_bundle_only_when_version_changes(
 def test_crawl_stops_on_rate_limit(monkeypatch, tmp_path):
     """全速抓掉落明细：对方限流（429）就停，不生成整包"""
     import urllib.error
-    from astral_toolkit.crafting import loot
+    from astral_toolkit.infrastructure.persistence import loot_details
+    from astral_toolkit.update import loot as loot_index
     from astral_toolkit.core import net
 
     monkeypatch.setattr(
-        loot,
+        loot_index,
         "update",
         lambda version=None, progress=print: {
             "version": "4.10.2LIVE",
@@ -276,15 +286,17 @@ def test_crawl_stops_on_rate_limit(monkeypatch, tmp_path):
 
     monkeypatch.setattr(net, "read", fake_read)
     try:
-        loot.crawl_details(out=tmp_path / "x.zip", workers=2, progress=None)
+        loot_index.crawl_details(out=tmp_path / "x.zip", workers=2, progress=None)
         assert False
     except RuntimeError as e:
         assert "429" in str(e)
     assert not (tmp_path / "x.zip").exists() and not (tmp_path / "x.part").exists()
     monkeypatch.setattr(net, "read", lambda req, timeout=60: b'{"ok": 1}')
-    ok, bad, v = loot.crawl_details(out=tmp_path / "x.zip", workers=4, progress=None)
+    ok, bad, v = loot_index.crawl_details(
+        out=tmp_path / "x.zip", workers=4, progress=None
+    )
     assert (
         ok == 40
         and bad == 0
-        and loot.details_version(tmp_path / "x.zip") == "4.10.2LIVE"
+        and loot_details.details_version(tmp_path / "x.zip") == "4.10.2LIVE"
     )

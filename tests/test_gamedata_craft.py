@@ -418,7 +418,7 @@ def test_min_sources_unchanged():
 
 
 def test_loot_rows_norm_columns_and_meta(monkeypatch, tmp_path):
-    from astral_toolkit.crafting.loot import _fold
+    from astral_toolkit.tasks.catalog_queries.loot import _fold
 
     snapshot = _built(monkeypatch, tmp_path)
     with snapshot() as s:
@@ -465,7 +465,7 @@ def test_loot_index_meta_absent_without_file(monkeypatch, tmp_path):
 
 
 def test_wiki_classes_cls_and_alt_lowercased(monkeypatch, tmp_path):
-    from astral_toolkit.crafting.loot import _fold
+    from astral_toolkit.tasks.catalog_queries.loot import _fold
 
     wiki = {
         "items": [
@@ -569,7 +569,7 @@ def test_alias_pairs_unfiltered(monkeypatch, tmp_path):
 
 def test_wiki_items_odd_types_do_not_break_build(monkeypatch, tmp_path):
     """n 是数字、alt 是数字 / 字符串：旧 _wiki_classes 吞错返回空集，这里跳过 / 当空；n 缺失照旧折叠成 ''"""
-    from astral_toolkit.crafting.loot import _fold
+    from astral_toolkit.tasks.catalog_queries.loot import _fold
 
     wiki = {
         "items": [
