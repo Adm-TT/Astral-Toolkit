@@ -2,7 +2,8 @@
 
 import pytest
 import time
-from astral_toolkit.crafting import shops
+from astral_toolkit.tasks.catalog_queries import shops
+from astral_toolkit.update import shops as shop_prices
 from astral_toolkit.crafting import wikelo
 from astral_toolkit.crafting import loot
 from astral_toolkit.crafting import acquire
@@ -13,7 +14,7 @@ from tests.tools_helpers import _shops_db
 
 def fake_shops(monkeypatch, tmp_path):
     data = {
-        "fmt": shops.FMT,
+        "fmt": shop_prices.FMT,
         "fetched": time.time(),
         "items": {
             "1600": ["SureGrip S1 Tractor Beam", "Tractor Beams"],
@@ -94,7 +95,7 @@ POINTS = [
 
 def setup(monkeypatch, tmp_path):
     data = {
-        "fmt": shops.FMT,
+        "fmt": shop_prices.FMT,
         "fetched": time.time(),
         "items": {
             "1700": ["MaxLift Tractor Beam", "Tractor Beams"],
@@ -161,8 +162,10 @@ def test_finder_cheapest_first(monkeypatch, tmp_path):
     assert shops.find("SureGrip S1")[0][0] == 1600
     buy, sell = shops.where(1600)
     assert buy[0][0] == 4500 and "Orison" in buy[0][2] and not sell
-    text = shops.where_text(1700)
-    assert "没有这件东西的商店售卖记录" in text and "1,200" in text
+    buy, sell = shops.where(
+        1700
+    )  # 没有商店卖、商店收最高 1,200（原来比 where_text 的文字，Q2 删了 where_text）
+    assert not buy and sell[0][0] == 1200
     assert "Orison" in shops.where_by_name("SureGrip S1 Tractor Beam")
 
 
@@ -197,16 +200,12 @@ def test_wikelo_data_and_lookup():
 
 def test_shop_point_and_nearest(monkeypatch, tmp_path):
     setup(monkeypatch, tmp_path)
-    assert (
-        shops.shop_point(
-            ["Stanton", "ArcCorp", "ArcCorp Lagrange Point 4", "", "ARC-L4", ""]
-        )["n"]
-        == "ARC L4"
+    arc = position.shop_point(
+        ["Stanton", "ArcCorp", "ArcCorp Lagrange Point 4", "", "ARC-L4", ""]
     )
-    assert (
-        shops.shop_point(["Stanton", "Crusader", "", "", "", "Orison"])["n"]
-        == "Crusader"
-    )
+    crusader = position.shop_point(["Stanton", "Crusader", "", "", "", "Orison"])
+    assert arc is not None and arc["n"] == "ARC L4"
+    assert crusader is not None and crusader["n"] == "Crusader"
     here = dict(POINTS[3], label="NB", age=0)  # 在微科星
     near = shops.nearest(1700, here, 3)
     assert near[0][2] == "Shop NB" and near[0][0] == 0

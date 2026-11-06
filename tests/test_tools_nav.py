@@ -5,7 +5,7 @@ from datetime import datetime
 from datetime import timezone
 from astral_toolkit.ocr import OcrToken
 import time
-from astral_toolkit.crafting import shops
+from astral_toolkit.update import shops
 from astral_toolkit.navigation import position
 from tests.tools_helpers import _shops_db
 

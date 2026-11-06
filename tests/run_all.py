@@ -32,7 +32,7 @@ from astral_toolkit.core import paths as _paths  # noqa: E402
 # 以前 crafting/loot 第一次 import 发生在 test_mining 里某条把 DATA 换成临时目录的测试中（经 position → places.code_zh → ensure →
 # 建库 → import_loot），INDEX / DETAILS 从此绑在临时目录，test_wikelo_materials_all_have_source 在库已建好时总被跳过（收口 2，待做 ㉑）
 import astral_toolkit.crafting.loot  # noqa: E402, F401
-import astral_toolkit.crafting.shops  # noqa: E402, F401
+import astral_toolkit.update.shops  # noqa: E402, F401
 import astral_toolkit.crafting.wikelo  # noqa: E402, F401
 import astral_toolkit.update.localization  # noqa: E402, F401
 import astral_toolkit.update.uex  # noqa: E402, F401

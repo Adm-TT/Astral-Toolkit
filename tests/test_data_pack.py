@@ -112,7 +112,8 @@ def test_unreachable_returns_none_and_run_falls_back(monkeypatch, tmp_path):
     assert P.update(progress=lambda *_: None) is None
     from astral_toolkit import run
     from astral_toolkit.update import uex, localization
-    from astral_toolkit.crafting import build_crafting, shops, loot
+    from astral_toolkit.crafting import build_crafting, loot
+    from astral_toolkit.update import shops
     from astral_toolkit.navigation import navigate
 
     called = []

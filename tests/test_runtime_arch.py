@@ -487,7 +487,7 @@ def _core_dynamic_up(source):
 _GAMEDATA_TEXTKEY_FORBIDDEN = (
     ("astral_toolkit.crafting.loot", {"_fold"}),
     ("astral_toolkit.crafting.wikelo", {"_fold"}),
-    ("astral_toolkit.crafting.shops", {"_fold"}),
+    ("astral_toolkit.tasks.catalog_queries.shops", {"_fold"}),
     ("astral_toolkit.tasks.catalog_queries.search", {"en_key", "zh_key"}),
     ("astral_toolkit.trade.names", {"_fold_en", "_norm_zh"}),
 )
@@ -761,7 +761,7 @@ def test_gamedata_has_no_reverse_imports():
 
 _PRODUCT_CODE_KEY_MODULES = {
     "astral_toolkit.crafting.crafting": {"_fold_name", "_search_norm"},
-    "astral_toolkit.crafting.shops": {"_fold"},
+    "astral_toolkit.tasks.catalog_queries.shops": {"_fold"},
     "astral_toolkit.crafting.loot": {"_fold"},
     "astral_toolkit.crafting.wikelo": {"_fold"},
     "astral_toolkit.trade.gamekey": {"_fold"},
@@ -769,7 +769,7 @@ _PRODUCT_CODE_KEY_MODULES = {
 }
 _PRODUCT_CODE_KEY_DEFINERS = {
     "crafting/crafting.py",
-    "crafting/shops.py",
+    "tasks/catalog_queries/shops.py",
     "crafting/loot.py",
     "crafting/wikelo.py",
     "trade/gamekey.py",
@@ -838,7 +838,7 @@ def _product_code_key_imports(source, package):
 def test_product_code_takes_name_keys_from_contracts():
     """产品代码要拿 contracts.textkeys 的名字键，不拿 crafting / trade 里的私有别名。"""
     assert _product_code_key_imports(
-        "from ..crafting import shops\nshops._fold('a')\n",
+        "from ..tasks.catalog_queries import shops\nshops._fold('a')\n",
         "astral_toolkit.crafting",
     )
     assert _product_code_key_imports(
@@ -1050,6 +1050,7 @@ def _catalog_presenter_violations(source):
 _CATALOG_QUERIES_FORBIDDEN = _CATALOG_USE_CASE_FORBIDDEN + (
     "astral_toolkit.crafting.acquire",
     "astral_toolkit.crafting.itemsearch",
+    "astral_toolkit.crafting.shops",
 )
 
 
@@ -1111,6 +1112,7 @@ def test_catalog_use_cases_stay_below_app():
         "def f():\n    from ...runtime import session\n",
         "from ...crafting.acquire import info",
         "from ...crafting import itemsearch",
+        "def f():\n    from ...crafting.shops import where\n",
     ):
         assert _catalog_use_case_violations(bad, sub), bad
     for bad in (
@@ -1189,6 +1191,8 @@ def test_crafting_reaches_up_into_tasks_only_where_listed():
         "acquire.py": {
             "astral_toolkit.tasks.catalog_queries.search",
             "astral_toolkit.tasks.catalog_queries.search.lookup",
+            "astral_toolkit.tasks.catalog_queries",
+            "astral_toolkit.tasks.catalog_queries.shops",
         },
         "goals.py": {"astral_toolkit.tasks.trade", "astral_toolkit.tasks.trade.trade"},
     }
