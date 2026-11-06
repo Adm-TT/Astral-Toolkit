@@ -93,10 +93,8 @@ def call_f8(img=None):
     from astral_toolkit import bootstrap
     from astral_toolkit.tasks import hover
 
-    hover.bind(
-        bootstrap._hover_links(), replace=True
-    )  # IQ-B6：F8 的物品查询由 bootstrap 接，和桌面版同一份
-    return hover.hover_once(img)
+    # IQ-B6：F8 的物品查询由 bootstrap 接，和桌面版同一份（F 段 B5 起当参数传）
+    return hover.hover_once(bootstrap._hover_links(), img)
 
 
 # ---------------------------------------------------------------- 小工具

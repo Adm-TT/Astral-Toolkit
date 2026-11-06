@@ -300,14 +300,13 @@ def test_b5_hover_lines_pass_names_to_links(monkeypatch):
         wikelo_rewards=rewards,
         has_blueprint=has_bp,
     )
-    monkeypatch.setattr(Hv, "_links", links)
     monkeypatch.setattr(Hv, "_goal_for", lambda *names: None)
-    lines = Hv._hover_lines({"name": "Card Name", "buy": []}, "OCR En", "中文名")
+    lines = Hv._hover_lines(links, {"name": "Card Name", "buy": []}, "OCR En", "中文名")
     assert lines == ["可通过维科洛兑换获得：兑换甲", "可制造：有蓝图（材料见物品查询）"]
     assert calls == [
         ("rewards", "Card Name", "中文名"),
         ("bp", "Card Name", "OCR En", "中文名"),
     ]
     calls.clear()
-    Hv._hover_lines({"buy": []}, "OCR En", "")
+    Hv._hover_lines(links, {"buy": []}, "OCR En", "")
     assert calls[0] == ("rewards", "OCR En", "")

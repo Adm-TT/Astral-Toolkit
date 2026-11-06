@@ -57,6 +57,7 @@ class DesktopApp:
     logwatch: Any
     cam_filter: Any
     steady: Any
+    hover_links: Any
     state: dict = field(default_factory=dict, compare=False)
 
 
@@ -295,7 +296,8 @@ def build(
         cursor_pos=options.get("cursor_pos"),
         worker=options.get("count_worker"),
     )
-    hover = _Hover(live=live, count=count)
+    hover_links = _hover_links()
+    hover = _Hover(live=live, count=count, links=hover_links)
     logwatch = _LogWatch()
 
     app = DesktopApp(
@@ -311,6 +313,7 @@ def build(
         logwatch=logwatch,
         cam_filter=cam_filter,
         steady=steady,
+        hover_links=hover_links,
         state={"warmups_enabled": True},
     )
     _register(app)
@@ -324,7 +327,6 @@ def bind_all(app: DesktopApp, *, replace: bool = False) -> None:
     from .app import lifecycle_gate, ui_stream
     from .navigation import navigate as navigate_data
     from .tasks import count as count_tasks
-    from .tasks import hover as hover_tasks
     from .tasks import navigation as navigation_tasks
     from .tasks import system as system_tasks
 
@@ -333,7 +335,6 @@ def bind_all(app: DesktopApp, *, replace: bool = False) -> None:
         app.nav, app.pos, app.game_events, app.results, replace=replace
     )
     count_tasks.bind(app.count, replace=replace)
-    hover_tasks.bind(_hover_links(), replace=replace)
     system_tasks.bind(status_sources(app), lambda: start(app), replace=replace)
     lifecycle_gate.bind_closing(app.lifecycle.is_closing, replace=replace)
     ui_stream.bind_switches(app.live, app.nav, app.pos, replace=replace)
@@ -341,11 +342,18 @@ def bind_all(app: DesktopApp, *, replace: bool = False) -> None:
 
 def routes(app: DesktopApp) -> Api:
     """这个 app 的接口表（F 段 B5，架构稿 §12.3「路由直接持有对象」）：不用后台对象的照旧是各 Controller 的 ROUTES；
-    要后台对象的由这里把这个 app 的对象交给 Controller 的 bound（采矿：实时读屏）。server.main 交给网页服务"""
+    要后台对象的由这里把这个 app 的对象交给 Controller 的 bound（采矿：实时读屏；F8：HoverLinks）。server.main 交给网页服务"""
     from .app.api import mining as mining_api
     from .app.api import router
+    from .app.api import vision as vision_api
 
-    return router.Api({**router.routes(), **mining_api.bound(app.live)})
+    return router.Api(
+        {
+            **router.routes(),
+            **mining_api.bound(app.live),
+            **vision_api.bound(app.hover_links),
+        }
+    )
 
 
 def status_sources(app: DesktopApp) -> StatusSources:

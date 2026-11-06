@@ -157,7 +157,7 @@ def _install(
     def fake_item_hud(text, second=None):
         calls.append(["hud", text, second])
 
-    def fake_item_info(name="", zh="", id=None, loot=True, exact=False):
+    def fake_item_info(_links, name="", zh="", id=None, loot=True, exact=False):
         info_calls.append([name, zh, id, loot, exact])
         if item_info_impl is None:
             return copy.deepcopy(info)
@@ -217,7 +217,7 @@ def _install(
     monkeypatch.setattr(T, "trade", lambda: fake_trade)
     monkeypatch.setattr(T, "_market_rows", fake_market_rows)
     # 照生产接法：市场会话、报价、掉落走 tasks/catalog
-    monkeypatch.setattr(Hv, "_links", bootstrap._hover_links())
+    links = bootstrap._hover_links()
     monkeypatch.setattr(Hv, "_goal_for", goal_for or default_goal_for)
     monkeypatch.setattr(Hv, "_goal_text", goal_text or default_goal_text)
     monkeypatch.setattr(Hv, "_item_hud", fake_item_hud)
@@ -252,6 +252,7 @@ def _install(
         hud_market_calls=hud_market_calls,
         loot_calls=loot_calls,
         trade=fake_trade,
+        links=links,
     )
 
 
@@ -259,7 +260,7 @@ def test_hover_miss(monkeypatch):
     """认字结果 None：发布 working → miss，悬浮窗两段提示，记一条日志线程。"""
     env = _install(monkeypatch, None)
 
-    assert Hv.hover_once(_Image()) == {"miss": True}
+    assert Hv.hover_once(env.links, _Image()) == {"miss": True}
     assert env.calls == [
         ["thread", "update_preview"],
         ["publish", "hover", {"state": "working"}],
@@ -366,7 +367,7 @@ def test_hover_normal_with_market(monkeypatch):
         "loot": {"drop": "固定掉"},
     }
 
-    assert Hv.hover_once(_Image()) == {"ok": True, "ms": 0}
+    assert Hv.hover_once(env.links, _Image()) == {"ok": True, "ms": 0}
     assert env.calls == [
         ["thread", "update_preview"],
         ["publish", "hover", {"state": "working"}],
@@ -459,7 +460,7 @@ def test_hover_unsure_missing_library(monkeypatch):
         "loot": {"drop": "固定掉"},
     }
 
-    assert Hv.hover_once(_Image()) == {"ok": True, "ms": 0}
+    assert Hv.hover_once(env.links, _Image()) == {"ok": True, "ms": 0}
     assert env.calls == [
         ["thread", "update_preview"],
         ["publish", "hover", {"state": "working"}],
@@ -549,7 +550,7 @@ def test_hover_unsure_library_ready(monkeypatch):
         "loot": {"drop": "固定掉"},
     }
 
-    assert Hv.hover_once(_Image()) == {"ok": True, "ms": 0}
+    assert Hv.hover_once(env.links, _Image()) == {"ok": True, "ms": 0}
     assert env.calls == [
         ["thread", "update_preview"],
         ["publish", "hover", {"state": "working"}],
@@ -609,7 +610,7 @@ def test_hover_canon_records_training_thread(monkeypatch):
         "loot": {"drop": "固定掉"},
     }
 
-    assert Hv.hover_once(_Image()) == {"ok": True, "ms": 0}
+    assert Hv.hover_once(env.links, _Image()) == {"ok": True, "ms": 0}
     assert env.calls == [
         ["thread", "update_preview"],
         ["publish", "hover", {"state": "working"}],
@@ -676,7 +677,7 @@ def test_hover_craft_line(monkeypatch):
         "loot": {"drop": "固定掉"},
     }
 
-    assert Hv.hover_once(_Image()) == {"ok": True, "ms": 0}
+    assert Hv.hover_once(env.links, _Image()) == {"ok": True, "ms": 0}
     assert env.calls == [
         ["thread", "update_preview"],
         ["publish", "hover", {"state": "working"}],
@@ -758,7 +759,7 @@ def test_hover_market_candidates_only_final_publish(monkeypatch):
         "loot": {"drop": "固定掉"},
     }
 
-    assert Hv.hover_once(_Image()) == {"ok": True, "ms": 0}
+    assert Hv.hover_once(env.links, _Image()) == {"ok": True, "ms": 0}
     assert env.calls == [
         ["thread", "update_preview"],
         ["publish", "hover", {"state": "working"}],
@@ -795,7 +796,7 @@ def test_hover_market_candidates_capped_at_eight(monkeypatch):
         match_tooltip=lambda t, zh, en, online=True: (None, list(items)),
         labels=labels,
     )
-    assert Hv.hover_once(_Image()) == {"ok": True, "ms": 0}
+    assert Hv.hover_once(env.links, _Image()) == {"ok": True, "ms": 0}
     more = [c for c in env.calls if c[0] == "publish" and c[1] == "hover_more"]
     assert len(more) == 1
     assert more[0][2]["market"] is None
@@ -870,7 +871,7 @@ def test_hover_typo_name_corrected(monkeypatch):
         "loot": {"drop": "固定掉"},
     }
 
-    assert Hv.hover_once(_Image()) == {"ok": True, "ms": 0}
+    assert Hv.hover_once(env.links, _Image()) == {"ok": True, "ms": 0}
     assert env.calls == [
         ["thread", "update_preview"],
         ["publish", "hover", {"state": "working"}],
@@ -968,7 +969,7 @@ def test_hover_price_and_loot_errors(monkeypatch):
         "loot": {"error": "掉落数据查询失败：掉落源坏了"},
     }
 
-    assert Hv.hover_once(_Image()) == {"ok": True, "ms": 0}
+    assert Hv.hover_once(env.links, _Image()) == {"ok": True, "ms": 0}
     assert env.calls == [
         ["thread", "update_preview"],
         ["publish", "hover", {"state": "working"}],
@@ -1014,7 +1015,9 @@ def test_hover_more_late_seq_drops_everything(monkeypatch):
         lines=["行一"],
     )
 
-    result = Hv._hover_more(7, "12:00:00", "医疗笔", "MedPen", info, 650, True)
+    result = Hv._hover_more(
+        env.links, 7, "12:00:00", "医疗笔", "MedPen", info, 650, True
+    )
 
     assert result is None
     assert env.calls == []
@@ -1039,7 +1042,7 @@ def test_hover_lines_ship_and_counts(monkeypatch):
         how="拾取",
         wikelo=[{"reward": "奖励甲"}, {"reward": "奖励乙"}],
     )
-    _install(
+    env = _install(
         monkeypatch,
         None,
         info=info,
@@ -1049,7 +1052,7 @@ def test_hover_lines_ship_and_counts(monkeypatch):
         ],
     )
 
-    assert Hv._hover_lines(info, "医疗笔", "医疗笔") == [
+    assert Hv._hover_lines(env.links, info, "医疗笔", "医疗笔") == [
         "随船自带：船甲、船乙、船丙 等 4 条船",
         "获取：拾取",
         "可通过维科洛兑换获得：合约甲 等 2 个",

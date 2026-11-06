@@ -1947,12 +1947,32 @@ def test_fs_b4_bus_split():
     assert not _fs_b4_bus_refs('"""见 bus.run_task 拆出去的说明"""')
 
 
-_FS_B5_GONE = {"mining.py": {"_live", "_UNBOUND", "bind", "_need_live"}}
-_FS_B5_BOUND_NAMES = {
-    "live_start",
-    "live_stop",
-    "set_mining_gear",
-    "set_mining_gadgets",
+_FS_B5_GONE = {
+    "mining.py": {"_live", "_UNBOUND", "bind", "_need_live"},
+    "hover.py": {"_links", "_UNBOUND", "bind", "_need_links"},
+}
+_FS_B5_FIRST_ARG = {
+    "mining.py": {
+        "live_start": "live*",
+        "live_stop": "live*",
+        "set_mining_gear": "live*",
+        "set_mining_gadgets": "live*",
+    },
+    "hover.py": {
+        "hover_once": "links*",
+        "item_info": "links*",
+        "_hover_lines": "links",
+        "_hover_more": "links",
+    },
+}
+_FS_B5_BOUND = {
+    "mining.py": {
+        "live_start",
+        "live_stop",
+        "set_mining_gear",
+        "set_mining_gadgets",
+    },
+    "vision.py": {"hover_trigger"},
 }
 
 
@@ -1977,7 +1997,34 @@ def _fs_b5_globals(source):
     }
 
 
-def _fs_b5_bind_all_refs(source):
+def _fs_b5_first_arg_bad(source, expected):
+    """按 {函数名: 第一个参数} 查；带 * 的还必须在 posonlyargs 里。返回不合的函数名。"""
+    funcs = {
+        node.name: node
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.FunctionDef)
+    }
+    bad = set()
+    for name, want in expected.items():
+        node = funcs.get(name)
+        if node is None:
+            bad.add(name)
+            continue
+        posonly = [a.arg for a in node.args.posonlyargs]
+        first = (
+            (posonly + [a.arg for a in node.args.args])[0]
+            if (posonly or node.args.args)
+            else None
+        )
+        if want.endswith("*"):
+            if want[:-1] not in posonly:
+                bad.add(name)
+        elif first != want:
+            bad.add(name)
+    return bad
+
+
+def _fs_b5_bind_all_refs(source, mods=("mining", "hover")):
     tree = ast.parse(source)
     fn = next(
         (
@@ -1990,21 +2037,25 @@ def _fs_b5_bind_all_refs(source):
     if fn is None:
         return set()
 
-    def mining_imports(node):
+    mods = set(mods)
+
+    def task_imports(node):
         got = set()
         for sub in ast.walk(node):
             if isinstance(sub, ast.ImportFrom):
                 for alias in sub.names:
-                    if alias.name == "mining":
+                    if alias.name in mods:
                         got.add(alias.asname or alias.name)
             elif isinstance(sub, ast.Import):
                 for alias in sub.names:
-                    if alias.name.endswith("tasks.mining"):
+                    if any(alias.name.endswith(f"tasks.{mod}") for mod in mods):
                         got.add(alias.asname or alias.name.rsplit(".", 1)[-1])
         return got
 
-    all_names = mining_imports(tree)
-    bad = set(mining_imports(fn))
+    known = task_imports(tree) | {
+        name for mod in mods for name in (mod, f"{mod}_tasks")
+    }
+    bad = set(task_imports(fn))
     for node in ast.walk(fn):
         if (
             isinstance(node, ast.Call)
@@ -2013,18 +2064,9 @@ def _fs_b5_bind_all_refs(source):
             and isinstance(node.func.value, ast.Name)
         ):
             name = node.func.value.id
-            if name in all_names or name in {"mining_tasks", "mining"}:
+            if name in known:
                 bad.add(name)
     return bad
-
-
-def _fs_b5_live_args(source):
-    args = {}
-    for node in ast.walk(ast.parse(source)):
-        if isinstance(node, ast.FunctionDef) and node.name in _FS_B5_BOUND_NAMES:
-            first = node.args.posonlyargs[0].arg if node.args.posonlyargs else None
-            args[node.name] = first
-    return args
 
 
 def _fs_b5_route_names(source):
@@ -2042,33 +2084,41 @@ def _fs_b5_route_names(source):
 
 
 def test_fs_b5_tasks_without_module_binding():
-    """FS-B5a：采矿 tasks 没有模块级绑定；接口表的要后台对象接口由 bound 给。"""
+    """FS-B5：采矿、F8 的 tasks 没有模块级绑定；接口表的要后台对象接口由 bound 给。"""
     for name, gone in _FS_B5_GONE.items():
         source = (_ROOT / "tasks" / name).read_text(encoding="utf-8")
         assert not (_fs_b5_defined_names(source) & gone), name
         assert not _fs_b5_globals(source), name
 
+    for name, expected in _FS_B5_FIRST_ARG.items():
+        source = (_ROOT / "tasks" / name).read_text(encoding="utf-8")
+        assert not _fs_b5_first_arg_bad(source, expected), name
+
     bootstrap_source = (_ROOT / "bootstrap.py").read_text(encoding="utf-8")
     assert not _fs_b5_bind_all_refs(bootstrap_source)
 
-    mining_source = (_ROOT / "tasks" / "mining.py").read_text(encoding="utf-8")
-    live_args = _fs_b5_live_args(mining_source)
-    assert set(live_args) == _FS_B5_BOUND_NAMES
-    assert set(live_args.values()) == {"live"}
-
-    api_source = (_ROOT / "app" / "api" / "mining.py").read_text(encoding="utf-8")
-    assert "bound" in _fs_b5_defined_names(api_source)
-    assert not _fs_b5_route_names(api_source) & _FS_B5_BOUND_NAMES
+    for name, names in _FS_B5_BOUND.items():
+        api_source = (_ROOT / "app" / "api" / name).read_text(encoding="utf-8")
+        assert "bound" in _fs_b5_defined_names(api_source), name
+        assert not _fs_b5_route_names(api_source) & names, name
 
     # 反例：旧写法查得出来
     assert "_live" in _fs_b5_defined_names("_live = None\n")
     old_bind = "def bind(x):\n    global _live\n    _live = x\n"
     assert "bind" in _fs_b5_defined_names(old_bind)
     assert _fs_b5_globals(old_bind) == {"_live"}
-    assert _fs_b5_live_args("def live_start(live):\n    pass\n")["live_start"] != "live"
+    assert _fs_b5_first_arg_bad(
+        "def hover_once(links, img=None):\n    pass\n", {"hover_once": "links*"}
+    ) == {"hover_once"}
     assert _fs_b5_bind_all_refs(
         "def bind_all(app):\n    mining_tasks.bind(app.live)\n"
     ) == {"mining_tasks"}
     assert _fs_b5_bind_all_refs(
         "def bind_all(app):\n    from .tasks import mining as mining_tasks\n"
     ) == {"mining_tasks"}
+    assert _fs_b5_bind_all_refs(
+        "def bind_all(app):\n    hover_tasks.bind(x)\n", ("hover",)
+    ) == {"hover_tasks"}
+    assert _fs_b5_bind_all_refs(
+        "def bind_all(app):\n    from .tasks import hover as hover_tasks\n", ("hover",)
+    ) == {"hover_tasks"}

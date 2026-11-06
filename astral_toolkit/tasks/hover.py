@@ -3,7 +3,7 @@
 专职处理：
 1. 鼠标悬停位置物品说明框（Tooltip）与格子角标的 OCR 图像裁剪与文字识别；
 2. 物品名称汉化纠错、品质与堆叠数量提取；
-3. 本机数据匹配、悬浮窗展示以及后台 UEX 市场价格异步查询；本机数据、掉落、玩家市场经 bootstrap 接的 HoverLinks（IQ-B6）。
+3. 本机数据匹配、悬浮窗展示以及后台 UEX 市场价格异步查询；本机数据、掉落、玩家市场经 bootstrap 接的 HoverLinks（IQ-B6；F 段 B5 起由「识别」接口和 F8 热键当参数传进来）。
 """
 
 import itertools
@@ -49,32 +49,10 @@ class HoverLinks:
     has_blueprint: Callable[..., bool]
 
 
-_links: HoverLinks | None = None
-_UNBOUND = (
-    "tasks.hover 未绑定：生产由 bootstrap.bind_all 接；测试先 bind(..., replace=True)"
-)
-
-
-def bind(links: HoverLinks, *, replace: bool = False) -> None:
-    """组装处调用一次（bootstrap.bind_all）"""
-    global _links
-    if _links is not None and not replace:
-        raise RuntimeError(
-            "tasks.hover 已绑定：生产只绑一次；测试用 replace=True 并在用完后恢复"
-        )
-    _links = links
-
-
-def _need_links() -> HoverLinks:
-    links = _links
-    if links is None:
-        raise RuntimeError(_UNBOUND)
-    return links
-
-
-def item_info(*args, **kwargs):
-    """物品卡片（和窗口物品查询页同一份）：F8 首屏、市场名纠正后重查都用它"""
-    return _need_links().item_card(*args, **kwargs)
+def item_info(links: HoverLinks, /, *args, **kwargs):
+    """物品卡片（和窗口物品查询页同一份）：F8 首屏、市场名纠正后重查都用它
+    links：bootstrap 接的 HoverLinks"""
+    return links.item_card(*args, **kwargs)
 
 
 def last_hover():
@@ -122,7 +100,7 @@ def _short_buy(info):
     return f"{r['dist'] + '｜' if r['dist'] else ''}{r['price']:,.0f}｜{r['shop']}"
 
 
-def _hover_lines(info, en, zh):
+def _hover_lines(links: HoverLinks, info, en, zh):
     """悬浮窗里物品下面的几行：买（商店有才写）、维科洛兑换、制造。没有的不写"""
     lines = []
     g = _goal_for(info.get("name"), en, zh)
@@ -141,7 +119,7 @@ def _hover_lines(info, en, zh):
         lines.append(f"获取：{info['how']}")
     try:
         name = info.get("name") or en
-        got = _need_links().wikelo_rewards(name, zh)
+        got = links.wikelo_rewards(name, zh)
         if got:
             lines.append(
                 f"可通过维科洛兑换获得：{got[0]['t']}"
@@ -157,19 +135,18 @@ def _hover_lines(info, en, zh):
     except Exception:
         pass
     try:
-        if _need_links().has_blueprint(info.get("name"), en, zh):
+        if links.has_blueprint(info.get("name"), en, zh):
             lines.append("可制造：有蓝图（材料见物品查询）")
     except Exception:
         pass
     return lines
 
 
-def _hover_more(seq, at, zh, en, info, quality=None, canon=True):
+def _hover_more(links: HoverLinks, seq, at, zh, en, info, quality=None, canon=True):
     """后台：对上玩家市场里的物品、查价、查掉落，查到一样补一样（悬浮窗和窗口都更新）"""
     from ..trade.matching import _fold
     from ..trade.names import has_chinese  # 只拿名字小工具，不碰 Trade
 
-    links = _need_links()
     out = {"at": at, "seq": seq}
     m = links.market()  # 以前 Trade 造不出来这次后台补价整个不做，现在一样
     try:
@@ -194,7 +171,7 @@ def _hover_more(seq, at, zh, en, info, quality=None, canon=True):
     # 认出的英文名有错字、本机没对上商店数据时：用市场里的标准英文名再查一次
     if item is not None and info.get("id") is None and _fold(item.name) != _fold(en):
         try:
-            better = item_info(item.name, zh, loot=False)
+            better = item_info(links, item.name, zh, loot=False)
             if better.get("id") is not None:
                 info = better
                 out["info"] = better
@@ -202,7 +179,7 @@ def _hover_more(seq, at, zh, en, info, quality=None, canon=True):
                     _last_hover.get("seq") == seq
                 ):  # 查的这会儿又按了 F8：别把这个物品的行写进下一次
                     lines = (_last_hover.get("lines") or [zh or en])[:1] + _hover_lines(
-                        better, item.name, zh
+                        links, better, item.name, zh
                     )  # 第一行（名字｜品质｜数量）不动
                     _last_hover["lines"] = lines
                     _item_hud("\n".join(lines))
@@ -248,7 +225,7 @@ def _hover_more(seq, at, zh, en, info, quality=None, canon=True):
 RETRY_WAIT = 0.5
 
 
-def hover_once(img=None):
+def hover_once(links: HoverLinks, /, img=None):
     """F8：认出鼠标指着的物品，马上把名字和本机数据（哪里买、维科洛、制造）显示到悬浮窗；
     要联网的（玩家市场价、掉落）放到后台，查到了再补上。以前要等联网全查完才显示，慢好几秒"""
     from ..mining.screen import grab
@@ -322,7 +299,7 @@ def hover_once(img=None):
     name = res.get("raw") or (zh, en)  # 记日志、收错题用纠正前照字认出的名字
     at = time.strftime("%H:%M:%S")  # 给人看的时间
     seq = next(_seq)  # 区分每一次 F8（同一秒按两次 at 一样）
-    info = item_info(en, zh, loot=False)  # 只用本机数据，很快
+    info = item_info(links, en, zh, loot=False)  # 只用本机数据，很快
     from .system.about import data_names_ready
 
     library_ready = data_names_ready()
@@ -346,7 +323,7 @@ def hover_once(img=None):
     lines = (
         [head]
         + ([f"材料品质：{craft_text(craft)}"] if craft else [])
-        + _hover_lines(info, en, zh)
+        + _hover_lines(links, info, en, zh)
     )
     _last_hover.clear()
     _last_hover.update(at=at, seq=seq, id=None, lines=lines)
@@ -396,7 +373,7 @@ def hover_once(img=None):
     )
     threading.Thread(
         target=_hover_more,
-        args=(seq, at, zh, en, info, quality, bool(canon)),
+        args=(links, seq, at, zh, en, info, quality, bool(canon)),
         daemon=True,
         name="hover-more",
     ).start()
