@@ -1,34 +1,13 @@
-"""读游戏日志 Game.log，判断你现在是不是坐在载具（飞船/车）的驾驶位上
+"""读游戏日志 Game.log：找日志文件（find_log），顺着读新写的部分认游戏事件（GameEvents / EventTail：
+量子目标、量子到达、管辖区、禁火区、监管区域、重生）。只读日志，不碰游戏文件。
 
-依据（从你的日志里核对过）：
-- 登上载具：HUD 通知「你已加入 频道 '<载具名> : <船主>'」（英文客户端是 joined channel）——只是登船，
-  在伊德里斯这种大船里走动也会加入频道，所以不算在开
-- 坐在驾驶位：飞船导航模块的日志「[ItemNavigation][CL]… | ANVL_C8R_Pisces_892158680463[…]|」
-  （PostInitialize 那种不算：附近任何船初始化都会写，1.6.45）
-- 离开驾驶位：「CVehicleMovementBase::ClearDriver: Local client node … releasing control token」
-  （上船后频道一直不退，光看频道会一直以为你在船上，所以要看这条）
-- 离开载具：「你退出了 频道 '<载具名> : <船主>'」
-- 重生：「[CSessionManager::OnClientSpawned] Spawned!」——船炸了没有离开通知，靠这个清掉
-- 游戏重启会新建 Game.log，从头读
-只读日志，不碰游戏文件。
+以前还有判断坐没坐驾驶位的 GameLog（给「双击 W 自动跑」用，模拟按键 2026-10-31 删了），CL-C2 删掉。
 """
 
 import re
 from pathlib import Path
 
-JOIN = re.compile(
-    r"Added notification \"(?:你已加入 频道|You have joined channel|Joined channel) '([^']+ : [^']+)'"
-)
-LEAVE = re.compile(
-    r"Added notification \"(?:你退出了 频道|You have left channel|Left channel) '([^']+ : [^']+)'"
-)
 SPAWN = "OnClientSpawned] Spawned!"
-SEAT = re.compile(
-    r"\[ItemNavigation\]\[CL\]\[\d+\]\s*\|[^|]*\|\s*([A-Za-z][A-Za-z0-9_]+?)_\d+\[\d+\]\|"
-)
-UNSEAT = re.compile(
-    r"ClearDriver: Local client node .*?releasing control token for '([^']+)'"
-)
 COMMON = [
     r"C:\Program Files\Roberts Space Industries\StarCitizen\LIVE",
     r"D:\Roberts Space Industries\StarCitizen\LIVE",
@@ -65,100 +44,6 @@ def find_log():
             settings.update(game_log=str(cand))
             return cand
     return None
-
-
-class GameLog:
-    def __init__(self, path=None):
-        self.path = Path(path) if path else None
-        self.pos = 0
-        self.buf = b""
-        self.vehicle = (
-            None  # 正坐在驾驶位的载具，None = 没在开（走路、在大船里走动都算 None）
-        )
-        self.channel = None  # 登上的载具（语音频道名），只做记录
-        self.events = []  # 最近的状态变化 [(时间, 说明)]
-
-    @property
-    def aboard(self):
-        return self.vehicle is not None
-
-    def _reset(self):
-        self.pos, self.buf, self.vehicle, self.channel = 0, b"", None, None
-
-    def poll(self):
-        """读新增的日志行，更新状态；返回 True 表示状态有变化"""
-        if self.path is None or not self.path.exists():
-            self.path = find_log() if self.path is None else self.path
-            if self.path is None or not self.path.exists():
-                return False
-        before = self.vehicle
-        try:
-            size = self.path.stat().st_size
-            if size < self.pos:  # 游戏重启，新日志
-                self._reset()
-            if size == self.pos:
-                return False
-            with (
-                open(self.path, "rb") as f
-            ):  # 分块读（每次 1 MB）：第一次接上时日志可能几百 MB，别整个读进内存（二审 2026-10-28）
-                f.seek(self.pos)
-                while self.pos < size:
-                    chunk = f.read(min(1 << 20, size - self.pos))
-                    if not chunk:
-                        break
-                    self.pos += len(chunk)
-                    self._feed(chunk)
-        except OSError:
-            return False
-        return self.vehicle != before
-
-    def _feed(self, data):
-        data = self.buf + data
-        lines = data.split(b"\n")
-        self.buf = lines.pop()  # 最后一行可能还没写完
-        for raw in lines:
-            if not (
-                b"Added notification" in raw
-                or b"Spawned!" in raw
-                or b"[ItemNavigation][CL]" in raw
-                or b"ClearDriver" in raw
-            ):
-                continue
-            self.line(raw.decode("utf-8", "replace"))
-
-    def line(self, text):
-        m = JOIN.search(text)
-        if m:  # 登船（含在大船里走动）：只记下来，不算在开
-            self.channel = m.group(1)
-            self.events.append((text[1:25], f"登上 {m.group(1)}（走动不算开船）"))
-            return
-        m = UNSEAT.search(text)
-        if m:
-            if self.vehicle:
-                self.events.append((text[1:25], f"离开驾驶位（{m.group(1)}）"))
-            self.vehicle = None
-            return
-        m = SEAT.search(text)
-        if m:
-            if "PostInitialize" in text:
-                # 附近别人的船（或刚刷出来的船）初始化导航模块时也写这条、带船名，不是你坐上了（1.6.45）
-                return
-            if self.vehicle is None:
-                self.vehicle = m.group(1)
-                self.events.append((text[1:25], f"坐上驾驶位（{m.group(1)}）"))
-            return
-        m = LEAVE.search(text)
-        if m:
-            if self.channel == m.group(1):
-                self.channel = None
-                self.vehicle = None
-                self.events.append((text[1:25], f"下了 {m.group(1)}"))
-            return
-        if SPAWN in text:
-            if self.vehicle:
-                self.events.append((text[1:25], "重生，算步行"))
-            self.vehicle = None
-            self.channel = None
 
 
 # ================================================================ 量子、管辖区、禁火区、重生（2026-10-27）

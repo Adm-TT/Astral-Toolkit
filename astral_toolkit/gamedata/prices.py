@@ -16,12 +16,6 @@ def city_prices(snap=None) -> dict[str, dict[str, float]]:
     return out
 
 
-def has_live(snap=None) -> bool:
-    """库里有没有 UEX 矿价（mineral_prices 非空）"""
-    with use(snap) as s:
-        return bool(s.execute("select 1 from mineral_prices limit 1"))
-
-
 def refinery_yields(snap=None) -> dict[str, dict]:
     """精炼站 → {矿: 加成%}（int / float 原样，{} 的站也在），按源顺序；每次新建，值会被塞进 REFINERIES"""
     with use(snap) as s:

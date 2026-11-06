@@ -91,20 +91,6 @@ class Handler(BaseHTTPRequestHandler):
             ctype += "; charset=utf-8"
         self._send(200, f.read_bytes(), ctype)
 
-    def _drain(self, n):
-        """把没用的请求体读掉，读不完就关连接"""
-        left = n
-        try:
-            while left > 0:
-                chunk = self.rfile.read(min(1 << 20, left))
-                if not chunk:
-                    break
-                left -= len(chunk)
-        except OSError:
-            left = 1
-        if left > 0:
-            self.close_connection = True
-
     def do_POST(self):
         # 拒绝时不读请求体，答完就关连接（请求体留在连接里，这条连接不能再复用）。
         # 审查 2026-10-31：以前先按 Content-Length 把请求体整个读进内存再验令牌，本机任何程序不带令牌就能让 AT 吃掉上 GB 内存

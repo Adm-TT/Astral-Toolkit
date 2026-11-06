@@ -153,21 +153,6 @@ def _need_results() -> _ResultsLike:
     return results
 
 
-def _need() -> tuple[_NavLike, _PosLike, _GameEventsLike, _ResultsLike]:
-    nav = _nav
-    pos = _pos
-    events = _game_events
-    results = _results
-    if nav is None or pos is None or events is None or results is None:
-        raise RuntimeError(_UNBOUND)
-    return nav, pos, events, results
-
-
-def _deps() -> tuple[_NavLike, _PosLike, _GameEventsLike, _ResultsLike]:
-    """兼容旧调用名：统一走 _need()，保证返回的四个对象都不是 None"""
-    return _need()
-
-
 def _start_error(result: Any) -> dict[str, str] | None:
     status = getattr(result, "status", "started")
     if status == "started":
