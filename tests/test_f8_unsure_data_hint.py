@@ -52,7 +52,9 @@ def _stub_unsure_hover(monkeypatch, *, library_ready: bool):
     monkeypatch.setattr(Hv, "item_info", lambda *a, **k: {})
     monkeypatch.setattr(Hv, "_hover_lines", lambda *a, **k: [])
     monkeypatch.setattr(Hv, "_hover_more", lambda *a, **k: None)
-    monkeypatch.setattr("astral_toolkit.trade.console._hover_log", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "astral_toolkit.trade.inspector._hover_log", lambda *a, **k: None
+    )
     monkeypatch.setattr(Hv, "WIN", False)
     return Hv, events, hud
 

@@ -1,9 +1,10 @@
 """一件东西怎么弄到：商店买（按离你远近推荐 3 处）→ 买不到就推荐能买到的原型/同系列 → 掉落 → 维科洛用途
 
-「哪买」命令和游戏里 F8 识别都用这里。
+游戏里 F8 识别、物品查询、维科洛材料来源都用这里（「哪买」命令行 2026-11-06 删了）。
 """
 
 import re
+import re as _re
 
 from ..contracts.textkeys import fold_en_loose
 from . import shops
@@ -297,3 +298,62 @@ def info(
     except Exception:
         pass
     return out
+
+
+def material_source(name_en):
+    """维科洛材料去哪弄：商店能买就给最便宜的店；是矿就给最好的矿点"""
+    from ..crafting import shops
+    from ..crafting.wikelo import source_note
+
+    note = source_note(name_en)
+    if note:
+        return note
+    tip = shops.where_by_name(name_en)
+    if tip:
+        return tip
+    try:
+        from ..mining.locations import where as mine_where, zh_name
+
+        base = _re.sub(r"\s*\(.*?\)", "", name_en).strip()
+        rows = mine_where(base)
+        if rows:
+            pct, loc = rows[0]
+            return f"挖矿：{zh_name(loc)} {pct:.0f}%" + (
+                "（要精炼成纯净的）" if "Pure" in name_en else ""
+            )
+    except Exception:
+        pass
+    return loot_source(name_en)
+
+
+def loot_source(name_en, name_zh=""):
+    """开箱掉落一句话（scl.miao.network 的掉落表）：概率最高的箱子在哪些地方；没有掉落返回空"""
+    try:
+        from ..crafting.loot import info
+
+        d = info(
+            name_en, name_zh, top=2, online=False
+        )  # 本机没有明细就算没有，不在页面里逐个材料联网等（细查 2026-10-28）
+    except Exception:
+        return ""
+    if not d or not d.get("groups"):
+        return ""
+    g = d["groups"][0]
+    regions = "、".join(g["regions"][:3]) + (
+        "等" if len(g["regions"]) > 3 or d.get("more") else ""
+    )
+    if d.get("mine"):  # 副本专属矿：不开箱，只能开采
+        return (
+            d["note"].split("：")[0]
+            + f"，只能开采：{regions}"
+            + (f"（{g['box']}）" if g["box"] else "")
+        )
+    if g.get("placed"):  # 不在箱子里，直接刷在场景里（争夺区奖励室架子上的舰船组件…）
+        return f"场景里刷出：{regions}（最高约 {g['p']:.0%}）"
+    box = g["box"].split(" · ")[0]
+    box = "" if _re.fullmatch(r"\d+.*", box or "") else box
+    return (
+        f"开箱：{regions}"
+        + (f"（{box} 箱" if box else "（")
+        + f"，单箱最高约 {g['p']:.0%}）"
+    )

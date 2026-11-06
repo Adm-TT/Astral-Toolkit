@@ -234,7 +234,7 @@ def market_lookup(q=""):
 def market_prices(id="", quality="q0", op="sell"):
     out, results = _market_rows(id, quality, op)
     if results is not None:
-        from ..trade.console import hud_market
+        from ..trade.market_text import hud_market
 
         market = hud_market(results)
         last_hover = _get_last_hover()
@@ -247,7 +247,7 @@ def market_prices(id="", quality="q0", op="sell"):
 
 def _market_rows(id, quality="q0", op="sell"):
     """(窗口用的价格表, 原始结果)；没有这个物品返回 ({error}, None)"""
-    from ..trade.console import _group, _money, SOURCE_ZH, STATE_ZH
+    from ..trade.market_text import _group, _money, SOURCE_ZH, STATE_ZH
 
     t = trade()
     item = t.catalog.get(id)

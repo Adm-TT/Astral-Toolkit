@@ -14,6 +14,9 @@ from ..lifecycle_gate import is_closing
 
 WIN = sys.platform == "win32"
 
+# F1～F12 的虚拟键码（以前在 trade/console）
+VK = {f"F{i}": 0x6F + i for i in range(1, 13)}
+
 
 def _T(name):
     """astral_toolkit.tasks 里的模块（运行时才取，避免互相 import）"""
@@ -70,7 +73,6 @@ class _Hover:
     def _run(self):
         import ctypes
         from ...core import settings
-        from ...trade.console import VK
 
         # 每个热键按下去做什么：(要不要占着「忙」, 动作)。占着忙的同一时间只跑一个（要截屏的）；
         # 记路标 / 一键定位 / 原矿记录只等玩家自己输 /showlocation（最多 60 秒，AT 不替玩家打字），不占着忙，免得这段时间 F8 用不了；

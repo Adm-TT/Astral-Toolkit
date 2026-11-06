@@ -3,7 +3,7 @@
 
 from ..crafting import wikelo
 from ..crafting.wikelo_rules import note_for, rewarding
-from ..trade.console import material_source
+from ..crafting.acquire import material_source
 
 _wk_cache = {}
 

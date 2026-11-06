@@ -19,9 +19,6 @@ TYPE_ZH = {
     "Wikelo - Other Items": "装备/物品",
     "Collection": "收集",
 }
-# 旧名字：只留给还冻着的调用方（test_runtime_arch 管着）
-# trade/console：F 段拆 Trade 总入口、它改走 tasks/wikelo + 排版时删
-describe = _rules.describe
 
 
 def make_data(merged_path, names_path):

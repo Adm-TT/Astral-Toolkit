@@ -95,7 +95,6 @@
   "astral_toolkit/tasks/mining.py": 2,
   "astral_toolkit/tasks/navigation.py": 1,
   "astral_toolkit/tasks/system/feedback.py": 1,
-  "astral_toolkit/trade/console.py": 13,
   "astral_toolkit/trade/inspector.py": 1,
   "astral_toolkit/trade/inventory.py": 1,
   "astral_toolkit/trade/models.py": 1,

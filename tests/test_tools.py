@@ -4,6 +4,9 @@ import pytest
 from datetime import datetime, timezone
 from decimal import Decimal as D
 from astral_toolkit.trade import console as C
+from astral_toolkit.trade import inspector as trade_inspector
+from astral_toolkit.trade import market_text as trade_market_text
+from astral_toolkit.trade import matching as trade_matching
 from astral_toolkit.trade.models import (
     Item,
     PriceKey,
@@ -73,7 +76,10 @@ def test_quality_parse():
         and C._quality("q6") == "q6"
         and C._quality("") is None
     )
-    assert C._group("exact:650") == "q3" and C._group("unknown") == "q0"
+    assert (
+        trade_market_text._group("exact:650") == "q3"
+        and trade_market_text._group("unknown") == "q0"
+    )
 
 
 def test_tooltip_name_from_hover_box():
@@ -85,11 +91,14 @@ def test_tooltip_name_from_hover_box():
         OcrToken("制造商：灰猫工业 (Greycat Industrial)", 95, (615, 358, 200, 16)),
         OcrToken("60/60", 95, (106, 818, 40, 16)),
     ]
-    assert C.tooltip_name(toks) == (
+    assert trade_inspector.tooltip_name(toks) == (
         "极限抬升-II“棱脊”牵引光束",
         'MaxLift-II "Keelback" Tractor',
     )
-    assert C.tooltip_name([OcrToken("60/60", 95, (106, 818, 40, 16))]) is None
+    assert (
+        trade_inspector.tooltip_name([OcrToken("60/60", 95, (106, 818, 40, 16))])
+        is None
+    )
 
 
 def test_match_tooltip_prefers_truncated_english(tmp_path):
@@ -110,7 +119,7 @@ def test_match_tooltip_prefers_truncated_english(tmp_path):
             return ProviderResult("uex", "empty")
 
     t = C.Trade(tmp_path, [U()])
-    item, _ = C.match_tooltip(
+    item, _ = trade_matching.match_tooltip(
         t, "极限抬升-II“棱脊”牵引光束", 'MaxLift-II "Keelback" Tractor'
     )
     assert item.id == "uex:9"
@@ -130,7 +139,7 @@ def test_tooltip_real_ocr_output():
         T("体积：16862uSCU", 615, 322),
         T("回复", 796, 298),
     ]
-    assert C.tooltip_name(toks, (690, 450)) == (
+    assert trade_inspector.tooltip_name(toks, (690, 450)) == (
         "极限抬升-II“棱脊”牵引光束",
         'MaxLift-ll"Keelback"Tractor',
     )
@@ -154,7 +163,7 @@ def test_match_tolerates_ocr_noise(tmp_path):
             return ProviderResult("uex", "empty")
 
     t = C.Trade(tmp_path, [U()])
-    item, _ = C.match_tooltip(
+    item, _ = trade_matching.match_tooltip(
         t, "极限抬升-II“棱脊”牵引光束", 'MaxLift-ll"Keelback"Tractor'
     )
     assert item.id == "uex:9"
@@ -172,7 +181,7 @@ def test_tooltip_skips_description_lines():
         T("这款飞行员版主体采用黄绿色搭配浅绿色的装饰。", 800, 630),
         T("STAND CLEAR", 805, 650),
     ]
-    assert C.tooltip_name(toks, (820, 640)) == (
+    assert trade_inspector.tooltip_name(toks, (820, 640)) == (
         "太阳-I飞行服飞行员",
         "Sol-IllFlightSuitAviator",
     )
@@ -198,14 +207,16 @@ def test_unrelated_search_results_dropped(tmp_path):
             return ProviderResult("scm", "empty")
 
     t = C.Trade(tmp_path, [S()])
-    item, cands = C.match_tooltip(t, "CQ7步枪", "CQ7Rifle")
+    item, cands = trade_matching.match_tooltip(t, "CQ7步枪", "CQ7Rifle")
     assert item.id == "scm:99" and all("Scrip" not in c.name for c in cands)
 
     class N(S):
         def lookup(self, q):
             return junk
 
-    item, cands = C.match_tooltip(C.Trade(tmp_path / "x", [N()]), "CQ7步枪", "CQ7Rifle")
+    item, cands = trade_matching.match_tooltip(
+        C.Trade(tmp_path / "x", [N()]), "CQ7步枪", "CQ7Rifle"
+    )
     assert item is None and cands == []
 
 
@@ -1041,7 +1052,6 @@ def test_live_scan_updates_when_read_gets_more_complete(monkeypatch, tmp_path):
 
 def test_tooltip_name_food_without_english_name():
     """食物说明框只有中文名，下面是「NDR:20 免疫下降」「剩余容量：100%」这类属性行，不能当名字（实测 肉串）"""
-    from astral_toolkit.trade import console as C
     from astral_toolkit.ocr import OcrToken
 
     T = lambda text, x, y: OcrToken(text, 90, (x, y, max(20, len(text) * 9), 18))  # noqa: E731
@@ -1057,7 +1067,7 @@ def test_tooltip_name_food_without_english_name():
         T("一根烤串，上面有着大块大块的肯定是肉的东西。", 864, 558),
         T("60/60", 140, 1056),
     ]
-    assert C.tooltip_name(toks, (900, 500)) == ("肉串", "")
+    assert trade_inspector.tooltip_name(toks, (900, 500)) == ("肉串", "")
 
 
 def test_display_label_lagrange_station():
@@ -1216,7 +1226,7 @@ def test_log_location_learns_ids_and_follows_moves(monkeypatch, tmp_path):
 def test_hud_market_min_max_mean_and_hide_empty():
     from decimal import Decimal as D
     from types import SimpleNamespace as N
-    from astral_toolkit.trade.console import hud_market
+    from astral_toolkit.trade.market_text import hud_market
 
     key = N(source="uex")
     st = lambda mn, mean, wk=None: N(key=key, minimum=mn, mean=mean, week_mean=wk)  # noqa: E731
@@ -1265,11 +1275,11 @@ def test_hover_overlay_updates_before_network(monkeypatch, tmp_path):
     )
     gate = threading.Event()
     monkeypatch.setattr(
-        C, "match_tooltip", lambda *a, **k: (gate.wait(5), (None, []))[1]
+        trade_matching, "match_tooltip", lambda *a, **k: (gate.wait(5), (None, []))[1]
     )  # 联网很慢
-    monkeypatch.setattr(C, "_hover_log", lambda *a, **k: None)
+    monkeypatch.setattr(trade_inspector, "_hover_log", lambda *a, **k: None)
     monkeypatch.setattr(
-        C, "_cursor_on_image", lambda img: (1280, 720)
+        trade_inspector, "_cursor_on_image", lambda img: (1280, 720)
     )  # 不看真鼠标在哪
     monkeypatch.setattr(
         t_trade, "trade", lambda: C.Trade(tmp_path, [])
@@ -1319,10 +1329,12 @@ def test_match_tooltip_uses_local_catalog_without_network(tmp_path):
 
     t = C.Trade(tmp_path / "x", [Boom()])
     t.catalog.upsert([Item("u1", "CQ7 Rifle", None)])
-    item, _ = C.match_tooltip(t, "CQ7步枪", "CQ7Rifle")
+    item, _ = trade_matching.match_tooltip(t, "CQ7步枪", "CQ7Rifle")
     assert item.id == "u1"
     t.catalog.add_alias("u1", "CQ7步枪")
-    item, _ = C.match_tooltip(t, "CQ7步枪", "乱码")  # 认过的中文名：直接对上
+    item, _ = trade_matching.match_tooltip(
+        t, "CQ7步枪", "乱码"
+    )  # 认过的中文名：直接对上
     assert item.id == "u1"
 
 
@@ -1393,7 +1405,6 @@ def test_market_sources_are_queried_at_the_same_time(tmp_path):
 
 
 def test_tooltip_anchor_tolerates_missing_char():
-    from astral_toolkit.trade import console as C
     from astral_toolkit.ocr import OcrToken
 
     T = lambda text, x, y: OcrToken(text, 90, (x, y, max(20, len(text) * 9), 18))  # noqa: E731
@@ -1404,7 +1415,7 @@ def test_tooltip_anchor_tolerates_missing_char():
         T("1网灵领童第卖枪", 1368, 900),
         T("Artington-Warchpoint' Rille", 1368, 924),
     ]
-    name, sure = C.tooltip_pick(
+    name, sure = trade_inspector.tooltip_pick(
         toks, (1400, 950)
     )  # 鼠标离下面的对比列表更近，也要选说明框标题
     assert name == ("CQ7步枪", "CQ7Rifle") and sure
@@ -2037,7 +2048,7 @@ def test_wikelo_materials_all_have_source(monkeypatch):
     """每样维科洛材料都要有「去哪弄」：商店 / 挖矿 / 特殊说明 / 开箱掉落（用户 2026-10-23：不知道就查，补齐为止）"""
     import pytest
     from astral_toolkit.crafting import wikelo, loot
-    from astral_toolkit.trade.console import material_source
+    from astral_toolkit.crafting.acquire import material_source
 
     cs = wikelo.load()
     if not cs or not loot.load_index(False):
@@ -3356,7 +3367,6 @@ def test_hover_ignores_chat_hud_and_markers(monkeypatch):
     """F8 物品识别：全局聊天「[全局]某人：…」、飞船 HUD、地点标记不能当成物品（2026-10-23 用户日志）；
     整屏找的时候必须名字下面紧跟「体积/制造商/物品类型…」才算说明框"""
     from PIL import Image
-    from astral_toolkit.trade import console as C
     from astral_toolkit import ocr
     from astral_toolkit.ocr import OcrToken
     from astral_toolkit.tasks import hover as t_hover
@@ -3373,16 +3383,16 @@ def test_hover_ignores_chat_hud_and_markers(monkeypatch):
         T("Zone: RSI_Perseus Pos:", 1500, 40),
         T("Zone: SolarSystem Pos: 22477025km", 1500, 64),
     ]
-    assert C.tooltip_pick(chat, (960, 540))[0] is None
-    assert C.tooltip_pick(chat + hud, (960, 540))[0] is None
-    name, sure = C.tooltip_pick(marker, (960, 540))
+    assert trade_inspector.tooltip_pick(chat, (960, 540))[0] is None
+    assert trade_inspector.tooltip_pick(chat + hud, (960, 540))[0] is None
+    name, sure = trade_inspector.tooltip_pick(marker, (960, 540))
     assert not sure  # 地点标记：下面没有「体积」之类，不算说明框
     item = [
         T("实准枪口补偿器2", 900, 300),
         T("VeraCompensator2", 900, 324),
         T("体积：20uSCU", 900, 348),
     ]
-    assert C.tooltip_pick(chat + item, (960, 540)) == (
+    assert trade_inspector.tooltip_pick(chat + item, (960, 540)) == (
         ("实准枪口补偿器2", "VeraCompensator2"),
         True,
     )
@@ -3563,11 +3573,10 @@ def test_goal_shortage_marked_everywhere(monkeypatch):
 def test_hover_unsure_names_and_anchor_lines():
     """2026-10-23 全量样本测试发现：中间没把握时会把碎字（「力 mnoc」）、地点标记、系统界面当物品；
     靠「体积」往上找名字时会把「制造商：灰猫工业」当名字"""
-    from astral_toolkit.trade import console as C
     from astral_toolkit.ocr import OcrToken
 
     T = lambda text, x, y: OcrToken(text, 90, (x, y, max(20, len(text) * 9), 18))  # noqa: E731
-    assert C.plausible_name("受辐射的瓦拉卡蛋", "IradiatedValakkar Egg")
+    assert trade_inspector.plausible_name("受辐射的瓦拉卡蛋", "IradiatedValakkar Egg")
     for zh, en in [
         ("力", "mnoc"),
         ("加力", "mnoo"),
@@ -3576,19 +3585,19 @@ def test_hover_unsure_names_and_anchor_lines():
         ("北极星需要外部货梯或者超大机库才能卸货", "Rabbit (id:Fiendmcy)"),
         ("天之神", "·Roberts"),
     ]:
-        assert not C.plausible_name(zh, en), (zh, en)
+        assert not trade_inspector.plausible_name(zh, en), (zh, en)
     toks = [
         T("制造商：灰猫工业（GreycatIndustrial)", 900, 280),
         T("体积：16862uSCU", 900, 304),
     ]
-    name, sure = C.tooltip_pick(toks, (960, 540))
+    name, sure = trade_inspector.tooltip_pick(toks, (960, 540))
     assert not name or "制造商" not in name[0]
     toks = [
         T("必事A20", 900, 256),
         T("制造商：必事", 900, 280),
         T("体积：600uSCU", 900, 304),
     ]
-    assert C.tooltip_pick(toks, (960, 540))[0][0] == "必事A20"
+    assert trade_inspector.tooltip_pick(toks, (960, 540))[0][0] == "必事A20"
 
 
 def test_mask_own_window_too():
