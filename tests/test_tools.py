@@ -1735,8 +1735,8 @@ def test_space_waypoint(monkeypatch, tmp_path):
     from tests.bootstrap_helpers import app_for_test
 
     # RT-B7：tasks.* 要先绑定（存太空路标会问现在在哪个星系）
-    with app_for_test():
-        r = t_nav.waypoint_add(name="气体云矿点", here=True)
+    with app_for_test() as app:
+        r = t_nav.waypoint_add(app.nav_deps, name="气体云矿点", here=True)
         assert r["pending"] and "/showlocation" in r["message"]
         time.sleep(0.3)
         clip["t"] = f"Coordinates: x:{g[0]} y:{g[1]} z:{g[2]}"
@@ -1861,7 +1861,7 @@ def test_mark_here_hotkey(monkeypatch, tmp_path):
             "poll",
             lambda force=False: (_ for _ in ()).throw(AssertionError("不该读右上角")),
         )
-        out = t_nav.mark_here()
+        out = t_nav.mark_here(app.nav_deps)
         assert (
             "error" not in out
             and "斯坦顿星系" in out["where"]
@@ -1874,14 +1874,17 @@ def test_mark_here_hotkey(monkeypatch, tmp_path):
         assert n.is_space(wp) and wp["n"] == out["name"]
         # 点过「用当前位置新建」再按 F7：用那里填的名字
         t_nav._HERE.update(name="我的矿点", until=__import__("time").time() + 30)
-        assert t_nav.mark_here()["name"] == "我的矿点" and t_nav._HERE["name"] is None
+        assert (
+            t_nav.mark_here(app.nav_deps)["name"] == "我的矿点"
+            and t_nav._HERE["name"] is None
+        )
         # 60 秒内没等到玩家输入 /showlocation：悬浮窗说原因，不记
         monkeypatch.setattr(
             showloc,
             "showlocation",
             lambda log=None: (None, "60 秒内没等到 /showlocation"),
         )
-        assert "error" in t_nav.mark_here() and "没等到" in shown["路标"]
+        assert "error" in t_nav.mark_here(app.nav_deps) and "没等到" in shown["路标"]
 
 
 def test_parse_showlocation_clip():
@@ -2016,7 +2019,7 @@ def test_where_now_ground_or_space(monkeypatch):
                 {"location": "AsteroidCluster MiningBase Stanton2"},
             ),
         )
-        assert t_nav._where_now() == "space"
+        assert t_nav._where_now(app.nav_deps) == "space"
         monkeypatch.setattr(t_nav, "_WHERE", {"t": 0.0, "v": None, "tried": 0.0})
         monkeypatch.setattr(
             app.pos,
@@ -2026,12 +2029,12 @@ def test_where_now_ground_or_space(monkeypatch):
         monkeypatch.setattr(
             navigate, "locate", lambda *a, **k: {"inside": True, "height_m": 2700}
         )
-        assert t_nav._where_now() == "ground"
+        assert t_nav._where_now(app.nav_deps) == "ground"
         monkeypatch.setattr(t_nav, "_WHERE", {"t": 0.0, "v": None, "tried": 0.0})
         monkeypatch.setattr(
             navigate, "locate", lambda *a, **k: {"inside": True, "height_m": 400_000}
         )
-        assert t_nav._where_now() == "space"
+        assert t_nav._where_now(app.nav_deps) == "space"
 
 
 def test_wikelo_detail_sticky_and_names_clean():
@@ -2692,7 +2695,7 @@ def test_space_fix_navigation(monkeypatch, tmp_path):
             "Timer",
             lambda *a, **k: type("T", (), {"start": lambda self: None})(),
         )  # 「仅用于手动定位」5 秒后清提示：别在补丁还原后建真悬浮窗
-        assert "error" in t_nav.fix_here()
+        assert "error" in t_nav.fix_here(app.nav_deps)
 
 
 def test_space_fix_dedupe_and_session(monkeypatch, tmp_path):
@@ -2897,16 +2900,16 @@ def test_nav_mode_switch(monkeypatch, tmp_path):
             )  # 2026-10-27：太空路标默认也实时读右上角
             app.nav.start(ground)
             assert app.nav.space_mode is False
-            r = t_nav.nav_mode("space")
+            r = t_nav.nav_mode(app.nav_deps, "space")
             assert (
                 r["space"] is True and app.nav.space_mode and app.nav.target is ground
             )
-            t_nav.nav_mode("ground")
+            t_nav.nav_mode(app.nav_deps, "ground")
             assert app.nav.space_mode is False
             app.nav.start(space)
-            t_nav.nav_mode("ground")
+            t_nav.nav_mode(app.nav_deps, "ground")
             assert app.nav.space_mode is False  # 太空路标也能用实时定位
-            assert "error" in t_nav.nav_mode("别的")
+            assert "error" in t_nav.nav_mode(app.nav_deps, "别的")
         finally:
             app.nav.stop()
     # 星球上的路标用一键定位：在星球自转坐标里算（目标跟着星球转，不能当成星系里的固定点）
@@ -3020,10 +3023,12 @@ def test_halo_services(monkeypatch, tmp_path):
         assert "error" in t_nav.halo_routes(
             frm="ARC-L1", band=0
         ) and "error" in t_nav.halo_routes(frm="没有", band=5)
-        assert "error" in t_nav.halo_pin(frm="ARC-L1", to="ARC-L1", band=5)
+        assert "error" in t_nav.halo_pin(
+            app.nav_deps, frm="ARC-L1", to="ARC-L1", band=5
+        )
         app.nav.target = None
         try:
-            p = t_nav.halo_pin(frm="ARC-L1", to="CRU-L4", band=5)
+            p = t_nav.halo_pin(app.nav_deps, frm="ARC-L1", to="CRU-L4", band=5)
             assert (
                 "14.3 Gm" in hud["小行星带"]
                 and "自动核对" in hud["小行星带"]
@@ -3041,7 +3046,7 @@ def test_halo_services(monkeypatch, tmp_path):
                 "showlocation",
                 lambda log=None: ((20.0e9, 0.0, 0.0), clip["t"]),
             )
-            assert t_nav.fix_here()["band"] == 3
+            assert t_nav.fix_here(app.nav_deps)["band"] == 3
             monkeypatch.setattr(
                 showloc,
                 "showlocation",
@@ -3050,11 +3055,14 @@ def test_halo_services(monkeypatch, tmp_path):
                     "Coordinates: x:20300000001 y:0 z:0",
                 ),
             )
-            assert t_nav.fix_here()["band"] == 5 and "✅" in hud["小行星带"]
+            assert t_nav.fix_here(app.nav_deps)["band"] == 5 and "✅" in hud["小行星带"]
             monkeypatch.setattr(
                 showloc, "showlocation", lambda log=None: (None, "游戏没在前台")
             )
-            assert "error" in t_nav.fix_here() and "定位失败" in hud["小行星带"]
+            assert (
+                "error" in t_nav.fix_here(app.nav_deps)
+                and "定位失败" in hud["小行星带"]
+            )
 
             # F9 等坐标期间方案被取下：结果作废，不报错
             def slow(log=None):
@@ -3062,15 +3070,15 @@ def test_halo_services(monkeypatch, tmp_path):
                 return None, "超时"
 
             monkeypatch.setattr(showloc, "showlocation", slow)
-            assert t_nav.fix_here() == {"error": "超时"}
-            t_nav.halo_pin(frm="ARC-L1", to="CRU-L4", band=5)
+            assert t_nav.fix_here(app.nav_deps) == {"error": "超时"}
+            t_nav.halo_pin(app.nav_deps, frm="ARC-L1", to="CRU-L4", band=5)
 
             def swap(log=None):
-                t_nav.halo_pin(frm="ARC-L1", to="CRU-L3", band=5)
+                t_nav.halo_pin(app.nav_deps, frm="ARC-L1", to="CRU-L3", band=5)
                 return (20.3e9, 0.0, 0.0), "Coordinates: x:20300000002 y:0 z:0"
 
             monkeypatch.setattr(showloc, "showlocation", swap)
-            assert "error" in t_nav.fix_here()  # 换了方案：旧的这次不算
+            assert "error" in t_nav.fix_here(app.nav_deps)  # 换了方案：旧的这次不算
         finally:
             t_nav.halo_unpin()
         assert "小行星带" not in hud and t_nav._HALO["plan"] is None
@@ -3084,7 +3092,7 @@ def test_halo_services(monkeypatch, tmp_path):
             "Timer",
             lambda *a, **k: type("T", (), {"start": lambda self: None})(),
         )  # 「仅用于手动定位」5 秒后清提示：别在补丁还原后建真悬浮窗
-        assert "error" in t_nav.fix_here()  # 什么都没挂：只提示，不打字
+        assert "error" in t_nav.fix_here(app.nav_deps)  # 什么都没挂：只提示，不打字
 
 
 def test_halo_where_edges():
@@ -3672,11 +3680,13 @@ def test_waypoint_from_pasted_showlocation(monkeypatch, tmp_path):
     from tests.bootstrap_helpers import app_for_test
 
     # RT-B7：tasks.navigation 要先绑定（预览会看现在的位置线索）
-    with app_for_test():
-        assert "error" in t_nav.waypoint_preview(text="随便一句话")
-        assert "error" in t_nav.waypoint_from_text(name="x", text="没有坐标")
+    with app_for_test() as app:
+        assert "error" in t_nav.waypoint_preview(app.nav_deps, text="随便一句话")
         assert "error" in t_nav.waypoint_from_text(
-            name="", text="Coordinates: x:1 y:2 z:3"
+            app.nav_deps, name="x", text="没有坐标"
+        )
+        assert "error" in t_nav.waypoint_from_text(
+            app.nav_deps, name="", text="Coordinates: x:1 y:2 z:3"
         )
         lp = next(
             p
@@ -3684,20 +3694,20 @@ def test_waypoint_from_pasted_showlocation(monkeypatch, tmp_path):
             if p["sys"] == "Stanton" and p["t"] == "Lagrange Point"
         )
         txt = f"Coordinates: x:{lp['x'] + 5000} y:{lp['y']} z:{lp['z']}"
-        pv = t_nav.waypoint_preview(text=txt)
+        pv = t_nav.waypoint_preview(app.nav_deps, text=txt)
         assert pv["ok"] and pv["space"] and "Stanton" in pv["body"]
-        r = t_nav.waypoint_from_text(name="太空点", text=txt)
+        r = t_nav.waypoint_from_text(app.nav_deps, name="太空点", text=txt)
         assert saved[-1] == ("space", "太空点", "Stanton") and "太空" in r["desc"]
         if g:
             txt = f"Coordinates: x:{g[0]} y:{g[1]} z:{g[2]}"
-            pv = t_nav.waypoint_preview(text=txt)
+            pv = t_nav.waypoint_preview(app.nav_deps, text=txt)
             assert (
                 pv["ok"]
                 and not pv["space"]
                 and pv["body"] == "Daymar"
                 and "戴玛尔" in pv["desc"]
             )
-            t_nav.waypoint_from_text(name="地面点", text=txt)
+            t_nav.waypoint_from_text(app.nav_deps, name="地面点", text=txt)
             assert saved[-1] == ("ground", "地面点", "Daymar")
 
 
@@ -4136,7 +4146,7 @@ def test_ore_log_record_and_hotkeys(monkeypatch, tmp_path):
     # RT-B7：结果仓库从装配入口注入（以前改 _M.results）
     with app_for_test(results=results) as app:
         sources = bootstrap.status_sources(app)
-        assert "error" in t_nav.ore_record()
+        assert "error" in t_nav.ore_record(app.nav_deps)
         _view = {
             "rock": "塔兰导电石",
             "mass": 38775,
@@ -4172,7 +4182,7 @@ def test_ore_log_record_and_hotkeys(monkeypatch, tmp_path):
             ],
         }
         assert results.accept(MINING_SCAN, _view, 1, 0, 1, 0.0, 0.0)
-        rec = t_nav.ore_record()
+        rec = t_nav.ore_record(app.nav_deps)
         assert (
             rec["value"] == 344786
             and rec["lots"][0]["pct"] == 11.55
@@ -4183,7 +4193,8 @@ def test_ore_log_record_and_hotkeys(monkeypatch, tmp_path):
         assert t_nav.ore_list()["rows"] == []
         t_nav.ore_restore(rec=gone)
         assert [r["id"] for r in t_nav.ore_list()["rows"]] == [rec["id"]]
-        assert "没有坐标" in t_nav.ore_go(id=rec["id"])["error"]
+        ore_err = t_nav.ore_go(app.nav_deps, id=rec["id"])["error"]
+        assert isinstance(ore_err, str) and "没有坐标" in ore_err
         store = dict(settings.DEFAULTS)
         monkeypatch.setattr(settings, "load", lambda: dict(store))
         monkeypatch.setattr(
@@ -4890,7 +4901,9 @@ def test_nav_nearest(monkeypatch, tmp_path):
         )
         == "死局空间站（Checkmate）"
     )
-    assert "error" in t_nav.nav_near("加油")
+    from tests.bootstrap_helpers import nav_deps
+
+    assert "error" in t_nav.nav_near(nav_deps(), "加油")
 
 
 def test_city_route(monkeypatch, tmp_path):

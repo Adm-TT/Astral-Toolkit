@@ -26,6 +26,7 @@ from astral_toolkit.tasks import hover as hover_tasks
 from astral_toolkit.tasks import mining as mining_tasks
 from astral_toolkit.tasks import navigation as nav_tasks
 from astral_toolkit.tasks import system as system_tasks
+from astral_toolkit.tasks import trade as trade_tasks
 from astral_toolkit.tasks import wikelo as wikelo_tasks
 from astral_toolkit.tasks.system import common as system_common
 from tests.bootstrap_helpers import (
@@ -138,9 +139,11 @@ def test_build_desktop_binds_everything_to_this_app(monkeypatch):
         app = bootstrap.build("desktop")
         try:
             assert not hasattr(mining_tasks, "_live")
-            assert nav_tasks._nav is app.nav and nav_tasks._pos is app.pos
-            assert nav_tasks._game_events is app.game_events
-            assert nav_tasks._results is app.results
+            assert not hasattr(nav_tasks, "_nav")
+            assert app.nav_deps == nav_tasks.NavDeps(
+                app.nav, app.pos, app.game_events, app.results
+            )
+            assert app.hover._nav is app.nav_deps
             assert count_tasks._count is app.count
             assert not hasattr(hover_tasks, "_links")
             assert app.hover_links.loot is catalog_tasks.get_item_loot
@@ -313,11 +316,6 @@ def test_bind_all_and_task_binds_refuse_second_binding():
     with app_for_test() as app:
         _assert_error(RuntimeError, "已绑定", lambda: bootstrap.bind_all(app))
         _assert_error(RuntimeError, "已绑定", lambda: count_tasks.bind(app.count))
-        _assert_error(
-            RuntimeError,
-            "已绑定",
-            lambda: nav_tasks.bind(app.nav, app.pos, app.game_events, app.results),
-        )
     assert snapshot_bindings() == before
 
 
@@ -326,18 +324,6 @@ def test_unbound_modules_raise_and_gate_stays_open():
     try:
         count_tasks._count = None
         _assert_error(RuntimeError, "未绑定", count_tasks.count_state)
-
-        nav_tasks._nav = None
-        nav_tasks._pos = None
-        nav_tasks._game_events = None
-        nav_tasks._results = None
-        for need in (
-            nav_tasks._need_nav,
-            nav_tasks._need_pos,
-            nav_tasks._need_events,
-            nav_tasks._need_results,
-        ):
-            _assert_error(RuntimeError, "未绑定", need)
 
         lifecycle_gate._CLOSING = None
         assert lifecycle_gate.is_closing() is False
@@ -449,10 +435,12 @@ def test_test_app_restores_previous_bindings():
 
 
 def test_routes_table_static_plus_bound(monkeypatch):
-    """F 段 B5a：bootstrap.routes(app) = 各 Controller 的 ROUTES + 要后台对象的 bound(...)；采矿那 4 个拿的是这个 app 的 live，F8 的拿这个 app 的 HoverLinks，系统的拿这个 app 的状态源和启动回调"""
+    """F 段 B5a：bootstrap.routes(app) = 各 Controller 的 ROUTES + 要后台对象的 bound(...)；采矿那 4 个拿的是这个 app 的 live，F8 的拿这个 app 的 HoverLinks，系统的拿这个 app 的状态源和启动回调，导航和物品查询的商店导航拿这个 app 的 NavDeps"""
     from astral_toolkit.app.api import mining as mining_api
+    from astral_toolkit.app.api import navigation as navigation_api
     from astral_toolkit.app.api import router
     from astral_toolkit.app.api import system as system_api
+    from astral_toolkit.app.api import trade as trade_api
     from astral_toolkit.app.api import vision as vision_api
 
     real_mining = mining_api.bound
@@ -475,11 +463,27 @@ def test_routes_table_static_plus_bound(monkeypatch):
         return real_system(sources, start)
 
     monkeypatch.setattr(system_api, "bound", fake_system)
+    real_navigation = navigation_api.bound
+    seen_navigation = []
+    monkeypatch.setattr(
+        navigation_api,
+        "bound",
+        lambda deps: seen_navigation.append(deps) or real_navigation(deps),
+    )
+    real_trade = trade_api.bound
+    seen_trade = []
+    monkeypatch.setattr(
+        trade_api,
+        "bound",
+        lambda deps: seen_trade.append(deps) or real_trade(deps),
+    )
     app = bootstrap.build("test")
     try:
         api = bootstrap.routes(app)
         assert seen == [app.live]
         assert seen_vision == [app.hover_links]
+        assert seen_navigation == [app.nav_deps]
+        assert seen_trade == [app.nav_deps]
         assert len(seen_system) == 1
         system_sources, system_start = seen_system[0]
         assert system_sources.results is app.results
@@ -489,6 +493,8 @@ def test_routes_table_static_plus_bound(monkeypatch):
             set(real_mining(app.live))
             | set(real_vision(app.hover_links))
             | set(real_system(system_sources, system_start))
+            | set(real_navigation(app.nav_deps))
+            | set(real_trade(app.nav_deps))
         )
         assert bound == {
             "live_start",
@@ -500,11 +506,65 @@ def test_routes_table_static_plus_bound(monkeypatch):
             "feedback_report",
             "set_settings",
             "agree",
+            "nav_near",
+            "nav_site",
+            "nav_start",
+            "nav_mode",
+            "nav_stop",
+            "nav_refresh",
+            "waypoint_add",
+            "waypoint_preview",
+            "waypoint_from_text",
+            "ore_record",
+            "ore_go",
+            "halo_pin",
+            "nav_shop",
         }
         assert not bound & set(static)
         assert set(api.table) == set(static) | bound
         for name in static:
             assert api.table[name] is static[name], name
+    finally:
+        bootstrap.shutdown(app, budget=0.2)
+
+
+def test_nav_deps_reach_hotkeys_live_and_routes(monkeypatch):
+    """F 段 B5d：热键记路标 / 原矿 / 一键定位、采矿读屏问位置、导航接口、物品查询的商店导航，拿的都是这个 app 的 NavDeps"""
+    got = []
+    for name in ("mark_here", "fix_here", "_where_now", "_area_now", "nav_stop"):
+        monkeypatch.setattr(
+            nav_tasks, name, lambda deps, *a, _n=name, **k: got.append((_n, deps)) or {}
+        )
+    monkeypatch.setattr(
+        nav_tasks,
+        "ore_record",
+        lambda deps, **k: got.append(("ore_record", deps, k)) or {},
+    )
+    monkeypatch.setattr(
+        trade_tasks,
+        "nav_shop",
+        lambda deps, **k: got.append(("nav_shop", deps)) or {},
+    )
+    monkeypatch.setattr(lifecycle_gate, "_CLOSING", None)
+    app = bootstrap.build("test")
+    try:
+        d = app.nav_deps
+        app.hover._mark()
+        app.hover._ore()
+        app.hover._fix()
+        app.live._where_now()
+        app.live._area_now()
+        assert bootstrap.routes(app).call("nav_stop") == {"ok": True, "data": {}}
+        assert bootstrap.routes(app).call("nav_shop") == {"ok": True, "data": {}}
+        assert got == [
+            ("mark_here", d),
+            ("ore_record", d, {"here": True}),
+            ("fix_here", d),
+            ("_where_now", d),
+            ("_area_now", d),
+            ("nav_stop", d),
+            ("nav_shop", d),
+        ]
     finally:
         bootstrap.shutdown(app, budget=0.2)
 

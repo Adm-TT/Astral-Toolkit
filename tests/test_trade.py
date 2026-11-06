@@ -1014,13 +1014,15 @@ _TRADE_API = [
     "item_search",
     "item_info",
     "item_loot",
-    "nav_shop",
     "trade",
     "market_lookup",
     "market_prices",
     "mineral_search",
     "mineral_info",
 ]
+_TRADE_BOUND = [
+    "nav_shop"
+]  # F 段 B5：商店导航要导航后台对象，由 trade 的 bound 给，不在 ROUTES 里
 _STOCK_API = [
     "stock",
     "stock_add",
@@ -1045,7 +1047,8 @@ _STOCK_API = [
 
 
 def test_trade_stock_controller_routes():
-    """交易、库存的每个接口名都由 app/api/trade.py、app/api/stock.py 接，名单和 Controller 的 ROUTES 一个不多一个不少"""
+    """交易、库存的每个接口名都由 app/api/trade.py、app/api/stock.py 接，名单和 Controller 的 ROUTES 一个不多一个不少；
+    商店导航由 trade 的 bound 给（F 段 B5）"""
     from astral_toolkit.app.api import router, trade as CT, stock as CS
 
     router.reset()
@@ -1057,6 +1060,11 @@ def test_trade_stock_controller_routes():
     assert sorted(CT.ROUTES) == sorted(_TRADE_API) and sorted(CS.ROUTES) == sorted(
         _STOCK_API
     )
+    bound = CT.bound(object())
+    assert sorted(bound) == sorted(_TRADE_BOUND)
+    for name, fn in bound.items():
+        assert name not in r, name
+        assert fn.__module__ == "astral_toolkit.app.api.trade", name
 
 
 def test_trade_stock_tasks_no_services():

@@ -7,6 +7,7 @@ from typing import Any
 
 from astral_toolkit.app.engines import nav as navmod
 from astral_toolkit.runtime.session import RunState, Session, StopAttempt, StopInfo
+from tests.bootstrap_helpers import nav_deps
 
 
 class _FakePos:
@@ -275,28 +276,21 @@ def test_nav_without_marker_never_touches_hud(monkeypatch):
     assert isinstance(nav._marker, navmod._NoMarker)
 
 
-def test_navigation_bind_required():
+def test_navigation_needs_deps():
     from astral_toolkit.tasks import navigation as nt
-    from tests.bootstrap_helpers import restore_bindings, snapshot_bindings
 
-    saved = snapshot_bindings()
+    assert not hasattr(nt, "bind") and not hasattr(nt, "_nav")
     try:
-        nt._nav = nt._pos = nt._game_events = nt._results = None
-        for need in (nt._need_nav, nt._need_pos, nt._need_events, nt._need_results):
-            try:
-                need()
-            except RuntimeError as exc:
-                assert "未绑定" in str(exc)
-            else:
-                raise AssertionError(f"未绑定时 {need.__name__} 应抛 RuntimeError")
-    finally:
-        restore_bindings(saved)
+        nt.nav_stop()  # pyright: ignore[reportCallIssue]  # 故意不给 deps
+    except TypeError:
+        pass
+    else:
+        raise AssertionError("不给 deps 时 nav_stop 应抛 TypeError")
 
 
 def test_nav_start_does_not_record_when_start_rejected(monkeypatch):
     from astral_toolkit.core import run_records
     from astral_toolkit.tasks import navigation as nt
-    from tests.bootstrap_helpers import bind_for_test
 
     records = []
 
@@ -310,27 +304,26 @@ def test_nav_start_does_not_record_when_start_rejected(monkeypatch):
     monkeypatch.setattr(nt, "_place_row", lambda p: {"key": "k"})
     monkeypatch.setattr(run_records, "record", lambda *a, **k: records.append(a))
     nt._places["k"] = {"b": "Daymar", "t": "Planet", "n": "X", "qt": 0}
-    with bind_for_test(nt, N(), object(), object(), object()):
-        assert nt.nav_start("k") == {"error": "导航正在停止，请稍候"}
-        assert records == []
+    deps = nav_deps(N())
+    assert nt.nav_start(deps, "k") == {"error": "导航正在停止，请稍候"}
+    assert records == []
 
 
 def test_nav_stop_timeout_message(monkeypatch):
     from astral_toolkit.core import run_records
     from astral_toolkit.tasks import navigation as nt
-    from tests.bootstrap_helpers import bind_for_test
 
     class N:
         def stop(self):
             return StopAttempt(1, False, True)
 
     monkeypatch.setattr(run_records, "record", lambda *a, **k: None)
-    with bind_for_test(nt, N(), object(), object(), object()):
-        assert nt.nav_stop() == {
-            "ok": True,
-            "stopping": True,
-            "message": "正在停止导航，旧线程还没退出",
-        }
+    deps = nav_deps(N())
+    assert nt.nav_stop(deps) == {
+        "ok": True,
+        "stopping": True,
+        "message": "正在停止导航，旧线程还没退出",
+    }
 
 
 def _fix_worker():

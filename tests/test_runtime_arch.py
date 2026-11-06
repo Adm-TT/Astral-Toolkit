@@ -273,8 +273,6 @@ def test_tasks_mining_import_creates_no_engine():
         "from astral_toolkit.tasks.system import common\n"
         "from astral_toolkit.app import lifecycle_gate, ui_stream\n"
         "values = [\n"
-        "    navigation._nav, navigation._pos,\n"
-        "    navigation._game_events, navigation._results,\n"
         "    count._count,\n"
         "    lifecycle_gate._CLOSING, ui_stream._SOURCES,\n"
         "]\n"
@@ -1958,6 +1956,18 @@ _FS_B5_GONE = {
         "_need_status",
         "_need_start",
     },
+    "navigation.py": {
+        "_nav",
+        "_pos",
+        "_game_events",
+        "_results",
+        "_UNBOUND",
+        "bind",
+        "_need_nav",
+        "_need_pos",
+        "_need_events",
+        "_need_results",
+    },
 }
 _FS_B5_FIRST_ARG = {
     "mining.py": {
@@ -1976,6 +1986,33 @@ _FS_B5_FIRST_ARG = {
     "system/feedback.py": {"feedback_report": "sources*"},
     "system/settings.py": {"set_settings": "sources*"},
     "system/about.py": {"agree": "sources*"},
+    "navigation.py": {
+        "nav_near": "deps*",
+        "nav_site": "deps*",
+        "nav_start": "deps*",
+        "nav_mode": "deps*",
+        "nav_stop": "deps*",
+        "nav_refresh": "deps*",
+        "waypoint_add": "deps*",
+        "waypoint_preview": "deps*",
+        "waypoint_from_text": "deps*",
+        "mark_here": "deps*",
+        "ore_record": "deps*",
+        "ore_go": "deps*",
+        "halo_pin": "deps*",
+        "fix_here": "deps*",
+        "_start_nav": "deps",
+        "_pos_current": "deps",
+        "_pos_latest": "deps",
+        "_where_now": "deps",
+        "_area_now": "deps",
+        "_hints_near": "deps",
+        "_save_here": "deps",
+        "_start_here_watch": "deps",
+        "_coord_desc": "deps",
+        "_halo_watch": "deps",
+    },
+    "trade.py": {"nav_shop": "deps*"},
 }
 _FS_B5_BOUND = {
     "mining.py": {
@@ -1986,6 +2023,21 @@ _FS_B5_BOUND = {
     },
     "vision.py": {"hover_trigger"},
     "system.py": {"status", "feedback_report", "set_settings", "agree"},
+    "navigation.py": {
+        "nav_near",
+        "nav_site",
+        "nav_start",
+        "nav_mode",
+        "nav_stop",
+        "nav_refresh",
+        "waypoint_add",
+        "waypoint_preview",
+        "waypoint_from_text",
+        "ore_record",
+        "ore_go",
+        "halo_pin",
+    },
+    "trade.py": {"nav_shop"},
 }
 
 
@@ -2097,7 +2149,7 @@ def _fs_b5_route_names(source):
 
 
 def test_fs_b5_tasks_without_module_binding():
-    """FS-B5：采矿、F8 的 tasks 没有模块级绑定；接口表的要后台对象接口由 bound 给。"""
+    """FS-B5：采矿、F8、系统、导航的 tasks 没有模块级绑定；接口表里要后台对象的接口（含物品查询的商店导航）由 bound 给。"""
     for name, gone in _FS_B5_GONE.items():
         source = (_ROOT / "tasks" / name).read_text(encoding="utf-8")
         assert not (_fs_b5_defined_names(source) & gone), name
@@ -2113,7 +2165,22 @@ def test_fs_b5_tasks_without_module_binding():
         assert not _fs_b5_first_arg_bad(source, expected), name
 
     bootstrap_source = (_ROOT / "bootstrap.py").read_text(encoding="utf-8")
-    assert not _fs_b5_bind_all_refs(bootstrap_source)
+    assert not _fs_b5_bind_all_refs(
+        bootstrap_source, ("mining", "hover", "system", "navigation")
+    )
+    bind_fn = next(
+        node
+        for node in ast.parse(bootstrap_source).body
+        if isinstance(node, ast.FunctionDef) and node.name == "bind_all"
+    )
+    assert {
+        node.func.value.id
+        for node in ast.walk(bind_fn)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "bind"
+        and isinstance(node.func.value, ast.Name)
+    } == {"count_tasks"}
 
     for name, names in _FS_B5_BOUND.items():
         api_source = (_ROOT / "app" / "api" / name).read_text(encoding="utf-8")

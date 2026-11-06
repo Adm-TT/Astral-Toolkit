@@ -9,6 +9,7 @@
 
 import re
 import threading
+from typing import TYPE_CHECKING
 
 
 # ---------------------------------------------------------------- 依赖：别的任务、悬浮窗
@@ -19,6 +20,9 @@ from ..app.hud_state import _item_hud
 # item_search 旧壳：库存联想（库存冻结）和上面的全局搜索在用，新库存做完再删
 from ..app.presenters import catalog as _present_catalog
 from . import catalog as _catalog
+
+if TYPE_CHECKING:
+    from .navigation import NavDeps
 
 
 def _nav_search(q=""):
@@ -116,9 +120,10 @@ def _site_key(s):
     return re.sub(r"[^a-z0-9]", "", (s or "").lower())
 
 
-def nav_shop(shop="", place=""):
+def nav_shop(deps: "NavDeps", /, shop="", place=""):
     """物品查询里点一处商店 → 导航过去（2026-10-28 用户定）。先找主城 / 空间站里这家店的点（城里导航），
-    没有就导航到这个地点本身（星图）。UEX 只写了星球 / 卫星 / 星系的不导；最后按名字搜也只认一模一样的（BF-2）"""
+    没有就导航到这个地点本身（星图）。UEX 只写了星球 / 卫星 / 星系的不导；最后按名字搜也只认一模一样的（BF-2）。
+    deps = 这个 app 的导航后台对象（F 段 B5）：bootstrap.routes 经 app/api/trade.py 的 bound 交进来"""
     from ..navigation import navigate as n
 
     data = n.load()
@@ -192,7 +197,7 @@ def nav_shop(shop="", place=""):
     _place_row, _places, _start_nav = _nav_objects()
     row = _place_row(hit)
     err = _start_nav(
-        _places[row["key"]]
+        deps, _places[row["key"]]
     )  # 停止中被拒时如实返回，不报「已开始」（RT-B5b）
     if err:
         return err

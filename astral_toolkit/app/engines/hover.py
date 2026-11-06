@@ -1,7 +1,7 @@
 """F8 物品识别 / 热键（_Hover）
 
 用到的函数 / 变量直接到它们所在的模块取，运行时才取，避免互相 import：
-_T("mining").xxx = tasks/mining.py，_H().xxx = app/hud_state.py，self._live / self._count = 构造时注入的引擎，self._links = F8 物品查询接线（HoverLinks，F 段 B5），self._feedback = 问题反馈（bootstrap 接好状态源的 feedback_report，F 段 B5）。
+_T("mining").xxx = tasks/mining.py，_H().xxx = app/hud_state.py，self._live / self._count = 构造时注入的引擎，self._links = F8 物品查询接线（HoverLinks，F 段 B5），self._feedback = 问题反馈（bootstrap 接好状态源的 feedback_report，F 段 B5）；self._nav = 导航任务要的后台对象（NavDeps，F 段 B5）。
 用到：WIN, _hotkey_values, _live, _note_hud, count_toggle, feedback_report, fix_here, hover_once, item_key_pressed, live_start, live_stop, mark_here, ore_record, settings_key
 """
 
@@ -32,11 +32,12 @@ def _H():
 class _Hover:
     GAME_ONLY = ("trade_capture_key", "count_key")  # 只在星际公民在最前面时才响应的热键
 
-    def __init__(self, *, live, count, links, feedback):
+    def __init__(self, *, live, count, links, feedback, nav):
         self._live = live
         self._count = count
         self._links = links
         self._feedback = feedback
+        self._nav = nav
         self.thread = None
         self.busy = False
         self.label = {}  # 热键名 → 当前绑定的键（如 trade_capture_key → F8）
@@ -199,17 +200,17 @@ class _Hover:
     def _mark(self):  # 不占着忙，结束时也不能清别人（F8、F10）的忙
         if is_closing():
             return {"error": "正在退出"}
-        return _T("navigation").mark_here()
+        return _T("navigation").mark_here(self._nav)
 
     def _ore(self):
         if is_closing():
             return {"error": "正在退出"}
-        return _T("navigation").ore_record(here=True)
+        return _T("navigation").ore_record(self._nav, here=True)
 
     def _fix(self):
         if is_closing():
             return {"error": "正在退出"}
-        return _T("navigation").fix_here()
+        return _T("navigation").fix_here(self._nav)
 
     def _start_hover(self):
         """F8：和窗口里的「识别」接口共用同一个任务名，已经在识别就不再起第二个（两个同时跑会互相清掉 _last_hover）"""

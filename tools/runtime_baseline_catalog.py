@@ -74,7 +74,10 @@ def call_item_loot(name="", zh=""):
 def call_nav_shop(shop="", place=""):
     from astral_toolkit.tasks import trade
 
-    return trade.nav_shop(shop, place)
+    deps: Any = (
+        None  # 基线里 _start_nav 换成了只记目标的假的，用不到导航引擎（F 段 B5）
+    )
+    return trade.nav_shop(deps, shop, place)
 
 
 def call_market_lookup(q=""):
@@ -334,7 +337,7 @@ class _Sandbox:
     def _names_ready(self):
         return bool(self.data_names_ready)
 
-    def _start_nav(self, target, row=None, space_mode=None):
+    def _start_nav(self, _deps, target, row=None, space_mode=None):
         self.nav_calls.append(
             {
                 "target": _safe_deepcopy(target),

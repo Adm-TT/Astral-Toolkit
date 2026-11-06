@@ -3526,14 +3526,6 @@
             {
                 "code": "reportOperatorIssue",
                 "range": {
-                    "startColumn": 15,
-                    "endColumn": 60,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportOperatorIssue",
-                "range": {
                     "startColumn": 8,
                     "endColumn": 32,
                     "lineCount": 1

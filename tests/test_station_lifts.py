@@ -755,6 +755,7 @@ def test_ore_go_name_clash_and_recorded_system(monkeypatch):
     """原矿「去这里」：同一分钟同种矿不撞名；用记录时定下的星系（审查 2026-10-31）"""
     from astral_toolkit.tasks import navigation as t_nav
     from astral_toolkit.mining import ore_log
+    from tests.bootstrap_helpers import nav_deps
 
     rec = {
         "id": "abcd1234ef",
@@ -764,34 +765,36 @@ def test_ore_go_name_clash_and_recorded_system(monkeypatch):
         "system": "Nyx",
     }
     saved, rows = [], [{"name": "原矿 铜 10-31 12:00", "key": "wp:old"}]
+    deps = nav_deps()
     monkeypatch.setattr(ore_log, "load", lambda: [rec])
     monkeypatch.setattr(ore_log, "update", lambda id, **kw: None)
     monkeypatch.setattr(t_nav, "waypoints", lambda: list(rows))
     monkeypatch.setattr(
         t_nav,
         "_save_here",
-        lambda name, g, info=None, system=None: (
+        lambda _deps, name, g, info=None, system=None: (
             saved.append((name, system)),
             rows.append({"name": name, "key": "wp:new"}),
         ),
     )
-    monkeypatch.setattr(t_nav, "nav_start", lambda key: {"key": key})
-    r = t_nav.ore_go(id=rec["id"])
+    monkeypatch.setattr(t_nav, "nav_start", lambda _deps, key: {"key": key})
+    r = t_nav.ore_go(deps, id=rec["id"])
     assert r["name"] == "原矿 铜 10-31 12:00 #abcd" and saved == [(r["name"], "Nyx")]
 
 
 def test_here_hints_only_for_where_you_are(monkeypatch):
     """右上角线索只用在「坐标就是你现在的位置」时：粘贴的远处坐标不套用当前星系（审查 2026-10-31）"""
     from astral_toolkit.tasks import navigation as t_nav
+    from tests.bootstrap_helpers import nav_deps
 
     pos = type("P", (), {})()
     pos.current = (0.0, (1e9, 0.0, 0.0), {})
     pos.hints = lambda: {"zone": "Pyro"}
-    monkeypatch.setattr(t_nav, "_pos", pos)
-    assert t_nav._hints_near((1e9 + 5000, 0.0, 0.0)) == {"zone": "Pyro"}
-    assert t_nav._hints_near((5e9, 0.0, 0.0)) == {}
+    deps = nav_deps(pos=pos)
+    assert t_nav._hints_near(deps, (1e9 + 5000, 0.0, 0.0)) == {"zone": "Pyro"}
+    assert t_nav._hints_near(deps, (5e9, 0.0, 0.0)) == {}
     pos.current = (0.0, None, None)
-    assert t_nav._hints_near((1e9, 0.0, 0.0)) == {}
+    assert t_nav._hints_near(deps, (1e9, 0.0, 0.0)) == {}
 
 
 def test_here_watch_save_error_is_reported(monkeypatch):
@@ -800,8 +803,10 @@ def test_here_watch_save_error_is_reported(monkeypatch):
     from astral_toolkit.tasks import navigation as t_nav
     from astral_toolkit.navigation import navigate as n
     from astral_toolkit.system import showloc
+    from tests.bootstrap_helpers import nav_deps
 
     notes, logs = [], []
+    deps = nav_deps()
     monkeypatch.setattr(n, "read_clipboard", lambda: "old")
     monkeypatch.setattr(
         showloc, "wait_new_coords", lambda old, timeout: ((1.0, 2.0, 3.0), "new")
@@ -809,14 +814,14 @@ def test_here_watch_save_error_is_reported(monkeypatch):
     monkeypatch.setattr(
         t_nav,
         "_save_here",
-        lambda name, g: (_ for _ in ()).throw(RuntimeError("路标文件坏了")),
+        lambda _deps, name, g: (_ for _ in ()).throw(RuntimeError("路标文件坏了")),
     )
     monkeypatch.setattr(t_nav, "_note_hud", lambda *a: notes.append(a))
     monkeypatch.setattr(t_nav, "_wp_log", logs.append)
     monkeypatch.setattr(
         t_nav, "_HERE", {"name": "矿点", "until": _t.time() + 30, "thread": None}
     )
-    t_nav._start_here_watch()
+    t_nav._start_here_watch(deps)
     t_nav._HERE["thread"].join(5)
     assert notes and "未保存" in notes[-1][1] and any("失败" in x for x in logs)
 
@@ -886,15 +891,17 @@ def test_mark_here_prompts_and_no_double_wait(monkeypatch):
     import time as _t
     from astral_toolkit.system import showloc
     from astral_toolkit.tasks import navigation as t_nav
+    from tests.bootstrap_helpers import nav_deps
 
     notes = []
+    deps = nav_deps()
     monkeypatch.setattr(
         t_nav, "_note_hud", lambda sec, text, secs=None: notes.append((sec, text, secs))
     )
     monkeypatch.setattr(t_nav, "_wp_log", lambda m: None)
     monkeypatch.setattr(showloc, "showlocation", lambda log=None: (None, "没读到"))
     monkeypatch.setattr(t_nav, "_HERE", {"name": None, "until": 0, "thread": None})
-    assert t_nav.mark_here() == {"error": "没读到"}
+    assert t_nav.mark_here(deps) == {"error": "没读到"}
     assert (
         notes[0][0] == "定位"
         and "/showlocation" in notes[0][1]
@@ -912,7 +919,7 @@ def test_mark_here_prompts_and_no_double_wait(monkeypatch):
         t_nav, "_HERE", {"name": "矿点", "until": _t.time() + 30, "thread": th}
     )
     try:
-        assert t_nav.mark_here() == {"pending": True} and not called
+        assert t_nav.mark_here(deps) == {"pending": True} and not called
         assert "矿点" in notes[-1][1]
     finally:
         ev.set()

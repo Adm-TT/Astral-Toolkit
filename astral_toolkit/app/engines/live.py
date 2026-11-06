@@ -230,6 +230,8 @@ class _Live:
         *,
         foreground=None,
         grab=None,
+        where_now=None,
+        area_now=None,
     ):
         self.results = results if results is not None else ResultStore()
         from ..miss_shots import MissShotsService
@@ -238,6 +240,9 @@ class _Live:
         from ...mining import screen
 
         self._grab = grab if grab is not None else (lambda: screen.grab())
+        # 现在在哪、在哪个产矿区，bootstrap 接 tasks/navigation 的 _where_now / _area_now（F 段 B5）；不给就当不知道
+        self._where_now = where_now
+        self._area_now = area_now
         self.loop: Any = SessionLoop(
             self,
             results=self.results,
@@ -567,7 +572,9 @@ class _Live:
 
                 yield_ocr()
             area = (
-                _T("navigation")._area_now() if sigs and sigs == ctx.sig_prev else None
+                self._area_now()
+                if self._area_now is not None and sigs and sigs == ctx.sig_prev
+                else None
             )
             # 产矿区变了（飞进矿带、跳跃）也要重新发：以前只看信号数值，同样的 7,200 会一直停在旧地点的说法
             from ...core.paths import file_stamp
@@ -589,8 +596,9 @@ class _Live:
                 and session.alive()
             ):
                 where = (
-                    _T("navigation")._where_now()
-                    if any(not match_signature(v) for v in sigs)
+                    self._where_now()
+                    if self._where_now is not None
+                    and any(not match_signature(v) for v in sigs)
                     else None
                 )
                 lines = _T("goals")._mark_goal_lines(describe_all(found, where, area))

@@ -950,6 +950,21 @@ _NAV_API = [
     "halo_pin",
     "halo_unpin",
 ]
+# F 段 B5d 起要导航后台对象的 12 个由 navigation 的 bound(deps) 给，不在 ROUTES 里
+_NAV_BOUND = [
+    "nav_near",
+    "nav_site",
+    "nav_start",
+    "nav_mode",
+    "nav_stop",
+    "nav_refresh",
+    "waypoint_add",
+    "waypoint_preview",
+    "waypoint_from_text",
+    "ore_record",
+    "ore_go",
+    "halo_pin",
+]
 # CR-B4 起制造 6 个、维科洛 2 个接口挪到 app/api/crafting.py、wikelo.py（归属在 tests/test_crafting_api.py 里查）
 _GOALS_API = [
     "goal_finish_preview",
@@ -963,18 +978,25 @@ _GOALS_API = [
 
 
 def test_nav_goals_controller_routes():
-    """导航、目标的每个接口名都由 app/api/navigation.py、app/api/goals.py 接，名单和 Controller 的 ROUTES 一个不多一个不少"""
+    """导航、目标的每个接口名都由 app/api/navigation.py、app/api/goals.py 接：导航静态的在 ROUTES、要后台对象的由 bound 给（F 段 B5），
+    两边合起来和名单一个不多一个不少；目标的名单和 ROUTES 一个不多一个不少"""
     from astral_toolkit.app.api import router, navigation as CN, goals as CG
 
     router.reset()
     r = router.routes()
-    for name in _NAV_API:
+    bound = CN.bound(object())
+    static = set(CN.ROUTES)
+    assert sorted(bound) == sorted(_NAV_BOUND) and not static & set(bound)
+    assert sorted(static | set(bound)) == sorted(_NAV_API)
+    for name in static:
+        assert r[name] is CN.ROUTES[name], name
         assert r[name].__module__ == "astral_toolkit.app.api.navigation", name
+    for name, fn in bound.items():
+        assert name not in r, name
+        assert fn.__module__ == "astral_toolkit.app.api.navigation", name
     for name in _GOALS_API:
         assert r[name].__module__ == "astral_toolkit.app.api.goals", name
-    assert sorted(CN.ROUTES) == sorted(_NAV_API) and sorted(CG.ROUTES) == sorted(
-        _GOALS_API
-    )
+    assert sorted(CG.ROUTES) == sorted(_GOALS_API)
 
 
 def test_nav_goals_tasks_no_services():
