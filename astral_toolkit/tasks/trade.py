@@ -108,9 +108,17 @@ def item_search(q=""):
     return _present_catalog.present_search_results(_catalog.search_items(q))
 
 
+# UEX 写全名、星图写简称的站（11-06：GrimHEX 那几家店点了导航说「没有这个地点」）
+_SITE_ALIAS = {"greenimperialhousingexchange": "grimhex"}
+
+
+def _site_key(s):
+    return re.sub(r"[^a-z0-9]", "", (s or "").lower())
+
+
 def nav_shop(shop="", place=""):
     """物品查询里点一处商店 → 导航过去（2026-10-28 用户定）。先找主城 / 空间站里这家店的点（城里导航），
-    没有就导航到这个地点本身（星图）"""
+    没有就导航到这个地点本身（星图）。UEX 只写了星球 / 卫星 / 星系的不导；最后按名字搜也只认一模一样的（BF-2）"""
     from ..navigation import navigate as n
 
     data = n.load()
@@ -118,7 +126,12 @@ def nav_shop(shop="", place=""):
     place = (
         (place or "").split(" · ")[-1].strip()
     )  # 商店行的地点是「Stanton · MicroTech · New Babbage」，只要最后一段（2026-10-28 反馈：点了说没这个地点）
-    site = re.sub(r"[^a-z0-9]", "", place.lower())
+    site = _site_key(place)
+    site = _SITE_ALIAS.get(site, site)
+    if site and site in {_site_key(b) for b in [*data["bodies"], *n.SYS_ZH]}:
+        return {
+            "error": f"UEX 上这家店只写了在「{place}」，没写是哪个站、城或前哨，导航不了"
+        }
     hit = None
     if site:
         pts = [
@@ -169,7 +182,9 @@ def nav_shop(shop="", place=""):
             else []
         ):  # 星图里叫 Checkmate，不带 Station
             hits, _ = n.search(q, data, limit=1)
-            if hits:
+            # 只认名字一模一样的：不一样的多半是「这个词出现在别的地点里」，比如只写了星球名，
+            # 星球上随便哪个点都搜得到（2026-10-28 审查：兜底搜索会导错）
+            if hits and _site_key(hits[0]["n"]) == _site_key(q):
                 hit = hits[0]
                 break
     if hit is None:
