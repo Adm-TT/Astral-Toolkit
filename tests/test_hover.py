@@ -182,12 +182,12 @@ class TestReadTooltipExecution(unittest.TestCase):
         self.assertEqual(calls[2], ((300, 240), False, (200, 460)))  # 说明框带 24%~70%
 
     def test_fullscreen_fallback(self):
-        """标题带、说明框带、全高都没认到，整屏兜底命中"""
+        """标题带、说明框带都没认到、也没见到说明框的样子（全高不认，2026-11-07 起），鼠标不在中间带：整屏兜底命中"""
         calls = []
 
         def fake_recognize(img, urgent=False, offset=(0, 0), native=False):
             calls.append((offset, native, img.size))
-            if len(calls) <= 6:  # 3 个高度阶段 × 2 个宽度条带
+            if len(calls) <= 4:  # 标题带、说明框带 × 2 个宽度条带
                 return []
             return [
                 OcrToken("实准枪口补偿器2", 90, (350, 300, 100, 18)),
@@ -199,18 +199,19 @@ class TestReadTooltipExecution(unittest.TestCase):
         toks, name, where = _read_tooltip(self.img, (100, 500))  # 鼠标在 10%
         self.assertEqual(where, "整屏")
         self.assertEqual(name, ("实准枪口补偿器2", "VeraCompensator2"))
-        self.assertEqual(len(calls), 7)
+        self.assertEqual(len(calls), 5)
         self.assertEqual(calls[-1][2], (1000, 1000))  # 整屏是整张图
 
 
 def test_cascade_order_and_cockpit_guard(monkeypatch):
-    """级联顺序：标题带 2 个宽度 → 说明框带 2 个 → 全高 2 个（native 只有标题带是 True）；
-    鼠标在中间带、一直没见到说明框特征：多半在驾驶位，不整屏"""
+    """级联顺序：标题带 2 个宽度 → 说明框带 2 个 → 全高 2 个（native 只有标题带是 True）；说明框带见到锚点（下半截的
+    体积那行）才认全高（2026-11-07 起）。鼠标在中间带、没见到说明框特征的见 test_both_passes_skip_full_when_nothing_seen"""
     _names(monkeypatch, {})
-    calls = _fake_ocr(monkeypatch, [[OcrToken("SCM 220", 90, (60, 300, 60, 18))]])
+    anchor_only = [OcrToken("体积：20uSCU", 90, (60, 348, 100, 18))]
+    calls = _fake_ocr(monkeypatch, [[], [], [], anchor_only, []])
     toks, name, where = _read_tooltip(MockImage(1000, 1000), (500, 500))
     assert name is None
-    assert calls == [
+    assert calls[:6] == [
         ((300, 240), True, (200, 120)),  # 标题带 30-50%
         ((300, 240), True, (400, 120)),  # 标题带 30-70%
         ((300, 240), False, (200, 460)),  # 说明框带 30-50%
@@ -220,11 +221,11 @@ def test_cascade_order_and_cockpit_guard(monkeypatch):
     ]
 
 
-def test_first_pass_skips_full_when_nothing_seen(monkeypatch):
-    """F8 第一遍（whole_screen=False）：标题带、说明框带（屏高 24%~70%）里连说明框的样子都没见到（不是锚点、
-    凑不成像样名字）——全高那两条也不认，直接回去让 F8 等一下再截（2026-11-07 PR #17 跟进：没有说明框时
-    第一遍从 6 次认字少到 4 次）；第二遍（可整屏）照旧六档都认；鼠标不在中间带的第一遍也一样只认四次，
-    读不到鼠标位置（只有中间一条）的第一遍只认两次。调试截图记「第一遍·没见到说明框」，第二遍照旧记驾驶位保护"""
+def test_both_passes_skip_full_when_nothing_seen(monkeypatch):
+    """标题带、说明框带（屏高 24%~70%）里连说明框的样子都没见到（不是锚点、凑不成像样名字）：全高那两条不认，
+    F8 两遍都这样（2026-11-07 PR #17 跟进，老大定要快的：没有说明框时一遍从 6 次认字少到 4 次）。第一遍直接回去
+    让 F8 等一下再截，调试截图记「第一遍·没见到说明框」；第二遍鼠标在中间带 → 驾驶位保护、不整屏，鼠标不在中间带
+    → 照旧整屏兜底；读不到鼠标位置（只有中间一条）的第一遍只认两次"""
     from types import SimpleNamespace
 
     from astral_toolkit.trade import debug_shots
@@ -240,12 +241,19 @@ def test_first_pass_skips_full_when_nothing_seen(monkeypatch):
     assert [c[2] for c in calls] == [(200, 120), (400, 120), (200, 460), (400, 460)]
     calls.clear()
     _read_tooltip(MockImage(1000, 1000), (500, 500))
-    assert [c[2][1] for c in calls] == [120, 120, 460, 460, 1000, 1000]
+    assert [c[2][1] for c in calls] == [120, 120, 460, 460]
     assert shot.stop_reason == "驾驶位保护"
     calls.clear()
     _read_tooltip(MockImage(1000, 1000), (100, 500), whole_screen=False)
     assert [c[2][1] for c in calls] == [120, 120, 460, 460]
     assert shot.stop_reason == "第一遍·没见到说明框"
+    calls.clear()
+    _read_tooltip(MockImage(1000, 1000), (100, 500))
+    assert [c[2] for c in calls][-1] == (
+        1000,
+        1000,
+    )  # 第二遍、鼠标不在中间带：整屏兜底（整张图）
+    assert [c[2][1] for c in calls] == [120, 120, 460, 460, 1000]
     calls.clear()
     _read_tooltip(MockImage(1000, 1000), None, whole_screen=False)
     assert [c[2] for c in calls] == [(400, 120), (400, 460)]
@@ -352,9 +360,11 @@ def test_weak_fuzzy_still_resolved_later(monkeypatch):
 
 
 def test_full_stage_stops_on_anchor_without_library_hit(monkeypatch):
-    """前三档都没认到、全高档看到完整说明框（英文下紧跟体积）：照旧当认到了，不为没入库的物品再跑整屏"""
+    """前两档没认到名字（说明框带只看到下半截的体积那行）、全高档看到完整说明框（英文下紧跟体积）：照旧当认到了，
+    不为没入库的物品再跑整屏"""
     _names(monkeypatch, {})
-    calls = _fake_ocr(monkeypatch, [[], [], [], [], [], _ITEM])
+    anchor_only = [OcrToken("体积：20uSCU", 90, (60, 348, 100, 18))]
+    calls = _fake_ocr(monkeypatch, [[], [], [], anchor_only, [], _ITEM])
     toks, name, where = _read_tooltip(MockImage(1000, 1000), (100, 500))
     # 全高第二个宽度条带（30~70%）认到的
     assert where == "30-70%@full" and len(calls) == 6
@@ -365,7 +375,7 @@ def test_cockpit_guard_allows_fullscreen_when_anchor_seen(monkeypatch):
     """认过的区域里有说明框特征（体积…）但没对上名字：照旧整屏兜底"""
     _names(monkeypatch, {})
     anchor_only = [OcrToken("体积：20uSCU", 90, (60, 348, 100, 18))]
-    calls = _fake_ocr(monkeypatch, [[], [], [], [], [], anchor_only])
+    calls = _fake_ocr(monkeypatch, [[], [], [], anchor_only, [], []])
     _read_tooltip(MockImage(1000, 1000), (500, 500))
     assert calls[-1][2] == (1000, 1000)
 
