@@ -264,6 +264,9 @@ def test_buy_rows_nearest_first_when_position_known(monkeypatch, tmp_path):
     assert d["buy"][0]["shop"] == "Shop NB"  # 在微科：新巴贝奇最近，虽然最贵
     ds = [r["dist_m"] for r in d["buy"]]
     assert all(isinstance(x, float) for x in ds) and ds == sorted(ds), d["buy"]
+    assert ds[0] == 0.0 and all(x > 1e9 for x in ds[1:]), (
+        ds
+    )  # 新巴贝奇就在微科；另两处在别的星球
     monkeypatch.setattr(position, "current", lambda: None)
     d = acquire.info("MaxLift Tractor Beam", "", 1700)
     assert [r["shop"] for r in d["buy"]] == ["Shop Orison", "Shop ARC-L4", "Shop NB"]
@@ -635,6 +638,7 @@ def test_material_source_order_and_sentence(monkeypatch):
         "Many": {"groups": [many]},
         "Shelf": {"groups": [shelf]},
         "Ore": {"mine": True, "note": "副本专属矿：要开采", "groups": [ore]},
+        "OreNoNote": {"mine": True, "groups": [ore]},  # 掉落数据缺说明
     }
     online = []
 
@@ -664,6 +668,9 @@ def test_material_source_order_and_sentence(monkeypatch):
     assert said("Many") == "开箱：一、二、三等（Crate 箱，单箱最高约 50%）"
     assert said("Shelf") == "场景里刷出：奖励室（最高约 30%）"
     assert said("Ore") == "副本专属矿，只能开采：副本（洞里）"
+    assert (
+        said("OreNoNote") == ""
+    )  # 以前在查询里拼会出错、取的时候吞成空；不拼出半句「，只能开采：…」
     assert acquire.material_source("Nothing") is None and said("Nothing") == ""
     # 只看本机：每次都要明说 online=False（loot.info 默认联网，漏传就会联网），不在页面里逐个材料联网等
     assert online and all(v is False for v in online), online
@@ -727,7 +734,62 @@ def test_presenters_write_distance_and_source_text():
     }
     assert (
         source_text({"loot": loot}) == "开箱：甲等（，单箱最高约 10%）"
-    )  # 箱子名是数字开头的不写
+    )  # 箱子名是数字开头的不写（「（，」是以前就这样，字不改）
+    three = dict(loot, regions=["一", "二", "三"], more=False, box="Crate", p=0.5)
+    assert (
+        source_text({"loot": three}) == "开箱：一、二、三（Crate 箱，单箱最高约 50%）"
+    )
+    # 拼字出错（掉落数据缺字段、不是数）写空、不让整页出错：以前在查询里拼，出错由维科洛页 / 目标页取的时候吞成空
+    assert source_text({"loot": dict(loot, box=None)}) == ""
+    assert source_text({"loot": dict(loot, mine=True, note=None)}) == ""
+    assert source_text({"mine": {"where": "甲", "pct": "?", "pure": False}}) == ""
+    plain = {
+        "id": 8,
+        "name": "W",
+        "total": 0,
+    }  # 同系列没有买点的那项原样给，不新加 buy 键
+    card = present.present_item_info(
+        ItemInfo(facts={"variants": [plain]}, zh="", goal="")
+    )
+    assert card["variants"] == [plain] and "buy" not in card["variants"][0]
+
+
+def test_wikelo_detail_writes_material_source_text(monkeypatch):
+    """维科洛页每样材料的「去哪弄」（目录迁移收尾）：用例 tasks/wikelo.exchange_detail 把 material_source 的事实放进
+    tip（取的时候出错放 None），app/presenters/wikelo.present_detail 写成字（查不到写空字符串）"""
+    from typing import Any
+
+    from astral_toolkit.app.presenters.wikelo import present_detail
+    from astral_toolkit.tasks import wikelo as wikelo_uc
+
+    a = {"n": "Carinite", "z": "科力晶", "q": 2, "u": "SCU"}
+    b = {"n": "Pearl", "z": "Pearl", "q": 0, "u": ""}
+    c = {
+        "id": "w-1",
+        "t": "兑换",
+        "type": "载具",
+        "rz": "奖励",
+        "rewards": ["R"],
+        "te": "",
+        "req": [a, b],
+    }
+    monkeypatch.setattr(wikelo, "load", lambda: [c])
+    monkeypatch.setattr(wikelo_uc, "_wk_cache", {})
+
+    def facts(name):
+        if name == "Pearl":
+            raise RuntimeError("坏了")
+        return {"mine": {"where": "甲地", "pct": 42.4, "pure": False}}
+
+    monkeypatch.setattr(acquire, "material_source", facts)
+    d = wikelo_uc.exchange_detail("w-1")
+    assert d is not None
+    assert [tip for _, tip in d["groups"]] == [facts("Carinite"), None]
+    out: Any = present_detail(d)  # 维科洛页的字典，值的类型各不一样
+    assert [r["tip"] for r in out["req"]] == ["挖矿：甲地 42%", ""]
+    assert (
+        out["req"][0]["name"] == "科力晶（Carinite）" and out["req"][0]["q"] == "2 SCU"
+    )
 
 
 def test_names_follow_game_localization(tmp_path, monkeypatch):

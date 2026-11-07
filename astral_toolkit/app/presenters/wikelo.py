@@ -31,7 +31,16 @@ def _loot_text(lt):
 
 
 def source_text(facts):
-    """材料去哪弄（tasks/catalog_queries/acquire.material_source 给的事实）→ 一句话；没有给空字符串"""
+    """材料去哪弄（tasks/catalog_queries/acquire.material_source 给的事实）→ 一句话；没有给空字符串。
+    拼的时候出错（掉落数据缺字段、不是数）也给空字符串：以前这几句在查询里拼，出错由维科洛页 / 目标页取的时候吞成空，
+    挪到这里照旧，不让整页出错"""
+    try:
+        return _source_text(facts)
+    except Exception:
+        return ""
+
+
+def _source_text(facts):
     if not facts:
         return ""
     if "note" in facts:

@@ -1032,10 +1032,10 @@ def test_where_to_get_goes_through_console_to_material_source(monkeypatch):
     from astral_toolkit.crafting import goals
     from astral_toolkit.tasks.catalog_queries import acquire
 
-    monkeypatch.setattr(acquire, "material_source", lambda en: "来源：" + en)
+    monkeypatch.setattr(acquire, "material_source", lambda en: {"note": "来源：" + en})
     goals.where_to_get.cache_clear()
     try:
-        assert goals.where_to_get("Quantainium") == "来源：Quantainium"
+        assert goals.where_to_get("Quantainium") == {"note": "来源：Quantainium"}
     finally:
         goals.where_to_get.cache_clear()
 

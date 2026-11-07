@@ -128,7 +128,7 @@ def present_item_info(info: ItemInfo) -> dict[str, Any]:
         d["buy"] = [_buy_row(r) for r in d["buy"]]
     if d.get("variants"):
         d["variants"] = [
-            {**v, "buy": [_buy_row(r) for r in v.get("buy") or []]}
+            {**v, "buy": [_buy_row(r) for r in v["buy"]]} if v.get("buy") else v
             for v in d["variants"]
         ]
     d["goal"] = info.goal

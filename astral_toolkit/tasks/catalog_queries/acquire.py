@@ -190,7 +190,8 @@ def material_source(name_en):
 
 def loot_source(name_en, name_zh=""):
     """开箱掉落（scl.miao.network 的掉落表）里概率最高那组的事实：{regions 地方、more 后面还有、mine 副本专属矿只能开采、
-    note 掉落说明、box 箱子、placed 直接刷在场景里、p 单箱最高概率}；没有掉落给 None。那一句话在 app/presenters/wikelo"""
+    note 掉落说明、box 箱子、placed 直接刷在场景里、p 单箱最高概率}；没有掉落给 None。那一句话在 app/presenters/wikelo。
+    regions、note、box、p 原样给：掉落数据缺字段时拼字那步出错、写空，和以前在这里拼时一样"""
     try:
         d: Any = loot.info(
             name_en, name_zh, top=2, online=False
@@ -201,10 +202,10 @@ def loot_source(name_en, name_zh=""):
         return None
     g = d["groups"][0]
     return {
-        "regions": list(g["regions"]),
+        "regions": g["regions"],
         "more": bool(d.get("more")),
         "mine": bool(d.get("mine")),
-        "note": d.get("note") or "",
+        "note": d.get("note"),
         "box": g["box"],
         "placed": bool(g.get("placed")),
         "p": g["p"],
