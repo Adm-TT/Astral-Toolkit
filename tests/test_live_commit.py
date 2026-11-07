@@ -1134,6 +1134,11 @@ def test_mining_full_and_cut_scans_ask_analysis_differently(tmp_path, monkeypatc
         live._tick_part(session, ctx, bag, 2.0, 1)
         assert views == [((part, bag), {"cut": True})] and votes == ["全", "全", "挡"]
         assert ctx.settled is False  # 还没认够一轮
+        ctx.done_here = 3
+        live._tick_part(session, ctx, bag, 2.1, 1)
+        assert views == [((part, bag), {"cut": True})]  # 一样的结果不重发
+        assert votes == ["全", "全", "挡", "挡"]
+        assert ctx.settled is True
     finally:
         ctx.close()
 
