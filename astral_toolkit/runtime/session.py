@@ -159,7 +159,10 @@ class Worker(Protocol):
     # 可选类属性 activity_kind（如 "mining"）、log_tag（如 "NAV"）/ display_name（如「导航」）：
     # 有就由 _confirm_stop_locked 发展示终态、框架日志按它标；不在协议里声明，按 getattr 读
     retries: int
-    idle_close: float | None
+
+    @property
+    def idle_close(self) -> float | None: ...
+
     stale_after: dict[str, float]
     needs_foreground: bool
     restart_while_stopping: bool

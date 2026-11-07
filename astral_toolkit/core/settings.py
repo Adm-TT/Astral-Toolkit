@@ -18,7 +18,9 @@ DEFAULTS = {
     "halo_qd": "Atlas (S1)",  # 小行星带导航：量子引擎（算安全窗口几秒）
     "fix_key": "",  # 一键定位：默认不绑（同上；导航、小行星带改成直接读右上角）
     "report_key": "F10",  # 问题反馈：识别不到 / 认错了，按一下把当时的截图和数据存下来
-    "live_key": "F5",  # 采矿助手开关（开着时 120 秒没看到扫描面板、也没认到信号就自动关）
+    "live_key": "F5",  # 采矿助手开关（自动关闭时间见 mining_idle_close）
+    "mining_idle_close": 120,  # 采矿助手所有通道都没看到时，多少秒后自动关闭（30–1800）
+    "mining_focus": None,  # 悬浮窗关注的矿物英文名列表；None = 全部，[] = 都不显示
     "count_key": "F6",  # 盘点开关
     "ore_key": "",  # 原矿记录：游戏里按这个键记下当前这块矿和坐标；默认不设，设置页自己选
     "stock_mode": None,  # 库存页：simple（简易）/ pro（经营）；None = 还没定（老用户有库存记录直接经营，新用户第一次打开问一次）
@@ -55,6 +57,15 @@ def nav_fps(value):
     except (TypeError, ValueError, OverflowError):
         return lo
     return max(lo, min(hi, v))
+
+
+def mining_idle_seconds(value):
+    """采矿助手自动关闭秒数：30–1800；坏值按默认 120。"""
+    try:
+        seconds = int(round(float(value)))
+    except (TypeError, ValueError, OverflowError):
+        return 120
+    return max(30, min(1800, seconds))
 
 
 def load():

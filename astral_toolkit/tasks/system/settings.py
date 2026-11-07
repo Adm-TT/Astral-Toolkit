@@ -85,6 +85,9 @@ def set_settings(sources: StatusSources, /, **kw):
     if "nav_fps" in kw:
         kw["nav_fps"] = settings.nav_fps(kw["nav_fps"])
     allowed.add("nav_fps")
+    if "mining_idle_close" in kw:
+        kw["mining_idle_close"] = settings.mining_idle_seconds(kw["mining_idle_close"])
+    allowed.add("mining_idle_close")
     clear_train = (
         kw.get("train_upload") is False
     )  # 关掉「帮助改进识别」：先存「关」，再删本地攒着没发的
