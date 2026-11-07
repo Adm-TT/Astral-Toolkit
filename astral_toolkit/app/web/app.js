@@ -2778,7 +2778,7 @@ PAGES.settings = () => {
       <p>F8 识别物品时，将名字那一行文字的小截图和正确名字发给作者（认错的都发，认对的抽一部分），用于改进识别。不含整屏截图。</p></div>
       <button class="switch ${c.train_upload !== false ? "on" : ""}" id="train-sw" aria-label="帮助改进识别"></button></div>
     <div class="set"><div>文字识别硬件 (OCR)
-      <p>选择文字识别（F8 物品识别、盘点、采矿扫描、导航、全屏扫描）使用的硬件设备。默认用处理器；显卡识别快一些（作者电脑上 F8 每次约快 0.2 秒），但 AT 会多占两三百 MB 内存。<br>
+      <p>选择文字识别（F8 物品识别、盘点、采矿助手、导航）用处理器还是显卡。默认用处理器；显卡识别快一些（作者电脑上 F8 每次约快 0.2 秒），但 AT 会多占两三百 MB 内存。<br>
       <span id="ocr-state">${ocrStateHtml(s, c)}</span>
       </p></div>
       ${segH("ocr-device", [["gpu", "显卡 (GPU)"], ["cpu", "处理器 (CPU)"]], (c.ocr_device || "cpu"), "文字识别硬件")}</div>

@@ -43,6 +43,9 @@ DEFAULTS = {
     "agreed": False,  # 第一次打开时确认过「本软件是免费软件」
     "mining_ship": None,  # 原矿扫描按哪条船的配置算：mole / prospector / golem；None = 还没选（窗口会先问）
     "mining_loadouts": {},  # 自己改过的配置 {船: {"heads": [[矿头, [模组…]], …], "crew": 几人}}；没改过的用默认
+    # 带了哪些手持工具（列表，键见 mining/data.GADGETS）；None = 没设过、全都带（老大 11-04 定）。
+    # 以前漏了这一项：存了也读不到，下次存别的设置时还会被抹掉（s1 第三轮复查）
+    "mining_gadgets": None,
 }
 
 
@@ -138,6 +141,11 @@ def save(cfg):
     with _LOCK:
         write_json(FILE, cfg, indent=1)
         _SAVED[0] += 1
+        # 刚存上的就是最新的：存完马上读不到（杀毒、同步软件常在文件刚改完时去扫）也给刚存的，别闪回改之前的
+        # （窗口外观、识别设备；s1 第三轮复查）。和读文件时一样只留认得的项
+        _LAST_GOOD[str(FILE)] = copy.deepcopy(
+            {**DEFAULTS, **{k: v for k, v in cfg.items() if k in DEFAULTS}}
+        )
 
 
 _unread = __import__("threading").local()
@@ -176,8 +184,8 @@ def update_checked(**kw):
 
 
 def load_checked():
-    """和 load 一样，但设置文件暂时读不到（拿到的只是默认值）时抛 NotSaved：
-    改热键前查撞键不能拿默认值查，会误报「已用于…」（s1 复查）"""
+    """和 load 一样，但设置文件暂时读不到时抛 NotSaved（这时拿到的是这次运行上次读到 / 存上的，没有就是默认值，
+    不一定是文件里现在的）：改热键前查撞键不能拿它查，会误报「已用于…」（s1 复查）"""
     with _LOCK:
         _unread.flag = False
         cfg = load()
@@ -190,7 +198,7 @@ class View:
     """每帧都要看的设置（调试模式、导航记号……）：内存里留一份，平时不读盘（NV-B5）。
 
     本进程存过设置以后，下一次取才重读文件：设置页保存、settings.update 都走 save，所以一改马上生效。
-    这次没读到真实设置（文件被别的程序占着）：先用读到的默认值，RETRY 秒后再读。
+    这次没读到真实设置（文件被别的程序占着）：先用 load 给的（这次运行上次读到 / 存上的，没有就是默认值），RETRY 秒后再读。
     手改 settings.json 不会马上生效：重开 AT，或在设置页随便改一项。
     取到的字典是大家共用的，只读，别改它。"""
 

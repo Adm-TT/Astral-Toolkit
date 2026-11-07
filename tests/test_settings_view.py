@@ -92,3 +92,40 @@ def test_unreadable_settings_keep_last_read(monkeypatch, tmp_path):
     else:
         raise AssertionError("读不到时要报没存上")
     assert f.is_dir()  # 没有拿默认值盖掉
+
+
+def test_just_saved_settings_survive_unreadable(monkeypatch, tmp_path):
+    """刚存上的就是最新的：存完马上读不到（杀毒、同步软件常在文件刚改完时去扫），给的是刚存的，不闪回改之前的
+    （s1 第三轮复查：以前只记读到的，窗口外观、识别设备会退回改之前的）"""
+    import json
+
+    f = tmp_path / "settings.json"
+    f.write_text(
+        json.dumps(
+            {"keys_v5": True, "ocr_v2": True, "theme": "dark", "ocr_device": "gpu"}
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(settings, "FILE", f)
+    assert settings.load()["theme"] == "dark"
+    settings.update_checked(theme="light", ocr_device="cpu")
+    f.unlink()
+    f.mkdir()  # 存完马上读不到
+    cfg = settings.load()
+    assert cfg["theme"] == "light" and cfg["ocr_device"] == "cpu"
+
+
+def test_mining_gadgets_saved_and_read_back(monkeypatch, tmp_path):
+    """带了哪些手持工具：存上就读得到，存别的设置时也不会被抹掉（s1 第三轮复查：以前不在默认值里，存了也读不到）"""
+    from astral_toolkit.mining import laser
+
+    f = tmp_path / "settings.json"
+    monkeypatch.setattr(settings, "FILE", f)
+    assert (
+        settings.load()["mining_gadgets"] is None and len(laser.carried_gadgets()) > 1
+    )
+    settings.update(mining_gadgets=["sabir"])
+    assert settings.load()["mining_gadgets"] == ["sabir"]
+    settings.update(theme="light")
+    assert settings.load()["mining_gadgets"] == ["sabir"]
+    assert laser.carried_gadgets() == ("sabir",)
