@@ -728,6 +728,31 @@ def _wp_log(msg):
         pass
 
 
+def nav_log(here, info, view):
+    """导航时每次算出新位置记一行（logs/nav_log.txt），方向不对时用来查是哪一步的问题
+    （目录迁移 R2 从 app/engines/nav 搬来，和 _wp_log 写同一个文件；bootstrap 接进导航线程的 NavLinks.trace）"""
+    try:
+        from ..core import paths
+
+        p = paths.log("nav_log.txt")
+        if p.exists() and p.stat().st_size > 300_000:
+            p.write_text(
+                "\n".join(p.read_text(encoding="utf-8").splitlines()[-1000:]) + "\n",
+                encoding="utf-8",
+            )
+        loc = info.get("local")
+        line = (
+            f"{time.strftime('%H:%M:%S')} 来源={here.get('src', '?')} 核对={info.get('local_ok')} "
+            f"游戏局部={tuple(round(v, 4) for v in loc) if loc else None} "
+            f"用的=({here['x']:.4f}, {here['y']:.4f}, {here['z']:.4f}) "
+            f"方位={view.get('raw_bearing', 0):.1f}° 显示={view.get('bearing', 0):.0f}° 距离={view.get('surface', 0):.2f}km"
+        )
+        with open(p, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except Exception:
+        pass
+
+
 def _surface_limit(here):
     """离地多高以内算「在星球上」（跟着星球自转记坐标）；再高就当太空，记星系坐标"""
     return max(100_000, here.get("radius_km", 0) * 1000 * 0.25)

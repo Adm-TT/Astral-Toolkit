@@ -90,21 +90,23 @@ STATION_NAMES = [
 
 # ---------------------------------------------------------------- 调用适配
 def call_nav_view(here, target, data, steady=None, prev=None):
-    from astral_toolkit.app.engines import nav
+    from astral_toolkit.app.presenters import (
+        nav as present_nav,
+    )  # R2 起三个视图在展示层
 
-    return nav._nav_view(here, target, data, steady=steady, prev=prev)
+    return present_nav.ground_view_of(here, target, data, steady=steady, prev=prev)
 
 
 def call_station_view(g, target, data, when=None, prev=None, info=None):
-    from astral_toolkit.app.engines import nav
+    from astral_toolkit.app.presenters import nav as present_nav
 
-    return nav._station_view(g, target, data, when=when, prev=prev, info=info)
+    return present_nav.station_view_of(g, target, data, when=when, prev=prev, info=info)
 
 
 def call_space_view(g, target, data):
-    from astral_toolkit.app.engines import nav
+    from astral_toolkit.app.presenters import nav as present_nav
 
-    return nav._space_view(g, target, data)
+    return present_nav.space_view_of(g, target, data)
 
 
 def make_marker(positions, live):
@@ -119,15 +121,17 @@ def call_marker_tick(marker, target, data, state, shown, ref=None):
 
 
 def call_nav_log(here, info, view):
-    from astral_toolkit.app.engines import nav
+    from astral_toolkit.tasks import (
+        navigation as navigation_tasks,
+    )  # R2 起导航日志那一行在这里
 
-    return nav.nav_log(here, info, view)
+    return navigation_tasks.nav_log(here, info, view)
 
 
 def call_mark_diag(why):
-    from astral_toolkit.app.engines import nav
+    from astral_toolkit.app import nav_marker  # R2 起导航记号在这里
 
-    return nav.marker_diag(why)
+    return nav_marker.marker_diag(why)
 
 
 # ---------------------------------------------------------------- 假时钟与替身
@@ -190,13 +194,15 @@ class _Sandbox:
         self._saved: list[tuple[Any, str, Any]] = []
 
     def __enter__(self):
-        from astral_toolkit.app import hud_state
-        from astral_toolkit.app.engines import nav as nav_mod
+        from astral_toolkit.app import hud_state, nav_marker
         from astral_toolkit.core import capture, paths, settings as settings_mod
         from astral_toolkit.navigation import displayinfo
         from astral_toolkit.system import showloc
+        from astral_toolkit.tasks import navigation as navigation_tasks
 
-        self._patch(nav_mod, "time", self.clock)
+        # R2 起记号（含记号收起的诊断）在 app/nav_marker、导航日志那一行在 tasks/navigation：两边都用假时钟
+        self._patch(nav_marker, "time", self.clock)
+        self._patch(navigation_tasks, "time", self.clock)
         self._patch(settings_mod, "load", self._load_settings)
         self._patch(paths, "log", self._log)
         self._patch(capture, "game_area", self._game_area)

@@ -16,13 +16,13 @@ from .app.engines.hover import _Hover
 from .app.engines.live import _Live
 from .app.engines.nav import (
     _CamFilter,
-    _GameEvents,
     _Nav,
-    _NavMarker,
     _Steady,
+    NavAnalysis,
     NavLinks,
-    marker_diag,
+    NavViews,
 )
+from .app.nav_marker import _NavMarker, marker_diag
 from .app.output import BusOutput
 from .runtime.lifecycle import (
     Lifecycle,
@@ -33,6 +33,7 @@ from .runtime.lifecycle import (
     StopReport,
 )
 from .runtime.results import ResultStore
+from .runtime.workers.game_events import GameEventsWorker
 from .runtime.workers.position import LogWatchWorker, PositionWorker
 
 if TYPE_CHECKING:
@@ -244,6 +245,51 @@ def _nav_links(view: Any) -> NavLinks:
         place_row=navigation_tasks._place_row,
         setting=navigation_tasks.settings_key,
         fps=lambda: settings.nav_fps(view.get("nav_fps")),
+        trace=navigation_tasks.nav_log,
+    )
+
+
+def _nav_analysis() -> NavAnalysis:
+    """导航线程一轮要用的分析（目录迁移 R2）：tasks/navigation_analysis 这个模块（原样转给 navigation/navigate）"""
+    from .tasks import navigation_analysis
+
+    return navigation_analysis
+
+
+def _nav_views() -> NavViews:
+    """导航线程要的排版（目录迁移 R2）：太空 / 空间站 / 地面三个视图、活动磁贴、右上角读位置的说法，都在 app/presenters/nav"""
+    from .app.presenters import nav as present_nav
+
+    return NavViews(
+        space=present_nav.space_view_of,
+        station=present_nav.station_view_of,
+        ground=present_nav.ground_view_of,
+        activity=present_nav.activity,
+        tip=present_nav.nav_tip,
+        di_help=present_nav.DI_HELP,
+    )
+
+
+def _game_events(pos: Any) -> GameEventsWorker:
+    """游戏日志事件（目录迁移 R2 起线程在 runtime/workers/game_events）：读日志用 system/gamelog（线程开始时才造），
+    推窗口走总线「gamelog」，量子到达让定位马上读一次；只有 Windows 起线程"""
+    import sys
+
+    from .app import bus
+
+    def tail() -> Any:
+        from .system.gamelog import EventTail
+
+        return EventTail()
+
+    def publish(event: dict[str, Any]) -> None:
+        bus.publish("gamelog", event)
+
+    return GameEventsWorker(
+        tail,
+        publish,
+        enabled=sys.platform == "win32",
+        on_qt_arrived=pos.request_read_now,
     )
 
 
@@ -331,7 +377,7 @@ def build(
     links = _nav_links(view)
     cam_filter = _CamFilter(log=links.log)
     steady = _Steady()
-    game_events = _GameEvents(on_qt_arrived=pos.request_read_now)
+    game_events = _game_events(pos)
     live = _Live(
         results,
         output=output,
@@ -352,6 +398,8 @@ def build(
         closing=lifecycle.is_closing,
         marker=_nav_marker(pos, live, mode, view),
         links=links,
+        analysis=_nav_analysis(),
+        views=_nav_views(),
     )
     nav_deps = navigation_tasks.NavDeps(
         nav=nav, pos=pos, game_events=game_events, results=results

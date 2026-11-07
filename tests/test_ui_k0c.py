@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 from astral_toolkit.app import bus, ui_stream
 from astral_toolkit.app.engines import nav as navmod
+from tests import nav_helpers
 from astral_toolkit.app.output import BusOutput
 from astral_toolkit.navigation import navigate
 from astral_toolkit.runtime.results import ResultStore
@@ -119,7 +120,7 @@ def _patch_nav(monkeypatch, arrived=False):
 def _new_nav(monkeypatch, arrived=False, retries=None, join_timeout=0.5):
     ui = _reset(monkeypatch)
     _patch_nav(monkeypatch, arrived=arrived)
-    nav = navmod._Nav(
+    nav = nav_helpers.nav(
         _FakePos(),
         _FakeCam(),
         None,

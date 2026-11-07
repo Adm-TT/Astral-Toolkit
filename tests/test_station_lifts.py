@@ -502,6 +502,7 @@ def test_nav_engine_station_branch(monkeypatch, tmp_path):
     from astral_toolkit.tasks import navigation as t_nav
     from astral_toolkit.app import bus
     from astral_toolkit.app.engines import nav as nav_mod
+    from tests import nav_helpers
     from astral_toolkit.runtime.session import Session
 
     tgt = ps["rr_x"]
@@ -556,7 +557,7 @@ def test_nav_engine_station_branch(monkeypatch, tmp_path):
             return True
 
     pos = Pos()
-    worker = nav_mod._NavWorker(pos, nav_mod._CamFilter(), threading.Lock())
+    worker = nav_helpers.worker(pos, nav_mod._CamFilter(), threading.Lock())
     worker.loop = Loop()
     session = Session(1, threading.Event(), nav_mod.NavPayload(tgt, tgt, False))
     ctx = nav_mod._NavCtx(1, session.payload)

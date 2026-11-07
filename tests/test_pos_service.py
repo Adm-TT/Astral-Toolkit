@@ -93,13 +93,71 @@ def test_logwatch_start_stop_shell(monkeypatch):
 
 
 def test_game_events_shell_and_callback():
+    from astral_toolkit.runtime.workers.game_events import GameEventsWorker
+
     called = []
-    ev = __import__(
-        "astral_toolkit.app.engines.nav", fromlist=["_GameEvents"]
-    )._GameEvents(on_qt_arrived=lambda: called.append(1))
+    ev = GameEventsWorker(
+        lambda: None,
+        lambda event: None,
+        enabled=True,
+        on_qt_arrived=lambda: called.append(1),
+    )
     assert ev.on_qt_arrived is not None
     ev.request_stop()
     assert ev.join(0.0) is True
+
+
+def test_game_events_worker_polls_publishes_and_calls_back():
+    """游戏事件线程（R2 搬进 runtime/workers/game_events）：线程开始时才造读日志的东西；每条事件记下最近一次、
+    推给窗口；量子到达记时间、调回调（回调出错不退）；读日志出错不退；不是 Windows（enabled=False）不起线程"""
+    import threading
+    import time
+
+    from astral_toolkit.runtime.workers.game_events import GameEventsWorker
+
+    made, published, called = [], [], []
+    second = threading.Event()
+
+    class Tail:
+        def __init__(self):
+            self.n = 0
+
+        def poll(self):
+            self.n += 1
+            if self.n == 1:
+                return [(1.0, "jurisdiction", "Hurston"), (2.0, "qt_arrived", None)]
+            if self.n == 2:
+                raise OSError("日志读不了")
+            second.set()
+            return []
+
+    def tail():
+        made.append(1)
+        return Tail()
+
+    def boom():
+        called.append(1)
+        raise RuntimeError("回调坏了")
+
+    ev = GameEventsWorker(tail, published.append, enabled=False, on_qt_arrived=boom)
+    ev.start()
+    assert ev.thread is None and made == []
+    ev = GameEventsWorker(tail, published.append, enabled=True, on_qt_arrived=boom)
+    assert made == []
+    before = time.time()
+    ev.start()
+    try:
+        assert second.wait(5.0)
+    finally:
+        ev.request_stop()
+        assert ev.join(5.0) is True
+    assert made == [1]
+    assert published == [
+        {"kind": "jurisdiction", "value": "Hurston", "t": 1.0},
+        {"kind": "qt_arrived", "value": None, "t": 2.0},
+    ]
+    assert ev.last == {"jurisdiction": (1.0, "Hurston"), "qt_arrived": (2.0, None)}
+    assert called == [1] and ev.arrived_at >= before
 
 
 def test_bootstrap_gives_reader_the_debug_switch(monkeypatch):

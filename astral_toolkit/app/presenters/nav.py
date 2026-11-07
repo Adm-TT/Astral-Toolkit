@@ -1,4 +1,6 @@
-"""导航活动的展示映射（UI-K0c）：NavPayload + state_view -> ui.activity；磁贴运行事实 -> status_line。"""
+"""导航活动的展示映射（UI-K0c）：NavPayload + state_view -> ui.activity；磁贴运行事实 -> status_line。
+目录迁移 R2 起导航线程用的排版也在这里：右上角读位置的说法（nav_tip、DI_HELP）、太空 / 空间站 / 地面三个视图
+（space_view_of / station_view_of / ground_view_of：navigation/views 算事实，这里排版），bootstrap 接进导航线程。"""
 
 import time
 from typing import Any
@@ -199,3 +201,55 @@ def marker_model(area, proj, label):
         "proj": proj,
         "label": label,
     }
+
+
+# ---------------------------------------------------------------- 导航线程用的排版（目录迁移 R2 从 app/engines/nav 搬来）
+DI_HELP = "未检测到右上角位置信息：在游戏中按 ~ 打开控制台，输入 r_DisplayInfo 2 后回车"
+
+
+def nav_tip(on, last_ok, now, has_shown, di_help):
+    """导航时右上角读位置的说法 → (窗口状态, 悬浮窗末尾那行)。窗口和悬浮窗说法一致（审查 2026-10-30）：
+    读得到：实时；8–30 秒前读到过而且有上次结果：标「暂停更新」，不冒充实时；刚开始还没结果：等待；
+    更久没读到 / 从没读到：教开调试信息"""
+    if on:
+        return "右上角调试信息：实时识别位置", ""
+    if last_ok and now - last_ok < 30:
+        if has_shown:
+            return (
+                "右上角位置暂时认不出，显示的是上次结果",
+                "\n位置暂停更新，以上是上次结果",
+            )
+        return "等待右上角位置信息…", ""
+    return (
+        di_help + "（或在聊天框输入 /showlocation）",
+        "\n读不到位置：控制台输入 r_DisplayInfo 2，或聊天框输入 /showlocation",
+    )
+
+
+def space_view_of(g, target, data):
+    """导航去太空路标：没有南北，给直线距离、先量子跳到哪、对准哪个标记偏几度"""
+    from ...navigation import views
+
+    return space_view(views.space_facts(g, target, data), g, target, data)
+
+
+def station_view_of(g, target, data, when=None, prev=None, info=None):
+    """拉格朗日点 / 跳跃点空间站里走路：距离按米、按站自己的朝向分上下；转向靠机头那一行和屏幕记号"""
+    from ...navigation import views
+
+    return station_view(
+        views.station_facts(g, target, data, when, prev, info),
+        g,
+        target,
+        data,
+        when,
+    )
+
+
+def ground_view_of(here, target, data, steady=None, prev=None):
+    """地面导航：方位、距离、到没到（防抖用导航线程自己的 _Steady）"""
+    from ...navigation import views
+
+    return ground_view(
+        views.ground_facts(here, target, data, prev), here, target, data, steady
+    )
