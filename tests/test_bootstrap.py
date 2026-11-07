@@ -409,6 +409,7 @@ def test_count_session_uses_fake_worker(monkeypatch):
         output=RecordingOutput(),
         count_worker=worker,
     ) as app:
+        app.count._enabled = True  # 原来换模块常量 WIN：不在 Windows 上跑也照样能开始
         result = app.count.start()
         assert result.get("running") is True, result
         assert _wait_until(app.count.running)
@@ -771,6 +772,18 @@ def test_count_analysis_views_and_links_are_wired_by_bootstrap(monkeypatch):
     cp, fg = (lambda: (1, 1)), (lambda: True)
     given = bootstrap._count_links({"cursor_pos": cp, "foreground": fg})
     assert given.cursor_pos is cp and given.foreground is fg
+    # 给的是 None 就当没给（tests/count_helpers 总是把两个键都带上）
+    dflt = bootstrap._count_links({"cursor_pos": None, "foreground": None})
+    monkeypatch.setattr(cursor_platform, "pos", lambda: (7, 8))
+    monkeypatch.setattr(mining_tasks, "_game_front", lambda: None)
+    assert dflt.cursor_pos() == (7, 8) and dflt.foreground() is None
+    # 装配那一步：build 把 overrides 里的 cursor_pos / foreground 交给盘点
+    app2 = bootstrap.build("test", overrides={"cursor_pos": cp, "foreground": fg})
+    try:
+        assert app2.count._links.cursor_pos is cp
+        assert app2.count.loop._foreground is fg
+    finally:
+        bootstrap.shutdown(app2, budget=0.2)
 
 
 def test_routes_hold_this_apps_live(monkeypatch):

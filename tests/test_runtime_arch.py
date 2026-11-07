@@ -557,7 +557,7 @@ def test_hotkeys_worker_import_is_light():
 def test_count_worker_import_is_light():
     """导入盘点线程（runtime/workers/count，目录迁移 R5）不带进 app、tasks、system、trade、mining、crafting、
     infrastructure、ctypes（读屏、认物品、库存、读光标都由 bootstrap 接），导入时也不起线程（起了马上结束的也算）；
-    再导入盘点分析（tasks/count_analysis，属于 tasks 层，带进 tasks 包是允许的）也不多出线程"""
+    再导入盘点分析（tasks/count_analysis，属于 tasks 层，带进 tasks 包是允许的）也不起线程"""
     code = (
         "import sys, threading\n"
         "n = threading.active_count()\n"
@@ -565,12 +565,11 @@ def test_count_worker_import_is_light():
         "_start = threading.Thread.start\n"
         "threading.Thread.start = lambda self: started.append(self.name) or _start(self)\n"
         "import astral_toolkit.runtime.workers.count\n"
-        "s = list(started)\n"
         "heavy = ('astral_toolkit.app', 'astral_toolkit.tasks', 'astral_toolkit.system', 'astral_toolkit.trade', "
         "'astral_toolkit.mining', 'astral_toolkit.crafting', 'astral_toolkit.infrastructure', 'ctypes')\n"
         "a = sorted(m for m in sys.modules if m.startswith(heavy))\n"
         "import astral_toolkit.tasks.count_analysis\n"
-        "print(threading.active_count() == n and not s, a)\n"
+        "print(threading.active_count() == n and not started, a)\n"
     )
     assert _run(code) == "True []"
 
@@ -2329,6 +2328,16 @@ def test_count_worker_does_not_start_its_own_threads():
     source = (_ROOT / "runtime" / "workers" / "count.py").read_text(encoding="utf-8")
     assert _thread_starts_in_source(source) == []
     assert "_loop_factory or SessionLoop" in source, "盘点要接会话循环"
+
+
+def test_count_worker_does_not_read_the_cursor_itself():
+    """目录迁移 R5：读光标交给平台层（infrastructure/platform/cursor，bootstrap 接进 CountLinks），
+    盘点线程里连函数里也不 import ctypes（原来的 _win_cursor_pos 就是在函数里 import 的，导入时查不出）"""
+    source = (_ROOT / "runtime" / "workers" / "count.py").read_text(encoding="utf-8")
+    pkg = "astral_toolkit.runtime.workers"
+    assert _forbidden(list(_imports_in_source(source, pkg)), ("ctypes",)) == []
+    bad = "def f():\n    import ctypes\n\n    return ctypes\n"
+    assert _forbidden(list(_imports_in_source(bad, pkg)), ("ctypes",)), bad
 
 
 def test_mining_worker_does_not_start_its_own_scan_loop():

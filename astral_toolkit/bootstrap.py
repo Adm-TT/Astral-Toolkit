@@ -420,12 +420,14 @@ def _count_links(options: Mapping[str, Any]) -> CountLinks:
 
     def place_now() -> str:
         from .crafting import stockplaces
-        from .tasks import stock as stock_tasks
-        from .tasks import trade as trade_tasks
 
         here = stockplaces.current_place()
         if here:
             return here["label"]
+        # 不知道当前地点才按上次记的位置找（和以前一样，这时才导入 tasks/stock、tasks/trade）
+        from .tasks import stock as stock_tasks
+        from .tasks import trade as trade_tasks
+
         return stock_tasks._place_of(
             trade_tasks.trade().db.get("last_location", "") or ""
         )[0]
