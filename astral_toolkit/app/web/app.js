@@ -101,7 +101,7 @@ function popOver(anchor, html, { cls = "", onClose = null, align = "right" } = {
   };
   place();
   const p = { el, q: (s) => el.querySelector(s), anchor, place, form: cls.includes("confirm"), dirty: false };
-  el.addEventListener("input", () => { p.dirty = true; });     // 填过东西的小表单：点外面、滚动都不关，只有「取消」或 Esc 关
+  el.addEventListener("input", (e) => { if (!e.target.closest?.("[data-filter]")) p.dirty = true; });   // 填过东西的小表单：点外面、滚动都不关，只有「取消」或 Esc 关；搜索框（data-filter）不算
   p.close = () => { const i = POPS.indexOf(p); if (i < 0) return; POPS.splice(i, 1); el.remove(); if (onClose) onClose(); };
   POPS.push(p);
   anchor.setAttribute("aria-expanded", "true");
@@ -1869,8 +1869,14 @@ function openModal({ title, sub = "", body = "", foot = "", wide = false, onClos
   m.addEventListener("mousedown", (e) => {
     if (e.target !== m) return;
     if (!md.dirty) { md.close(); return; }
-    const card = m.querySelector(".modal-card");                 // 挡住了：卡片轻轻跳一下，提示点「关闭」或「取消」
+    // 挡住了：卡片轻轻跳一下，「关闭」「取消」描一圈边（关了动画效果的电脑上也看得到），提示点它们；输入框不失焦
+    e.preventDefault();
+    const card = m.querySelector(".modal-card");
     card.classList.remove("nudge"); void card.offsetWidth; card.classList.add("nudge");
+    const btns = m.querySelectorAll("[data-close]");
+    btns.forEach((b) => b.classList.add("hint"));
+    clearTimeout(md.hintT);
+    md.hintT = setTimeout(() => btns.forEach((b) => b.classList.remove("hint")), 1200);
   });
   m.querySelectorAll("[data-close]").forEach((b) => (b.onclick = md.close));
   return md;
@@ -2159,6 +2165,7 @@ function stockInDialog(pre = {}) {
       <label class="field">备注<textarea class="input" id="si-note" rows="2" placeholder="选填"></textarea></label>`,
     foot: `<button type="button" class="btn" data-close>取消</button><button type="button" class="btn" id="si-more">保存并继续</button><button type="button" class="btn primary" id="si-ok">保存</button>` });
   if (pre.unit) md.q("#si-unit").value = pre.unit;
+  if ((pre.qty ?? "") !== "" || (pre.quality ?? "") !== "") md.dirty = true;   // 从物品页带进来的数量、品质是玩家填过的：点外面也护住
   bindBinSelect(md, md.q("#si-bin"));
   // 1.6.67：能制造的东西，按材料槽填品质（品质栏自动算平均）
   let craftSlots = [];
@@ -2514,7 +2521,7 @@ async function stockSimple() {
     const counts = {};
     d.rows.forEach((r) => { counts[r.place] = (counts[r.place] || 0) + 1; });
     const places = [["", "全部地点", d.rows.length], ...Object.keys(counts).sort((a, b) => a.localeCompare(b, "zh-CN")).map((p) => [p, p, counts[p]])];
-    const p = popOver(e.currentTarget, `<div style="padding:8px;width:280px"><input class="input" placeholder="搜索地点" aria-label="搜索地点" style="margin-bottom:6px">
+    const p = popOver(e.currentTarget, `<div style="padding:8px;width:280px"><input class="input" placeholder="搜索地点" aria-label="搜索地点" data-filter style="margin-bottom:6px">
       <div role="listbox" style="max-height:264px;overflow-y:auto" class="menu-list"></div></div>`, { cls: "menu", align: "left" });
     if (!p) return;
     const list = p.q("[role=listbox]"), inp = p.q("input");
