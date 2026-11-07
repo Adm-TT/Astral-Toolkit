@@ -142,7 +142,8 @@ def _no_exact(zh="", en=""):
 def _install(monkeypatch, rows=None, calls=None):
     contracts = _patch_data(monkeypatch, rows, calls)
     monkeypatch.setattr(gd_wikelo, "print_places", lambda key, snap=None: [])
-    monkeypatch.setattr(QA, "material_source", lambda name: "来源：" + name)
+    # 查询给事实、那一句由展示层写（目录迁移收尾）：假的也给事实，下面的黄金字面量不变
+    monkeypatch.setattr(QA, "material_source", lambda name: {"note": "来源：" + name})
     monkeypatch.setattr(names, "canonical_exact", _no_exact)
     return contracts
 
@@ -437,7 +438,7 @@ def test_wikelo_detail_tip_exception_is_empty(monkeypatch):
         def source(name):
             if name == "Kopion Horn":
                 raise RuntimeError("来源坏了")
-            return "来源：" + name
+            return {"note": "来源：" + name}
 
         monkeypatch.setattr(QA, "material_source", source)
         out = goals.wikelo_detail("gear-1")

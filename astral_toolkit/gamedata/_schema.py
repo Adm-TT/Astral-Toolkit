@@ -43,7 +43,7 @@ DDL: list[str] = [
         item_id TEXT NOT NULL REFERENCES items(item_id),
         PRIMARY KEY (source, external_id)
     )""",
-    # shops.json 的 items 原样：uex 编号 → 英文名、类别，按字典顺序。shops.find / variants / where_by_name 在它上面扫，
+    # shops.json 的 items 原样：uex 编号 → 英文名、类别，按字典顺序。shops.find / variants / cheapest_buy 在它上面扫，
     # 不能用合并后的 items 表代替（同一折叠名两种写法只会留一个，如 Synergy / Synergy+）
     """CREATE TABLE shop_items (
         uex_item_id INTEGER PRIMARY KEY,

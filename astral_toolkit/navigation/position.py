@@ -512,13 +512,3 @@ def distance(here, p):
     if here["sys"] and p["sys"] and here["sys"] != p["sys"]:
         return 1e15
     return math.dist((here["x"], here["y"], here["z"]), (p["x"], p["y"], p["z"]))
-
-
-def fmt_distance(m):
-    if m >= 1e15:
-        return "要跳星系"
-    if m < 1e6:
-        return "就在附近"
-    if m < 1e9:
-        return f"{m / 1e6:,.0f} 千公里"
-    return f"{m / 1e9:,.1f} Gm"

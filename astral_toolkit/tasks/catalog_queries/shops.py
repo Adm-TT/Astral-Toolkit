@@ -74,16 +74,17 @@ def _is_id(item_id):
     )
 
 
-def where_by_name(name_en):
-    """给维科洛材料等用：按英文名找第一处最便宜的买点，一行说明；找不到返回空"""
+def cheapest_buy(name_en):
+    """给维科洛材料等用：按英文名找第一件有商店卖的，给它最便宜那处 (价格, 商店, 位置)；找不到给 None。
+    以前这里直接拼好「可买：…」一行（where_by_name），目录迁移收尾挪到 app/presenters/wikelo.source_text"""
     k = _fold(name_en)
     ids = [i for i, _n, _c, f in _folded_items() if f == k]
     for iid in ids:
         buy, _ = where(iid)
         if buy:
             p, shop, place = buy[0]
-            return f"可买：{shop}（{place}）{p:,.0f} aUEC"
-    return ""
+            return (p, shop, place)
+    return None
 
 
 # ---------------------------------------------------------------- 按远近排、同系列变体

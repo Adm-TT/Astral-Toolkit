@@ -600,13 +600,15 @@ def finish(trade, gid):
 
 @lru_cache(maxsize=512)
 def where_to_get(en):
-    """一句话：商店最便宜在哪 / 去哪挖 / 维科洛特殊材料说明"""
+    """去哪弄的事实：商店最便宜在哪 / 去哪挖 / 维科洛特殊材料说明 / 开箱掉落（tasks/catalog_queries/acquire.material_source，
+    经 trade/console 转过来）；查不到、出错给 None。那一句话由目标页用例拼（tasks/goals 调 app/presenters/wikelo.source_text，
+    目录迁移收尾）"""
     try:
         from ..trade.console import material_source
 
-        return material_source(en) or ""
+        return material_source(en) or None
     except Exception:
-        return ""
+        return None
 
 
 # 挂牌单位 → 每 SCU 要乘几（按 SCU 算的需求只认这些；按「个」算的只认 unit）

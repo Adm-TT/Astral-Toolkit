@@ -5,7 +5,7 @@
 原 crafting/acquire.info 里不夹着取数据的规则搬到这里；查商店、物品查询、掉落、维科洛、蓝图、当前位置在
 tasks/catalog_queries/acquire.py（目录迁移 Q3b 从 crafting/acquire 搬去）。还夹着取数据、留在那边的规则：
 买点给最近 3 处还是最便宜 3 处（_buy_rows，按条件才去查）、名字找物品 id 的先后（resolve）、
-维科洛材料来源那一句（material_source / loot_source）。
+维科洛材料先查哪样（material_source / loot_source，只给事实；那一句在 app/presenters/wikelo.source_text）。
 catalog 不读文件、不联网、不碰全局缓存（和 catalog/shops.py、catalog/loot.py 一样）。
 """
 

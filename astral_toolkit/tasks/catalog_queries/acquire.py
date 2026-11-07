@@ -4,9 +4,10 @@
 游戏里 F8 识别、物品查询、维科洛材料来源都用这里。一次查询按原来的先后取数据：商店、物品搜索、掉落（都在本目录）、
 维科洛和蓝图（crafting）、当前位置（navigation）；挑同款、「哪都没有」、要不要查掉落、各块的样子、详情字典骨架这些组合规则
 在 catalog/acquire.py（IQ-C2）。还夹着取数据、留在这里的规则：_buy_rows（有位置、算得出距离就给最近 3 处，不然给最便宜 3 处）、
-resolve（名字找物品 id 的先后）、material_source / loot_source（维科洛材料来源那一句）。
-距离写成文字、材料来源那句话目前还在这里拼好交出去（展示层和目标链都在用，目标链经 trade/console 转过来），
-挪去展示层另开一批，和路径搬家分开。命令行「哪买」2026-11-06 删了，它用的整段文字版（text / buy_lines）也跟着删了。
+resolve（名字找物品 id 的先后）、material_source / loot_source（维科洛材料去哪弄）。
+这里只交事实（目录迁移收尾）：买点的距离给米数 dist_m，写成「就在附近 / 要跳星系 / … Gm」在 app/presenters/catalog；
+材料去哪弄给事实字典，那一句话在 app/presenters/wikelo.source_text（维科洛页、目标页的「去哪弄」都用它，
+目标链经 trade/console 转过来）。命令行「哪买」2026-11-06 删了，它用的整段文字版（text / buy_lines）也跟着删了。
 """
 
 import re as _re
@@ -18,18 +19,18 @@ from . import loot, shops
 
 
 def _buy_rows(item_id, here, top=3):
+    """买点：有位置、算得出距离就给最近 top 处，dist_m 是米（不在一个星系的是很大的数）；不然给最便宜 top 处，
+    dist_m 是 None。距离写成文字在 app/presenters/catalog.distance_text"""
     if here:
         rows = shops.nearest(item_id, here, top)
         if rows and rows[0][0] != float("inf"):
-            from ...navigation.position import fmt_distance
-
             return [
-                {"dist": fmt_distance(d), "price": p, "shop": shop, "place": place}
+                {"dist_m": d, "price": p, "shop": shop, "place": place}
                 for d, p, shop, place in rows
             ]
     buy, _ = shops.where(item_id)
     return [
-        {"dist": "", "price": p, "shop": shop, "place": place}
+        {"dist_m": None, "price": p, "shop": shop, "place": place}
         for p, shop, place in buy[:top]
     ]
 
@@ -160,15 +161,17 @@ def info(
 
 
 def material_source(name_en):
-    """维科洛材料去哪弄：商店能买就给最便宜的店；是矿就给最好的矿点"""
+    """维科洛材料去哪弄（事实，按这个先后取第一样有的）：维科洛特殊说明 {"note": 说明} → 商店最便宜一处
+    {"buy": (价格, 商店, 位置)} → 最好的矿点 {"mine": {"where", "pct", "pure"}} → 开箱掉落 {"loot": loot_source 的事实}；
+    都没有给 None。那一句话在 app/presenters/wikelo.source_text"""
     from ...crafting.wikelo import source_note
 
     note = source_note(name_en)
     if note:
-        return note
-    tip = shops.where_by_name(name_en)
-    if tip:
-        return tip
+        return {"note": note}
+    buy = shops.cheapest_buy(name_en)
+    if buy:
+        return {"buy": buy}
     try:
         from ...mining.locations import where as mine_where, zh_name
 
@@ -176,40 +179,34 @@ def material_source(name_en):
         rows = mine_where(base)
         if rows:
             pct, loc = rows[0]
-            return f"挖矿：{zh_name(loc)} {pct:.0f}%" + (
-                "（要精炼成纯净的）" if "Pure" in name_en else ""
-            )
+            return {
+                "mine": {"where": zh_name(loc), "pct": pct, "pure": "Pure" in name_en}
+            }
     except Exception:
         pass
-    return loot_source(name_en)
+    found = loot_source(name_en)
+    return {"loot": found} if found else None
 
 
 def loot_source(name_en, name_zh=""):
-    """开箱掉落一句话（scl.miao.network 的掉落表）：概率最高的箱子在哪些地方；没有掉落返回空"""
+    """开箱掉落（scl.miao.network 的掉落表）里概率最高那组的事实：{regions 地方、more 后面还有、mine 副本专属矿只能开采、
+    note 掉落说明、box 箱子、placed 直接刷在场景里、p 单箱最高概率}；没有掉落给 None。那一句话在 app/presenters/wikelo。
+    regions、note、box、p 原样给：掉落数据缺字段时拼字那步出错、写空，和以前在这里拼时一样"""
     try:
         d: Any = loot.info(
             name_en, name_zh, top=2, online=False
         )  # 本机没有明细就算没有，不在页面里逐个材料联网等（细查 2026-10-28）
     except Exception:
-        return ""
+        return None
     if not d or not d.get("groups"):
-        return ""
+        return None
     g = d["groups"][0]
-    regions = "、".join(g["regions"][:3]) + (
-        "等" if len(g["regions"]) > 3 or d.get("more") else ""
-    )
-    if d.get("mine"):  # 副本专属矿：不开箱，只能开采
-        return (
-            d["note"].split("：")[0]
-            + f"，只能开采：{regions}"
-            + (f"（{g['box']}）" if g["box"] else "")
-        )
-    if g.get("placed"):  # 不在箱子里，直接刷在场景里（争夺区奖励室架子上的舰船组件…）
-        return f"场景里刷出：{regions}（最高约 {g['p']:.0%}）"
-    box = g["box"].split(" · ")[0]
-    box = "" if _re.fullmatch(r"\d+.*", box or "") else box
-    return (
-        f"开箱：{regions}"
-        + (f"（{box} 箱" if box else "（")
-        + f"，单箱最高约 {g['p']:.0%}）"
-    )
+    return {
+        "regions": g["regions"],
+        "more": bool(d.get("more")),
+        "mine": bool(d.get("mine")),
+        "note": d.get("note"),
+        "box": g["box"],
+        "placed": bool(g.get("placed")),
+        "p": g["p"],
+    }

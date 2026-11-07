@@ -844,6 +844,96 @@ def test_infrastructure_adapters_stay_below_domain():
     )
 
 
+def _non_doc_strings(source):
+    """一个文件里不算说明文字（模块、类、函数开头那段）的字符串常量，f-string 里的字面部分也算"""
+    tree = ast.parse(source)
+    docs = set()
+    for node in ast.walk(tree):
+        body = getattr(node, "body", None)
+        if (
+            isinstance(
+                node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+            )
+            and body
+        ):
+            first = body[0]
+            if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant):
+                docs.add(id(first.value))
+    return [
+        n.value
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Constant)
+        and isinstance(n.value, str)
+        and id(n) not in docs
+    ]
+
+
+_ACQUIRE_WORDS = (
+    "就在附近",
+    "要跳星系",
+    "千公里",
+    "可买：",
+    "挖矿：",
+    "开箱：",
+    "只能开采：",
+    "场景里刷出",
+    "单箱最高约",
+    "要精炼成纯净的",
+)
+
+
+def test_catalog_queries_hand_facts_not_sentences():
+    """目录迁移收尾：获取途径的距离写成文字、维科洛材料去哪弄那一句挪到展示层（app/presenters/catalog.distance_text、
+    app/presenters/wikelo.source_text），查询内部实现只交事实——这些字不许回到 tasks/catalog_queries（说明文字里提到不算）；
+    navigation/position 也不再管距离写成文字"""
+    # 整个目录都查（词表里是带冒号的「只能开采：」；掉落查询自己的说明「…只能开采」不带冒号，是掉落数据的说明，不算）
+    for f in sorted((_ROOT / "tasks" / "catalog_queries").glob("*.py")):
+        said = _non_doc_strings(f.read_text(encoding="utf-8"))
+        assert [w for w in _ACQUIRE_WORDS if any(w in s for s in said)] == [], f.name
+    assert "def fmt_distance" not in (_ROOT / "navigation" / "position.py").read_text(
+        encoding="utf-8"
+    )
+    # 换个名字留在导航里也不行（「就在附近」导航自己的城里提示也用，不查这个）
+    for f in sorted((_ROOT / "navigation").rglob("*.py")):
+        said = _non_doc_strings(f.read_text(encoding="utf-8"))
+        assert [w for w in ("要跳星系", "千公里") if any(w in s for s in said)] == [], (
+            f.name
+        )
+    pres = _ROOT / "app" / "presenters"
+    assert "def distance_text" in (pres / "catalog.py").read_text(encoding="utf-8")
+    assert "def source_text" in (pres / "wikelo.py").read_text(encoding="utf-8")
+    bad = 'def f(m):\n    """说明里写「就在附近」不算"""\n    return f"挖矿：{m}"\n'
+    assert [
+        w for w in _ACQUIRE_WORDS if any(w in s for s in _non_doc_strings(bad))
+    ] == ["挖矿："]
+
+
+def test_cursor_and_key_reads_have_one_home():
+    """目录迁移收尾：读光标（GetCursorPos）只在 core/capture（托盘弹菜单定位置那句是界面自己的，另算），
+    读键（GetAsyncKeyState）只在 infrastructure/platform/keys；悬浮窗状态（app/hud_state）的由 bootstrap 接进来"""
+    where: dict[str, set[str]] = {"GetCursorPos": set(), "GetAsyncKeyState": set()}
+    for f in _ROOT.rglob("*.py"):
+        text = f.read_text(encoding="utf-8")
+        for k, seen in where.items():
+            if k in text:
+                seen.add(f.relative_to(_ROOT).as_posix())
+    assert where["GetCursorPos"] == {"core/capture.py", "app/tray.py"}, where
+    assert where["GetAsyncKeyState"] == {"infrastructure/platform/keys.py"}, where
+    other = ("GetPhysicalCursorPos", "GetCursorInfo", "GetKeyState", "GetKeyboardState")
+    found = [
+        f.relative_to(_ROOT).as_posix()
+        for f in _ROOT.rglob("*.py")
+        if any(k in f.read_text(encoding="utf-8") for k in other)
+    ]
+    assert found == [], found  # 别的读光标 / 读键的写法也不许另开一份
+    hud = (_ROOT / "app" / "hud_state.py").read_text(encoding="utf-8")
+    mods = list(_imports_in_source(hud, "astral_toolkit.app"))
+    banned = ("astral_toolkit.infrastructure", "astral_toolkit.core.capture")
+    assert _forbidden(mods, banned) == []
+    bad = "def f():\n    from ..core.capture import cursor_pos\n"
+    assert _forbidden(list(_imports_in_source(bad, "astral_toolkit.app")), banned)
+
+
 def test_core_stays_below_app():
     """core/ 是基础工具：不反向依赖界面、用例、runtime 和装配入口（CL-C5 去掉了截图读悬浮窗、运行记录推面板
     这两处，改成装配接进来）。函数里的 import 也算"""
@@ -1839,7 +1929,9 @@ def _crafting_presenter_imports(source, pkg):
 
 
 def test_only_goals_shell_imports_crafting_presenters():
-    """CR-B4 过渡：tasks 里只有 tasks/goals.py 旧壳能 import 制造 / 维科洛排版；B5、B6 删壳后收紧成一个都不许。"""
+    """CR-B4 过渡：tasks 里只有 tasks/goals.py 能 import 制造 / 维科洛排版——旧壳（B5、B6 删）和目标页「去哪弄」那句
+    （_goals_view 调 wikelo.source_text，目录迁移收尾起；目标冻结期的例外，目标换新实现时挪进目标页的展示层）。
+    两样都没了再收紧成一个都不许。"""
     pkg = "astral_toolkit.tasks"
     assert _crafting_presenter_imports(
         "from ..app.presenters import crafting as p", pkg

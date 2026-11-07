@@ -1032,9 +1032,41 @@ def test_where_to_get_goes_through_console_to_material_source(monkeypatch):
     from astral_toolkit.crafting import goals
     from astral_toolkit.tasks.catalog_queries import acquire
 
-    monkeypatch.setattr(acquire, "material_source", lambda en: "来源：" + en)
+    monkeypatch.setattr(acquire, "material_source", lambda en: {"note": "来源：" + en})
     goals.where_to_get.cache_clear()
     try:
-        assert goals.where_to_get("Quantainium") == "来源：Quantainium"
+        assert goals.where_to_get("Quantainium") == {"note": "来源：Quantainium"}
     finally:
         goals.where_to_get.cache_clear()
+
+
+def test_goals_view_tip_written_by_presenter(monkeypatch):
+    """目标页「去哪弄」：where_to_get 给事实，tasks/goals 调 app/presenters/wikelo.source_text 写成一句
+    （目录迁移收尾）；还差的行和总缺口都写，不差的行不写，查不到写空字符串"""
+    from astral_toolkit.crafting import goals as G
+    from astral_toolkit.tasks import goals as T
+
+    class _Trade:
+        db = {"last_location": "某处"}
+
+    monkeypatch.setattr(T, "trade", lambda: _Trade())
+    monkeypatch.setattr(
+        G,
+        "plan",
+        lambda t: {
+            "goals": [
+                {
+                    "kind": "item",
+                    "rows": [{"short": 2, "en": "A"}, {"short": 0, "en": "B"}],
+                }
+            ],
+            "shortfall": [{"en": "C"}, {"en": "D"}],
+        },
+    )
+    facts = {"A": {"note": "说明甲"}, "C": {"buy": (5, "店", "地")}}
+    monkeypatch.setattr(G, "where_to_get", lambda en: facts.get(en))
+    p = T._goals_view()
+    rows = p["goals"][0]["rows"]
+    assert rows[0]["tip"] == "说明甲" and "tip" not in rows[1]
+    assert [x["tip"] for x in p["shortfall"]] == ["可买：店（地）5 aUEC", ""]
+    assert p["last_location"] == "某处"

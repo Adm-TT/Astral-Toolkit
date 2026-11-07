@@ -146,12 +146,15 @@ def _goals_view():
     t = trade()
     p = G.plan(t)
     p["last_location"] = t.db.get("last_location", "")
+    # 「去哪弄」那句由维科洛的展示层写（目录迁移收尾 2026-11-07）：用例层调展示层是目标冻结期留的例外，
+    # 门禁 test_only_goals_shell_imports_crafting_presenters 里单独放着；目标换新实现时把 tip 挪进目标页的展示层，
+    # 门禁再收紧成 tasks 一个都不许 import 排版（待做里记着）
     for g in p["goals"]:
         for r in g["rows"]:
             if r["short"] > 0:
-                r["tip"] = G.where_to_get(r["en"])
+                r["tip"] = _present_wikelo.source_text(G.where_to_get(r["en"]))
     for t_item in p["shortfall"]:
-        t_item["tip"] = G.where_to_get(t_item["en"])
+        t_item["tip"] = _present_wikelo.source_text(G.where_to_get(t_item["en"]))
     for g in p["goals"]:
         if g.get("kind") != "craft" or g.get("missing"):
             continue
