@@ -236,6 +236,19 @@ def overshoot(plan, g, pts: dict | None = None):
     }
 
 
+def route_off(a, b, g):
+    """坐标 g（米）离「a→b」这段直线多远（Gm）；a、b 是 Gm 坐标"""
+    p = [float(v) / 1e9 for v in g]
+    ab = [b[i] - a[i] for i in range(3)]
+    n2 = sum(x * x for x in ab)
+    k = (
+        max(0.0, min(1.0, sum((p[i] - a[i]) * ab[i] for i in range(3)) / n2))
+        if n2
+        else 0.0
+    )
+    return math.dist(p, [a[i] + ab[i] * k for i in range(3)])
+
+
 def where(g):
     """/showlocation 坐标（米）→ 离恒星多远、在第几带"""
     r = (

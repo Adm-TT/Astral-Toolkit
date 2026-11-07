@@ -102,7 +102,9 @@ LEFT_START = (
     0.1  # Gm：离方案起点这么近算还在起点（普通飞行一千多米每秒，飞 0.1 Gm 要一天多）
 )
 NEAR_MIN = 0.01  # Gm：离起点多近算在起点，最少这么多（起点本身就在要去的带里时，按路线算出来是 0）
-STOP_S = 1.0  # 秒：一跳里读数慢下来连续这么久才算断开停下；游戏卡一下、同一帧读两遍不算（审查 2026-11-08 第三轮）
+STOP_S = 3.0  # 秒：一跳里读数慢下来连续这么久才算断开停下；游戏卡一下、掉进带里加载石头卡一两秒都不算（审查 2026-11-08）
+ROUTE_NEAR = 0.2  # Gm：离方案「起点→目标」那条直线超过这么远，就是跳去了别处，不说多飞 / 少飞（审查 2026-11-08）
+AT_TARGET = 0.05  # Gm：离目标这么近就是到了目标（比如挖完去卖矿），不说
 
 
 # ---------------------------------------------------------------- 依赖与辅助
@@ -765,11 +767,6 @@ def nav_log(here, info, view):
         from ..core import paths
 
         p = paths.log("nav_log.txt")
-        if p.exists() and p.stat().st_size > 300_000:
-            p.write_text(
-                "\n".join(p.read_text(encoding="utf-8").splitlines()[-1000:]) + "\n",
-                encoding="utf-8",
-            )
         loc = info.get("local")
         line = (
             f"{time.strftime('%H:%M:%S')} 来源={here.get('src', '?')} 核对={info.get('local_ok')} "
@@ -777,8 +774,16 @@ def nav_log(here, info, view):
             f"用的=({here['x']:.4f}, {here['y']:.4f}, {here['z']:.4f}) "
             f"方位={view.get('raw_bearing', 0):.1f}° 显示={view.get('bearing', 0):.0f}° 距离={view.get('surface', 0):.2f}km"
         )
-        with open(p, "a", encoding="utf-8") as f:
-            f.write(line + "\n")
+        # 和 _wp_log 写同一个文件：截短、追加都拿同一把锁（审查 2026-11-08）
+        with _WP_LOCK:
+            if p.exists() and p.stat().st_size > 300_000:
+                p.write_text(
+                    "\n".join(p.read_text(encoding="utf-8").splitlines()[-1000:])
+                    + "\n",
+                    encoding="utf-8",
+                )
+            with open(p, "a", encoding="utf-8") as f:
+                f.write(line + "\n")
     except Exception:
         pass
 
@@ -1238,10 +1243,18 @@ def halo_check(g, clip=None, sess=None):
         # 比方案的断开点多飞 / 少飞多少：老大实飞量断开后船滑多远（2026-11-08）。在方案起点附近、差得太远都不说；
         # 每秒自动核对还要挂上以后测到过起跳才说（还没跳就说「少飞了」像是玩家错了）；
         # 手动定位（剪贴板、F9）没有实时坐标测起跳，只看离起点多远（审查 2026-11-08）
-        target = (_HALO["ends"] or (None, None))[1]
+        # 离航线远（跳去了别处）、到了目标跟前也不说（审查 2026-11-08）
+        ends = _HALO["ends"]
         over, first = None, False
-        if target and not _near_start(g) and (clip is not None or _HALO["jumped"]):
-            over = halo.overshoot(p, g, {p.get("to"): target})
+        if (
+            ends
+            and not _near_start(g)
+            and (clip is not None or _HALO["jumped"])
+            and halo.route_off(ends[0], ends[1], g) <= ROUTE_NEAR
+        ):
+            over = halo.overshoot(p, g, {p.get("to"): ends[1]})
+            if over and over["left"] < AT_TARGET:
+                over = None
         if over:
             w["left"], w["over"] = over["left"], over["over"]
             w["text"] += "\n" + over["text"]
