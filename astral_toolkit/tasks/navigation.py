@@ -1165,12 +1165,17 @@ def halo_check(g, clip=None, sess=None):
             _HALO["seen"] = clip
         w = halo.where(g)
         w["text"] = halo.where_text(w, p["band"])
+        # 比方案的断开点多飞 / 少飞多少：老大实飞量断开后船滑多远（2026-11-08）
+        over = halo.overshoot(p, g)
+        if over:
+            w["left"], w["over"] = over["left"], over["over"]
+            w["text"] += "\n" + over["text"]
         _HALO["last"] = w
         _hud_set(
             "小行星带", p["text"] + "\n" + w["text"]
         )  # 退出距离、安全区间一直留着（审查 2026-10-27：自动核对不能把它盖掉）
         bus.publish("halo", w)
-    _wp_log(f"小行星带核对：{w['text']}")
+    _wp_log(f"小行星带核对：{w['text']}".replace("\n", "｜"))
     return w
 
 

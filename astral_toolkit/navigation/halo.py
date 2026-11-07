@@ -1,10 +1,13 @@
 """Aaron Halo 小行星带导航（照 SCMiner 的 Aaron Halo Flight Computer 做）
 
-做法：小行星带是绕斯坦顿恒星的一圈圈环带（离恒星 19.67–21.30 Gm）。从一个拉格朗日点 / 星球
-量子跳向另一个，航线会穿过某一条带；算出穿过点到目标还剩多远，玩家盯着 HUD 上「到目标的剩余距离」，
-到这个数就按 U 断开量子，就停在这条带里了。
+做法：小行星带是绕斯坦顿恒星的一圈环带（游戏数据：离恒星 19.598–21.393 Gm），里面有 10 条石头密的子带。
+从一个拉格朗日点 / 星球量子跳向另一个，航线会穿过某一条子带；算出穿过点到目标还剩多远，玩家盯着 HUD 上
+「到目标的剩余距离」，到这个数就按 U 断开量子，就停在这条带里了。
 
-数据：带的范围、厚度、密度、矿种、量子引擎速度都抄自 scminer.rocks（2026-10-23）。
+数据：环带内外边界、量子引擎速度用游戏解包数据（2026-10-30 解的，游戏 4.10；2026-11-08 起，以前也抄 SCMiner）。
+10 条子带游戏里没有定义（是密度噪声的峰谷），范围、厚度、密度、矿种照旧抄自 scminer.rocks（2026-10-23，它网站标 4.10.2
+的那张表到 11-08 还是这张）。按游戏速度穿过子带核心常常不到 1 秒，人按 U 的反应加上断开后船往前滑的那段就飞过去了：
+核对时说出比方案多飞了多少（overshoot），老大实飞几次量出来再把提前量加进断开距离（2026-11-08 老大定）。
 坐标：斯坦顿星系坐标原点就是恒星（用 ARC-L1→CRU-L4 第 5 带核对：算出 14.29 Gm，SCMiner 显示 14.3 Gm）。
 安全窗口：航线在带「核心」（中心 85% 厚度）里走的长度。这样算出的 5 条路线和 SCMiner 的 margin 相差 3% 以内
 （SCMiner 没公开公式，这个比例是对着它的数反推的）。反应时间 = 安全窗口 ÷ 量子引擎速度。
@@ -41,15 +44,21 @@ BANDS = [
     (9, 21.05, 21.13, 86, 25, ("Titanium", "Tungsten", "Beryl", "Diamond"), "普通"),
     (10, 21.13, 21.30, 166, 33, ("Titanium", "Tungsten", "Beryl", "Diamond"), "普通"),
 ]
-# 量子引擎：名字, 尺寸, 速度 Mm/s（SCMiner 的选项）
+# 量子引擎：名字, 尺寸, 巡航速度 Mm/s（游戏解包 driveSpeed，2026-10-30；以前抄 SCMiner 的 74–103 慢了两三倍）。
+# Goliath 是勘探者、魔像原装，Huracan 是鼹鼠原装
 QDS = [
-    ("Atlas", "S1", 103),
-    ("Hemera", "S2", 95),
-    ("Beacon", "S1", 90),
-    ("Expedition", "S1", 86),
-    ("Voyage", "S2", 79),
-    ("Odyssey", "S3", 74),
+    ("Atlas", "S1", 259),
+    ("Goliath", "S1", 219),
+    ("Huracan", "S2", 304),
+    ("Colossus", "S1", 241),
+    ("Hemera", "S2", 326),
+    ("Beacon", "S1", 161),
+    ("Expedition", "S1", 189),
+    ("Voyage", "S1", 208),
+    ("Odyssey", "S2", 238),
 ]
+# 环带内外边界 Gm（游戏数据 innerRadius 19,597,600 km / outerRadius 21,392,800 km）
+BELT = (19.598, 21.393)
 CORE = 0.85  # 安全窗口只算带中心 85% 的厚度
 WIDE_MM = 250  # 安全窗口超过这么多算「宽」，好断
 PLANETS = ("Hurston", "Crusader", "ArcCorp", "microTech")
@@ -80,8 +89,10 @@ def band_row(row):
 
 
 def qd_speed(qd):
-    for name, size, v in QDS:
-        if str(qd).lower() in (name.lower(), f"{name} ({size})".lower()):
+    # 「Voyage (S2)」这种老写法：尺寸改过了，按名字认
+    key = str(qd).split("(")[0].strip().lower()
+    for name, _size, v in QDS:
+        if key == name.lower():
             return v
     try:
         return float(qd)
@@ -135,7 +146,7 @@ def _inside(A, D, t0, lo, hi):
     return t0, t0
 
 
-def route(frm, to, b, speed=103, pts=None):
+def route(frm, to, b, speed=QDS[0][2], pts=None):
     """从 frm 量子跳向 to，在第 b 带断开：到 to 还剩多少（Gm）时断、安全窗口多长。航线不穿过这条带就 None"""
     pts = pts or points()
     if frm not in pts or to not in pts or frm == to:
@@ -181,7 +192,7 @@ def route(frm, to, b, speed=103, pts=None):
     }
 
 
-def routes(frm, b, speed=103, pts=None):
+def routes(frm, b, speed=QDS[0][2], pts=None):
     """从 frm 出发、航线穿过第 b 带的所有目标，安全窗口宽的排前面"""
     pts = pts or points()
     rows = [r for to in pts if (r := route(frm, to, b, speed, pts))]
@@ -199,6 +210,26 @@ def plan_text(r):
         f"HUD 到 {r['to_zh']} 剩 {r['dropout']:.1f} Gm 左右按 U 断开\n"
         f"剩 {r['early']:.1f}–{r['late']:.1f} Gm 之间断开都在带里"
     )
+
+
+def overshoot(plan, g, pts=None):
+    """断开后核对：现在到方案的目标还剩多远、比方案的断开点多飞（正）/ 少飞（负）了多少 Mm。
+    方案里没有目标或断开距离、星图里找不到目标就 None（老大实飞量断开后滑多远用，2026-11-08）"""
+    to, drop = plan.get("to"), plan.get("dropout")
+    if not to or drop is None:
+        return None
+    pts = pts or points()
+    if to not in pts:
+        return None
+    left = math.dist(pts[to], [float(v) / 1e9 for v in g])  # Gm
+    over = (float(drop) - left) * 1000  # Mm
+    way = "多飞" if over >= 0 else "少飞"
+    name = plan.get("to_zh") or to
+    return {
+        "left": round(left, 3),
+        "over": round(over),
+        "text": f"现在离{name}还剩 {left:.2f} Gm，比方案的断开点{way}了 {abs(over):,.0f} Mm",
+    }
 
 
 def where(g):
@@ -226,7 +257,7 @@ def where_text(w, want=None):
     else:
         off = w["off"]
     if abs(off) > 3000:
-        return f"❌ {r}：离小行星带太远（带在离恒星 19.67–21.30 Gm）"
+        return f"❌ {r}：离小行星带太远（环带在离恒星 {BELT[0]:.2f}–{BELT[1]:.2f} Gm）"
     way = "往外（背对恒星）" if off > 0 else "往里（朝恒星）"
     now = f"在第{w['band']}带" if w["band"] else "在带外"
     goal = f"第{want}带" if want else f"最近的第{w['near']}带"

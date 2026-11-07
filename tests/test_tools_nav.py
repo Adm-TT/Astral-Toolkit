@@ -991,6 +991,8 @@ def test_nav_mode_switch(monkeypatch, tmp_path):
 def test_halo_routes_match_scminer():
     """小行星带导航：对照 SCMiner 的 Aaron Halo Flight Computer（ARC-L1 出发，第 5 带）
     SCMiner：CRU-L3 12.7 Gm/389 Mm、CRU-L4 14.3/345、Hurston 13.5/192、Crusader 33.2/177、CRU-L5 39.5/151"""
+    import math
+
     from astral_toolkit.navigation import halo
     from astral_toolkit.navigation import navigate as n
 
@@ -1036,7 +1038,23 @@ def test_halo_routes_match_scminer():
     assert "第3带" in t and "往外" in t and "230" in t
     assert "往里" in halo.where_text(halo.where((21.6e9, 0, 0)), 5)
     assert halo.where_text(halo.where((10e9, 0, 0)), 5).startswith("❌")
-    assert halo.qd_speed("Atlas (S1)") == 103 and halo.qd_speed("odyssey") == 74
+    # 量子速度用游戏数据（以前抄 SCMiner 的慢了两三倍）；老写法「Voyage (S2)」尺寸改过了，按名字认
+    assert halo.qd_speed("Atlas (S1)") == 259 and halo.qd_speed("odyssey") == 238
+    assert halo.qd_speed("Voyage (S2)") == 208 and halo.qd_speed("Goliath (S1)") == 219
+    assert "19.60–21.39 Gm" in halo.where_text(halo.where((10e9, 0, 0)), 5)
+    # 断开后核对：比方案的断开点多飞 / 少飞多少（老大实飞量滑多远）
+    p = rows["CRU-L4"]
+    B = pts["CRU-L4"]
+    A = pts["ARC-L1"]
+    L = math.dist(A, B)
+    stop = [(B[i] + (A[i] - B[i]) * (p["dropout"] - 0.17) / L) * 1e9 for i in range(3)]
+    o = halo.overshoot(p, stop, pts)
+    assert o and abs(o["over"] - 170) <= 1 and "多飞了 170 Mm" in o["text"]
+    stop = [(B[i] + (A[i] - B[i]) * (p["dropout"] + 0.05) / L) * 1e9 for i in range(3)]
+    assert "少飞了 50 Mm" in halo.overshoot(p, stop, pts)["text"]
+    assert (
+        halo.overshoot({"text": "方案", "band": 5}, stop, pts) is None
+    )  # 方案里没有目标
 
 
 def test_halo_services(monkeypatch, tmp_path):
@@ -1086,7 +1104,8 @@ def test_halo_services(monkeypatch, tmp_path):
         )
         assert any(p["key"] == "ARC-L1" for p in o["points"])
         r = t_nav.halo_routes(frm="ARC-L1", band=5, qd="Odyssey (S3)")
-        assert store["halo_qd"] == "Odyssey (S3)" and r["speed"] == 74 and r["rows"]
+        # 存着老写法「Odyssey (S3)」：尺寸改过了，按名字认出游戏数据的速度
+        assert store["halo_qd"] == "Odyssey (S3)" and r["speed"] == 238 and r["rows"]
         assert "error" in t_nav.halo_routes(
             frm="ARC-L1", band=0
         ) and "error" in t_nav.halo_routes(frm="没有", band=5)
@@ -1107,6 +1126,7 @@ def test_halo_services(monkeypatch, tmp_path):
             clip["t"] = "Coordinates: x:20000000000 y:0 z:0"
             _t.sleep(0.8)
             assert "第3带" in hud["小行星带"] and "往外" in hud["小行星带"]
+            assert "比方案的断开点" in hud["小行星带"]  # 核对时说出多飞 / 少飞多少
             # F9：拿到的还是这一份坐标（监听已经处理过）→ 不重复算，结果一样
             monkeypatch.setattr(
                 showloc,
@@ -1149,6 +1169,11 @@ def test_halo_services(monkeypatch, tmp_path):
         finally:
             t_nav.halo_unpin()
         assert "小行星带" not in hud and t_nav._HALO["plan"] is None
+        logged = (tmp_path / "nav_log.txt").read_text(encoding="utf-8").splitlines()
+        assert any(
+            "比方案的断开点" in x for x in logged
+        )  # 核对多出来的那一行记进导航日志
+        assert all(x[:4].isdigit() for x in logged)  # 而且不拆成两行：每行都以日期开头
         clip["t"] = "Coordinates: x:20100000000 y:0 z:0"
         _t.sleep(0.5)
         assert "小行星带" not in hud  # 取下后监听停了

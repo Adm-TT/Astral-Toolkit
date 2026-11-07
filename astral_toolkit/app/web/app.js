@@ -1256,7 +1256,7 @@ async function navHaloView() {
   if (!still()) return;
   const h = state.halo || (state.halo = { frm: "ARC-L1", band: 5, to: null });
   box.innerHTML = `<div class="panel">
-      <p class="muted" style="margin:0 0 12px">Aaron Halo 是环绕斯坦顿恒星的 10 条小行星带（距恒星 19.67–21.30 Gm）。选择出发点和目标带后，AT 计算量子跳跃的目标，以及剩余距离为多少时按 U 退出，即可停在该带内。数据和算法来自 SCMiner。</p>
+      <p class="muted" style="margin:0 0 12px">Aaron Halo 是环绕斯坦顿恒星的一圈小行星带（距恒星 19.60–21.39 Gm），里面有 10 条石头密的子带。选择出发点和目标带后，AT 计算量子跳跃的目标，以及剩余距离为多少时按 U 退出，即可停在该带内。环带边界、量子速度用游戏数据；子带位置、密度和算法来自 SCMiner。</p>
       <div class="row" style="gap:10px;flex-wrap:wrap">
         <label>出发点 <select class="input" id="hfrm">${o.points.map((p) => `<option value="${esc(p.key)}" ${p.key === h.frm ? "selected" : ""}>${esc(p.label)}</option>`).join("")}</select></label>
       </div>
