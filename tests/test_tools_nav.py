@@ -1317,9 +1317,22 @@ def test_halo_overshoot_after_each_jump(monkeypatch, tmp_path):
         r5["text"] = "方案"
         t_nav._HALO.update(plan=r5, ends=(pts["ARC-L5"], B), near=t_nav._start_near(r5))
         assert not says(t_nav.halo_check([v * 1e9 for v in B], None, sess))
+        # 去 CRU-L2 的第 8 带：安全窗口一直延到离目标不到 0.05 Gm 的地方，窗口里停下照样说；到了跟前不说
+        r8 = halo.route("HUR-L1", "CRU-L2", 8, pts=pts)
+        assert r8 and r8["late"] < t_nav.AT_TARGET
+        r8["text"] = "方案"
+        S8, T8 = pts["HUR-L1"], pts["CRU-L2"]
+        t_nav._HALO.update(plan=r8, ends=(S8, T8), near=t_nav._start_near(r8))
+
+        def on8(left):
+            k = left / r8["total"]
+            return [(T8[i] - (T8[i] - S8[i]) * k) * 1e9 for i in range(3)]
+
+        assert says(t_nav.halo_check(on8(r8["late"] + 0.002), None, sess))
+        assert not says(t_nav.halo_check(on8(r8["late"] / 2), None, sess))
 
         # 实时坐标喂给看量子的线程（读数每 0.25 秒一份，线程每 20 毫秒看一次）：每次起跳都刷回只剩方案；
-        # 慢读数连续 1 秒才算停下，游戏卡一下不算；从起点跳的那趟停下后标出来（审查 2026-11-08 第三轮）
+        # 慢读数连续 3 秒才算停下，游戏卡一下不算；从起点跳的那趟停下后标出来（审查 2026-11-08 第三轮）
         class _Fast(threading.Event):
             def wait(self, timeout=None):
                 return super().wait(0.02)
