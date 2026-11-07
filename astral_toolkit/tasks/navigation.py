@@ -101,6 +101,8 @@ QT_SPEED = 50_000  # 米/秒：比这快就是在量子跳跃（普通飞行最�
 LEFT_START = (
     0.1  # Gm：离方案起点这么近算还在起点（普通飞行一千多米每秒，飞 0.1 Gm 要一天多）
 )
+NEAR_MIN = 0.01  # Gm：离起点多近算在起点，最少这么多（起点本身就在要去的带里时，按路线算出来是 0）
+STOP_S = 1.0  # 秒：一跳里读数慢下来连续这么久才算断开停下；游戏卡一下、同一帧读两遍不算（审查 2026-11-08 第三轮）
 
 
 # ---------------------------------------------------------------- 依赖与辅助
@@ -743,11 +745,14 @@ def _no_home(msg):
     return _HOME_RE.sub("~", str(msg))
 
 
+_WP_LOCK = threading.Lock()  # 导航日志：看量子的线程和接口线程会同时追加，不锁会互相盖掉（审查 2026-11-08 第三轮）
+
+
 def _wp_log(msg):
     try:
         from ..core import paths
 
-        with open(paths.log("nav_log.txt"), "a", encoding="utf-8") as f:
+        with _WP_LOCK, open(paths.log("nav_log.txt"), "a", encoding="utf-8") as f:
             f.write(f"{time.strftime('%F %T')} 路标 {_no_home(msg)}\n")
     except OSError:
         pass
@@ -1108,8 +1113,7 @@ def halo_pin(deps: NavDeps, /, frm="", to="", band=5, qd=""):
             last=None,
             ev=ev,
             ends=(pts[frm], pts[to]),
-            # 断开点离起点很近的路线（CRU-L2 本身就在带里）：门槛缩到起点到安全窗口那段的一半
-            near=min(LEFT_START, (r["total"] - r["early"]) / 2),
+            near=_start_near(r),
             jumped=False,
             first=False,
             logged=None,
@@ -1119,10 +1123,11 @@ def halo_pin(deps: NavDeps, /, frm="", to="", band=5, qd=""):
         except Exception:
             _HALO["seen"] = None
         _hud_set("小行星带", r["text"])
+    # 先记方案那行再起看量子的线程：线程一起来就会核对、记日志（审查 2026-11-08 第三轮）
+    _wp_log(f"小行星带方案：{frm} → {to} 第{band}带，剩 {r['dropout']} Gm 断开")
     threading.Thread(
         target=_halo_watch, args=(deps, sess, ev), daemon=True, name="halo"
     ).start()
-    _wp_log(f"小行星带方案：{frm} → {to} 第{band}带，剩 {r['dropout']} Gm 断开")
     return r
 
 
@@ -1145,31 +1150,39 @@ def _halo_watch(deps: NavDeps, sess, ev):
     nav = deps.nav
     events = deps.game_events
     seen_live, live_at, prev, arr = None, 0.0, None, events.arrived_at
-    in_qt = False  # 上一次读数在量子里（每秒几万公里）
+    in_qt = False  # 在一跳里：测到起跳、还没确认停下
+    slow_since = None  # 一跳里读数慢下来的那一刻（读数时间）
     while not ev.is_set():
         try:
-            if (
-                events.arrived_at != arr
-            ):  # 游戏日志说量子到了：马上核对，不用等测速（2026-10-27）
-                arr, prev, live_at, in_qt = events.arrived_at, None, 0.0, False
+            if events.arrived_at != arr:
+                # 游戏日志说量子到了：下一次核对提前，不用等每秒那一下；跳没跳完照旧按读数算——手动断开时船还在滑，
+                # 这会儿就当停下，量出来的滑行距离会少一截（审查 2026-11-08 第三轮）
+                arr, live_at = events.arrived_at, 0.0
             t, g_live, _ = _pos_current(
                 deps
             )  # 每次读到都更新（停着不动也有新的一份），latest 只在坐标变了才换（审查 2026-10-27）
             if g_live and t != seen_live and time.time() - t < 3:
                 seen_live = t
-                fast = (
+                fast = bool(
                     prev
                     and t > prev[0]
                     and math.dist(g_live, prev[1]) / (t - prev[0]) > QT_SPEED
                 )
-                # 从慢变快就是起跳了，每次起跳都算：起跳前最后一次读数在方案起点附近，就是从起点跳的那一趟
-                if fast and not in_qt:
-                    _halo_jump(sess, prev is not None and _near_start(prev[1]))
-                in_qt = bool(fast)
+                if fast:
+                    # 从慢变快就是起跳了，每次起跳都算：起跳前最后一次读数在方案起点附近，就是从起点跳的那一趟
+                    if not in_qt:
+                        _halo_jump(sess, prev is not None and _near_start(prev[1]))
+                    in_qt, slow_since = True, None
+                elif in_qt:
+                    # 一跳里慢下来：连续 STOP_S 秒都慢才算断开停下，中间又快起来还是这一跳（游戏卡一下、
+                    # 按 U 那一刻卡住，都会连着读到一样的坐标）；停下了马上核对
+                    slow_since = t if slow_since is None else slow_since
+                    if t - slow_since >= STOP_S:
+                        in_qt, slow_since, live_at = False, None, 0.0
                 prev = (t, g_live)
                 if (
-                    not fast and time.time() - live_at >= 1.0
-                ):  # 量子途中（每秒几万公里）不核对，等断开
+                    not in_qt and time.time() - live_at >= 1.0
+                ):  # 量子途中（每秒几万公里）不核对，等确认停下
                     live_at = time.time()
                     halo_check(g_live, None, sess)
             clip = n.read_clipboard()
@@ -1191,6 +1204,12 @@ def _halo_jump(sess, from_start):
             return
         _HALO.update(jumped=True, first=bool(from_start))
         _hud_set("小行星带", p["text"])
+
+
+def _start_near(r):
+    """离方案起点多近算还在起点（Gm）：一般 LEFT_START；断开点离起点很近的路线（CRU-L2 本身就在带里）缩到起点到
+    安全窗口那段的一半，最少 NEAR_MIN（审查 2026-11-08）"""
+    return max(NEAR_MIN, min(LEFT_START, (r["total"] - r["early"]) / 2))
 
 
 def _near_start(g):
@@ -1216,7 +1235,7 @@ def halo_check(g, clip=None, sess=None):
             _HALO["seen"] = clip
         w = halo.where(g)
         w["text"] = halo.where_text(w, p["band"])
-        # 比方案的断开点多飞 / 少飞多少：老大实飞量断开后船滑多远（2026-11-08）。在方案起点附近不说；
+        # 比方案的断开点多飞 / 少飞多少：老大实飞量断开后船滑多远（2026-11-08）。在方案起点附近、差得太远都不说；
         # 每秒自动核对还要挂上以后测到过起跳才说（还没跳就说「少飞了」像是玩家错了）；
         # 手动定位（剪贴板、F9）没有实时坐标测起跳，只看离起点多远（审查 2026-11-08）
         target = (_HALO["ends"] or (None, None))[1]

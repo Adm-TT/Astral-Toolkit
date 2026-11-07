@@ -1058,6 +1058,10 @@ def test_halo_routes_match_scminer():
     assert (
         halo.overshoot({"text": "方案", "band": 5}, stop, pts) is None
     )  # 方案里没有目标
+    # 差得太远（还没跳、跳去了别处、到了目标）不说（审查 2026-11-08 第三轮）
+    assert halo.overshoot(p, [v * 1e9 for v in B], pts) is None
+    far = [(B[i] + (A[i] - B[i]) * (p["dropout"] + 3.5) / L) * 1e9 for i in range(3)]
+    assert halo.overshoot(p, far, pts) is None
 
 
 def test_halo_services(monkeypatch, tmp_path):
@@ -1129,7 +1133,8 @@ def test_halo_services(monkeypatch, tmp_path):
             clip["t"] = "Coordinates: x:20000000000 y:0 z:0"
             _t.sleep(0.8)
             assert "第3带" in hud["小行星带"] and "往外" in hud["小行星带"]
-            assert "比方案的断开点" in hud["小行星带"]  # 核对时说出多飞 / 少飞多少
+            # 这份坐标不在这一趟的航线上（离方案的断开点差了好几 Gm）：不说多飞 / 少飞（审查 2026-11-08 第三轮）
+            assert "比方案的断开点" not in hud["小行星带"]
             # F9：拿到的还是这一份坐标（监听已经处理过）→ 不重复算，结果一样
             monkeypatch.setattr(
                 showloc,
@@ -1161,7 +1166,15 @@ def test_halo_services(monkeypatch, tmp_path):
 
             monkeypatch.setattr(showloc, "showlocation", slow)
             assert t_nav.fix_here(app.nav_deps) == {"error": "超时"}
-            t_nav.halo_pin(app.nav_deps, frm="ARC-L1", to="CRU-L4", band=5)
+            p = t_nav.halo_pin(app.nav_deps, frm="ARC-L1", to="CRU-L4", band=5)
+            # 断开后按 F9：在航线上、比断开点往前 50 Mm，说多飞了多少（手动定位没法测起跳，只看离起点多远）
+            A, B = halo.points()["ARC-L1"], halo.points()["CRU-L4"]
+            k = (p["dropout"] - 0.05) / p["total"]
+            g = tuple((B[i] - (B[i] - A[i]) * k) * 1e9 for i in range(3))
+            monkeypatch.setattr(
+                showloc, "showlocation", lambda log=None: (g, "Coordinates: on-route")
+            )
+            assert t_nav.fix_here(app.nav_deps) and "多飞了 50 Mm" in hud["小行星带"]
 
             def swap(log=None):
                 t_nav.halo_pin(app.nav_deps, frm="ARC-L1", to="CRU-L3", band=5)
@@ -1172,6 +1185,9 @@ def test_halo_services(monkeypatch, tmp_path):
             # 断开点离起点很近的路线（CRU-L2 本身就在带里）：离起点多近算在起点，门槛跟着缩（审查 2026-11-08）
             q = t_nav.halo_pin(app.nav_deps, frm="CRU-L2", to="Hurston", band=8)
             assert "error" not in q and t_nav._HALO["near"] < t_nav.LEFT_START
+            # 起点本身就在要去的带里（CRU-L2 → ARC-L3 第 9 带）：按路线算是 0，最少 NEAR_MIN（审查 2026-11-08 第三轮）
+            q = t_nav.halo_pin(app.nav_deps, frm="CRU-L2", to="ARC-L3", band=9)
+            assert "error" not in q and t_nav._HALO["near"] == t_nav.NEAR_MIN
         finally:
             t_nav.halo_unpin()
         assert "小行星带" not in hud and t_nav._HALO["plan"] is None
@@ -1239,7 +1255,7 @@ def test_halo_overshoot_after_each_jump(monkeypatch, tmp_path):
             last=None,
             seen=None,
             ends=(A, B),
-            near=min(t_nav.LEFT_START, (r["total"] - r["early"]) / 2),
+            near=t_nav._start_near(r),
             jumped=False,
             first=False,
             logged=None,
@@ -1288,51 +1304,71 @@ def test_halo_overshoot_after_each_jump(monkeypatch, tmp_path):
         marks = [x for x in log() if "（量子后第一次）" in x]
         assert len(marks) == 2 and all("比方案的断开点" in x for x in marks), log()
 
-        # 实时坐标：起点停着 → 起跳（每秒几万公里）→ 停在断开点 → 补跳：
-        # 每次起跳都刷回只剩方案，从起点跳的那趟断开后标出来
-        sess = pin()
-        before = len(log())
-        seq = [
-            start,
-            [start[0] + 1e9, start[1], start[2]],
-            [start[0] + 2e9, start[1], start[2]],
-            drop,
-            drop,
-            [drop[0] + 1e9, drop[1], drop[2]],
-            past,  # 补跳后停下：照样说，但不标
-            past,
-            past,
-        ]
-        last = []
+        # 实时坐标喂给看量子的线程（读数每 0.25 秒一份，线程每 20 毫秒看一次）：每次起跳都刷回只剩方案；
+        # 慢读数连续 1 秒才算停下，游戏卡一下不算；从起点跳的那趟停下后标出来（审查 2026-11-08 第三轮）
+        class _Fast(threading.Event):
+            def wait(self, timeout=None):
+                return super().wait(0.02)
 
-        def reading(deps):
-            if seq:
-                last[:] = [(_t.time(), tuple(seq.pop(0)), None)]
-            return last[0]
-
-        monkeypatch.setattr(t_nav, "_pos_current", reading)
-        monkeypatch.setattr(n, "read_clipboard", lambda: "")
         deps = SimpleNamespace(
             nav=SimpleNamespace(target=None, space_mode=False),
             game_events=SimpleNamespace(arrived_at=0.0),
         )
-        ev = threading.Event()
-        huds.clear()
-        th = threading.Thread(
-            target=t_nav._halo_watch, args=(deps, sess, ev), daemon=True
+        monkeypatch.setattr(n, "read_clipboard", lambda: "")
+
+        def watch(seq, arrive=None):  # arrive：喂到第几份读数时游戏日志说量子到了
+            sess = pin()
+            before = len(log())
+            todo = [tuple(x) for x in seq]
+            t0, fed, last = _t.time(), [], []
+
+            def reading(deps):
+                if todo:
+                    last[:] = [(t0 + 0.25 * len(fed), todo.pop(0), None)]
+                    fed.append(1)
+                    if len(fed) == arrive:
+                        deps.game_events.arrived_at += 1.0
+                return last[0]
+
+            monkeypatch.setattr(t_nav, "_pos_current", reading)
+            ev = _Fast()
+            huds.clear()
+            th = threading.Thread(
+                target=t_nav._halo_watch, args=(deps, sess, ev), daemon=True
+            )
+            th.start()
+            deadline = _t.time() + 6
+            while todo and _t.time() < deadline:
+                _t.sleep(0.02)
+            _t.sleep(0.3)
+            ev.set()
+            th.join(2)
+            new = log()[before:]
+            said = [x for x in new if "比方案的断开点" in x]
+            return (
+                huds.count("方案"),
+                [x for x in said if "（量子后第一次）" in x],
+                said,
+            )
+
+        s1 = [start[0] + 1e9, start[1], start[2]]
+        s2 = [start[0] + 2e9, start[1], start[2]]
+        hop = [drop[0] + 1e9, drop[1], drop[2]]
+        slid = at(r["dropout"] - 0.03)  # 按 U 以后又往前滑了 30 Mm
+        # 正常一趟 + 补跳：两次起跳各刷一次；从起点跳的那趟停下后标一行，补跳停下后照样说、不标
+        got = watch([start, s1, s2] + [drop] * 8 + [hop] + [past] * 8)
+        assert got[0] == 2 and len(got[1]) == 1 and len(got[2]) == 2, got
+        # 跳到一半游戏卡了两下（同一帧读两遍，两下隔了一秒多）：不算停下、不核对，还是这一跳，标在真正停下那行
+        s3, s4 = (
+            [start[0] + 3e9, start[1], start[2]],
+            [start[0] + 4e9, start[1], start[2]],
         )
-        th.start()
-        deadline = _t.time() + 6
-        while seq and _t.time() < deadline:
-            _t.sleep(0.05)
-        _t.sleep(0.6)
-        ev.set()
-        th.join(2)
-        assert huds.count("方案") == 2, huds  # 起跳、补跳各刷一次
-        new = log()[before:]
-        marked = [x for x in new if "（量子后第一次）" in x]
-        assert len(marked) == 1 and "比方案的断开点" in marked[0], new
-        assert sum("比方案的断开点" in x for x in new) >= 2, new
+        got = watch([start, s1, s1, s2, s3, s4, s4] + [drop] * 8)
+        assert got[0] == 1 and len(got[2]) == 1 and got[1] == got[2], got
+        # 按 U 那一刻卡住，之后又滑了 30 Mm 才停：标的是停下那行（多飞 30 Mm），不是卡住那一下
+        # （卡住那一下游戏日志恰好说「到了」：也只是让核对提前，还是等停下）
+        got = watch([start, s1, drop, drop, drop] + [slid] * 8, arrive=4)
+        assert got[0] == 1 and len(got[1]) == 1 and "多飞了 30 Mm" in got[1][0], got
     finally:
         t_nav._HALO.update(
             plan=None,
@@ -1343,6 +1379,28 @@ def test_halo_overshoot_after_each_jump(monkeypatch, tmp_path):
             first=False,
             logged=None,
         )
+
+
+def test_nav_log_appends_from_threads_do_not_clobber(monkeypatch, tmp_path):
+    """导航日志几个线程一起追加（看量子的线程、接口线程）：一行都不丢、不互相盖掉（审查 2026-11-08 第三轮）"""
+    import threading
+
+    from astral_toolkit.core import paths
+    from astral_toolkit.tasks import navigation as t_nav
+
+    monkeypatch.setattr(paths, "log", lambda name: tmp_path / name)
+
+    def write(k):
+        for i in range(200):
+            t_nav._wp_log(f"线程{k} 第{i}行 " + "x" * 80)
+
+    ths = [threading.Thread(target=write, args=(k,)) for k in range(4)]
+    for th in ths:
+        th.start()
+    for th in ths:
+        th.join()
+    lines = (tmp_path / "nav_log.txt").read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 800 and all(x.endswith("x" * 80) for x in lines)
 
 
 def test_halo_where_edges():

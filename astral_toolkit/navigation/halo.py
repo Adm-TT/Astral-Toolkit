@@ -61,6 +61,7 @@ QDS = [
 BELT = (19.598, 21.393)
 CORE = 0.85  # 安全窗口只算带中心 85% 的厚度
 WIDE_MM = 250  # 安全窗口超过这么多算「宽」，好断
+FAR_MM = 3000  # Mm：离要去的带、方案的断开点差这么多，就不是在这一趟上了（还没跳、跳去了别处、到了目标）
 PLANETS = ("Hurston", "Crusader", "ArcCorp", "microTech")
 STAR_GM = 1.0  # 航线离恒星中心这么近，游戏里量子跳多半会被恒星挡住（SCMiner 没过滤这种，我们标出来）
 
@@ -214,7 +215,8 @@ def plan_text(r):
 
 def overshoot(plan, g, pts: dict | None = None):
     """断开后核对：现在到方案的目标还剩多远、比方案的断开点多飞（正）/ 少飞（负）了多少 Mm。
-    方案里没有目标或断开距离、星图里找不到目标就 None（老大实飞量断开后滑多远用，2026-11-08）"""
+    方案里没有目标或断开距离、星图里找不到目标就 None（老大实飞量断开后滑多远用，2026-11-08）；
+    差得比 FAR_MM 还多也是 None：不是这一趟断开后滑的，说了反倒误导（审查 2026-11-08 第三轮）"""
     to, drop = plan.get("to"), plan.get("dropout")
     if not to or drop is None:
         return None
@@ -223,6 +225,8 @@ def overshoot(plan, g, pts: dict | None = None):
         return None
     left = math.dist(pts[to], [float(v) / 1e9 for v in g])  # Gm
     over = (float(drop) - left) * 1000  # Mm
+    if abs(over) > FAR_MM:
+        return None
     way = "多飞" if over >= 0 else "少飞"
     name = plan.get("to_zh") or to
     return {
@@ -256,7 +260,7 @@ def where_text(w, want=None):
         return f"✅ {r}：在第{w['band']}带里"
     else:
         off = w["off"]
-    if abs(off) > 3000:
+    if abs(off) > FAR_MM:
         return f"❌ {r}：离小行星带太远（环带在离恒星 {BELT[0]:.2f}–{BELT[1]:.2f} Gm）"
     way = "往外（背对恒星）" if off > 0 else "往里（朝恒星）"
     now = f"在第{w['band']}带" if w["band"] else "在带外"
