@@ -41,7 +41,8 @@ def header(bp):
     from . import itemstats
 
     t = itemstats.tags(bp.get("u"))
-    # 尺寸 / 等级 / 类别只写船零件的，而且只写游戏说明里有的；个人武器、护甲物品属性里的是默认值（审查 2026-11-08）
+    # 尺寸 / 等级 / 类别只写船零件的，而且只写游戏说明里有的；个人武器、护甲的游戏说明里不写尺寸、等级
+    # （物品属性里有值，其中等级 A 是默认值）（审查 2026-11-08）
     tags = (
         _labels.spec_tags(t, bp.get("s") or "", kind=bp["t"])
         if bp["g"] == "vehiclegear"

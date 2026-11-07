@@ -5,6 +5,7 @@
 """
 
 from types import SimpleNamespace
+from typing import Any
 
 from astral_toolkit.crafting import (
     classify,
@@ -523,6 +524,11 @@ def test_spec_tags_and_browse_spec_facets():
     assert labels.weight_zh({**bag, "size": 1}) == "轻型"
     assert labels.weight_zh(bag, "H4-PBF Ammo Carrier") == ""  # 能配中型、重型护甲
     assert labels.weight_zh({"sub": "Personal", "size": 3}) == ""  # 不是背包
+    # 超重型按类名认（BUL-H4 的子类型写的是 Heavy）；同一套的弹药携具按类名认出来，不写，不靠英文名（审查 2026-11-08）
+    h4 = {"sub": "Heavy", "type": "Char_Armor_Helmet", "cn": "cds_superheavy_helmet"}
+    assert labels.weight_zh(h4) == "超重型"
+    assert labels.weight_zh({**bag, "cn": "cds_combat_superheavy_backpack_01"}) == ""
+    assert labels.weight_zh({**bag, "cn": "cds_heavy_backpack_01"}) == "重型"
 
     def bp(n, t, s, u):
         return _bp(n, n, "vehiclegear", t, s, u, "M", 1, True, [])
@@ -552,7 +558,7 @@ def test_spec_tags_and_browse_spec_facets():
     def spec(b):
         return stats.get(b["u"], {})
 
-    def names(**kw):
+    def names(**kw: Any):
         return [b["n"] for b in listing.browse(lambda: bps, spec=spec, **kw)["rows"]]
 
     pp = listing.browse(lambda: bps, cat="vehiclegear/powerplant", spec=spec)

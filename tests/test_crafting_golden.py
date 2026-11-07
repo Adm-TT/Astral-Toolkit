@@ -5,6 +5,7 @@ CR-B1～B6 拆制造代码时，这些输出应当一个字都不变。
 
 import logging
 from types import SimpleNamespace
+from typing import Any
 
 from astral_toolkit.contracts.blueprints import assign_keys
 from astral_toolkit.contracts.textkeys import blueprint_norm, blueprint_search_norm
@@ -1441,8 +1442,10 @@ def test_craft_browse_spec_tags_and_filters(monkeypatch):
         assert not {"sizes", "grades", "clss"} & set(armour)
         assert api.craft_browse(cat="fpsgear/weapons")["rows"][0]["tags"] == "突击步枪"
         # 护甲、个人武器的尺寸 / 等级是物品属性里的默认值：标题只写轻重
-        assert G.craft_detail("Test Helmet")["head"]["tags"] == ["重型"]
-        assert G.craft_detail("Test Rifle")["head"]["tags"] == []
+        helmet: Any = G.craft_detail("Test Helmet")
+        rifle: Any = G.craft_detail("Test Rifle")
+        assert helmet["head"]["tags"] == ["重型"]
+        assert rifle["head"]["tags"] == []
     finally:
         G.clear_caches()
 
