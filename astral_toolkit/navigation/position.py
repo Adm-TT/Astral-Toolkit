@@ -28,12 +28,6 @@ JUMP = {
     "PyroNyx": "Pyro - Nyx Jump Point",
     "NyxPyro": "Jumppoint_Nyx_Pyro",
 }
-LEO = {
-    "HUR": "Everus Harbor",
-    "CRU": "Seraphim Station",
-    "ARC": "Baijini Point",
-    "MIC": "Port Tressler",
-}  # 行星近轨道站（日志 RR_HUR_LEO）：星图里没有站、按星球算远近，地点名用站名
 
 
 def find_point(name=None, internal=None):
@@ -98,17 +92,21 @@ def from_code(code):
     斯坦顿的星图内部名改过：星球 / 卫星现在叫 OOC_Stanton_4_Microtech、OOC_Stanton_1b_Aberdeen，拉格朗日点叫
     OOC_Stanton1_L1；日志里还是旧代码（Stanton4_NewBabbage、RR_HUR_L1）。先按旧内部名找（老数据），找不到再按现在的
     叫法找——以前只按旧名找，斯坦顿全对不上：物品查询不按远近排、盘点认不出地点（2026-11-07 老大在新巴贝奇发现）。
-    先按旧内部名找那一步只为老数据和测试里的假星图留着：确认星图数据里斯坦顿都是 OOC_ 叫法、测试的假星图
-    （test_tools_catalog 的 POINTS 等）改成新叫法以后删（待做记着；shop_point 里拉格朗日点先试老叫法那一步一起删）。
-    同一批补上老大日志里以前就认不出的：行星近轨道站 RR_HUR_LEO（星图里没有站，算星球）、JUMP 表里没有的跳跃点
-    （RR_JP_StantonMagnus、RR_JP_NyxCastra）、列夫斯基 Nyx_Levski（以前先按 Nyx 找，找不到直接给 None；现在先认列夫斯基）"""
+    先按旧内部名找的几步（拉格朗日站、近轨道站、星球 / 卫星，加上 shop_point 里拉格朗日点那一步）只为老数据和测试里的
+    假星图留着：确认星图数据里斯坦顿都是 OOC_ 叫法、测试的假星图（test_tools_catalog 的 POINTS 等）改成新叫法以后一起删
+    （待做记着）。同一批补上老大日志里以前就认不出的：行星近轨道站 RR_HUR_LEO（星图的点里没有站，算星球；派罗的
+    RR_P3_LEO 也是）、JUMP 表里没有的跳跃点（RR_JP_StantonMagnus、RR_JP_NyxCastra）、列夫斯基 Nyx_Levski
+    （以前先按 Nyx 找，找不到直接给 None；现在先认列夫斯基）"""
     m = re.match(r"RR_(ARC|HUR|CRU|MIC)_L(\d)", code)
     if m:
         old = f"{PLANET_CODE[m.group(1)]}_L{m.group(2)}"
         return find_point(internal=old) or find_point(internal="OOC_" + old)
-    m = re.match(r"RR_(ARC|HUR|CRU|MIC)_LEO", code)
-    if m:
-        body = PLANET_CODE[m.group(1)]
+    m = re.match(r"RR_(ARC|HUR|CRU|MIC|P\d)_LEO", code)
+    if m:  # 行星近轨道站：星图的点里没有站，算星球（派罗的按 Pyro3 找，星图里叫 pyro3）
+        k = m.group(1)
+        if k.startswith("P"):
+            return find_point(internal=f"Pyro{k[1:]}")
+        body = PLANET_CODE[k]
         return find_point(internal=body) or _ooc_body(body)
     m = re.match(r"RR_P(\d)_L(\d)", code)
     if m:
@@ -141,8 +139,9 @@ def _jump_point(key):
 
 
 def _jump_parts(key):
-    """日志里跳跃点那段 → 两个星系名：StantonMagnus → (Stanton, Magnus)，站在斯坦顿、通往马格努斯；
-    不是正好两个首字母大写的词拼起来的给 None"""
+    """日志里跳跃点那段 → 两个词：StantonMagnus → (Stanton, Magnus)，拼星图里跳跃点的内部名用
+    （OOC_JumpPoint_stanton_magnus）；不是正好两个首字母大写的词拼起来的给 None。站名别按它拼：
+    RR_JP_StantonMagnus 那个站是尼克斯星门，见 _station_zh"""
     parts = re.findall(r"[A-Z][a-z]+", key)
     return (parts[0], parts[1]) if len(parts) == 2 and "".join(parts) == key else None
 
@@ -245,7 +244,7 @@ def _station_table(_version):
 
 def place_name(code):
     """日志里的地点代码 → 具体地点的中文名：Stanton4_NewBabbage → 新巴贝奇，RR_ARC_L1 → 弧 L1 广袤森林站，
-    RR_HUR_LEO → 埃弗勒斯空间站，RR_JP_StantonPyro → 派罗星门"""
+    RR_HUR_LEO → 埃弗勒斯空间站，RR_JP_StantonMagnus → 尼克斯星门"""
     return _place_name(code, _data_version())
 
 
@@ -262,6 +261,14 @@ def _data_version():
 
 @lru_cache(maxsize=256)
 def _place_name(code, _version):
+    if re.match(r"RR_(?:(?:ARC|HUR|CRU|MIC|P\d)_LEO|JP_)", code):
+        # 行星近轨道站、星门站：站名查游戏数据库的站内地点表，和盘点地点列表一致。星门不能按代码里的星系名拼：
+        # RR_JP_StantonMagnus 是尼克斯星门（游戏把通往尼克斯的星门建在了原来马格努斯跳跃点的位置），RR_JP_NyxCastra
+        # 是斯坦顿星门（2026-11-07 斯坦顿地点第二轮复查发现）。以前星门站叫「斯坦顿 - 派罗 跳跃点」这类跳跃点的叫法，
+        # 盘点记成了自定义地点：旧名字在盘点地点的别名里（stockplaces._ALIASES）。表里没有再走下面的老办法
+        hit = _station_zh(code)
+        if hit:
+            return hit
     m = re.match(r"RR_(ARC|HUR|CRU|MIC)_L(\d)", code)
     if m:
         return (
@@ -269,9 +276,6 @@ def _place_name(code, _version):
             or _place_zh(prefix=f"{m.group(1).lower()}l{m.group(2)}")
             or f"{m.group(1)}-L{m.group(2)}"
         )
-    m = re.match(r"RR_(ARC|HUR|CRU|MIC)_LEO", code)
-    if m:  # 行星近轨道站：站名的中文，没有就用英文站名（盘点地点列表两种都认）
-        return _zh_name(LEO[m.group(1)])
     m = re.match(r"RR_P(\d)(?:_L(\d))?", code)
     if m:
         # 派罗：汉化包里有每个站的正式名（RR_P1_L2 → 焰联-远程站-1-2，RR_P3 → 轨道讣闻站）；
@@ -288,16 +292,6 @@ def _place_name(code, _version):
         return ini_name(f"Pyro{k}") or f"PYR{k}"
     m = re.match(r"RR_JP_(\w+)", code)
     if m:
-        # 星门站：汉化包里有站名就用站名（站在斯坦顿、通往派罗的叫派罗星门），和盘点地点列表里的星门对得上；
-        # 没有站名用跳跃点的叫法；都没有照旧。以前派罗星门叫成「斯坦顿 - 派罗 跳跃点」，盘点记成了自定义地点
-        # （2026-11-07 跟着斯坦顿地点一起改）
-        ab = _jump_parts(m.group(1))
-        hit = ab and (
-            ini_name(f"{ab[0]}_{ab[1]}_JPStation")
-            or ini_name(f"{ab[0]}_JumpPoint_{ab[1]}")
-        )
-        if hit:
-            return hit
         name = JUMP.get(m.group(1), m.group(1))
         return _place_zh(re.sub(r"[^a-z0-9]", "", name.lower())) or name
     rest = code.split("_", 1)[1] if "_" in code else code
@@ -305,6 +299,22 @@ def _place_name(code, _version):
     if hit:
         return hit
     return re.sub(r"(?<=[a-z])(?=[A-Z])", " ", rest).replace("_", " ")
+
+
+def _station_zh(code):
+    """站内地点表（游戏数据库 city_places）里这个站代码（rr_jp_stantonmagnus）的站名：中文，没有中文用英文；
+    表里没有、游戏数据库不可用给 None"""
+    from ..gamedata import GamedataError, places
+
+    key = code.lower()
+    try:
+        rows = places.city_places()
+    except GamedataError:
+        return None
+    for r in rows:
+        if str(r.get("city") or "").lower() == key:
+            return r.get("city_zh") or r.get("site_en") or None
+    return None
 
 
 _LOOSE = [

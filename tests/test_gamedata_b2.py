@@ -400,7 +400,7 @@ def test_stanton_old_and_new_names_mixed(monkeypatch, tmp_path):
 
 def _more_place_points():
     """老大日志里出现过、以前认不出的几种地点用到的星图点（内部名照真实星图）；加一个内部名就叫 Nyx 的点，
-    看 Nyx_Levski 是不是先认列夫斯基"""
+    看 Nyx_Levski 是不是先认列夫斯基；派罗的 Bloom（pyro3）给派罗近轨道站用"""
     sm = json.loads(json.dumps(_NAV_SOURCES["starmap.json"]))
     sm["points"] += [
         dict(
@@ -458,12 +458,13 @@ def _more_place_points():
             y=0.0,
             z=0.0,
         ),
+        dict(n="Bloom", i="pyro3", sys="Pyro", t="Planet", x=80.0, y=0.0, z=0.0),
     ]
     return {"starmap.json": sm}
 
 
 def test_from_code_leo_jump_points_and_levski(monkeypatch, tmp_path):
-    """老大日志里以前认不出的：行星近轨道站 RR_HUR_LEO 算星球；JUMP 表里有的照旧按名字找，表里没有、或按名字找不到的
+    """老大日志里以前认不出的：行星近轨道站 RR_HUR_LEO、派罗的 RR_P3_LEO 算星球；JUMP 表里有的照旧按名字找，表里没有、或按名字找不到的
     按两个星系名找；Nyx_Levski 先认列夫斯基（星图里有内部名叫 Nyx 的点也不认成它）；对不上的照旧 None"""
     from astral_toolkit.navigation import position
 
@@ -471,6 +472,8 @@ def test_from_code_leo_jump_points_and_levski(monkeypatch, tmp_path):
     position._ooc_bodies.cache_clear()
     assert (position.from_code("RR_HUR_LEO") or {}).get("i") == "OOC_Stanton_1_Hurston"
     assert position.from_code("RR_CRU_LEO") is None  # 十字军不在这份星图里
+    assert (position.from_code("RR_P3_LEO") or {}).get("i") == "pyro3"
+    assert position.from_code("RR_P6_LEO") is None  # Terminus 不在这份星图里
     assert (position.from_code("RR_JP_StantonMagnus") or {}).get(
         "i"
     ) == "OOC_JumpPoint_stanton_magnus"
@@ -526,32 +529,120 @@ def test_point_zh_stanton_lagrange_ooc_name(monkeypatch):
         assert N.point_zh(p) == "弧 L1 广袤森林站"
 
 
+_STATION_ROWS = [
+    dict(city="rr_jp_stantonmagnus", city_zh="尼克斯星门", site_en="Nyx Gateway"),
+    dict(city="rr_jp_nyxcastra", city_zh="斯坦顿星门", site_en="Stanton Gateway"),
+    dict(city="rr_jp_pyrostanton", city_zh="斯坦顿星门", site_en="Stanton Gateway"),
+    dict(city="rr_jp_stantonpyro", city_zh="派罗星门", site_en="Pyro Gateway"),
+    dict(city="rr_hur_leo", city_zh="埃弗勒斯空间站", site_en="Everus Harbor"),
+    dict(city="rr_p3_leo", city_zh="", site_en="Orbituary"),
+]  # 照真实的站内地点表（city_places）：游戏把通往尼克斯的星门建在了原来马格努斯、卡斯塔跳跃点的位置
+
+
 def test_place_name_gateway_and_leo_stations(monkeypatch, tmp_path):
-    """星门站、行星近轨道站的地点名用站名（盘点地点列表里的星门、空间站对得上）：汉化包有星门站名用站名，没有用跳跃点的
-    叫法，都没有照旧；近轨道站用站名的中文，地名表里没有就用英文站名"""
+    """星门站、行星近轨道站的地点名查游戏数据库的站内地点表（不能按代码里的星系名拼：RR_JP_StantonMagnus 是尼克斯星门、
+    RR_JP_NyxCastra 是斯坦顿星门）；没有中文用英文站名；表里没有、游戏数据库不可用照旧"""
+    from astral_toolkit.gamedata import GamedataError
+    from astral_toolkit.gamedata import places as gd_places
     from astral_toolkit.navigation import position
 
     _setup(monkeypatch, tmp_path)
-    ini = {
-        "stanton_pyro_jpstation": "派罗星门",
-        "stanton_magnus_jpstation": "马格努斯星门",
-        "nyx_jumppoint_castra": "尼克斯 - 卡斯塔 跳跃点",
-    }
-    zh = {"everusharbor": "埃弗勒斯空间站"}
-    monkeypatch.setattr(position, "ini_name", lambda k: ini.get(k.lower(), ""))
-    monkeypatch.setattr(position, "_place_zh", lambda key="", prefix=None: zh.get(key))
+    monkeypatch.setattr(gd_places, "city_places", lambda snap=None: _STATION_ROWS)
     position._place_name.cache_clear()
     try:
+        assert position.place_name("RR_JP_StantonMagnus") == "尼克斯星门"
+        assert position.place_name("RR_JP_NyxCastra") == "斯坦顿星门"
         assert position.place_name("RR_JP_StantonPyro") == "派罗星门"
-        assert position.place_name("RR_JP_StantonMagnus") == "马格努斯星门"
-        assert position.place_name("RR_JP_NyxCastra") == "尼克斯 - 卡斯塔 跳跃点"
+        assert position.place_name("RR_HUR_LEO") == "埃弗勒斯空间站"
+        assert position.place_name("RR_P3_LEO") == "Orbituary"  # 没有中文：英文站名
         assert (
             position.place_name("RR_JP_PyroNyx") == "Pyro - Nyx Jump Point"
-        )  # 都没有：照旧
-        assert position.place_name("RR_HUR_LEO") == "埃弗勒斯空间站"
-        assert position.place_name("RR_MIC_LEO") == "Port Tressler"
+        )  # 表里没有：照旧
+        assert position.place_name("RR_MIC_LEO") == "MIC LEO"  # 表里没有：照旧
+
+        def down(*a, **k):
+            raise GamedataError("游戏数据库不可用")
+
+        monkeypatch.setattr(gd_places, "city_places", down)
+        position._place_name.cache_clear()
+        assert position.place_name("RR_HUR_LEO") == "HUR LEO"
     finally:
         position._place_name.cache_clear()
+
+
+def _stock_places(monkeypatch, raw, zh):
+    """盘点地点列表换成给定的几个站（中文名按 zh 表），缓存换新的"""
+    from astral_toolkit.crafting import stockplaces as SP
+    from astral_toolkit.gamedata._cache import VersionCache
+    from astral_toolkit.navigation import navigate
+
+    monkeypatch.setattr(navigate, "poi_zh", lambda en: zh.get(en))
+    monkeypatch.setattr(SP, "_PLACES", VersionCache())
+    monkeypatch.setattr(SP, "_INDEX", VersionCache(identity=True))
+    monkeypatch.setattr(SP, "_raw_places", lambda: list(raw))
+    return SP
+
+
+def test_gateway_and_leo_names_match_stock_places(monkeypatch, tmp_path):
+    """日志代码 → 地点名 → 盘点地点列表（开始盘点就是这么认地点的）：星门站、近轨道站都对上列表里的站，同名的按星系分"""
+    from astral_toolkit.gamedata import places as gd_places
+    from astral_toolkit.navigation import position
+
+    _setup(monkeypatch, tmp_path)
+    monkeypatch.setattr(gd_places, "city_places", lambda snap=None: _STATION_ROWS)
+    SP = _stock_places(
+        monkeypatch,
+        [
+            ("Stanton", "Hurston", "", "Everus Harbor", False),
+            ("Stanton", "", "", "Nyx Gateway (Stanton)", False),
+            ("Pyro", "", "", "Nyx Gateway (Pyro)", False),
+            ("Pyro", "", "", "Stanton Gateway (Pyro)", False),
+            ("Nyx", "", "", "Stanton Gateway (Nyx)", False),
+        ],
+        {
+            "Everus Harbor": "埃弗勒斯空间站",
+            "Nyx Gateway (Stanton)": "尼克斯星门",
+            "Nyx Gateway (Pyro)": "尼克斯星门",
+            "Stanton Gateway (Pyro)": "斯坦顿星门",
+            "Stanton Gateway (Nyx)": "斯坦顿星门",
+        },
+    )
+    position._place_name.cache_clear()
+    try:
+        for code, sysname, label in [
+            ("RR_JP_StantonMagnus", "Stanton", "尼克斯星门（斯坦顿）"),
+            ("RR_JP_NyxCastra", "Nyx", "斯坦顿星门（尼克斯）"),
+            ("RR_JP_PyroStanton", "Pyro", "斯坦顿星门（派罗）"),
+            ("RR_HUR_LEO", "Stanton", "埃弗勒斯空间站"),
+        ]:
+            got = SP.match(position.place_name(code), sysname) or {}
+            assert got.get("label") == label, code
+    finally:
+        position._place_name.cache_clear()
+
+
+def test_old_gateway_names_match_gateway_places(monkeypatch, tmp_path):
+    """派罗、尼克斯那几个星门站以前的自动地点名（「斯坦顿 - 派罗 跳跃点」这类，盘点记成了自定义地点）：改叫站名以后，
+    旧名字下的库存记录照样归到星门站（库存页、盘点对账都按 match 认地点，不带星系）"""
+    _setup(monkeypatch, tmp_path)
+    SP = _stock_places(
+        monkeypatch,
+        [
+            ("Stanton", "", "", "Pyro Gateway (Stanton)", False),
+            ("Pyro", "", "", "Stanton Gateway (Pyro)", False),
+            ("Pyro", "", "", "Nyx Gateway (Pyro)", False),
+            ("Nyx", "", "", "Pyro Gateway (Nyx)", False),
+        ],
+        {},
+    )
+    for old, en in [
+        ("斯坦顿 - 派罗 跳跃点", "Pyro Gateway (Stanton)"),
+        ("Stanton-Pyro Jump Point", "Pyro Gateway (Stanton)"),
+        ("Pyro-Stanton Jump Point", "Stanton Gateway (Pyro)"),
+        ("Pyro - Nyx Jump Point", "Nyx Gateway (Pyro)"),
+        ("Jumppoint_Nyx_Pyro", "Pyro Gateway (Nyx)"),
+    ]:
+        assert (SP.match(old) or {}).get("en") == en, old
 
 
 def test_ooc_body_without_version_or_database(monkeypatch, tmp_path):
