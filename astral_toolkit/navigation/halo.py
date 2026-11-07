@@ -146,7 +146,7 @@ def _inside(A, D, t0, lo, hi):
     return t0, t0
 
 
-def route(frm, to, b, speed=QDS[0][2], pts=None):
+def route(frm, to, b, speed: float = QDS[0][2], pts: dict | None = None):
     """从 frm 量子跳向 to，在第 b 带断开：到 to 还剩多少（Gm）时断、安全窗口多长。航线不穿过这条带就 None"""
     pts = pts or points()
     if frm not in pts or to not in pts or frm == to:
@@ -192,7 +192,7 @@ def route(frm, to, b, speed=QDS[0][2], pts=None):
     }
 
 
-def routes(frm, b, speed=QDS[0][2], pts=None):
+def routes(frm, b, speed: float = QDS[0][2], pts: dict | None = None):
     """从 frm 出发、航线穿过第 b 带的所有目标，安全窗口宽的排前面"""
     pts = pts or points()
     rows = [r for to in pts if (r := route(frm, to, b, speed, pts))]
@@ -212,7 +212,7 @@ def plan_text(r):
     )
 
 
-def overshoot(plan, g, pts=None):
+def overshoot(plan, g, pts: dict | None = None):
     """断开后核对：现在到方案的目标还剩多远、比方案的断开点多飞（正）/ 少飞（负）了多少 Mm。
     方案里没有目标或断开距离、星图里找不到目标就 None（老大实飞量断开后滑多远用，2026-11-08）"""
     to, drop = plan.get("to"), plan.get("dropout")
