@@ -269,6 +269,7 @@ def test_bin_aliases_read_and_edit_atomically(monkeypatch, tmp_path, action, jum
     )
     assert all(b["name"] != "待卖" for b in d["bins"][label]["bins"])
     assert t.inventory.revision() == before_revision + 1
+    assert t.inventory.history()[0]["source"] == ""  # 玩家改的仓位，记录来源不写成 AT
     t.inventory.undo(d["history"][0]["batch"])
     assert t.inventory.list_stock() == before
 
@@ -388,7 +389,8 @@ const api = () => new Promise(resolve => {release = () => resolve({});});
     assert result == {"place": "new"}
 
 
-def test_real_catalog_english_conflict_refuses_all_writes(monkeypatch, tmp_path):
+def test_real_catalog_english_name_wins_over_shared_label(monkeypatch, tmp_path):
+    """英文名明确对上正式物品时按英文名认：汉化名撞到别的物品，不把它的库存配过去，也不整笔拒绝（审查 2026-11-08）"""
     t = _context(monkeypatch, tmp_path, [("eye", "unknown", "A", 5)])
     t.catalog.add_alias("eye", "shared-label")
     items = {
@@ -397,12 +399,71 @@ def test_real_catalog_english_conflict_refuses_all_writes(monkeypatch, tmp_path)
     }
     assert goals.resolve_all(t, "Yormandi Eye", "shared-label") == ["eye"]
     assert set(goals.resolve_all(t, "Vanduul Plating", "shared-label")) == {"eye", "vp"}
-    before, revision = t.inventory.list_stock(), t.inventory.revision()
+    rv = count_task._count_review("A", items)
+    assert [(r["en"], r["book"], r["game"]) for r in rv["rows"]] == [
+        ("Yormandi Eye", 5, 2),
+        ("Vanduul Plating", 0, 4),
+    ]
+    assert "conflicts" not in rv
     count = count_helpers.count()
-    count.review = count_task._count_review("A", items)
+    count.review = rv
+    monkeypatch.setattr(bus, "publish", lambda *args: None)
     with bind_for_test(count_task, count):
-        assert "error" in count_task.count_apply()
-    assert t.inventory.list_stock() == before and t.inventory.revision() == revision
+        assert "error" not in count_task.count_apply()
+    got = {line.key.item_id: line.quantity for line in t.inventory.list_stock()}
+    assert got == {"eye": 2, "vp": 4}
+
+
+def test_same_item_two_english_names_merge_at_new_place(monkeypatch, tmp_path):
+    """账上还没有这件东西的地点：同一物品的两个英文名也合成一行，确认时不报「出现了两次」（审查 2026-11-08）"""
+    from astral_toolkit.trade.models import Item
+
+    t = _context(monkeypatch, tmp_path)
+    t.catalog.add_alias("eye", "Eye Alias")
+    t.catalog.upsert([Item("local:Eye Alias", "Eye Alias")])
+    rv = count_task._count_review(
+        "A", {1: _item("Yormandi Eye", 2), 2: _item("Eye Alias", 4)}
+    )
+    assert len(rv["rows"]) == 1
+    assert rv["rows"][0]["game"] == 6 and not rv["rows"][0]["keys"]
+    count = count_helpers.count()
+    count.review = rv
+    monkeypatch.setattr(bus, "publish", lambda *args: None)
+    with bind_for_test(count_task, count):
+        assert "error" not in count_task.count_apply()
+    got = [(line.key.item_id, line.quantity) for line in t.inventory.list_stock()]
+    assert got == [("eye", 6)]
+
+
+def test_place_pick_while_running_keeps_count(monkeypatch, tmp_path):
+    """选地点框还开着时游戏里已经按 F6 开始了：再选地点不把刚开始的盘点停掉；不带地点照旧是停（审查 2026-11-08）"""
+    _context(monkeypatch, tmp_path)
+    count = count_helpers.count()
+    stops = []
+    monkeypatch.setattr(count, "running", lambda: True)
+    monkeypatch.setattr(count, "stop", lambda: stops.append(1) or {"running": False})
+    with bind_for_test(count_task, count):
+        r = count_task.count_toggle(place="New Babbage")
+        assert r["running"] is True and not stops
+        assert count_task.count_toggle() == {"running": False} and stops == [1]
+
+
+def test_legacy_bin_default_and_desc_fill_official_blanks(monkeypatch, tmp_path):
+    """正式名的默认仓位、同名仓位描述是空的：用旧名设过的，不让自动建的空设置盖掉（审查 2026-11-08）"""
+    t = _context(monkeypatch, tmp_path)
+    t.db.set(
+        "stock_bins",
+        {
+            "New Babbage": {
+                "bins": [{"name": "待卖", "desc": "旧描述"}],
+                "default": "待卖",
+            },
+            "新巴贝奇": {"bins": [{"name": "待卖", "desc": ""}], "default": ""},
+        },
+    )
+    b = stock_task.stock_places()["bins"]["新巴贝奇"]
+    assert b["default"] == "待卖"
+    assert b["bins"] == [{"name": "待卖", "desc": "旧描述"}]
 
 
 def test_real_catalog_same_item_alias_merges_despite_extra_local_candidate(
@@ -583,7 +644,7 @@ def test_real_catalog_local_stock_alias_merges_with_official_name(
     }
     before, revision = t.inventory.list_stock(), t.inventory.revision()
     rv = count_task._count_review("A", items)
-    assert len(rv["rows"]) == 1 and rv["conflicts"] == []
+    assert len(rv["rows"]) == 1 and "conflicts" not in rv
     row = rv["rows"][0]
     assert (row["book"], row["game"], row["delta"], row["cells"]) == (8, 6, -2, 2)
     assert {key[0] for key in row["keys"]} == {"eye", "local:Yormandi Eye"}

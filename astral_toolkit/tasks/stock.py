@@ -172,11 +172,17 @@ def _bins(t):
         if label not in merged:
             merged[label] = {"bins": [], "default": meta.get("default", "")}
         target = merged[label]
-        names = {x["name"] for x in target["bins"]}
+        # 正式名的默认仓位、同名仓位的描述是空的（入库时自动建的就是空的）：用旧名设过的，别让空的盖掉（审查 2026-11-08）
+        if not target["default"] and meta.get("default"):
+            target["default"] = meta["default"]
+        have = {x["name"]: x for x in target["bins"]}
         for x in meta.get("bins", []):
-            if x["name"] not in names:
-                target["bins"].append(dict(x))
-                names.add(x["name"])
+            old = have.get(x["name"])
+            if old is None:
+                have[x["name"]] = dict(x)
+                target["bins"].append(have[x["name"]])
+            elif not old.get("desc") and x.get("desc"):
+                old["desc"] = x["desc"]
     return merged
 
 
@@ -757,6 +763,7 @@ def _move_bin(t, place, old, new, note):
             SP.join_loc(place, new) if _place_of(loc)[:2] == (place, old) else None
         ),
         note=note,
+        source="",  # 玩家自己改的仓位：记录来源不写成 AT（审查 2026-11-08）
     )
     return n
 

@@ -383,10 +383,10 @@ class Inventory:
             self._note(c, batch, note, "", "")
             return batch
 
-    def normalize_locations(self, canon, backup=None, note=""):
+    def normalize_locations(self, canon, backup=None, note="", source="AT"):
         """以前手打的位置能对上地点列表的（英文名、空格大小写不同：New Babbage、Area18），改成列表里的叫法。
         canon(位置) → 标准叫法或 None（对不上的不动，库存页里放「未归类」）。真要改时先备份数据库；记一笔移库，能撤销。
-        note 可指定仓位改名 / 删除的说明。返回改了几个位置"""
+        note 可指定仓位改名 / 删除的说明；source 是记录里的来源（启动时自动归位写 AT，玩家改仓位不写）。返回改了几个位置"""
         with self.db.connection() as c:
             locs = [
                 r[0]
@@ -420,7 +420,7 @@ class Inventory:
                 note
                 or "地点自动归位：" + "，".join(f"{a} → {b}" for a, b in todo.items()),
                 "",
-                "AT",
+                source,
             )
             return len(todo)
 

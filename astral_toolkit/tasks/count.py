@@ -100,22 +100,12 @@ def _count_review(place, items):
     used, rows = set(), []
     # 同一物品 + 品质 + 单位分成了几组（制造品各槽品质不同、两个名字是同一物品）：会配到同一批库存行，先合成一行
     # （各槽品质只留第一组的——库存还不分变体，见待做 #10；复审 2026-10-28）
-    merged, conflicts = {}, []
+    merged = {}
     for v in items.values():
         ids = frozenset(G.resolve_all(t, v["en"], v["zh"]))
         qkey = "unknown" if v["quality"] is None else f"exact:{int(v['quality'])}"
         ukey = G.USCU if v["unit"] == "SCU" else "unit"
-        lines = [
-            line
-            for line in book
-            if line.key.item_id in ids
-            and line.key.quality == qkey
-            and line.key.unit == ukey
-        ]
-        # 候选名可能多带一个账上没有的 id；只要实际命中的库存行相同，就共用一份账面数量。
-        matched = frozenset(line.key for line in lines)
         # 当前地点没库存不代表它和另一个物品同名：英文明确对应的真实目录身份不能丢。
-        # 本地副本只是旧库存的另一种记法，不用它认定两个真实物品的身份冲突（#10/#11 不在此处处理）。
         en = v["en"]
         named = {
             item.id
@@ -129,8 +119,27 @@ def _count_review(place, items):
         real_ids = {
             iid for iid in ids if not iid.startswith("local:") and t.catalog.get(iid)
         }
-        if named and real_ids - named:
-            conflicts.append(en)
+        if named:
+            # 英文名明确对上正式物品：只拿它和英文名自己的本地副本（旧库存的另一种记法）去配账，
+            # 汉化名撞到的别的物品不算（以前整笔拒绝、看不出是哪件，原来能确认的盘点也被拒；审查 2026-11-08）
+            ids = frozenset(
+                named
+                | {
+                    item.id
+                    for item in t.catalog.search(en)
+                    if item.id.startswith("local:")
+                    and item.name.casefold() == en.casefold()
+                }
+            )
+        lines = [
+            line
+            for line in book
+            if line.key.item_id in ids
+            and line.key.quality == qkey
+            and line.key.unit == ukey
+        ]
+        # 候选名可能多带一个账上没有的 id；只要实际命中的库存行相同，就共用一份账面数量。
+        matched = frozenset(line.key for line in lines)
         identity = frozenset(
             named
             or {
@@ -140,7 +149,13 @@ def _count_review(place, items):
             }
             or real_ids
         )
-        k = (matched or ids or (en or v["zh"]), qkey, ukey, identity)
+        # 没配到账上的行时，英文名明确的按它对上的正式物品分组：同一物品两个英文名在新地点也合成一行（审查 2026-11-08）
+        k = (
+            matched or frozenset(named) or ids or (en or v["zh"]),
+            qkey,
+            ukey,
+            identity,
+        )
         if k in merged:
             m, _ = merged[k]
             merged[k] = (
@@ -197,7 +212,6 @@ def _count_review(place, items):
         "missing": missing,
         "at": time.strftime("%H:%M:%S"),
         "revision": rev,
-        "conflicts": conflicts,
     }  # 确认时核对：中间改过账就不按这份旧账改（审查 2026-10-28 第 8 条）
 
 
@@ -211,6 +225,9 @@ def count_toggle(place=""):
         if is_closing():
             return {"error": "正在退出"}
     if count.running():
+        # 选地点框还开着时游戏里已经按 F6 开始了：选了地点不把刚开始的盘点停掉（审查 2026-11-08）
+        if place:
+            return count_state()
         return count.stop()
     if not isinstance(place, str):
         return {"error": "请选择有效的盘点地点"}
@@ -256,10 +273,6 @@ def count_apply(zero=None):
     # 先把每一行要改成多少算清楚（不写库），再一笔事务写进去：要么全改、要么一行不改（审查 2026-10-28 第 8 条）
     targets, crafts = {}, []
     try:
-        if rv.get("conflicts"):
-            raise ValueError(
-                "盘点物品名称对应不同物品，这次没改；请核对名称或在库存页手动改数量"
-            )
         for r in rv["rows"]:
             if not r["delta"]:
                 continue
