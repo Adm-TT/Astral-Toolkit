@@ -218,13 +218,14 @@ def to_hud(r: MiningResult, focus=None):
         if names is None
         else "、".join(g.zh for g in composition) or "未发现关注的矿"
     )
-    goal_lines = (
-        r.goal_lines
-        if names is None
-        else tuple(
-            g["text"] for g in r.goals if g["zh"] in names and g["text"] in r.goal_lines
-        )
-    )
+    if names is None:
+        goal_lines = r.goal_lines
+    elif r.goal_lines:
+        # 目标查全了才写。开了关注：先按关注的矿挑、再取前两条，别让没关注的矿把它挤掉；
+        # 按英文键挑，不靠两套中文名正好一样（审查 2026-11-08）
+        goal_lines = tuple(g["text"] for g in r.goals if g["en"] in focus)[:2]
+    else:
+        goal_lines = ()
     hud = [
         f"{title}｜{r.mass:,.0f} kg｜抗性 {r.resistance:g}%｜不稳定 {r.instability:g}"
     ]

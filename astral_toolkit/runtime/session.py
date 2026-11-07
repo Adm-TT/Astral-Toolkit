@@ -999,6 +999,8 @@ class SessionLoop:
         """记 observed、判过期；返回要不要自动关闭"""
         stale: list[str] = []
         idle = False
+        # idle_close 可能要读设置（采矿助手的自动关闭时间）：锁外取，锁里不做文件读写（审查 2026-11-08）
+        limit_idle = self._worker.idle_close
         with self._lock:
             cur = self._current
             if (
@@ -1019,7 +1021,6 @@ class SessionLoop:
                 if active - cur.last_seen.get(channel, active) > float(limit):
                     cur.freshness[channel] = Freshness.STALE
                     stale.append(channel)
-            limit_idle = self._worker.idle_close
             if limit_idle is not None:
                 last = max(cur.last_seen.values(), default=cur.attempt_started)
                 idle = active - last > float(limit_idle)

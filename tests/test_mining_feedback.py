@@ -37,6 +37,29 @@ def test_empty_focus_hides_all_ores():
     assert rich["comp"] == [] and "钨" not in hud
 
 
+def test_focus_goal_lines_pick_focused_ores_before_cutting_to_two():
+    """开了关注：目标缺口先按关注的矿挑、再取前两条，排第三的关注矿那行不会被挤掉；按英文键挑；
+    目标没查全不写（审查 2026-11-08）"""
+    from dataclasses import replace
+
+    result = analyze(_scan(), ({}, None, None), _inputs())
+    goals = tuple(
+        {"en": en, "zh": zh, "text": f"目标缺少 {zh}"}
+        for en, zh in (("Gold", "金"), ("Tungsten", "钨"), ("Copper", "铜矿"))
+    )
+    r = replace(result, goals=goals, goal_lines=tuple(g["text"] for g in goals[:2]))
+
+    def lines(rich):
+        return [x for x in rich["minor"] if x.startswith("目标缺少")]
+
+    hud, rich = present.to_hud(r, focus=["Copper"])
+    assert lines(rich) == ["目标缺少 铜矿"] and "目标缺少 金" not in hud
+    _, rich = present.to_hud(r, focus=["Gold", "Tungsten", "Copper"])
+    assert lines(rich) == ["目标缺少 金", "目标缺少 钨"]
+    _, rich = present.to_hud(replace(r, goal_lines=()), focus=["Copper"])
+    assert lines(rich) == []
+
+
 def test_focus_save_validates_and_persists(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
     changes = []
