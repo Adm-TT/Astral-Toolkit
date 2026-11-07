@@ -1024,3 +1024,17 @@ def test_nav_goals_router_roundtrip(monkeypatch, tmp_path):
     assert got["ok"], got
     want = json.loads(json.dumps(TN.waypoints(), ensure_ascii=False, default=str))
     assert got["data"] == want and any(w["name"] == "测试点" for w in want)
+
+
+def test_where_to_get_goes_through_console_to_material_source(monkeypatch):
+    """目标的「去哪弄」经 trade/console 的转发拿物品查询内部实现的 material_source（目录迁移 Q3b 起；老大 11-07 定
+    留着转发、门禁钉住，goals 换新实现时删）：转错函数、转错路径（where_to_get 的 try 会吞成空）都要红"""
+    from astral_toolkit.crafting import goals
+    from astral_toolkit.tasks.catalog_queries import acquire
+
+    monkeypatch.setattr(acquire, "material_source", lambda en: "来源：" + en)
+    goals.where_to_get.cache_clear()
+    try:
+        assert goals.where_to_get("Quantainium") == "来源：Quantainium"
+    finally:
+        goals.where_to_get.cache_clear()

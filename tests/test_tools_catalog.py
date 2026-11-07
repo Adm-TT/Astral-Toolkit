@@ -250,6 +250,53 @@ def test_limited_variant_recommends_base(monkeypatch, tmp_path):
     assert d2["loot"] == {"groups": ["测试掉落"]} and d2["sell"]["price"] == 9000
 
 
+def test_buy_rows_nearest_first_when_position_known(monkeypatch, tmp_path):
+    """买点：有位置、算得出距离就按远近给最近 3 处并写上距离（贵的离得近也排前面）；没有位置给最便宜 3 处、
+    不写距离（目录迁移 Q3b 改坏检查补的：上面那条最近和最便宜碰巧同序，不按远近也看不出来）"""
+    setup(monkeypatch, tmp_path)
+    monkeypatch.setattr(loot, "info", lambda en="", zh="", **kw: None)
+    monkeypatch.setattr(
+        position, "current", lambda: dict(POINTS[3], label="在 微科 开过库存", age=0)
+    )
+    d = acquire.info("MaxLift Tractor Beam", "", 1700)
+    assert d["buy"][0]["shop"] == "Shop NB"  # 在微科：新巴贝奇最近，虽然最贵
+    assert all(r["dist"] for r in d["buy"]), d["buy"]
+    monkeypatch.setattr(position, "current", lambda: None)
+    d = acquire.info("MaxLift Tractor Beam", "", 1700)
+    assert [r["shop"] for r in d["buy"]] == ["Shop Orison", "Shop ARC-L4", "Shop NB"]
+    assert [r["dist"] for r in d["buy"]] == ["", "", ""]
+
+
+def test_resolve_order(monkeypatch):
+    """名字找商店物品编号的先后（目录迁移 Q3b 改坏检查补的）：给了编号就用 → 英文名完全一样（不分大小写、符号）
+    → 中文名 → 英文名最像的（OCR 认错一两个字母）→ 只有英文名时取英文名模糊找的第一个；都没有给 None"""
+    found = {
+        "MaxLift Tractor Beam": [
+            (1701, "MaxLift Tractor Beam Battery"),
+            (1700, "maxlift tractor-beam"),
+        ],
+        "牵引光束": [(1600, "SureGrip S1 Tractor Beam")],
+        "MaxLift": [(1701, "MaxLift Tractor Beam Battery")],
+    }
+    monkeypatch.setattr(shops, "find", lambda q, limit=3: found.get(q, []))
+    monkeypatch.setattr(
+        shops, "find_close", lambda q: [1702] if q == "MaxLlft Tractor Beam" else []
+    )
+    assert acquire.resolve("MaxLift Tractor Beam", "牵引光束", 42) == 42
+    assert acquire.resolve() is None
+    assert (
+        acquire.resolve("MaxLift Tractor Beam", "牵引光束") == 1700
+    )  # 英文名完全一样排第一
+    assert (
+        acquire.resolve("MaxLlft Tractor Beam", "牵引光束") == 1600
+    )  # 英文名对不上：中文名
+    assert (
+        acquire.resolve("MaxLlft Tractor Beam", "没有这个") == 1702
+    )  # 中文名也找不到：英文名最像的
+    assert acquire.resolve("MaxLift", "") == 1701  # 只有英文名、也不像：模糊找的第一个
+    assert acquire.resolve("MaxLift", "没有这个") is None  # 有中文名时不退到模糊找
+
+
 def test_info_wires_lookups_into_facts(monkeypatch, tmp_path):
     """info 只取数据、交给规则拼（IQ-C2）：名字和类别以商店数据为准、当前位置、不是精确点进来时按商店名字查描述、
     维科洛用途和掉落按传进来的英文名、中文名查、精确命中但掉落数据里没有这件时不查掉落、
@@ -540,6 +587,69 @@ def test_wikelo_materials_all_have_source(monkeypatch):
     names = {r["n"] for c in cs for r in c["req"]}
     missing = [n for n in sorted(names) if not material_source(n)]
     assert not missing, missing
+
+
+def test_material_source_order_and_sentence(monkeypatch):
+    """维科洛材料去哪弄那一句（目录迁移 Q3b 改坏检查补的）：维科洛说明 → 商店最便宜的 → 挖矿最好的矿点（纯净的要精炼）
+    → 开箱掉落（只看本机，不联网）；开箱那句写最常见的箱子、超过 3 个地方写「等」，副本专属矿说只能开采，刷在场景里的不说箱子"""
+    from astral_toolkit.mining import locations
+
+    monkeypatch.setattr(
+        wikelo, "source_note", lambda n: "维科洛说明" if n == "Wikelo Favor" else ""
+    )
+    monkeypatch.setattr(
+        shops,
+        "where_by_name",
+        lambda n: "可买：某店" if n in ("Wikelo Favor", "ASD Secure Drive") else "",
+    )
+    monkeypatch.setattr(
+        locations,
+        "where",
+        lambda base: [(42.4, "LocA"), (10.0, "LocB")] if base == "Carinite" else [],
+    )
+    monkeypatch.setattr(
+        locations, "zh_name", lambda loc: {"LocA": "甲地"}.get(loc, loc)
+    )
+    box = {"p": 0.25, "box": "Box A · 1", "regions": ["区一", "区二"], "placed": False}
+    many = {
+        "p": 0.5,
+        "box": "Crate",
+        "regions": ["一", "二", "三", "四"],
+        "placed": False,
+    }
+    shelf = {"p": 0.3, "box": "x", "regions": ["奖励室"], "placed": True}
+    ore = {"p": 1.0, "box": "洞里", "regions": ["副本"], "placed": False}
+    found = {
+        "Pearl": {"groups": [box]},
+        "Many": {"groups": [many]},
+        "Shelf": {"groups": [shelf]},
+        "Ore": {"mine": True, "note": "副本专属矿：要开采", "groups": [ore]},
+    }
+    online = []
+
+    def fake_info(en="", zh="", **kw):
+        online.append(kw.get("online"))
+        return found.get(en)
+
+    monkeypatch.setattr(loot, "info", fake_info)
+    assert acquire.material_source("Wikelo Favor") == "维科洛说明"  # 商店也有，说明在先
+    assert acquire.material_source("ASD Secure Drive") == "可买：某店"
+    assert acquire.material_source("Carinite") == "挖矿：甲地 42%"
+    assert (
+        acquire.material_source("Carinite (Pure)") == "挖矿：甲地 42%（要精炼成纯净的）"
+    )
+    assert (
+        acquire.material_source("Pearl")
+        == "开箱：区一、区二（Box A 箱，单箱最高约 25%）"
+    )
+    assert (
+        acquire.material_source("Many")
+        == "开箱：一、二、三等（Crate 箱，单箱最高约 50%）"
+    )
+    assert acquire.material_source("Shelf") == "场景里刷出：奖励室（最高约 30%）"
+    assert acquire.material_source("Ore") == "副本专属矿，只能开采：副本（洞里）"
+    assert acquire.material_source("Nothing") == ""
+    assert online and not any(online)  # 只看本机，不在页面里逐个材料联网等
 
 
 def test_names_follow_game_localization(tmp_path, monkeypatch):
