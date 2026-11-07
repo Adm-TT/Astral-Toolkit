@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, Callable
 
 from .app.engines.count import _Count
 from .app.engines.hover import _Hover
-from .app.engines.live import _Live
+from .app.engines.live import MiningAnalysis, MiningLinks, MiningViews, _Live
 from .runtime.workers.navigation import (
     _CamFilter,
     _Nav,
@@ -23,7 +23,7 @@ from .runtime.workers.navigation import (
     NavViews,
 )
 from .app.nav_marker import _NavMarker, marker_diag
-from .app.output import BusOutput
+from .app.output import BusOutput, setting_run_flag
 from .runtime.lifecycle import (
     Lifecycle,
     OneShot,
@@ -293,6 +293,70 @@ def _game_events(pos: Any) -> GameEventsWorker:
     )
 
 
+def _mining_analysis() -> MiningAnalysis:
+    """采矿线程一轮识别要用的分析（目录迁移 R3）：tasks/mining_analysis 这个模块（原样转给 mining/screen、
+    mining/signals、tasks/mining 等）"""
+    from .tasks import mining_analysis
+
+    return mining_analysis
+
+
+def _mining_views() -> MiningViews:
+    """采矿线程要的排版（目录迁移 R3）：活动磁贴在 app/presenters/mining"""
+    from .app.presenters import mining as present_mining
+
+    return MiningViews(activity=present_mining.activity)
+
+
+def _mining_links(options: Mapping[str, Any]) -> MiningLinks:
+    """采矿线程要的外面的东西（目录迁移 R3：以前采矿线程在构造器里自己造、或经 `_T` 动态去 tasks 取）。
+    抓图（mining/screen）、游戏在不在前台（tasks/mining）、热键名（tasks/navigation 读设置）、日志和截图目录
+    （core/paths）、让读位置让出识别引擎（navigation/displayinfo）都是用的时候才取；没出结果的画面交给
+    app/miss_shots 的后台队列存（lifecycle 登记它）；设置里的 live_on 跟着开关写。overrides 给了 grab /
+    foreground 就用给的（测试用）"""
+    from .app.miss_shots import MissShotsService
+    from .core import paths
+
+    def grab() -> Any:
+        from .mining import screen
+
+        return screen.grab()
+
+    def foreground() -> bool | None:
+        from .tasks import mining as mining_tasks
+
+        return mining_tasks._game_front()
+
+    def hotkey() -> str:
+        from .tasks import navigation as navigation_tasks
+
+        return navigation_tasks.settings_key("live_key", "F5")
+
+    def log_file(name: str) -> Any:
+        return paths.log(name)
+
+    def shots(name: str) -> Any:
+        return paths.shots(name)
+
+    def yield_ocr() -> None:
+        from .navigation import displayinfo
+
+        displayinfo.yield_ocr()
+
+    given_grab = options.get("grab")
+    given_front = options.get("foreground")
+    return MiningLinks(
+        grab=given_grab if given_grab is not None else grab,
+        foreground=given_front if given_front is not None else foreground,
+        hotkey=hotkey,
+        log_file=log_file,
+        shots=shots,
+        miss_shots=MissShotsService(),
+        yield_ocr=yield_ocr,
+        run_flag=setting_run_flag("live_on"),
+    )
+
+
 def _hover_links() -> HoverLinks:
     """F8 要用的物品查询（IQ-B6）：物品卡片和窗口物品查询页同一份（tasks/catalog 用例 + app/presenters/catalog 排版）；
     掉落、玩家市场经 tasks/catalog（Trade 只在那里的市场会话里用，第一次用才造，和以前一样）；
@@ -381,10 +445,11 @@ def build(
     live = _Live(
         results,
         output=output,
+        analysis=_mining_analysis(),
+        views=_mining_views(),
+        links=_mining_links(options),
         clock=options.get("clock"),
         closing=lifecycle.is_closing,
-        foreground=options.get("foreground"),
-        grab=options.get("grab"),
         where_now=where_now,
         area_now=area_now,
     )

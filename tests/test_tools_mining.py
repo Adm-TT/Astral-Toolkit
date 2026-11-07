@@ -24,7 +24,7 @@ def _live_run(
     from astral_toolkit.core import paths
     from astral_toolkit.mining.parse import Scan
     from astral_toolkit.tasks import mining as t_mining
-    import astral_toolkit.app.engines.live as live_mod
+    from tests import mining_helpers
     from astral_toolkit.app import bus
 
     monkeypatch.setattr(paths, "log", lambda name: tmp_path / name)
@@ -67,7 +67,7 @@ def _live_run(
 
     # RT-B7：tasks.* 先绑定（认出信号后会问现在在哪个产矿区）；这里照旧另建一个 _Live 跑
     with app_for_test():
-        live = live_mod._Live()
+        live = mining_helpers.live()
         if stale is not None:
             monkeypatch.setattr(live, "stale_after", {"panel": stale, "signals": stale})
         q = bus.subscribe()
@@ -163,7 +163,7 @@ def test_live_scan_updates_when_read_gets_more_complete(monkeypatch, tmp_path):
     monkeypatch.setattr(paths, "shots", lambda name: tmp_path)
     from astral_toolkit.mining.parse import Scan
     from astral_toolkit.tasks import mining as t_mining
-    import astral_toolkit.app.engines.live as live_mod
+    from tests import mining_helpers
     from astral_toolkit.app import bus
 
     img = Image.new("RGB", (320, 180), (20, 20, 20))
@@ -215,7 +215,7 @@ def test_live_scan_updates_when_read_gets_more_complete(monkeypatch, tmp_path):
     for _m in (t_nav, t_sys, hud_state):
         monkeypatch.setattr(_m, "_hud", _v)
     q = bus.subscribe()
-    live = live_mod._Live()
+    live = mining_helpers.live()
     try:
         sid = live.start()
         assert sid is not None
@@ -375,7 +375,8 @@ def test_live_session_isolation(monkeypatch, tmp_path):
     import threading
     from dataclasses import replace
 
-    import astral_toolkit.app.engines.live as live_mod
+    from astral_toolkit import bootstrap
+    from tests import mining_helpers
     from astral_toolkit.core import paths
     from astral_toolkit.mining import screen, signals
     from astral_toolkit.mining.parse import Scan
@@ -391,7 +392,7 @@ def test_live_session_isolation(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(screen, "grab", lambda: frame)
     monkeypatch.setattr(
-        live_mod,
+        bootstrap,
         "setting_run_flag",
         lambda key: RunFlag(key, lambda k, v: None),
     )
@@ -428,7 +429,7 @@ def test_live_session_isolation(monkeypatch, tmp_path):
     monkeypatch.setattr(screen, "LAST_PANEL", {})
     monkeypatch.setattr(t_mining, "_game_front", lambda: None)
     out = RecordingOutput()
-    live = live_mod._Live(output=out, foreground=lambda: True)
+    live = mining_helpers.live(output=out, foreground=lambda: True)
     live.loop._join_timeout = 0.05
     try:
         assert live.start() is not None
@@ -1001,7 +1002,7 @@ def test_live_key_hint_says_stopping_when_refused(monkeypatch):
     from PIL import Image
 
     from astral_toolkit.app.engines import hover as hover_mod
-    from astral_toolkit.app.engines import live as live_engine
+    from astral_toolkit import bootstrap
     from astral_toolkit.mining import screen as mining_screen
     from astral_toolkit.mining import signals
     from astral_toolkit.mining.parse import Scan
@@ -1012,7 +1013,7 @@ def test_live_key_hint_says_stopping_when_refused(monkeypatch):
 
     flag_writes = []
     monkeypatch.setattr(
-        live_engine,
+        bootstrap,
         "setting_run_flag",
         lambda key: RunFlag(key, lambda k, v: flag_writes.append((k, v))),
     )

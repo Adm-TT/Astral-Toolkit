@@ -201,7 +201,9 @@ def test_count_service_stops_session_loop(monkeypatch):
 
 
 def test_live_gets_closing_before_new_session():
-    from astral_toolkit.app.engines.live import _Live
+    from tests.mining_helpers import (
+        live as _Live,
+    )  # 分析、活动磁贴、外面的东西、output 由测试工具补上（R3）
 
     live = _Live(closing=lambda: True)
     assert live.start() is None

@@ -12,7 +12,6 @@ from PIL import Image
 from astral_toolkit import bootstrap
 from astral_toolkit.app import lifecycle_gate
 from astral_toolkit.app.engines import count as count_engine
-from astral_toolkit.app.engines import live as live_engine
 from astral_toolkit.app import nav_marker
 from astral_toolkit.crafting import stockplaces
 from astral_toolkit.mining import screen as mining_screen
@@ -374,7 +373,7 @@ def _quiet_mining(monkeypatch):
     # 会话循环开 / 停时会写设置里的 live_on：换成只记录、不落盘的 RunFlag，别动真设置
     flag_writes = []
     monkeypatch.setattr(
-        live_engine,
+        bootstrap,
         "setting_run_flag",
         lambda key: RunFlag(key, lambda k, v: flag_writes.append((k, v))),
     )
@@ -781,3 +780,68 @@ def test_nav_analysis_views_trace_and_game_events_are_wired_by_bootstrap(monkeyp
     assert isinstance(app.game_events, GameEventsWorker)
     assert app.game_events.on_qt_arrived == app.pos.request_read_now
     assert app.game_events._enabled is (sys.platform == "win32")
+
+
+def test_mining_analysis_views_and_links_are_wired_by_bootstrap(monkeypatch, tmp_path):
+    """采矿线程（目录迁移 R3）要的东西都由 bootstrap 接：分析是 tasks/mining_analysis 这个模块，活动磁贴是
+    app/presenters/mining.activity；抓图、前台、热键名、日志和截图目录、让读位置让出识别都是用的时候才去 mining/screen、
+    tasks/mining、tasks/navigation、core/paths、navigation/displayinfo 取（装配时一样都不取），overrides 给了抓图 / 前台
+    就用给的；没出结果的画面交给 MissShotsService（lifecycle 登记的就是它）；设置里的 live_on 跟着开关写"""
+    from astral_toolkit.app.miss_shots import MissShotsService
+    from astral_toolkit.app.presenters import mining as present_mining
+    from astral_toolkit.core import paths
+    from astral_toolkit.navigation import displayinfo
+    from astral_toolkit.tasks import mining_analysis
+
+    assert bootstrap._mining_analysis() is mining_analysis
+    assert bootstrap._mining_views().activity is present_mining.activity
+
+    calls = []
+    monkeypatch.setattr(mining_screen, "grab", lambda: calls.append("grab") or "图")
+    monkeypatch.setattr(
+        mining_tasks, "_game_front", lambda: calls.append("front") or False
+    )
+    monkeypatch.setattr(
+        nav_tasks,
+        "settings_key",
+        lambda key, default=None: calls.append((key, default)) or "F6",
+    )
+    monkeypatch.setattr(paths, "log", lambda name: tmp_path / "logs" / name)
+    monkeypatch.setattr(paths, "shots", lambda name: tmp_path / "shots" / name)
+    monkeypatch.setattr(displayinfo, "yield_ocr", lambda: calls.append("yield"))
+    flags = []
+    monkeypatch.setattr(
+        bootstrap,
+        "setting_run_flag",
+        lambda key: flags.append(key) or RunFlag(key, lambda k, v: None),
+    )
+
+    links = bootstrap._mining_links({})
+    assert calls == []
+    assert links.grab() == "图" and links.foreground() is False
+    assert links.hotkey() == "F6"
+    links.yield_ocr()
+    assert calls == ["grab", "front", ("live_key", "F5"), "yield"]
+    assert links.log_file("live_log.txt") == tmp_path / "logs" / "live_log.txt"
+    assert links.shots("miss") == tmp_path / "shots" / "miss"
+    assert isinstance(links.miss_shots, MissShotsService)
+    assert flags == ["live_on"] and links.run_flag.key == "live_on"
+
+    def grab():
+        return "给的图"
+
+    def front():
+        return True
+
+    given = bootstrap._mining_links({"grab": grab, "foreground": front})
+    assert given.grab is grab and given.foreground is front
+
+    app = bootstrap.build("test")  # 真装配出来的也是这几样（不只工厂函数对）
+    live = app.live
+    assert live._an is mining_analysis
+    assert live._views == bootstrap._mining_views()
+    assert live.miss_shots is live._links.miss_shots
+    assert isinstance(live.miss_shots, MissShotsService)
+    assert live.loop._foreground is live._links.foreground
+    assert live.loop._run_flag is live._links.run_flag
+    assert live._links.run_flag.key == "live_on"

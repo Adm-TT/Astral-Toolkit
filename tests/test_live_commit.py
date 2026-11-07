@@ -19,6 +19,7 @@ from astral_toolkit.runtime.results import MINING_SCAN, MINING_SIGNALS
 from astral_toolkit.runtime.session import StopInfo
 from astral_toolkit.tasks import mining as t_mining
 from astral_toolkit.tasks import navigation as t_nav
+from tests import mining_helpers
 
 WAIT = 30
 
@@ -151,7 +152,7 @@ def _start_stuck(monkeypatch, tmp_path, join_timeout=0.02):
     hud, _ = _world(monkeypatch, tmp_path)
     gate = _Gate()
     monkeypatch.setattr(t_mining, "scan_view", gate.view)
-    live = live_mod._Live()
+    live = mining_helpers.live()
     live.loop._join_timeout = join_timeout
     q = _subscribe()
     assert live.start() is not None
@@ -246,7 +247,7 @@ def test_older_frame_arriving_late_is_rejected(monkeypatch, tmp_path):
 def test_old_epoch_rejected_after_config_change(monkeypatch, tmp_path):
     """④ 配装变了：旧 epoch 的结果作废，下一帧按新配装算出来再发布，采矿助手不退出"""
     hud, _ = _world(monkeypatch, tmp_path)
-    live = live_mod._Live()
+    live = mining_helpers.live()
     calls = []
 
     def view(*a, **k):
@@ -314,7 +315,7 @@ def test_stale_republish_does_not_touch_store(monkeypatch, tmp_path):
     monkeypatch.setattr(screen, "grab", grab)
     monkeypatch.setattr(time, "time", lambda: clock["t"])
     monkeypatch.setattr(t_mining, "scan_view", lambda *a, **k: _fake_view())
-    live = live_mod._Live(clock=lambda: clock["t"])
+    live = mining_helpers.live(clock=lambda: clock["t"])
     real_publish = bus.publish
 
     def publish(kind, data):
@@ -363,7 +364,7 @@ def test_live_false_comes_after_last_scan(monkeypatch, tmp_path):
 def test_live_false_after_published_scan(monkeypatch, tmp_path):
     _world(monkeypatch, tmp_path)
     monkeypatch.setattr(t_mining, "scan_view", lambda *a, **k: _fake_view())
-    live = live_mod._Live()
+    live = mining_helpers.live()
     q = _subscribe()
     try:
         assert live.start() is not None
@@ -406,7 +407,7 @@ def test_every_way_of_stopping_keeps_results_and_rejects_late(monkeypatch, tmp_p
 
     for name in ("stop", "auto_off", "fail_off", "退出"):
         _world(monkeypatch, tmp_path)
-        live = live_mod._Live()
+        live = mining_helpers.live()
         q = _subscribe()
         try:
             assert live.start() is not None
@@ -432,7 +433,7 @@ def test_every_way_of_stopping_keeps_results_and_rejects_late(monkeypatch, tmp_p
 def test_new_session_first_result_replaces_last_one(monkeypatch, tmp_path):
     _world(monkeypatch, tmp_path)
     monkeypatch.setattr(t_mining, "scan_view", lambda *a, **k: _fake_view("一"))
-    live = live_mod._Live()
+    live = mining_helpers.live()
     q = _subscribe()
     try:
         assert live.start() is not None
@@ -451,7 +452,7 @@ def test_new_session_first_result_replaces_last_one(monkeypatch, tmp_path):
 
 def test_start_presses_old_switch(monkeypatch, tmp_path):
     _world(monkeypatch, tmp_path)
-    live = live_mod._Live()
+    live = mining_helpers.live()
     try:
         assert live.start() is not None
         old = live.stop_ev
@@ -467,7 +468,7 @@ def test_zombie_worker_cannot_end_new_session(monkeypatch, tmp_path):
     """旧会话的停止命令迟到：结束不了后来开的会话"""
     _world(monkeypatch, tmp_path)
     monkeypatch.setattr(t_mining, "scan_view", lambda *a, **k: _fake_view())
-    live = live_mod._Live()
+    live = mining_helpers.live()
     q = _subscribe()
     try:
         assert live.start() is not None
@@ -645,7 +646,7 @@ def test_cut_result_is_partial_and_old_epoch_rejected(monkeypatch, tmp_path):
     """面板被挡走真循环：存的是 partial；算到一半改配装，这份作废，循环不退出，下一帧出新结果"""
     hud, _ = _world(monkeypatch, tmp_path, lambda img: (_cut_rock(), ({}, None, None)))
     monkeypatch.setattr(screen, "LAST_PANEL", {"cut": True})
-    live = live_mod._Live()
+    live = mining_helpers.live()
     calls = []
 
     def view(*a, **k):
@@ -686,7 +687,7 @@ def _signal_world(monkeypatch, tmp_path, lines):
 def test_signal_result_goes_to_store(monkeypatch, tmp_path):
     """信号走真循环：窗口消息里没有 values，store 里有；日志排在悬浮窗之后"""
     hud = _signal_world(monkeypatch, tmp_path, lambda *a: ["信号 4,285 → 铝"])
-    live = live_mod._Live()
+    live = mining_helpers.live()
     q = _subscribe()
     try:
         assert live.start() is not None
@@ -701,7 +702,7 @@ def test_signal_result_goes_to_store(monkeypatch, tmp_path):
 
 
 def test_signal_old_epoch_rejected(monkeypatch, tmp_path):
-    live = live_mod._Live()
+    live = mining_helpers.live()
     calls = []
 
     def lines(*a):
@@ -727,7 +728,7 @@ def test_signal_old_epoch_rejected(monkeypatch, tmp_path):
 def test_signal_of_old_session_rejected_after_restart(monkeypatch, tmp_path):
     gate = _Gate()
     hud = _signal_world(monkeypatch, tmp_path, gate.lines)
-    live = live_mod._Live()
+    live = mining_helpers.live()
     live.loop._join_timeout = 0.02
     q = _subscribe()
     try:
@@ -753,7 +754,7 @@ def test_signal_of_old_session_rejected_after_restart(monkeypatch, tmp_path):
 def test_worker_keeps_the_session_it_was_started_with(monkeypatch, tmp_path):
     """会话号和 payload 在 start 的锁里取好交给线程：线程起来得晚，也不会读成后来的新会话"""
     _world(monkeypatch, tmp_path)
-    live = live_mod._Live()
+    live = mining_helpers.live()
     seen = []
     done = threading.Event()
 
@@ -794,7 +795,7 @@ def test_stop_note_uses_the_hotkey_from_stop_time(monkeypatch, tmp_path):
     clock = {"t": 1000.0}
     hud, _ = _world(monkeypatch, tmp_path, lambda img: (Scan(), ({}, None, None)))
     monkeypatch.setattr(time, "time", lambda: clock["t"])
-    live = live_mod._Live(clock=lambda: clock["t"])
+    live = mining_helpers.live(clock=lambda: clock["t"])
     keys = {"v": "F5"}
     monkeypatch.setattr(live, "hotkey", lambda: keys["v"])
     q = _subscribe()
@@ -812,7 +813,7 @@ def test_error_note_uses_the_hotkey_from_stop_time(monkeypatch, tmp_path):
     clock = {"t": 1000.0}
     hud, _ = _world(monkeypatch, tmp_path, lambda img: (Scan(), ({}, None, None)))
     monkeypatch.setattr(time, "time", lambda: clock["t"])
-    live = live_mod._Live(clock=lambda: clock["t"])
+    live = mining_helpers.live(clock=lambda: clock["t"])
     live.retries = 1
     keys = {"v": "F5"}
     ticks = {"n": 0}
@@ -843,7 +844,7 @@ def test_sessions_do_not_share_vote_queue_or_log(monkeypatch, tmp_path):
     """两个会话不共享投票队列和日志句柄：A 停了以后它的 ctx 关日志，B 的是新对象"""
     _world(monkeypatch, tmp_path)
     monkeypatch.setattr(t_mining, "scan_view", lambda *a, **k: _fake_view())
-    live = live_mod._Live()
+    live = mining_helpers.live()
     contexts = {}
     real_setup = live.setup
 
@@ -877,3 +878,55 @@ def _wait_until(predicate, timeout=5):
             return True
         time.sleep(0.001)
     return False
+
+
+def test_mining_analysis_forwards_to_screen_signals_and_tasks(monkeypatch):
+    """目录迁移 R3：tasks/mining_analysis 每样都原样转给以前线程里现取的那个函数 / 常数（调用时才取，测试换掉照样生效）"""
+    from astral_toolkit.mining import mining_area
+    from astral_toolkit.tasks import goals as t_goals
+    from astral_toolkit.tasks import mining_analysis as an
+
+    for name in ("INTERVAL", "VOTE_FRAMES", "SEARCH", "LAST_RAW", "LAST_PANEL"):
+        monkeypatch.setattr(screen, name, object())
+    assert an.interval() is screen.INTERVAL
+    assert an.vote_frames() is screen.VOTE_FRAMES
+    assert an.search() is screen.SEARCH
+    assert an.last_raw() is screen.LAST_RAW
+    assert an.last_panel() is screen.LAST_PANEL
+
+    seen = []
+
+    def fake(tag):
+        def f(*args, **kwargs):
+            seen.append((tag, args, kwargs))
+            return tag
+
+        return f
+
+    forwards = {
+        "analyse": (screen, "analyse"),
+        "panel_seen": (screen, "panel_seen"),
+        "enqueue_rock": (screen, "enqueue_rock"),
+        "miss_reason": (screen, "miss_reason"),
+        "vote": (screen, "vote"),
+        "vote_partial": (screen, "vote_partial"),
+        "find_signatures": (signals, "find_signatures"),
+        "match_signature": (signals, "match_signature"),
+        "describe_all": (signals, "describe_all"),
+        "guesses": (signals, "guesses"),
+        "mark_goal_lines": (t_goals, "_mark_goal_lines"),
+        "scan_view": (t_mining, "scan_view"),
+    }
+    for mod, attr in forwards.values():
+        monkeypatch.setattr(mod, attr, fake(f"{mod.__name__}.{attr}"))
+    for name, (mod, attr) in forwards.items():
+        seen.clear()
+        tag = f"{mod.__name__}.{attr}"
+        assert getattr(an, name)(1, "二", k=3) == tag, name
+        assert seen == [(tag, (1, "二"), {"k": 3})], name
+
+    monkeypatch.setattr(mining_area, "rocks_stamp", lambda: "石头表戳")
+    monkeypatch.setattr(signals, "_mine_file", lambda: "读数文件")
+    monkeypatch.setattr(paths, "file_stamp", lambda p: ("戳", p))
+    assert an.rocks_stamp() == "石头表戳"
+    assert an.mine_file_stamp() == ("戳", "读数文件")

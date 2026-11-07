@@ -503,7 +503,7 @@ def test_live_fail_off_without_hud(monkeypatch, tmp_path):
     import time
 
     from astral_toolkit.app import bus, hud_state
-    from astral_toolkit.app.engines import live as live_mod
+    from tests import mining_helpers
     from astral_toolkit.core import paths, settings
     from astral_toolkit.runtime.session import RunState
     from astral_toolkit.tasks import mining as t_mining
@@ -516,7 +516,7 @@ def test_live_fail_off_without_hud(monkeypatch, tmp_path):
     monkeypatch.setattr(paths, "log", lambda name: tmp_path / name)
     monkeypatch.setattr(paths, "shots", lambda name: tmp_path)
     monkeypatch.setattr(t_mining, "_game_front", lambda: None)
-    live = live_mod._Live()
+    live = mining_helpers.live()
     live.retries = 1  # 一次就收尾
 
     def boom(session, ctx, now):
