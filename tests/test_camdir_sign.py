@@ -105,7 +105,7 @@ def test_faint_minus_rejected(monkeypatch, tmp_path):
 def test_erased_minus_caught_by_cam_filter(monkeypatch, tmp_path):
     """负号整个抹掉（和正数一模一样）：像素上分不出来，读成 63。-63 → 63 差 126°：
     导航里的镜头防误读（单独一帧变号不信）要拦下这一帧"""
-    from astral_toolkit.app.engines.nav import _CamFilter
+    from astral_toolkit.runtime.workers.navigation import _CamFilter
 
     G = _font_glyphs(monkeypatch, tmp_path)
     pyro = _sample("displayinfo_live_pyro.png")

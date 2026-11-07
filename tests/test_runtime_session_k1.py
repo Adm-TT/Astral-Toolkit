@@ -4,7 +4,7 @@ import time
 
 from astral_toolkit.app.engines.count import _CountWorker
 from astral_toolkit.app.engines.live import _Live
-from astral_toolkit.app.engines.nav import _NavWorker
+from astral_toolkit.runtime.workers.navigation import _NavWorker
 from astral_toolkit.runtime.session import RunState, StopInfo
 from tests.runtime_fakes import FakeClock, FakeWorker, Gate, make_loop
 

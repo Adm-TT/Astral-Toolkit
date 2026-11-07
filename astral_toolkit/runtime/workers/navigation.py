@@ -1,4 +1,5 @@
-"""导航引擎：实时方位 / 路标 / 站内导航（_Nav）、读数平滑（_Steady）、摄像头过滤（_CamFilter）
+"""导航线程（目录迁移 R2 从 app/engines/nav.py 搬来）：实时方位 / 路标 / 站内导航（_Nav）、读数平滑（_Steady）、
+摄像头过滤（_CamFilter）
 
 NV-B3 / NV-B4（2026-11-05）：HUD 记号（_NavMarker）、三个视图和导航日志都搬进本模块；以前经 _T 动态去 tasks/mining、
 tasks/navigation 取的东西，现在由 bootstrap 造对象时传进来（_NavMarker 的依赖、NavLinks），本模块不再动态导入 tasks。
@@ -23,8 +24,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol
 
-from ...runtime.results import ResultStore
-from ...runtime.session import (
+from ..results import ResultStore
+from ..session import (
     RunState,
     Session,
     SessionLoop,

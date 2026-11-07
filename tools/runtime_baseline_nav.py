@@ -475,7 +475,7 @@ def _ground_inputs(nav, data):
         "z": game[2],
         "n": "目标",
     }
-    nav_mod = importlib.import_module("astral_toolkit.app.engines.nav")
+    nav_mod = importlib.import_module("astral_toolkit.runtime.workers.navigation")
     steady = nav_mod._Steady()
     here = None
     last_view = None

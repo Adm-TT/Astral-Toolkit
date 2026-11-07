@@ -501,7 +501,7 @@ def test_nav_engine_station_branch(monkeypatch, tmp_path):
     n, ps = _station(tmp_path, monkeypatch)
     from astral_toolkit.tasks import navigation as t_nav
     from astral_toolkit.app import bus
-    from astral_toolkit.app.engines import nav as nav_mod
+    from astral_toolkit.runtime.workers import navigation as nav_mod
     from tests import nav_helpers
     from astral_toolkit.runtime.session import Session
 
@@ -691,7 +691,10 @@ def test_no_synthetic_input_in_nav_files():
         root / "system" / "showloc.py",
         root / "tasks" / "navigation.py",
         root / "app" / "overlay.py",
-        root / "app" / "engines" / "nav.py",
+        root / "runtime" / "workers" / "navigation.py",  # R2 起导航线程在这里
+        root / "runtime" / "workers" / "game_events.py",
+        root / "tasks" / "navigation_analysis.py",
+        root / "app" / "nav_marker.py",
         root / "runtime" / "workers" / "position.py",
         root / "tasks" / "position.py",
         root / "app" / "hud_state.py",

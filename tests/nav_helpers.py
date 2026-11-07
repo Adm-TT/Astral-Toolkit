@@ -7,7 +7,7 @@
 
 import dataclasses
 
-from astral_toolkit.app.engines import nav as navmod
+from astral_toolkit.runtime.workers import navigation as navmod
 from astral_toolkit.app.output import BusOutput
 from astral_toolkit.app.presenters import nav as present_nav
 from astral_toolkit.tasks import navigation as navigation_tasks

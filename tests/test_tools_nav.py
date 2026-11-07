@@ -364,7 +364,7 @@ def test_displayinfo_local_cross_checked_with_campos():
 def test_nav_bearing_is_steady_when_standing_still(monkeypatch, tmp_path):
     """站着不动：右上角那行有时认不出，位置也不在「游戏给的」和「推算的」之间来回跳，显示的方位不变"""
     from astral_toolkit.navigation import navigate as n
-    import astral_toolkit.app.engines.nav as nav_mod
+    import astral_toolkit.runtime.workers.navigation as nav_mod
     from astral_toolkit.app.presenters import nav as present_nav
 
     if not n.CACHE.exists():
@@ -416,7 +416,7 @@ def test_nav_bearing_is_steady_when_standing_still(monkeypatch, tmp_path):
 
 def test_bearing_text_and_deadband():
     from astral_toolkit.navigation import navigate as n
-    import astral_toolkit.app.engines.nav as nav_mod
+    import astral_toolkit.runtime.workers.navigation as nav_mod
 
     assert n.deg_text(359.6) == "000" and n.deg_text(5.2) == "005"
     st = nav_mod._Steady()
@@ -433,7 +433,7 @@ def test_nav_uses_display_info_waypoints_use_showlocation():
     """导航实时方位只读右上角调试信息（不往游戏里打字）；自定义路标只用 /showlocation（2026-10-23 用户要求）"""
     import inspect
     from astral_toolkit.tasks import navigation as t_nav
-    import astral_toolkit.app.engines.nav as nav_mod
+    import astral_toolkit.runtime.workers.navigation as nav_mod
 
     run = "\n".join(
         inspect.getsource(fn)
@@ -662,7 +662,7 @@ def test_parse_showlocation_clip():
 
 def test_camdir_sign_filter():
     """CamDir 漏了负号（-142 认成 142）：这次不用；转过 ±180° 是真的转了，照用"""
-    from astral_toolkit.app.engines.nav import _CamFilter
+    from astral_toolkit.runtime.workers.navigation import _CamFilter
 
     f = _CamFilter()
     assert f.check((23, 9, -142)) == (23, 9, -142)

@@ -611,7 +611,7 @@ def test_camdir_broken_row_rejected():
 
 def test_cam_filter_recovers_from_real_mirror_turn():
     """被拒的读数连着几帧都一样就收下，不会永久卡在旧值上（审查 2026-10-31）"""
-    from astral_toolkit.app.engines.nav import _CamFilter
+    from astral_toolkit.runtime.workers.navigation import _CamFilter
 
     f = _CamFilter()
     assert f.check((30, 0, 90), fast=True) == (30, 0, 90)

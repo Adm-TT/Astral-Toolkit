@@ -504,6 +504,83 @@ def test_position_worker_import_is_light():
     assert _run(code) == "True []"
 
 
+def test_navigation_workers_import_is_light():
+    """导入导航线程（runtime/workers/navigation）、游戏事件线程（runtime/workers/game_events）不带进 navigation、app、
+    tasks、system（目录迁移 R2）；再导入导航分析（tasks/navigation_analysis）也不起线程"""
+    code = (
+        "import sys, threading\n"
+        "n = threading.active_count()\n"
+        "import astral_toolkit.runtime.workers.navigation\n"
+        "import astral_toolkit.runtime.workers.game_events\n"
+        "heavy = ('astral_toolkit.navigation', 'astral_toolkit.app', 'astral_toolkit.tasks', 'astral_toolkit.system')\n"
+        "a = sorted(m for m in sys.modules if m.startswith(heavy))\n"
+        "import astral_toolkit.tasks.navigation_analysis\n"
+        "print(threading.active_count() == n, a)\n"
+    )
+    assert _run(code) == "True []"
+
+
+_NAV_ANALYSIS_FORBIDDEN = (
+    "astral_toolkit.app",
+    "astral_toolkit.runtime",
+    "astral_toolkit.bootstrap",
+    "astral_toolkit.infrastructure",
+    "astral_toolkit.system",
+)
+_NAV_MARKER_FORBIDDEN = (
+    "astral_toolkit.tasks",
+    "astral_toolkit.runtime",
+    "astral_toolkit.bootstrap",
+)
+
+
+def _nav_layer_violations(source, pkg, forbidden):
+    mods = list(_imports_in_source(source, pkg))
+    bare = [m for m in _bound_modules(source, pkg) if m in _BARE_FORBIDDEN]
+    dynamic = [
+        d for d in _dynamic_imports(source) if d != "open"
+    ]  # 写文件的 .open( 不算
+    return _forbidden(mods, forbidden) + bare + dynamic
+
+
+def test_navigation_analysis_and_marker_stay_in_their_layers():
+    """目录迁移 R2 拆出来的两块：导航分析（tasks/navigation_analysis）只往下转给 navigation，不碰界面、runtime、装配、
+    平台、系统，文件顶上只 import typing（navigate 调用时才取）；HUD 记号（app/nav_marker）不碰 tasks、runtime、装配。
+    都不许字符串导入、不许裸 import astral_toolkit 再走属性"""
+    path = _ROOT / "tasks" / "navigation_analysis.py"
+    source = path.read_text(encoding="utf-8")
+    assert (
+        _nav_layer_violations(source, "astral_toolkit.tasks", _NAV_ANALYSIS_FORBIDDEN)
+        == []
+    )
+    top = [
+        n for n in ast.parse(source).body if isinstance(n, (ast.Import, ast.ImportFrom))
+    ]
+    assert [ast.unparse(n) for n in top] == ["from typing import Any"]
+    path = _ROOT / "app" / "nav_marker.py"
+    source = path.read_text(encoding="utf-8")
+    assert (
+        _nav_layer_violations(source, "astral_toolkit.app", _NAV_MARKER_FORBIDDEN) == []
+    )
+    for bad in (
+        "def f():\n    from ..app import bus\n",
+        "from ..runtime.workers import navigation\n",
+        "import importlib\nimportlib.import_module('astral_toolkit.app')\n",
+        "import astral_toolkit\n",
+    ):
+        assert _nav_layer_violations(
+            bad, "astral_toolkit.tasks", _NAV_ANALYSIS_FORBIDDEN
+        ), bad
+    for bad in (
+        "from ..tasks import navigation\n",
+        "def f():\n    from ..runtime.workers import navigation\n",
+        "from .. import bootstrap\n",
+    ):
+        assert _nav_layer_violations(
+            bad, "astral_toolkit.app", _NAV_MARKER_FORBIDDEN
+        ), bad
+
+
 _INFRA_FORBIDDEN = (
     "astral_toolkit.app",
     "astral_toolkit.tasks",
@@ -1086,8 +1163,9 @@ def _nav_presenter_violations(source):
 
 
 def test_nav_engine_does_not_reach_into_tasks():
-    """导航引擎只在 bootstrap 接好的依赖上跑：不再静态 / 动态导入 tasks，也不再留 _T / _H。"""
-    path = _ROOT / "app/engines/nav.py"
+    """导航线程（目录迁移 R2 起在 runtime/workers/navigation）只在 bootstrap 接好的依赖上跑：不再静态 / 动态导入 tasks，
+    也不再留 _T / _H（runtime 门禁另外只许 runtime、contracts、core.run_records）。"""
+    path = _ROOT / "runtime/workers/navigation.py"
     source = path.read_text(encoding="utf-8")
     assert _nav_engine_violations(source) == [], path.name
     for bad in (

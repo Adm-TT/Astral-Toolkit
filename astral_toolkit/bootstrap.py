@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any, Callable
 from .app.engines.count import _Count
 from .app.engines.hover import _Hover
 from .app.engines.live import _Live
-from .app.engines.nav import (
+from .runtime.workers.navigation import (
     _CamFilter,
     _Nav,
     _Steady,

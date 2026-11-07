@@ -5,7 +5,7 @@ import time
 from types import SimpleNamespace
 from typing import Any
 
-from astral_toolkit.app.engines import nav as navmod
+from astral_toolkit.runtime.workers import navigation as navmod
 from astral_toolkit.app.presenters import nav as present_nav
 from astral_toolkit.tasks import navigation as navigation_tasks
 from astral_toolkit.runtime.session import RunState, Session, StopAttempt, StopInfo
@@ -332,7 +332,7 @@ def test_nav_stop_timeout_message(monkeypatch):
 def _fix_worker():
     import threading
 
-    from astral_toolkit.app.engines import nav as nav_mod
+    from astral_toolkit.runtime.workers import navigation as nav_mod
     from astral_toolkit.runtime.session import Session
 
     worker = nav_helpers.worker(object(), nav_mod._CamFilter(), threading.Lock())

@@ -6,7 +6,7 @@ import time
 from types import SimpleNamespace
 
 from astral_toolkit.app import bus, ui_stream
-from astral_toolkit.app.engines import nav as navmod
+from astral_toolkit.runtime.workers import navigation as navmod
 from tests import nav_helpers
 from astral_toolkit.app.output import BusOutput
 from astral_toolkit.navigation import navigate
