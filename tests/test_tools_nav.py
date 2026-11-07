@@ -1142,6 +1142,7 @@ def test_halo_services(monkeypatch, tmp_path):
                 lambda log=None: ((20.0e9, 0.0, 0.0), clip["t"]),
             )
             assert t_nav.fix_here(app.nav_deps)["band"] == 3
+            clip["t"] = "Coordinates: x:20300000001 y:0 z:0"
             monkeypatch.setattr(
                 showloc,
                 "showlocation",
@@ -1170,10 +1171,10 @@ def test_halo_services(monkeypatch, tmp_path):
             # 断开后按 F9：在航线上、比断开点往前 50 Mm，说多飞了多少（手动定位没法测起跳，只看离起点多远）
             A, B = halo.points()["ARC-L1"], halo.points()["CRU-L4"]
             k = (float(p["dropout"]) - 0.05) / float(p["total"])
-            g = tuple((B[i] - (B[i] - A[i]) * k) * 1e9 for i in range(3))
-            monkeypatch.setattr(
-                showloc, "showlocation", lambda log=None: (g, "Coordinates: on-route")
-            )
+            g = tuple(round((B[i] - (B[i] - A[i]) * k) * 1e9) for i in range(3))
+            on_route = f"Coordinates: x:{g[0]} y:{g[1]} z:{g[2]}"
+            clip["t"] = on_route
+            monkeypatch.setattr(showloc, "showlocation", lambda log=None: (g, on_route))
             assert t_nav.fix_here(app.nav_deps) and "多飞了 50 Mm" in hud["小行星带"]
 
             def swap(log=None):
@@ -1303,6 +1304,21 @@ def test_halo_overshoot_after_each_jump(monkeypatch, tmp_path):
         assert says(t_nav.halo_check(past, None, sess))
         marks = [x for x in log() if "（量子后第一次）" in x]
         assert len(marks) == 2 and all("比方案的断开点" in x for x in marks), log()
+        # 从起点跳了，却停在离航线 1 Gm 的地方（到目标的距离和断开点差不多）：不说，记号留给停在航线上的那一行
+        sess = pin()
+        t_nav._halo_jump(sess, True)
+        aside = list(drop)
+        aside[2] += 1e9
+        assert halo.route_off(A, B, aside) > t_nav.ROUTE_NEAR
+        assert not says(t_nav.halo_check(aside, None, sess))
+        assert says(t_nav.halo_check(drop, None, sess))
+        assert len([x for x in log() if "（量子后第一次）" in x]) == 3
+        # 断开距离不到 3 Gm 的路线（ARC-L5 → CRU-L4 第 5 带）：到了目标卖矿不说
+        r5 = halo.route("ARC-L5", "CRU-L4", 5, pts=pts)
+        assert r5 and r5["dropout"] * 1000 < halo.FAR_MM
+        r5["text"] = "方案"
+        t_nav._HALO.update(plan=r5, ends=(pts["ARC-L5"], B), near=t_nav._start_near(r5))
+        assert not says(t_nav.halo_check([v * 1e9 for v in B], None, sess))
 
         # 实时坐标喂给看量子的线程（读数每 0.25 秒一份，线程每 20 毫秒看一次）：每次起跳都刷回只剩方案；
         # 慢读数连续 1 秒才算停下，游戏卡一下不算；从起点跳的那趟停下后标出来（审查 2026-11-08 第三轮）
@@ -1356,18 +1372,21 @@ def test_halo_overshoot_after_each_jump(monkeypatch, tmp_path):
         hop = [drop[0] + 1e9, drop[1], drop[2]]
         slid = at(r["dropout"] - 0.03)  # 按 U 以后又往前滑了 30 Mm
         # 正常一趟 + 补跳：两次起跳各刷一次；从起点跳的那趟停下后标一行，补跳停下后照样说、不标
-        got = watch([start, s1, s2] + [drop] * 8 + [hop] + [past] * 8)
+        got = watch([start, s1, s2] + [drop] * 18 + [hop] + [past] * 18)
         assert got[0] == 2 and len(got[1]) == 1 and len(got[2]) == 2, got
         # 跳到一半游戏卡了两下（同一帧读两遍，两下隔了一秒多）：不算停下、不核对，还是这一跳，标在真正停下那行
         s3, s4 = (
             [start[0] + 3e9, start[1], start[2]],
             [start[0] + 4e9, start[1], start[2]],
         )
-        got = watch([start, s1, s1, s2, s3, s4, s4] + [drop] * 8)
+        got = watch([start, s1, s1, s2, s3, s4, s4] + [drop] * 18)
         assert got[0] == 1 and len(got[2]) == 1 and got[1] == got[2], got
         # 按 U 那一刻卡住，之后又滑了 30 Mm 才停：标的是停下那行（多飞 30 Mm），不是卡住那一下
         # （卡住那一下游戏日志恰好说「到了」：也只是让核对提前，还是等停下）
-        got = watch([start, s1, drop, drop, drop] + [slid] * 8, arrive=4)
+        got = watch([start, s1, drop, drop, drop] + [slid] * 18, arrive=4)
+        assert got[0] == 1 and len(got[1]) == 1 and "多飞了 30 Mm" in got[1][0], got
+        # 按 U 那一刻卡了 2 秒（掉进带里加载石头）再滑 30 Mm：照样标在停下那行
+        got = watch([start, s1] + [drop] * 9 + [slid] * 18)
         assert got[0] == 1 and len(got[1]) == 1 and "多飞了 30 Mm" in got[1][0], got
     finally:
         t_nav._HALO.update(
@@ -1394,13 +1413,21 @@ def test_nav_log_appends_from_threads_do_not_clobber(monkeypatch, tmp_path):
         for i in range(200):
             t_nav._wp_log(f"线程{k} 第{i}行 " + "x" * 80)
 
-    ths = [threading.Thread(target=write, args=(k,)) for k in range(4)]
+    def trace(k):  # 导航线程每算出一个位置记一行，写的也是这个文件
+        here = {"x": 1.0, "y": 2.0, "z": 3.0, "src": f"线程{k}"}
+        for _ in range(200):
+            t_nav.nav_log(here, {}, {})
+
+    ths = [threading.Thread(target=write, args=(k,)) for k in range(2)]
+    ths += [threading.Thread(target=trace, args=(k,)) for k in range(2)]
     for th in ths:
         th.start()
     for th in ths:
         th.join()
     lines = (tmp_path / "nav_log.txt").read_text(encoding="utf-8").splitlines()
-    assert len(lines) == 800 and all(x.endswith("x" * 80) for x in lines)
+    assert len(lines) == 800 and all(
+        x.endswith("x" * 80) or x.endswith("距离=0.00km") for x in lines
+    )
 
 
 def test_halo_where_edges():
