@@ -1,7 +1,12 @@
-"""导航引擎：实时方位 / 路标 / 站内导航（_Nav）、读数平滑（_Steady）、摄像头过滤（_CamFilter）、游戏事件（_GameEvents）
+"""导航线程（目录迁移 R2 从 app/engines/nav.py 搬来）：实时方位 / 路标 / 站内导航（_Nav）、读数平滑（_Steady）、
+摄像头过滤（_CamFilter）
 
 NV-B3 / NV-B4（2026-11-05）：HUD 记号（_NavMarker）、三个视图和导航日志都搬进本模块；以前经 _T 动态去 tasks/mining、
 tasks/navigation 取的东西，现在由 bootstrap 造对象时传进来（_NavMarker 的依赖、NavLinks），本模块不再动态导入 tasks。
+
+目录迁移 R2（2026-11-07）：本模块只留线程、会话和一轮的先后。导航分析（analysis：tasks/navigation_analysis）、
+排版（views：app/presenters/nav 的三个视图、活动磁贴、读位置的说法）、导航日志那一行（NavLinks.trace）都由
+bootstrap 接进来；HUD 记号搬到 app/nav_marker.py，游戏事件线程搬到 runtime/workers/game_events.py。
 
 RT-B5b：导航线程 / 停止 / 提交边界 / 重试全部交给 runtime/session.py 的 SessionLoop；
 _Nav 只保留对外兼容外壳，_NavWorker 只写一轮业务，会话可变状态放在 _NavCtx。
@@ -14,20 +19,13 @@ _Nav 只保留对外兼容外壳，_NavWorker 只写一轮业务，会话可变�
 
 from __future__ import annotations
 
-import sys
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any, Callable, Protocol
 
-from .. import bus
-from ..output import BusOutput
-from ..presenters import nav as _present_nav
-from ..presenters.nav import activity as _nav_activity
-from ...navigation import marker as _marker
-from ...navigation import views as _views
-from ...runtime.results import ResultStore
-from ...runtime.session import (
+from ..results import ResultStore
+from ..session import (
     RunState,
     Session,
     SessionLoop,
@@ -36,10 +34,7 @@ from ...runtime.session import (
     Tick,
 )
 
-WIN = sys.platform == "win32"
-
 LIVE_STALE = 3.0  # 右上角多少秒没读到才算读不到（这时才用玩家自己输的 /showlocation）
-DI_HELP = "未检测到右上角位置信息：在游戏中按 ~ 打开控制台，输入 r_DisplayInfo 2 后回车"
 _BASE_FPS = 5  # 导航帧数取不到时按 5（设置默认值）
 CLIP_EVERY = 0.3  # 地面导航没有新读数时多久看一次剪贴板（以前每 3 圈一次、一圈 0.1 秒；帧数调高后一圈变短，改按时间，NV-B5）
 NAV_LOG_EVERY = 0.2  # 导航日志最多每 0.2 秒一行（帧数调高后 300 KB 不至于十几秒就写满；5 帧时和以前一样）
@@ -47,6 +42,10 @@ NAV_LOG_EVERY = 0.2  # 导航日志最多每 0.2 秒一行（帧数调高后 300
 
 def _base_fps() -> int:
     return _BASE_FPS
+
+
+def _quiet_trace(here: Any, info: Any, view: Any) -> None:
+    return None
 
 
 @dataclass(frozen=True)
@@ -65,6 +64,8 @@ class NavLinks:
     ]  # 读一项设置（tasks.navigation.settings_key：空值也按没设）
     # 导航帧数（设置页「导航帧数」；bootstrap 传进来时已限在 5–30）
     fps: Callable[[], int] = _base_fps
+    # 每次算出新位置往导航日志写一行（tasks/navigation.nav_log，R2 起接进来）；没接就不写
+    trace: Callable[[Any, Any, Any], Any] = _quiet_trace
 
 
 def _quiet_log(msg: str) -> None:
@@ -88,69 +89,42 @@ def _links_fps(links: NavLinks) -> int:
         return _BASE_FPS
 
 
-def nav_tip(on, last_ok, now, has_shown, di_help):
-    """导航时右上角读位置的说法 → (窗口状态, 悬浮窗末尾那行)。窗口和悬浮窗说法一致（审查 2026-10-30）：
-    读得到：实时；8–30 秒前读到过而且有上次结果：标「暂停更新」，不冒充实时；刚开始还没结果：等待；
-    更久没读到 / 从没读到：教开调试信息"""
-    if on:
-        return "右上角调试信息：实时识别位置", ""
-    if last_ok and now - last_ok < 30:
-        if has_shown:
-            return (
-                "右上角位置暂时认不出，显示的是上次结果",
-                "\n位置暂停更新，以上是上次结果",
-            )
-        return "等待右上角位置信息…", ""
-    return (
-        di_help + "（或在聊天框输入 /showlocation）",
-        "\n读不到位置：控制台输入 r_DisplayInfo 2，或聊天框输入 /showlocation",
-    )
+class NavAnalysis(Protocol):
+    """一轮导航要用的分析（目录迁移 R2）：tasks/navigation_analysis 这个模块实现，bootstrap 接进来，线程不 import 它"""
+
+    def load(self) -> Any: ...
+    def label(self, target: Any) -> Any: ...
+    def read_clipboard(self) -> Any: ...
+    def parse_clip(self, clip: Any) -> Any: ...
+    def fix_guide(self, *args: Any, **kwargs: Any) -> Any: ...
+    def fix_text(self, *args: Any, **kwargs: Any) -> Any: ...
+    def locate(self, *args: Any, **kwargs: Any) -> Any: ...
+    def is_city(self, target: Any) -> Any: ...
+    def is_space(self, target: Any) -> Any: ...
+    def station_leg(self, *args: Any, **kwargs: Any) -> Any: ...
+    def station_text(self, *args: Any, **kwargs: Any) -> Any: ...
+    def space_text(self, *args: Any, **kwargs: Any) -> Any: ...
+    def city_leg(self, *args: Any, **kwargs: Any) -> Any: ...
+    def near_text(self, *args: Any, **kwargs: Any) -> Any: ...
+    def short(self, *args: Any, **kwargs: Any) -> Any: ...
+    def steer(self, *args: Any, **kwargs: Any) -> Any: ...
+    def steer_text(self, *args: Any, **kwargs: Any) -> Any: ...
+    def target_global(self, *args: Any, **kwargs: Any) -> Any: ...
+    def city_near_m(self) -> float: ...
 
 
-def _space_view(g, target, data):
-    """导航去太空路标：没有南北，给直线距离、先量子跳到哪、对准哪个标记偏几度"""
-    return _present_nav.space_view(_views.space_facts(g, target, data), g, target, data)
+@dataclass(frozen=True)
+class NavViews:
+    """导航线程要的排版（目录迁移 R2）：app/presenters/nav 实现，bootstrap 接进来"""
 
-
-def _station_view(g, target, data, when=None, prev=None, info=None):
-    """拉格朗日点 / 跳跃点空间站里走路：距离按米、按站自己的朝向分上下；转向靠机头那一行和屏幕记号"""
-    return _present_nav.station_view(
-        _views.station_facts(g, target, data, when, prev, info),
-        g,
-        target,
-        data,
-        when,
-    )
-
-
-def _nav_view(here, target, data, steady=None, prev=None):
-    return _present_nav.ground_view(
-        _views.ground_facts(here, target, data, prev), here, target, data, steady
-    )
-
-
-def nav_log(here, info, view):
-    """导航时每次算出新位置记一行（logs/nav_log.txt），方向不对时用来查是哪一步的问题"""
-    try:
-        from ...core import paths
-
-        p = paths.log("nav_log.txt")
-        if p.exists() and p.stat().st_size > 300_000:
-            p.write_text(
-                "\n".join(p.read_text(encoding="utf-8").splitlines()[-1000:]) + "\n",
-                encoding="utf-8",
-            )
-        loc = info.get("local")
-        line = (
-            f"{time.strftime('%H:%M:%S')} 来源={here.get('src', '?')} 核对={info.get('local_ok')} "
-            f"游戏局部={tuple(round(v, 4) for v in loc) if loc else None} "
-            f"用的=({here['x']:.4f}, {here['y']:.4f}, {here['z']:.4f}) "
-            f"方位={view.get('raw_bearing', 0):.1f}° 显示={view.get('bearing', 0):.0f}° 距离={view.get('surface', 0):.2f}km"
-        )
-        with open(p, "a", encoding="utf-8") as f:
-            f.write(line + "\n")
-    except Exception:
-        pass
+    space: Callable[..., Any]  # 太空路标（实时定位）：space_view_of
+    station: Callable[..., Any]  # 空间站里走路：station_view_of
+    ground: Callable[..., Any]  # 地面导航：ground_view_of
+    activity: Callable[[Any, Any, Any], Any]  # 活动磁贴
+    tip: Callable[
+        [Any, Any, float, bool, str], tuple[str, str]
+    ]  # 右上角读位置的说法：nav_tip
+    di_help: str  # 读不到右上角时教开调试信息的那句
 
 
 class _Steady:
@@ -209,136 +183,6 @@ class _CamFilter:
             )
         self.held, self.count = None, 0
         return cam
-
-
-MARKER_STALE = 4.0  # 右上角多少秒没读到就收起导航记号（城里偶尔几次读不到，1.5 秒就收会一直闪，2026-10-27 实测）
-CAM_HOLD = 1.0  # 这一帧坐标有、镜头方向没读出：这么久以内读到的镜头方向接着用（按它自己的读取时间算，不当成新的）
-
-
-def marker_diag(why):
-    """导航记号收起 / 重新出来时记一行进 logs/di_log.txt（和读右上角的诊断放一起对时间，老大 11-03 实测「记号还会消失」）"""
-    try:
-        from ...core import paths
-
-        with paths.log("di_log.txt").open("a", encoding="utf-8") as f:
-            f.write(
-                f"{time.strftime('%H:%M:%S')}.{int(time.time() * 1000) % 1000:03d} "
-                f"记号 {'收起：' + why if why else '显示'}\n"
-            )
-    except Exception:
-        pass
-
-
-class _NavMarker:
-    """导航 HUD 记号（NV-B3 从 tasks/mining 搬来，逻辑没改）：按位置、镜头和设置决定画不画，画时把投影交给悬浮窗。"""
-
-    def __init__(
-        self,
-        positions: Any,
-        *,
-        mining_running: Callable[[], bool],
-        foreground: Callable[[], bool],
-        game_area: Callable[[], dict[str, Any]],
-        last_fov: Callable[[], Any],
-        settings: Callable[[], dict[str, Any]],
-        hud: Callable[[], Any],
-        diag: Callable[[Any], None],
-        clock: Callable[[], float] | None = None,
-    ) -> None:
-        self._pos = positions
-        self._mining_running = mining_running
-        self._foreground = foreground
-        self._game_area = game_area
-        self._last_fov = last_fov
-        self._settings = settings
-        self._hud = hud
-        self._diag = diag
-        self._clock = clock if clock is not None else time.time
-        self.cfg: dict[str, Any] = {"on": True, "at": 0.0}
-        self.cam_last: dict[str, Any] = {"t": 0.0, "cam": None}
-        self.why: Any = None
-
-    def enabled(self):
-        """设置里的 nav_marker（两秒读一次，导航每 0.1 秒问一次）"""
-        if self._clock() - self.cfg["at"] > 2:
-            self.cfg["at"] = self._clock()
-            try:
-                self.cfg["on"] = self._settings().get("nav_marker", True) is not False
-            except Exception:
-                self.cfg["on"] = True
-        return self.cfg["on"]
-
-    def tick(self, target, data, state, shown, ref=None):
-        """导航记号（2026-10-27）：每圈先判断该不该显示（还没算出位置、到了、跨星系、1.5 秒没读到、切出游戏、玩家关了、
-        采矿助手开着——记号窗口读屏时会被涂黑，会挡住扫描面板和雷达信号），不该显示就收起；
-        该显示且右上角有新截图（停着只转镜头也算）就按镜头朝向和视角重算位置。返回这次画的截图时间，收起了返回 None"""
-        from ...navigation import navigate as n
-
-        t, g, info = self._pos.snapshot().current
-        h = state.get("here")
-        # 镜头方向来自读屏，没有类型；走到投影那一步时一定有值
-        cam: Any = _marker.camera_hold(
-            (info or {}).get("camdir"), t, self.cam_last, CAM_HOLD
-        )
-        try:
-            fg = self._foreground()
-        except Exception:
-            fg = True
-        why = _marker.hidden_reason(
-            h,
-            g,
-            cam,
-            t,
-            now=self._clock,
-            stale=MARKER_STALE,
-            foreground=fg,
-            mining_running=self._mining_running,
-            enabled=self.enabled,
-        )
-        if why != self.why:
-            self.why = why
-            self._diag(why)
-        if why:
-            if shown is not None:
-                self._draw(None)
-            return None
-        if t == shown:
-            return shown
-        try:
-            a = self._game_area()
-            fov = _marker.pick_fov(info.get("fov"), self._last_fov)
-            tg = n.target_global(target, data, info.get("t"), ref)
-            pr = n.project(
-                g,
-                cam,
-                fov,
-                tg,
-                a["width"],
-                a["height"],
-                vertical=self._setting("fov_axis", "v") != "h",
-            )
-            label = _present_nav.marker_label(pr["dist"])
-            model = _present_nav.marker_model(a, pr, label)
-            self._draw(model)
-            return t
-        except Exception:
-            self._draw(None)
-            return None
-
-    def _setting(self, key, default=None):
-        try:
-            return self._settings().get(key, default)
-        except Exception:
-            return default
-
-    def _draw(self, data):
-        try:
-            self._hud().marker(data)
-        except Exception:  # 测试里的假悬浮窗没有这个接口
-            pass
-
-    def clear(self):
-        self._draw(None)
 
 
 class _NoMarker:
@@ -454,8 +298,13 @@ class _NavWorker:
         results: ResultStore | None = None,
         marker: Any = None,
         links: NavLinks | None = None,
+        *,
+        analysis: NavAnalysis,
+        views: NavViews,
     ) -> None:
         self._pos = positions
+        self._an = analysis
+        self._views = views
         self._cam_filter = cam_filter
         self._marker_lock = marker_lock
         self._results = results if results is not None else ResultStore()
@@ -494,7 +343,7 @@ class _NavWorker:
             "status": None,
             "stale_since": None,
         }
-        return [("ui", "ui.activity", _nav_activity(session.id, payload, view))]
+        return [("ui", "ui.activity", self._views.activity(session.id, payload, view))]
 
     def stop_ops(
         self, session: Session | None, info: StopInfo
@@ -529,9 +378,7 @@ class _NavWorker:
             raise RuntimeError("导航会话缺少 payload")
         ctx = _NavCtx(session.id, payload)
         if not payload.space_mode:
-            from ...navigation import navigate as n
-
-            ctx.data = n.load()
+            ctx.data = self._an.load()
         with self._ctx_lock:
             self._ctx = ctx
         return ctx
@@ -597,7 +444,7 @@ class _NavWorker:
         return self._ground_tick(session, ctx, now)
 
     def _first_tick(self, session: Session, ctx: _NavCtx) -> bool:
-        from ...navigation import navigate as n
+        n = self._an
 
         target = ctx.payload.target
         if ctx.payload.space_mode:
@@ -611,7 +458,7 @@ class _NavWorker:
                 "help": "",
             }
             ctx.state = state
-            activity = _nav_activity(
+            activity = self._views.activity(
                 session.id,
                 ctx.payload,
                 {
@@ -641,12 +488,12 @@ class _NavWorker:
             "active": True,
             "target": ctx.payload.target_row,
             "status": "等待右上角位置信息…",
-            "help": DI_HELP,
+            "help": self._views.di_help,
             "msgs": [],
             "here": None,
         }
         ctx.state = state
-        activity = _nav_activity(
+        activity = self._views.activity(
             session.id,
             ctx.payload,
             {
@@ -700,7 +547,7 @@ class _NavWorker:
                 req.done.set()
 
     def _space_tick(self, session: Session, ctx: _NavCtx, now: float) -> Tick:
-        from ...navigation import navigate as n
+        n = self._an
 
         clip = n.read_clipboard()
         g = n.parse_clip(clip)
@@ -712,7 +559,7 @@ class _NavWorker:
         self, session: Session, ctx: _NavCtx, g: Any, clip: Any = None
     ) -> Any:
         """F9 / 剪贴板拿到一次 /showlocation：只在这里算，随后同一批 loop.commit 发旧通道"""
-        from ...navigation import navigate as n
+        n = self._an
 
         if not ctx.payload.space_mode:
             return None
@@ -765,7 +612,7 @@ class _NavWorker:
             "help": "",
             "at": time.strftime("%H:%M:%S"),
         }
-        activity = _nav_activity(
+        activity = self._views.activity(
             session.id,
             ctx.payload,
             {
@@ -796,7 +643,7 @@ class _NavWorker:
         return view
 
     def _ground_tick(self, session: Session, ctx: _NavCtx, now: float) -> Tick:
-        from ...navigation import navigate as n
+        n = self._an
 
         fps = _links_fps(self._links)
         if fps != ctx.fps:  # 帧数变了（设置页改了）：告诉位置服务按新的读
@@ -864,7 +711,7 @@ class _NavWorker:
                     inner_zone,
                 )
                 ctx.prev_goal = goal
-                ctx.state["here"] = _station_view(
+                ctx.state["here"] = self._views.station(
                     g_di,
                     goal,
                     data,
@@ -891,7 +738,7 @@ class _NavWorker:
                 if ctx.state["here"].get("steps"):
                     ctx.shown += "\n" + "\n".join(str(s) for s in steps)
             elif n.is_space(target):
-                ctx.state["here"] = _space_view(g_di, target, data)
+                ctx.state["here"] = self._views.space(g_di, target, data)
                 ctx.shown = str(n.space_text(g_di, target, data))
             else:
                 if n.is_city(target):
@@ -901,7 +748,7 @@ class _NavWorker:
                 if goal is not target and ctx.prev_goal is not goal:
                     ctx.steady = _Steady()
                 ctx.prev_goal = goal
-                ctx.state["here"] = _nav_view(
+                ctx.state["here"] = self._views.ground(
                     here, goal, data, ctx.steady, prev=ctx.state.get("here")
                 )
                 if goal is not target:
@@ -912,7 +759,7 @@ class _NavWorker:
                     ctx.state["here"].pop("steps", None)
                 near = n.near_text(here, data)
                 ctx.shown = str(
-                    n._short(
+                    n.short(
                         here,
                         goal,
                         ctx.state["here"].get("bearing"),
@@ -924,13 +771,13 @@ class _NavWorker:
                 # 停着不动每帧都来，日志只记坐标变了的；最多每 0.2 秒一行
                 if not still and now - ctx.log_at >= NAV_LOG_EVERY:
                     ctx.log_at = now
-                    nav_log(here, info, ctx.state["here"])
+                    self._links.trace(here, info, ctx.state["here"])
             cam = self._cam_filter.check(
                 info.get("camdir"), fast=bool(info.get("fast"))
             )
             close = bool(
                 ctx.state["here"].get("city")
-                and (ctx.state["here"].get("direct_m") or 0) < n.CITY_NEAR_M
+                and (ctx.state["here"].get("direct_m") or 0) < n.city_near_m()
             )
             if (
                 cam
@@ -954,12 +801,12 @@ class _NavWorker:
             fresh = True
             ctx.last_ok = time.time()
         head = f"→ {n.label(target)}"
-        stat_text, tip = nav_tip(
+        stat_text, tip = self._views.tip(
             snap.reader_active,
             snap.reader_ok_at,
             time.time(),
             bool(ctx.shown),
-            DI_HELP,
+            self._views.di_help,
         )
         pub: dict[str, Any] | None = None
         if fresh or ctx.state.get("status") != stat_text:
@@ -982,7 +829,11 @@ class _NavWorker:
                 "stale_since": stale_since,
             }
             ops.append(
-                ("ui", "ui.activity", _nav_activity(session.id, ctx.payload, act_view))
+                (
+                    "ui",
+                    "ui.activity",
+                    self._views.activity(session.id, ctx.payload, act_view),
+                )
             )
         ops.append(("hud.set", "导航", f"{head}\n{ctx.shown or '等待位置信息…'}" + tip))
         ok = self._require_loop().commit(session, *ops)
@@ -1087,8 +938,10 @@ class _Nav:
         cam_filter: Any,
         steady: _Steady | None,
         results: ResultStore | None = None,
-        output: Any = None,
         *,
+        output: Any,
+        analysis: NavAnalysis,
+        views: NavViews,
         clock: Callable[[], float] | None = None,
         closing: Callable[[], bool] | None = None,
         join_timeout: float = 2.0,
@@ -1101,6 +954,7 @@ class _Nav:
         self.target: Any = None
         self.space_mode: bool = False
         self._positions = positions
+        self._analysis = analysis
         self._marker = marker if marker is not None else _NoMarker()
         self._links = links if links is not None else QUIET_LINKS
         self._stop_ev_override: Any = None
@@ -1113,12 +967,14 @@ class _Nav:
             results,
             self._marker,
             links=self._links,
+            analysis=analysis,
+            views=views,
         )
         factory = _loop_factory if _loop_factory is not None else SessionLoop
         self.loop: Any = factory(
             self._worker,
             results=results,
-            output=output if output is not None else BusOutput(),
+            output=output,
             foreground=lambda: True,
             clock=clock,
             join_timeout=join_timeout,
@@ -1152,13 +1008,11 @@ class _Nav:
     def target_label(self) -> str:
         if not self.target:
             return ""
-        from ...navigation.navigate import label
-
-        return label(self.target)
+        return self._analysis.label(self.target)
 
     def use_space(self, target: Any) -> bool:
         """「手动定位」（只用 /showlocation 的坐标）还是「实时定位」（读右上角）：玩家在导航页自己切，默认实时。
-        太空路标在实时定位下按星系坐标给距离和机头转向（_space_view + steer）"""
+        太空路标在实时定位下按星系坐标给距离和机头转向（views.space + steer）"""
         mode = self._links.setting("nav_mode", "auto")
         return mode == "space"
 
@@ -1259,55 +1113,3 @@ class _Nav:
         if not req.done.wait(1.0) and not self._worker.cancel_fix(req):
             req.done.wait(5.0)  # 已在处理中：等它做完，返回值如实
         return req.result
-
-
-class _GameEvents:
-    """读游戏日志里的量子、管辖区、禁火区、重生事件（2026-10-27）：推给窗口（gamelog），量子一到就调注入回调"""
-
-    def __init__(self, on_qt_arrived: Callable[[], None] | None = None) -> None:
-        self.thread: threading.Thread | None = None
-        self.last: dict[str, tuple[float, Any]] = {}
-        self.arrived_at: float = 0.0
-        self.stop_ev = threading.Event()
-        self.on_qt_arrived = on_qt_arrived
-
-    def start(self) -> None:
-        if WIN and (self.thread is None or not self.thread.is_alive()):
-            self.stop_ev.clear()
-            self.thread = threading.Thread(
-                target=self._run, daemon=True, name="game-events"
-            )
-            self.thread.start()
-
-    def request_stop(self) -> None:
-        self.stop_ev.set()
-
-    def join(self, timeout: float | None = None) -> bool:
-        thread = self.thread
-        if thread is None:
-            return True
-        if thread is threading.current_thread():
-            return not thread.is_alive()
-        thread.join(timeout)
-        return not thread.is_alive()
-
-    def _run(self) -> None:
-        from ...system.gamelog import EventTail
-
-        tail = EventTail()
-        while not self.stop_ev.is_set():
-            try:
-                for t, k, v in tail.poll():
-                    self.last[k] = (t, v)
-                    if k == "qt_arrived":
-                        self.arrived_at = time.time()
-                        if self.on_qt_arrived is not None:
-                            try:
-                                self.on_qt_arrived()
-                            except Exception:
-                                pass
-                    bus.publish("gamelog", {"kind": k, "value": v, "t": t})
-            except Exception:
-                pass
-            if self.stop_ev.wait(0.5):
-                break

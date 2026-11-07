@@ -208,7 +208,7 @@ def test_live_gets_closing_before_new_session():
 
 
 def test_nav_gets_closing_before_new_session():
-    from astral_toolkit.app.engines.nav import _Nav
+    from tests.nav_helpers import nav as _Nav  # 分析、排版、output 由测试工具补上（R2）
 
     captured = {}
 

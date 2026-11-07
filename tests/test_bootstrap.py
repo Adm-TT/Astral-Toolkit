@@ -13,7 +13,7 @@ from astral_toolkit import bootstrap
 from astral_toolkit.app import lifecycle_gate
 from astral_toolkit.app.engines import count as count_engine
 from astral_toolkit.app.engines import live as live_engine
-from astral_toolkit.app.engines import nav as navmod
+from astral_toolkit.app import nav_marker
 from astral_toolkit.crafting import stockplaces
 from astral_toolkit.mining import screen as mining_screen
 from astral_toolkit.mining import signals as mining_signals
@@ -182,7 +182,7 @@ def test_nav_marker_is_wired_by_bootstrap():
     app = bootstrap.build("test")
     try:
         marker = app.nav._marker
-        assert isinstance(marker, navmod._NavMarker)
+        assert isinstance(marker, nav_marker._NavMarker)
         assert app.nav._worker._marker is marker
         assert marker._pos is app.pos
         assert marker._mining_running == app.live.running
@@ -727,3 +727,57 @@ def test_search_warmup_thread_builds_index_in_background(monkeypatch):
         assert hooked == [] and not t.is_alive()
     finally:
         bootstrap.shutdown(app, budget=0.2)
+
+
+def test_nav_analysis_views_trace_and_game_events_are_wired_by_bootstrap(monkeypatch):
+    """导航线程（目录迁移 R2）要的东西都由 bootstrap 接：分析是 tasks/navigation_analysis 这个模块，排版是
+    app/presenters/nav 那几个，导航日志那一行接 tasks/navigation.nav_log；游戏事件线程只在 Windows 起、
+    量子到达让定位马上读、事件推总线「gamelog」、读日志的东西到线程开始时才造"""
+    import sys
+
+    from astral_toolkit import bootstrap
+    from astral_toolkit.app import bus
+    from astral_toolkit.app.presenters import nav as present_nav
+    from astral_toolkit.system import gamelog
+    from astral_toolkit.tasks import navigation as navigation_tasks
+    from astral_toolkit.tasks import navigation_analysis
+
+    assert bootstrap._nav_analysis() is navigation_analysis
+    v = bootstrap._nav_views()
+    assert (v.space, v.station, v.ground, v.activity, v.tip, v.di_help) == (
+        present_nav.space_view_of,
+        present_nav.station_view_of,
+        present_nav.ground_view_of,
+        present_nav.activity,
+        present_nav.nav_tip,
+        present_nav.DI_HELP,
+    )
+    assert bootstrap._nav_links(object()).trace is navigation_tasks.nav_log
+
+    made, sent = [], []
+    monkeypatch.setattr(gamelog, "EventTail", lambda: made.append(1) or "tail")
+    monkeypatch.setattr(
+        bus, "publish", lambda channel, data: sent.append((channel, data))
+    )
+
+    def read_now():
+        return None
+
+    ev = bootstrap._game_events(SimpleNamespace(request_read_now=read_now))
+    assert ev._enabled is (sys.platform == "win32")
+    assert ev.on_qt_arrived is read_now
+    assert made == []  # 装配时不造读日志的东西
+    assert ev._tail() == "tail" and made == [1]
+    ev._publish({"kind": "k"})
+    assert sent == [("gamelog", {"kind": "k"})]
+
+    from astral_toolkit.runtime.workers.game_events import GameEventsWorker
+
+    app = bootstrap.build("test")  # 真装配出来的也是这几样（不只工厂函数对）
+    worker = app.nav._worker
+    assert worker._an is navigation_analysis
+    assert worker._views == bootstrap._nav_views()
+    assert worker._links.trace is navigation_tasks.nav_log
+    assert isinstance(app.game_events, GameEventsWorker)
+    assert app.game_events.on_qt_arrived == app.pos.request_read_now
+    assert app.game_events._enabled is (sys.platform == "win32")

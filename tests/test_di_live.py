@@ -198,12 +198,12 @@ def test_grid_miss_still_yields_to_mining(monkeypatch):
 
 def test_marker_keeps_last_camdir_for_one_frame():
     """坐标有、这一帧镜头方向没读出：1 秒内读到的接着用，记号不闪；超过 1 秒才收起，并记下收起原因（老大 11-03 实测）"""
-    from astral_toolkit.app.engines import nav as navmod
+    from astral_toolkit.app import nav_marker
 
     hud, diag = [], []
     pos = SimpleNamespace(current=(0.0, None, None))
     positions = SimpleNamespace(snapshot=lambda: SimpleNamespace(current=pos.current))
-    marker = navmod._NavMarker(
+    marker = nav_marker._NavMarker(
         positions,
         mining_running=lambda: False,
         foreground=lambda: True,

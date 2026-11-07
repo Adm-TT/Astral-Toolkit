@@ -195,7 +195,8 @@ def test_first_tick_waits_by_fps_while_waiting_for_position(monkeypatch):
     """还没拿到第一个位置时：地面导航也按帧数等，手动定位照旧 0.3 秒（控制台补）"""
     import threading
 
-    from astral_toolkit.app.engines import nav as navmod
+    from astral_toolkit.runtime.workers import navigation as navmod
+    from tests import nav_helpers
     from astral_toolkit.runtime.session import Session
 
     links = navmod.NavLinks(
@@ -205,7 +206,7 @@ def test_first_tick_waits_by_fps_while_waiting_for_position(monkeypatch):
         setting=lambda key, default: default,
         fps=lambda: 30,
     )
-    worker = navmod._NavWorker(
+    worker = nav_helpers.worker(
         SimpleNamespace(),
         SimpleNamespace(check=lambda cam, fast=False: cam),
         threading.Lock(),
@@ -238,7 +239,8 @@ def test_ground_tick_waits_by_fps_when_commit_refused(monkeypatch):
     """提交被拒（会话已停）那一圈也按帧数等（控制台补）"""
     import threading
 
-    from astral_toolkit.app.engines import nav as navmod
+    from astral_toolkit.runtime.workers import navigation as navmod
+    from tests import nav_helpers
     from astral_toolkit.navigation import navigate as n
     from astral_toolkit.runtime.session import Session
 
@@ -264,7 +266,7 @@ def test_ground_tick_waits_by_fps_when_commit_refused(monkeypatch):
         reader_ok_at=0.0,
     )
     pos = SimpleNamespace(snapshot=lambda: snap, set_demand=lambda *a, **k: None)
-    worker = navmod._NavWorker(
+    worker = nav_helpers.worker(
         pos,
         SimpleNamespace(check=lambda cam, fast=False: cam),
         threading.Lock(),
