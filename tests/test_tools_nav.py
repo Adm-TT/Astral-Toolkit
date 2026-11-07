@@ -1187,6 +1187,107 @@ def test_halo_services(monkeypatch, tmp_path):
         assert "error" in t_nav.fix_here(app.nav_deps)  # 什么都没挂：只提示，不打字
 
 
+def test_halo_overshoot_only_after_leaving_start(monkeypatch, tmp_path):
+    """「多飞 / 少飞」只在离开方案起点（跳过了）以后说，起跳前不说；进量子时悬浮窗刷回只剩方案；
+    导航日志标出量子后第一次，跟上次一样的核对不再记（审查 2026-11-08）"""
+    import time as _t
+    from types import SimpleNamespace
+
+    from astral_toolkit.core import paths
+    from astral_toolkit.navigation import halo
+    from astral_toolkit.navigation import navigate as n
+    from astral_toolkit.tasks import navigation as t_nav
+
+    if not n.CACHE.exists():
+        pytest.skip("没有星图数据")
+    pts = halo.points()
+    if "ARC-L1" not in pts or "CRU-L4" not in pts:
+        pytest.skip("没有星图数据")
+    monkeypatch.setattr(paths, "log", lambda name: tmp_path / name)
+    hud = {}
+    monkeypatch.setattr(t_nav, "_hud_set", lambda k, v, *a: hud.__setitem__(k, v))
+    monkeypatch.setattr(
+        halo,
+        "points",
+        lambda: (_ for _ in ()).throw(AssertionError("核对时查了星图库")),
+    )
+    r = halo.route("ARC-L1", "CRU-L4", 5, pts=pts)
+    r["text"] = "方案"
+    A, B = pts["ARC-L1"], pts["CRU-L4"]
+    k = r["dropout"] / r["total"]  # 方案的断开点：离目标还剩 dropout
+    drop = [(B[i] - (B[i] - A[i]) * k) * 1e9 for i in range(3)]
+    k2 = (r["dropout"] - 0.05) / r["total"]  # 再往前 50 Mm
+    past = [(B[i] - (B[i] - A[i]) * k2) * 1e9 for i in range(3)]
+
+    def pin():
+        sess = t_nav._HALO["sess"] + 1
+        t_nav._HALO.update(
+            plan=r,
+            sess=sess,
+            last=None,
+            seen=None,
+            ends=(A, B),
+            qt=False,
+            first=True,
+            logged=None,
+        )
+        return sess
+
+    try:
+        sess = pin()
+        w = t_nav.halo_check([v * 1e9 for v in A], None, sess)  # 挂上方案、还在起点
+        assert "比方案的断开点" not in w["text"] and "over" not in w
+        assert "比方案的断开点" not in hud["小行星带"]
+        w = t_nav.halo_check(drop, None, sess)
+        assert abs(w["over"]) <= 1 and "比方案的断开点" in hud["小行星带"]
+        assert (
+            t_nav.halo_check(drop, None, sess)["over"] == w["over"]
+        )  # 一样的：日志不再记
+        w = t_nav.halo_check(past, None, sess)
+        assert w["over"] == 50 and "多飞了 50 Mm" in w["text"]
+        logged = [
+            x
+            for x in (tmp_path / "nav_log.txt").read_text(encoding="utf-8").splitlines()
+            if "小行星带核对" in x
+        ]
+        assert len(logged) == 3
+        assert ["（量子后第一次）" in x for x in logged] == [False, True, False]
+
+        # 量子途中：读到的坐标每秒几万公里 → 悬浮窗刷回只剩方案，起跳前那次核对不冻在上面
+        sess = pin()
+        x = [0.0]
+
+        def moving(deps):
+            x[0] += 1e9
+            return _t.time(), (A[0] * 1e9 + x[0], A[1] * 1e9, A[2] * 1e9), None
+
+        monkeypatch.setattr(t_nav, "_pos_current", moving)
+        monkeypatch.setattr(n, "read_clipboard", lambda: "")
+        deps = SimpleNamespace(
+            nav=SimpleNamespace(target=None, space_mode=False),
+            game_events=SimpleNamespace(arrived_at=0.0),
+        )
+        ev = __import__("threading").Event()
+        th = __import__("threading").Thread(
+            target=t_nav._halo_watch, args=(deps, sess, ev), daemon=True
+        )
+        th.start()
+        _t.sleep(1.2)
+        ev.set()
+        th.join(2)
+        assert t_nav._HALO["qt"] and hud["小行星带"] == "方案"
+    finally:
+        t_nav._HALO.update(
+            plan=None,
+            last=None,
+            seen=None,
+            ends=None,
+            qt=False,
+            first=True,
+            logged=None,
+        )
+
+
 def test_halo_where_edges():
     """判带用没四舍五入的半径：离内边界还差 400 km 不能说已经在带里"""
     from astral_toolkit.navigation import halo
