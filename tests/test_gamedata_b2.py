@@ -398,6 +398,162 @@ def test_stanton_old_and_new_names_mixed(monkeypatch, tmp_path):
     assert (position.from_code("RR_CRU_L1") or {}).get("i") == "Stanton2_L1"
 
 
+def _more_place_points():
+    """老大日志里出现过、以前认不出的几种地点用到的星图点（内部名照真实星图）；加一个内部名就叫 Nyx 的点，
+    看 Nyx_Levski 是不是先认列夫斯基"""
+    sm = json.loads(json.dumps(_NAV_SOURCES["starmap.json"]))
+    sm["points"] += [
+        dict(
+            n="Hurston",
+            i="OOC_Stanton_1_Hurston",
+            sys="Stanton",
+            t="Planet",
+            x=10.0,
+            y=0.0,
+            z=0.0,
+        ),
+        dict(
+            n="Jumppoint Magnus",
+            i="OOC_JumpPoint_stanton_magnus",
+            sys="Stanton",
+            t="Jumppoint",
+            x=50.0,
+            y=0.0,
+            z=0.0,
+        ),
+        dict(
+            n="Jumppoint Pyro",
+            i="OOC_JumpPoint_stanton_pyro",
+            sys="Stanton",
+            t="Jumppoint",
+            x=51.0,
+            y=0.0,
+            z=0.0,
+        ),
+        dict(
+            n="Pyro - Nyx Jump Point",
+            i="Pyro_Gate_Nyx",
+            sys="Pyro",
+            t="Jumppoint",
+            x=55.0,
+            y=0.0,
+            z=0.0,
+        ),
+        dict(
+            n="Nyx - Castra Jump Point",
+            i="jumppoint_nyx_castra",
+            sys="Nyx",
+            t="Jumppoint",
+            x=60.0,
+            y=0.0,
+            z=0.0,
+        ),
+        dict(n="Nyx Star", i="Nyx", sys="Nyx", t="Star", x=65.0, y=0.0, z=0.0),
+        dict(
+            n="Delamar",
+            i="glaciemring_segment_levski",
+            sys="Nyx",
+            t="Planet",
+            x=70.0,
+            y=0.0,
+            z=0.0,
+        ),
+    ]
+    return {"starmap.json": sm}
+
+
+def test_from_code_leo_jump_points_and_levski(monkeypatch, tmp_path):
+    """老大日志里以前认不出的：行星近轨道站 RR_HUR_LEO 算星球；JUMP 表里有的照旧按名字找，表里没有、或按名字找不到的
+    按两个星系名找；Nyx_Levski 先认列夫斯基（星图里有内部名叫 Nyx 的点也不认成它）；对不上的照旧 None"""
+    from astral_toolkit.navigation import position
+
+    _setup(monkeypatch, tmp_path, **_more_place_points())
+    position._ooc_bodies.cache_clear()
+    assert (position.from_code("RR_HUR_LEO") or {}).get("i") == "OOC_Stanton_1_Hurston"
+    assert position.from_code("RR_CRU_LEO") is None  # 十字军不在这份星图里
+    assert (position.from_code("RR_JP_StantonMagnus") or {}).get(
+        "i"
+    ) == "OOC_JumpPoint_stanton_magnus"
+    assert (position.from_code("RR_JP_NyxCastra") or {}).get(
+        "i"
+    ) == "jumppoint_nyx_castra"
+    assert (position.from_code("RR_JP_PyroNyx") or {}).get("i") == "Pyro_Gate_Nyx"
+    assert (position.from_code("RR_JP_StantonPyro") or {}).get(
+        "i"
+    ) == "OOC_JumpPoint_stanton_pyro"
+    assert position.from_code("RR_JP_Weird") is None
+    assert position.from_code("RR_JP_StantonMagnusX") is None
+    assert (position.from_code("Nyx_Levski") or {}).get(
+        "i"
+    ) == "glaciemring_segment_levski"
+
+
+def test_from_log_this_session_unknown_does_not_use_last_session(monkeypatch, tmp_path):
+    """这次游戏有位置信号、但认不出：当不知道，不退回上一局（上一局在新巴贝奇，人在别处按 F6 不能拿新巴贝奇对账）；
+    这次游戏一条位置信号都没有：照旧用上一局的"""
+    from astral_toolkit.navigation import position
+
+    _setup(monkeypatch, tmp_path, **_ooc_points())
+    position._ooc_bodies.cache_clear()
+    monkeypatch.setattr(position, "_save_ids", lambda: None)
+    backups = tmp_path / "logbackups"
+    backups.mkdir()
+    line = (
+        "<2026-11-07T12:00:00.000Z> [Notice] <RequestLocationInventory> Player[X] "
+        "requested inventory for Location[{}] [Team]\n"
+    )
+    (backups / "old.log").write_text(
+        line.format("Stanton4_NewBabbage"), encoding="utf-8"
+    )
+    now = tmp_path / "Game.log"
+    now.write_text(line.format("RR_ZZ_Unknown"), encoding="utf-8")
+    assert position.from_log(now) is None
+    quiet = tmp_path / "Game2.log"
+    quiet.write_text("<2026-11-07T12:00:00.000Z> [Notice] 别的事\n", encoding="utf-8")
+    hit = position.from_log(quiet)
+    assert hit is not None and hit[2]["i"] == "OOC_Stanton_4_Microtech"
+
+
+def test_point_zh_stanton_lagrange_ooc_name(monkeypatch):
+    """星图里斯坦顿拉格朗日点现在叫 OOC_Stanton3_L1：导航地名照样拿到汉化包里的站名（以前只认 Stanton3_L1，退回英文）"""
+    from astral_toolkit.navigation import names as N
+    from astral_toolkit.navigation import position
+
+    fake = {"RR_ARC_L1": "弧 L1 广袤森林站"}
+    monkeypatch.setattr(position, "ini_name", lambda k: fake.get(k, ""))
+    for i in ("OOC_Stanton3_L1", "Stanton3_L1"):
+        p = dict(t="Lagrange Point", i=i, n="ARC L1")
+        assert N.point_zh(p) == "弧 L1 广袤森林站"
+
+
+def test_place_name_gateway_and_leo_stations(monkeypatch, tmp_path):
+    """星门站、行星近轨道站的地点名用站名（盘点地点列表里的星门、空间站对得上）：汉化包有星门站名用站名，没有用跳跃点的
+    叫法，都没有照旧；近轨道站用站名的中文，地名表里没有就用英文站名"""
+    from astral_toolkit.navigation import position
+
+    _setup(monkeypatch, tmp_path)
+    ini = {
+        "stanton_pyro_jpstation": "派罗星门",
+        "stanton_magnus_jpstation": "马格努斯星门",
+        "nyx_jumppoint_castra": "尼克斯 - 卡斯塔 跳跃点",
+    }
+    zh = {"everusharbor": "埃弗勒斯空间站"}
+    monkeypatch.setattr(position, "ini_name", lambda k: ini.get(k.lower(), ""))
+    monkeypatch.setattr(position, "_place_zh", lambda key="", prefix=None: zh.get(key))
+    position._place_name.cache_clear()
+    try:
+        assert position.place_name("RR_JP_StantonPyro") == "派罗星门"
+        assert position.place_name("RR_JP_StantonMagnus") == "马格努斯星门"
+        assert position.place_name("RR_JP_NyxCastra") == "尼克斯 - 卡斯塔 跳跃点"
+        assert (
+            position.place_name("RR_JP_PyroNyx") == "Pyro - Nyx Jump Point"
+        )  # 都没有：照旧
+        assert position.place_name("RR_HUR_LEO") == "埃弗勒斯空间站"
+        assert position.place_name("RR_MIC_LEO") == "Port Tressler"
+    finally:
+        position._place_name.cache_clear()
+
+
 def test_ooc_body_without_version_or_database(monkeypatch, tmp_path):
     """拿不到游戏数据库的版本号时现查、不缓存（不然数据换了还用旧表）；游戏数据库不可用时给 None，不往外抛"""
     from astral_toolkit.gamedata import GamedataError

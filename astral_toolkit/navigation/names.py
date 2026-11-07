@@ -261,8 +261,8 @@ def point_zh(p: dict) -> str:
         m = re.match(r"(?:P|Pyro)(\d)_L(\d)$", i)
         if m:  # 派罗：建在点上的空间站，没有就是点本身（派1 PYR1 L1）
             return place_name(f"RR_P{m.group(1)}_L{m.group(2)}")
-        m = re.match(r"Stanton(\d)_L(\d)$", i)
-        if m:  # 斯坦顿：弧 L1 广袤森林站
+        m = re.match(r"(?:OOC_)?Stanton(\d)_L(\d)$", i)
+        if m:  # 斯坦顿：弧 L1 广袤森林站（星图现在叫 OOC_Stanton3_L1，2026-11-07 跟着斯坦顿地点一起改）
             code = _RR.get(m.group(1))
             return (code and ini_name(f"RR_{code}_L{m.group(2)}")) or ini_name(
                 f"Stanton{m.group(1)}_L{m.group(2)}"

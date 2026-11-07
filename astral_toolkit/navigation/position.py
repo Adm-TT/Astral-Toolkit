@@ -28,6 +28,12 @@ JUMP = {
     "PyroNyx": "Pyro - Nyx Jump Point",
     "NyxPyro": "Jumppoint_Nyx_Pyro",
 }
+LEO = {
+    "HUR": "Everus Harbor",
+    "CRU": "Seraphim Station",
+    "ARC": "Baijini Point",
+    "MIC": "Port Tressler",
+}  # 行星近轨道站（日志 RR_HUR_LEO）：星图里没有站、按星球算远近，地点名用站名
 
 
 def find_point(name=None, internal=None):
@@ -91,23 +97,54 @@ def from_code(code):
     """日志里的地点代码 → 星图点。
     斯坦顿的星图内部名改过：星球 / 卫星现在叫 OOC_Stanton_4_Microtech、OOC_Stanton_1b_Aberdeen，拉格朗日点叫
     OOC_Stanton1_L1；日志里还是旧代码（Stanton4_NewBabbage、RR_HUR_L1）。先按旧内部名找（老数据），找不到再按现在的
-    叫法找——以前只按旧名找，斯坦顿全对不上：物品查询不按远近排、盘点认不出地点（2026-11-07 老大在新巴贝奇发现）"""
+    叫法找——以前只按旧名找，斯坦顿全对不上：物品查询不按远近排、盘点认不出地点（2026-11-07 老大在新巴贝奇发现）。
+    先按旧内部名找那一步只为老数据和测试里的假星图留着：确认星图数据里斯坦顿都是 OOC_ 叫法、测试的假星图
+    （test_tools_catalog 的 POINTS 等）改成新叫法以后删（待做记着；shop_point 里拉格朗日点先试老叫法那一步一起删）。
+    同一批补上老大日志里以前就认不出的：行星近轨道站 RR_HUR_LEO（星图里没有站，算星球）、JUMP 表里没有的跳跃点
+    （RR_JP_StantonMagnus、RR_JP_NyxCastra）、列夫斯基 Nyx_Levski（以前先按 Nyx 找，找不到直接给 None；现在先认列夫斯基）"""
     m = re.match(r"RR_(ARC|HUR|CRU|MIC)_L(\d)", code)
     if m:
         old = f"{PLANET_CODE[m.group(1)]}_L{m.group(2)}"
         return find_point(internal=old) or find_point(internal="OOC_" + old)
+    m = re.match(r"RR_(ARC|HUR|CRU|MIC)_LEO", code)
+    if m:
+        body = PLANET_CODE[m.group(1)]
+        return find_point(internal=body) or _ooc_body(body)
     m = re.match(r"RR_P(\d)_L(\d)", code)
     if m:
         return find_point(internal=f"P{m.group(1)}_L{m.group(2)}")
     m = re.match(r"RR_JP_(\w+)", code)
-    if m and m.group(1) in JUMP:
-        return find_point(name=JUMP[m.group(1)])
+    if m:
+        return _jump_point(m.group(1))
+    if code.startswith("Delamar") or "Levski" in code:
+        return find_point(name="Delamar")
     m = re.match(r"(Stanton\d[a-z]?|Pyro\d[a-z]?|Nyx\d?)", code, re.I)
     if m:
         return find_point(internal=m.group(1)) or _ooc_body(m.group(1))
-    if code.startswith("Delamar") or "Levski" in code:
-        return find_point(name="Delamar")
     return None
+
+
+def _jump_point(key):
+    """日志里跳跃点那段（StantonPyro、StantonMagnus、NyxCastra）→ 星图里的跳跃点：JUMP 表里有的先按表里的名字找；
+    表里没有、或者按名字找不到的，按两个星系名拼现在的内部名找（OOC_JumpPoint_stanton_magnus、jumppoint_nyx_castra）；
+    都对不上给 None"""
+    p = find_point(name=JUMP[key]) if key in JUMP else None
+    if p:
+        return p
+    ab = _jump_parts(key)
+    if not ab:
+        return None
+    a, b = (x.lower() for x in ab)
+    return find_point(internal=f"OOC_JumpPoint_{a}_{b}") or find_point(
+        internal=f"jumppoint_{a}_{b}"
+    )
+
+
+def _jump_parts(key):
+    """日志里跳跃点那段 → 两个星系名：StantonMagnus → (Stanton, Magnus)，站在斯坦顿、通往马格努斯；
+    不是正好两个首字母大写的词拼起来的给 None"""
+    parts = re.findall(r"[A-Z][a-z]+", key)
+    return (parts[0], parts[1]) if len(parts) == 2 and "".join(parts) == key else None
 
 
 def _ooc_body(old):
@@ -207,7 +244,8 @@ def _station_table(_version):
 
 
 def place_name(code):
-    """日志里的地点代码 → 具体地点的中文名：Stanton4_NewBabbage → 新巴贝奇，RR_ARC_L1 → 弧 L1 广袤森林站"""
+    """日志里的地点代码 → 具体地点的中文名：Stanton4_NewBabbage → 新巴贝奇，RR_ARC_L1 → 弧 L1 广袤森林站，
+    RR_HUR_LEO → 埃弗勒斯空间站，RR_JP_StantonPyro → 派罗星门"""
     return _place_name(code, _data_version())
 
 
@@ -231,6 +269,9 @@ def _place_name(code, _version):
             or _place_zh(prefix=f"{m.group(1).lower()}l{m.group(2)}")
             or f"{m.group(1)}-L{m.group(2)}"
         )
+    m = re.match(r"RR_(ARC|HUR|CRU|MIC)_LEO", code)
+    if m:  # 行星近轨道站：站名的中文，没有就用英文站名（盘点地点列表两种都认）
+        return _zh_name(LEO[m.group(1)])
     m = re.match(r"RR_P(\d)(?:_L(\d))?", code)
     if m:
         # 派罗：汉化包里有每个站的正式名（RR_P1_L2 → 焰联-远程站-1-2，RR_P3 → 轨道讣闻站）；
@@ -247,6 +288,16 @@ def _place_name(code, _version):
         return ini_name(f"Pyro{k}") or f"PYR{k}"
     m = re.match(r"RR_JP_(\w+)", code)
     if m:
+        # 星门站：汉化包里有站名就用站名（站在斯坦顿、通往派罗的叫派罗星门），和盘点地点列表里的星门对得上；
+        # 没有站名用跳跃点的叫法；都没有照旧。以前派罗星门叫成「斯坦顿 - 派罗 跳跃点」，盘点记成了自定义地点
+        # （2026-11-07 跟着斯坦顿地点一起改）
+        ab = _jump_parts(m.group(1))
+        hit = ab and (
+            ini_name(f"{ab[0]}_{ab[1]}_JPStation")
+            or ini_name(f"{ab[0]}_JumpPoint_{ab[1]}")
+        )
+        if hit:
+            return hit
         name = JUMP.get(m.group(1), m.group(1))
         return _place_zh(re.sub(r"[^a-z0-9]", "", name.lower())) or name
     rest = code.split("_", 1)[1] if "_" in code else code
@@ -481,7 +532,9 @@ def _hit(last):
 
 def from_log(path=None, tail=None):
     """游戏日志里你最近所在的地点：(时间戳, 具体地点中文名, 星图点) 或 None。
-    第一次从头读一遍；之后只读日志新增的部分（很快）。这次游戏还没有位置信号就用上一次游戏的日志"""
+    第一次从头读一遍；之后只读日志新增的部分（很快）。这次游戏还没有位置信号才用上一次游戏的日志；
+    这次有信号、认不出就当不知道（以前认不出也退回上一局：上一局的斯坦顿认得出以后，人在别处按 F6 会拿上一局的地点
+    对账，2026-11-07 斯坦顿地点审查发现）"""
     from ..system.gamelog import find_log
 
     path = Path(path) if path else find_log()
@@ -498,7 +551,8 @@ def from_log(path=None, tail=None):
         if c["state"].learned:
             c["state"].learned = False
             _save_ids()
-    return _hit(c["state"].last) or _from_backups(path)
+    last = c["state"].last
+    return _hit(last) if last else _from_backups(path)
 
 
 _backup_cache = {}
