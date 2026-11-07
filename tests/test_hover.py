@@ -220,6 +220,92 @@ def test_cascade_order_and_cockpit_guard(monkeypatch):
     ]
 
 
+def test_first_pass_skips_full_when_nothing_seen(monkeypatch):
+    """F8 第一遍（whole_screen=False）：标题带、说明框带（屏高 24%~70%）里连说明框的样子都没见到（不是锚点、
+    凑不成像样名字）——全高那两条也不认，直接回去让 F8 等一下再截（2026-11-07 PR #17 跟进：没有说明框时
+    第一遍从 6 次认字少到 4 次）；第二遍（可整屏）照旧六档都认；鼠标不在中间带的第一遍也一样只认四次，
+    读不到鼠标位置（只有中间一条）的第一遍只认两次。调试截图记「第一遍·没见到说明框」，第二遍照旧记驾驶位保护"""
+    from types import SimpleNamespace
+
+    from astral_toolkit.trade import debug_shots
+
+    shot = SimpleNamespace(add_attempt=lambda *a: None, stop_reason="")
+    monkeypatch.setattr(debug_shots, "current", lambda: shot)
+    _names(monkeypatch, {})
+    calls = _fake_ocr(monkeypatch, [[OcrToken("SCM 220", 90, (60, 300, 60, 18))]])
+    toks, name, where = _read_tooltip(
+        MockImage(1000, 1000), (500, 500), whole_screen=False
+    )
+    assert name is None and shot.stop_reason == "第一遍·没见到说明框"
+    assert [c[2] for c in calls] == [(200, 120), (400, 120), (200, 460), (400, 460)]
+    calls.clear()
+    _read_tooltip(MockImage(1000, 1000), (500, 500))
+    assert [c[2][1] for c in calls] == [120, 120, 460, 460, 1000, 1000]
+    assert shot.stop_reason == "驾驶位保护"
+    calls.clear()
+    _read_tooltip(MockImage(1000, 1000), (100, 500), whole_screen=False)
+    assert [c[2][1] for c in calls] == [120, 120, 460, 460]
+    assert shot.stop_reason == "第一遍·没见到说明框"
+    calls.clear()
+    _read_tooltip(MockImage(1000, 1000), None, whole_screen=False)
+    assert [c[2] for c in calls] == [(400, 120), (400, 460)]
+
+
+def test_first_pass_skips_full_when_name_not_plausible(monkeypatch):
+    """第一遍前两档凑出了名字、但不像样（plausible_name 不认）、也没锚点：照样不认全高"""
+    from astral_toolkit.trade import inspector as I
+
+    _names(monkeypatch, {})
+    calls = _fake_ocr(monkeypatch, [[OcrToken("乱码", 90, (350, 300, 100, 18))]])
+    monkeypatch.setattr(
+        I,
+        "tooltip_pick",
+        lambda tokens, cursor=None, img=None: (("乱码", "Junk"), False),
+    )
+    monkeypatch.setattr(I, "plausible_name", lambda zh, en: False)
+    toks, name, where = _read_tooltip(
+        MockImage(1000, 1000), (500, 500), whole_screen=False
+    )
+    assert name is None and len(calls) == 4
+
+
+def test_first_pass_reads_full_after_anchor_seen(monkeypatch):
+    """第一遍里说明框带见到了锚点（说明框只露出下半截，体积那行）：全高照认，全高看到完整说明框就停"""
+    _names(monkeypatch, {})
+    anchor_only = [OcrToken("体积：20uSCU", 90, (60, 348, 100, 18))]
+    calls = _fake_ocr(monkeypatch, [[], [], [], anchor_only, [], _ITEM])
+    toks, name, where = _read_tooltip(
+        MockImage(1000, 1000), (100, 500), whole_screen=False
+    )
+    assert where == "30-70%@full" and len(calls) == 6
+    assert name == ("实准枪口补偿器2", "VeraCompensator2")
+
+
+def test_first_pass_reads_full_after_plausible_name_seen(monkeypatch):
+    """第一遍里说明框带凑出了像样的名字（没把握、没锚点）：全高照认，全高认准了就用全高的"""
+    from astral_toolkit.trade import inspector as I
+
+    _names(monkeypatch, {})
+    cand = [OcrToken("候选", 90, (350, 300, 100, 18))]
+    sure = [OcrToken("认准", 90, (350, 300, 100, 18))]
+    calls = _fake_ocr(monkeypatch, [[], [], cand, [], [], sure])
+
+    def pick(tokens, cursor=None, img=None):
+        if tokens and tokens[0].text == "候选":
+            return ("候选物品", "Candidate Item"), False
+        if tokens and tokens[0].text == "认准":
+            return ("认准物品", "Sure Item"), True
+        return None, False
+
+    monkeypatch.setattr(I, "tooltip_pick", pick)
+    monkeypatch.setattr(I, "plausible_name", lambda zh, en: True)
+    toks, name, where = _read_tooltip(
+        MockImage(1000, 1000), (500, 500), whole_screen=False
+    )
+    assert len(calls) == 6 and where == "30-70%@full"
+    assert name == ("认准物品", "Sure Item")
+
+
 def test_title_stage_stops_on_chinese_library_hit(monkeypatch):
     """中文标题行在汉化包里精确对上：标题带第一次就停（中文已经是高把握命中，不再用英文行兜）"""
     _names(monkeypatch, {"实准枪口补偿器2": "VeraCompensator2"})
