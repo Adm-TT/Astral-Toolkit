@@ -50,7 +50,8 @@ _CODES = {"F5": 116, "F6": 117, "F7": 118, "F8": 119, "F9": 120, "F10": 121}
 
 
 def _worker(bindings: Any, script=None, limit=10, pressed=None):
-    """假键盘的热键线程：script = {键码: 第几遍按着（从 0 数）}；got 记 (第几遍, 热键名, 键名) 和 "failed" """
+    """假键盘的热键线程：script = {键码: 第几遍按着（从 0 数）}；got 记 (第几遍, 热键名, 键名) 和
+    ("failed", 那时已经等过几次)"""
     ticks = _Ticks(limit)
     script = script or {}
     reads = []
@@ -66,7 +67,7 @@ def _worker(bindings: Any, script=None, limit=10, pressed=None):
         code=_CODES.get,
         down=down,
         pressed=pressed or (lambda name, key: got.append((ticks.polls, name, key))),
-        failed=lambda: got.append("failed"),
+        failed=lambda: got.append(("failed", len(ticks.waits))),
     )
     worker = HotkeyWorker(links, enabled=True)
     worker.stop_ev = ticks
@@ -130,7 +131,8 @@ def test_worker_survives_errors_and_clears_busy_first(monkeypatch):
     worker, ticks, _, got = _worker(bindings, {119: {1}}, limit=3)
     worker._guard()
     assert printed == ["热键监听出错，1 秒后重来：RuntimeError('设置坏了')"]
-    assert got == ["failed", (1, "trade_capture_key", "F8")]
+    # 先叫入口清「忙」（那时一次都还没等过），再等 1 秒
+    assert got == [("failed", 0), (1, "trade_capture_key", "F8")]
     assert ticks.waits[0] == 1 and state["n"] == 2
 
     calls = []
@@ -144,12 +146,11 @@ def test_worker_survives_errors_and_clears_busy_first(monkeypatch):
         [("F8", "trade_capture_key")], {119: {1, 2}}, limit=4, pressed=pressed
     )
     worker._guard()
-    # 动作出错也一样；重来以后从头看，那时还按着的键算新按下（以前也是这样）
-    assert got == ["failed"] and calls == ["trade_capture_key", "trade_capture_key"]
-    assert (
-        ticks.waits.count(1) == 1
-        and printed[-1] == "热键监听出错，1 秒后重来：ValueError('动作坏了')"
-    )
+    # 动作出错也一样：清忙时只等过第 0 遍那一次，1 秒在清忙之后；重来以后从头看，那时还按着的键算新按下（以前也是这样）
+    assert got == [("failed", 1)]
+    assert calls == ["trade_capture_key", "trade_capture_key"]
+    assert ticks.waits[:2] == [0.03, 1] and ticks.waits.count(1) == 1
+    assert printed[-1] == "热键监听出错，1 秒后重来：ValueError('动作坏了')"
 
 
 def test_worker_thread_only_when_enabled():
@@ -335,17 +336,23 @@ def test_bindings_follow_settings_in_hotkey_order(monkeypatch):
     assert ("F10", "report_key") in cmd.bindings()
 
 
-def test_f8_retry_message_uses_the_pressed_key(monkeypatch):
-    """F8 改绑到别的键（如 F11）：上一次识别还没收尾、重试也起不来时清掉「忙」，提示里说的是玩家按的那个键"""
+def test_f8_retry_waits_for_the_last_run_and_uses_the_pressed_key(monkeypatch):
+    """F8：先记下按键那一刻（鼠标位置、Shift），再起识别；起不来（上一次还没收尾）就另起短线程，等上一次 0.3 秒再试。
+    重试也起不来：清掉「忙」，提示里说的是玩家按的那个键（如改绑的 F11）；重试起来了：不提示，「忙」留给识别做完再清"""
     logs = []
     monkeypatch.setattr(bus, "runtime_log", lambda line, **kw: logs.append(line))
     monkeypatch.setattr(mining_tasks, "_game_front", lambda: True)
-    monkeypatch.setattr(hud_state, "item_key_pressed", lambda: None)
     tries = []
-    monkeypatch.setattr(
-        task_runner, "run_task_once", lambda tid, fn, *a, **k: tries.append(tid)
-    )
-    monkeypatch.setattr(task_runner, "_running", {})
+    monkeypatch.setattr(hud_state, "item_key_pressed", lambda: tries.append("item"))
+    outcomes = []  # run_task_once 每次回什么：None = 同名任务还在跑、没起来
+
+    def run_task_once(tid, fn, *a, **k):
+        tries.append(tid)
+        return outcomes.pop(0)
+
+    monkeypatch.setattr(task_runner, "run_task_once", run_task_once)
+    running = {}
+    monkeypatch.setattr(task_runner, "_running", running)
 
     class _Now:
         def __init__(self, target, **kw):
@@ -354,12 +361,31 @@ def test_f8_retry_message_uses_the_pressed_key(monkeypatch):
         def start(self):
             self.target()
 
+    class _Last:
+        def __init__(self):
+            self.joined = []
+
+        def join(self, timeout=None):
+            self.joined.append(timeout)
+
     monkeypatch.setattr(entry, "threading", SimpleNamespace(Thread=_Now))
     cmd = _commands()
+    outcomes[:] = [None, None]
     cmd.pressed("trade_capture_key", "F11")
-    assert tries == ["hover", "hover"]
+    assert tries == ["item", "hover", "hover"]
     assert logs == ["捕获到 F11 快捷键，触发悬停识别...", "F11 正在识别中，请稍候..."]
     assert cmd.busy is False
+
+    last = _Last()
+    running["hover"] = last
+    outcomes[:] = [None, "重试起来了"]
+    tries.clear()
+    logs.clear()
+    cmd.pressed("trade_capture_key", "F11")
+    assert last.joined == [0.3]
+    assert tries == ["item", "hover", "hover"]
+    assert logs == ["捕获到 F11 快捷键，触发悬停识别..."]
+    assert cmd.busy is True
 
 
 def test_platform_keys_map_f1_to_f12_and_read_the_high_bit(monkeypatch):
