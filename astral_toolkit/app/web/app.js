@@ -2857,9 +2857,7 @@ PAGES.settings = () => {
     };
   };
   saveSeg("#ui-theme", "theme", { show: applyTheme, done: () => {} });
-  saveSeg("#ov-scale", "hud_scale", { num: true });
-  saveSeg("#ov-plate", "hud_plate", { num: true });
-  saveSeg("#nav-fps", "nav_fps", { num: true });
+  for (const [id, key] of [["#ov-scale", "hud_scale"], ["#ov-plate", "hud_plate"], ["#nav-fps", "nav_fps"]]) saveSeg(id, key, { num: true });
   saveSeg("#ov-theme", "hud_theme");
   saveSeg("#ocr-device", "ocr_device", { done: async (v) => {
     try { state.status = await api("status"); renderPage(); } catch (err) { toast(err.message); return; }
