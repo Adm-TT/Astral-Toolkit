@@ -102,12 +102,12 @@ def test_idle_close_is_read_outside_the_loop_lock():
 
     class Worker(FakeWorker):
         @property
-        def idle_close(self):  # pyright: ignore[reportIncompatibleVariableOverride]
+        def idle_close(self):
             held.append(bool(self.loop is not None and self.loop.lock_held_by_me()))
             return 10.0
 
         @idle_close.setter
-        def idle_close(self, value):
+        def idle_close(self, value):  # pyright: ignore[reportIncompatibleVariableOverride]
             pass
 
     clock = FakeClock()

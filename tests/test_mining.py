@@ -1496,7 +1496,9 @@ def test_craft_stats_and_detail_structure(monkeypatch, tmp_path):
             and h["kind"] == "采矿激光器"
             and h["stats_version"] == "4.10.2-test"
         )
-        d = t_goals.craft_detail("Helix II Mining Laser")
+        from typing import Any
+
+        d: Any = t_goals.craft_detail("Helix II Mining Laser")
         assert d["head"]["tags"] == ["S2"] and [s["slot"] for s in d["slots"]] == [
             "框架",
             "发射器",

@@ -599,11 +599,12 @@ def test_spec_tags_and_browse_spec_facets():
     assert listing.browse(
         lambda: bps, cat="vehiclegear/weapons", sub="laser", spec=spec
     )["sizes"] == [{"key": "10", "label": "S10", "count": 1}]
-    for kw in (
+    cases: list[dict[str, Any]] = [
         {"spec": spec},
         {"cat": "fpsgear/armour", "spec": spec},
         {"cat": "vehiclegear/powerplant"},
-    ):
+    ]
+    for kw in cases:
         r = listing.browse(lambda: bps, grade="C", cls="Civilian", size="1", **kw)
         assert not {"sizes", "grades", "clss"} & set(r), kw
         want = [
