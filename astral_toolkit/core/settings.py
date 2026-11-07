@@ -28,8 +28,9 @@ DEFAULTS = {
     "theme": "dark",  # 窗口外观：dark 深色 / light 浅色（2026-10-25 AT 品牌配色）
     "ata": True,  # 窗口里显示阿塔（助手）
     "update_online": True,  # 启动时到网上检查新版本（只读一个小文件；下载要玩家点）
-    "ocr_device": "gpu",  # 文字识别设备：gpu (显卡 DirectML 加速) / cpu (处理器)
-    "always_use_gpu": True,  # 兼容旧配置项
+    "ocr_device": "cpu",  # 文字识别设备：cpu (处理器，默认) / gpu (显卡 DirectML：F8 每次约快 0.2 秒，但认过一次字 AT 就多占两三百 MB 内存；2026-11-08 老大定默认处理器)
+    "always_use_gpu": False,  # 兼容旧配置项
+    "ocr_v2": True,  # 识别默认改处理器那次的一次性迁移做过了：老版本存的设置文件里没有这一项（见 _load）
     "debug_mode": False,  # 调试模式：开着时 F8/盘点把裁切阶段与停因打进运行日志、在 userdata/shots/debug/ 落识别区域调试图；导航读右上角的诊断（logs/di_log.txt、shots/di_fail、记号收起原因）也只在开着时写（NV-B5）。仅本机，不上传；默认关
     "train_upload": True,  # 帮助改进识别：认字的错题（一行字的小截图 + 正确答案）发给作者训练（2026-10-27 负责人定）
     "feedback_upload": True,  # 问题反馈存好后自动发给作者（2026-10-27 负责人定，设置页能关）
@@ -94,6 +95,14 @@ def _load():
         ):  # 以前选了「太空导航」（只用 /showlocation）的改回实时
             cfg["nav_mode"] = "auto"
         cfg["keys_v5"] = True
+        changed = True
+    if data and "ocr_v2" not in data:
+        # 识别默认改处理器（显卡认过一次字 AT 就多占两三百 MB 内存）。以前默认显卡、存设置时连它一起写进了文件，
+        # 分不出谁是自己选的：老文件统一改一次处理器。这一项按「文件里有没有」认，新存的文件都带着它，
+        # 之后玩家在设置页切回显卡就一直是显卡（2026-11-08 老大定）
+        cfg["ocr_device"] = "cpu"
+        cfg["always_use_gpu"] = False
+        cfg["ocr_v2"] = True
         changed = True
     if changed:
         try:

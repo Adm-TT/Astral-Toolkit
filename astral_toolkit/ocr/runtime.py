@@ -13,7 +13,7 @@ import time
 OCR_THREADS = max(2, min(6, (os.cpu_count() or 4)))
 USE_GPU = (
     os.environ.get("DUBHE_OCR_CPU") != "1"
-)  # 能用显卡（DirectML）就用；用不了自动用 CPU。环境变量 DUBHE_OCR_CPU=1 强制 CPU（对比测速用）
+)  # 设置里选了显卡、电脑也能用显卡（DirectML）才用，用不了自动用 CPU。环境变量 DUBHE_OCR_CPU=1 强制 CPU（对比测速用）
 # 哪几步放显卡：det 找字（整块大图，显卡快 4 倍）、rec 认字（很多小块、每块尺寸不同，显卡反而慢一倍）。
 # 环境变量 DUBHE_OCR_DML=det,rec 可以改（对比测速用）
 GPU_PARTS = [
@@ -51,9 +51,9 @@ def is_gpu_preferred():
         dev = cfg.get("ocr_device")
         if dev is not None:
             return str(dev).lower() == "gpu"
-        return bool(cfg.get("always_use_gpu", True))
+        return bool(cfg.get("always_use_gpu", False))
     except Exception:
-        return True
+        return False  # 默认处理器（2026-11-08 老大定）
 
 
 def ocr_device():
@@ -220,7 +220,7 @@ def set_ocr_device(target):
     采矿读屏、交易识别各自缓存了旧对象，切了不生效）"""
     global _engine, _last_error, _cpu_fallback
     with _lock:
-        target = (target or "gpu").lower()
+        target = (target or "cpu").lower()
         from ..core import settings
 
         settings.update(ocr_device=target, always_use_gpu=(target == "gpu"))

@@ -2714,7 +2714,7 @@ function goalsDraw() {
 // 设置页「文字识别硬件」里的当前状态（实际在哪算、为什么没用上显卡）：status 每秒推一次，只更新这一段
 function ocrStateHtml(s, c) {
   return `当前实际运行：<b style="color:${s.ocr_device === '显卡' ? 'var(--ok,#2e7d32)' : 'inherit'}">${esc(s.ocr_device || 'CPU')}</b>
-      ${!s.gpu_available && (c.ocr_device || 'gpu') === 'gpu' ? `<br><span class="muted" style="font-size:12px;color:var(--warn,#d9822b)">⚠️ 当前 Python 环境未检测到 DirectML 支持，已自动切换为 CPU 运行。<br>如需显卡加速，请在终端执行：<code>.venv\\Scripts\\pip install onnxruntime-directml</code></span>` : ''}
+      ${!s.gpu_available && (c.ocr_device || 'cpu') === 'gpu' ? `<br><span class="muted" style="font-size:12px;color:var(--warn,#d9822b)">⚠️ 当前 Python 环境未检测到 DirectML 支持，已自动切换为 CPU 运行。<br>如需显卡加速，请在终端执行：<code>.venv\\Scripts\\pip install onnxruntime-directml</code></span>` : ''}
       ${s.ocr_error ? `<br><span class="muted" style="font-size:12px;color:var(--err,#d32f2f)">错误详情：${esc(s.ocr_error)}</span>` : ''}`;
 }
 
@@ -2778,10 +2778,10 @@ PAGES.settings = () => {
       <p>F8 识别物品时，将名字那一行文字的小截图和正确名字发给作者（认错的都发，认对的抽一部分），用于改进识别。不含整屏截图。</p></div>
       <button class="switch ${c.train_upload !== false ? "on" : ""}" id="train-sw" aria-label="帮助改进识别"></button></div>
     <div class="set"><div>文字识别硬件 (OCR)
-      <p>选择文字识别（F8 物品识别、全屏扫描）使用的硬件设备。<br>
+      <p>选择文字识别（F8 物品识别、全屏扫描）使用的硬件设备。默认用处理器；显卡识别快一些（F8 每次约快 0.2 秒），但 AT 会多占两三百 MB 内存。<br>
       <span id="ocr-state">${ocrStateHtml(s, c)}</span>
       </p></div>
-      ${segH("ocr-device", [["gpu", "显卡 (GPU)"], ["cpu", "处理器 (CPU)"]], (c.ocr_device || (c.always_use_gpu !== false ? "gpu" : "cpu")), "文字识别硬件")}</div>
+      ${segH("ocr-device", [["gpu", "显卡 (GPU)"], ["cpu", "处理器 (CPU)"]], (c.ocr_device || "cpu"), "文字识别硬件")}</div>
     <div class="set"><div>调试模式
       <p>开启后，F8 物品识别与 F6 盘点会把裁切阶段、停因写入运行日志，并在 userdata/shots/debug/ 落下识别区域调试图；导航读游戏右上角时每读一次在 userdata/logs/di_log.txt 记一行（导航记号收起的原因也记在这里），没读出的画面存到 userdata/shots/di_fail/。都只在本机，不上传，便于排查认错、偏慢、裁切区域不对或导航记号消失。日志和磁盘占用会明显增加；平时请保持关闭。</p></div>
       <button class="switch ${c.debug_mode ? "on" : ""}" id="debug-sw" aria-label="调试模式"></button></div>

@@ -54,7 +54,7 @@ def status(sources: StatusSources, /):
         cur_dev = ocr_device()
         out["ocr_device"] = cur_dev
         out["gpu_available"] = gpu_available()
-        out["ocr_mode"] = cfg.get("ocr_device", "gpu")
+        out["ocr_mode"] = cfg.get("ocr_device", "cpu")
         out["ocr_error"] = last_ocr_error()
     except Exception:
         out["ocr_device"] = "CPU"
