@@ -1,4 +1,5 @@
-"""热键按下去做什么：键盘入口（HotkeyCommands；目录迁移 R4 把看键的线程拆去了 runtime/workers/hotkeys）
+"""热键按下去做什么：键盘入口（HotkeyCommands；目录迁移 R4 从 app/engines/hover 搬来，看键的线程拆去了
+runtime/workers/hotkeys）
 
 热键线程只管看键：约 1.8 秒从这里的 bindings() 重读一次绑定，看到刚按下一个键就调 pressed(热键名, 键名)，
 出错重来之前调 failed()（都由 bootstrap 接）。这里定每个热键做什么——F8 物品识别、记录路标、一键定位、问题反馈、

@@ -55,7 +55,7 @@ class _FakeImage:
 
 def test_closing_gate_f5_f6(monkeypatch):
     from astral_toolkit.app import hud_state
-    from astral_toolkit.app.engines.hover import HotkeyCommands
+    from astral_toolkit.app.inputs.hotkeys import HotkeyCommands
     from astral_toolkit.tasks import count as count_task
     from astral_toolkit.tasks import mining, navigation
     from tests.bootstrap_helpers import bind_for_test
@@ -127,7 +127,7 @@ def test_closing_gate_f5_f6(monkeypatch):
 def test_closing_gate_navigation_and_writes(monkeypatch):
     from types import SimpleNamespace
 
-    from astral_toolkit.app.engines.hover import HotkeyCommands
+    from astral_toolkit.app.inputs.hotkeys import HotkeyCommands
     from astral_toolkit.tasks import navigation
 
     deps: Any = SimpleNamespace()

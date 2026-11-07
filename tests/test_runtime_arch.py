@@ -1296,8 +1296,8 @@ def test_nav_and_mining_workers_do_not_reach_into_tasks():
 
 # 键盘入口（热键按下去做什么，目录迁移 R4）：不反过来拿热键线程（runtime）、不自己读键（ctypes、infrastructure 的平台读数）、
 # 不碰装配；也不留 _T / _H 这种字符串导入
-_KEYBOARD_ENTRY = ("app", "engines", "hover.py")
-_KEYBOARD_ENTRY_PKG = "astral_toolkit.app.engines"
+_KEYBOARD_ENTRY = ("app", "inputs", "hotkeys.py")
+_KEYBOARD_ENTRY_PKG = "astral_toolkit.app.inputs"
 _KEYBOARD_ENTRY_FORBIDDEN = (
     "astral_toolkit.runtime",
     "astral_toolkit.infrastructure",

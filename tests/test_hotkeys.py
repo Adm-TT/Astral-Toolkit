@@ -9,8 +9,8 @@ from types import SimpleNamespace
 from typing import Any
 
 from astral_toolkit.app import bus, hud_state, task_runner
-from astral_toolkit.app.engines import hover as entry
-from astral_toolkit.app.engines.hover import HotkeyCommands
+from astral_toolkit.app.inputs import hotkeys as entry
+from astral_toolkit.app.inputs.hotkeys import HotkeyCommands
 from astral_toolkit.core import settings
 from astral_toolkit.runtime.workers.hotkeys import HotkeyLinks, HotkeyWorker
 from astral_toolkit.tasks import mining as mining_tasks

@@ -5,7 +5,7 @@
 （现在只认 F1～F12）不看。线程出错就记一笔、先叫 failed()、等 1 秒从头再来，别让 F5 / F6 / F8 全失效。
 
 按下去做什么（F8 识别、F5 采矿助手、F6 盘点……，要不要占着「忙」、切出游戏时怎么说）、绑定从设置里怎么读，
-在键盘入口 HotkeyCommands；原始按键读数在 infrastructure/platform/keys；都由 bootstrap 接进来，本模块只用标准库。
+在键盘入口（app/inputs/hotkeys 的 HotkeyCommands）；原始按键读数在 infrastructure/platform/keys；都由 bootstrap 接进来，本模块只用标准库。
 """
 
 import threading
@@ -17,15 +17,15 @@ from dataclasses import dataclass
 class HotkeyLinks:
     """热键线程要的外面的东西（bootstrap 接）"""
 
-    # 现在的热键绑定，按生效顺序：[(键名, 热键名)]，没绑的键名是空字符串（键盘入口读设置）
+    # 现在的热键绑定，按生效顺序：[(键名, 热键名)]，没绑的键名是空字符串（app/inputs/hotkeys 读设置）
     bindings: Callable[[], Iterable[tuple[str, str]]]
     # 键名 → 平台键码，认不了的键给 None（infrastructure/platform/keys）
     code: Callable[[str], int | None]
     # 这个键码现在是不是按着（infrastructure/platform/keys）
     down: Callable[[int], bool]
-    # 刚按下一个键：(热键名, 键名)；做什么由键盘入口定
+    # 刚按下一个键：(热键名, 键名)；做什么由 app/inputs/hotkeys 定
     pressed: Callable[[str, str], None]
-    # 出错、1 秒后重来之前调一下（键盘入口清「忙」，别让 F8 一直卡在「正在识别」）
+    # 出错、1 秒后重来之前调一下（app/inputs/hotkeys 清「忙」，别让 F8 一直卡在「正在识别」）
     failed: Callable[[], None]
 
 

@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable
 
 from .app.engines.count import _Count
-from .app.engines.hover import HotkeyCommands
+from .app.inputs.hotkeys import HotkeyCommands
 from .runtime.workers.hotkeys import HotkeyLinks, HotkeyWorker
 from .runtime.workers.mining import MiningAnalysis, MiningLinks, MiningViews, _Live
 from .runtime.workers.navigation import (
@@ -361,7 +361,7 @@ def _mining_links(options: Mapping[str, Any]) -> MiningLinks:
 
 def _hotkeys(commands: HotkeyCommands) -> HotkeyWorker:
     """热键线程（目录迁移 R4 起在 runtime/workers/hotkeys，只管看键）：绑定、按下去做什么、出错清「忙」都接键盘入口
-    （HotkeyCommands），读键接 infrastructure/platform/keys；只有 Windows 起线程"""
+    （app/inputs/hotkeys 的 HotkeyCommands），读键接 infrastructure/platform/keys；只有 Windows 起线程"""
     import sys
 
     from .infrastructure.platform import keys
