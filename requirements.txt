@@ -1,3 +1,5 @@
+# 只列直接依赖、不锁版本。装环境用锁文件加 --no-deps（见 AGENTS.md）：rapidocr 会顺带拉 CPU 版 onnxruntime，
+# 跟 onnxruntime-directml 冲突（同名模块，后装的盖掉先装的）；已经装了 CPU 版的先 pip uninstall onnxruntime 再装
 mss
 pillow
 numpy

@@ -27,6 +27,7 @@ mimetypes.add_type("image/svg+xml", ".svg")
 # 每次启动随机生成的口令：只有助手自己打开的窗口知道（在网址里带过去），别的网页、别的程序猜不到
 TOKEN = secrets.token_urlsafe(24)
 MAX_BODY = 16 << 20  # 接口的请求体上限（都是小 JSON）
+DRAIN_MAX = 64 << 10  # 拒绝请求前最多读掉这么多请求体（见 Handler._drain）
 _last_client = {"t": time.time(), "ever": False}
 # 新展示流心跳间隔（秒）；测试可调小，不需要长 sleep
 UI_HEARTBEAT_INTERVAL = 5.0
@@ -47,6 +48,25 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(data)
+
+    def _drain(self, n):
+        """拒绝前把小请求体读掉再关连接：请求体留在连接里就关，Windows 会回 RST，客户端常常读不到这次的回答
+        （WinError 10053，11-07 电脑满负荷时测试红过）。只读不超过 DRAIN_MAX 字节、最多等 1 秒；大的照旧不读
+        （不让本机别的程序用大请求体耗 AT 的内存，审查 2026-10-31）"""
+        if not 0 < n <= DRAIN_MAX:
+            return
+        sock = self.connection
+        old = sock.gettimeout()
+        try:
+            sock.settimeout(1.0)
+            self.rfile.read(n)
+        except OSError:
+            pass
+        finally:
+            try:
+                sock.settimeout(old)
+            except OSError:
+                pass
 
     def _allowed(self):
         """只认本机、带对口令、不是从别的网站发来的请求"""
@@ -111,6 +131,7 @@ class Handler(BaseHTTPRequestHandler):
         name = self.path[5:].split("?")[0]
         if not self._allowed():  # 只看请求头和网址，不用先读请求体
             self.close_connection = True
+            self._drain(n)
             return self._send(403, json.dumps({"ok": False, "error": "拒绝访问"}))
         if n > MAX_BODY:
             self.close_connection = True
@@ -119,6 +140,7 @@ class Handler(BaseHTTPRequestHandler):
             )
         if not WRITES.try_begin_write(name):
             self.close_connection = True
+            self._drain(n)
             return self._send(
                 200,
                 json.dumps({"ok": False, "error": "正在退出"}, ensure_ascii=False),

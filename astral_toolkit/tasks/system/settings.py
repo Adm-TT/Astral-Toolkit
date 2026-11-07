@@ -109,7 +109,14 @@ def set_settings(sources: StatusSources, /, **kw):
         if k in taken:
             return {"error": f"{k} 已用于「{taken[k]}」，需更换按键"}
         kw[name] = k
-    cfg = settings.update(**{k: v for k, v in kw.items() if k in allowed})
+    try:
+        cfg = settings.update_checked(**{k: v for k, v in kw.items() if k in allowed})
+    except OSError as e:  # 没存上：告诉玩家再点一次，别装作存好了（后面跟着改的悬浮窗、识别设备也不动）
+        if isinstance(e, settings.NotSaved):
+            return {"error": str(e)}
+        return {
+            "error": "设置文件写不进去（可能被杀毒或同步软件占着），这次没存上，再点一次"
+        }
     if clear_train:
         try:
             from ...system import train_data

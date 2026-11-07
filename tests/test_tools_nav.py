@@ -2121,3 +2121,45 @@ def test_rotation_phase_calibration(tmp_path, monkeypatch):
         math.dist(n.to_local(b, g2, when), p) < 0.01
     )  # 校准后推算的位置和游戏给的一致
     n._calib.update(stamp=None, data={}, pending={})
+
+
+def test_nav_hud_missing_does_not_break_halo_and_fix(monkeypatch, tmp_path):
+    """悬浮窗建不起来（_hud() 是 None）：小行星带核对、取下方案、一键定位照常返回，不抛 AttributeError
+    （以前 tasks/navigation 里 7 处直接 _hud().set / .clear；待做原第 342 行）"""
+    import threading
+    import types
+    from pathlib import Path
+
+    from astral_toolkit.app import hud_state
+    from astral_toolkit.core import paths
+    from astral_toolkit.navigation import halo
+    from astral_toolkit.tasks import navigation as t_nav
+
+    src = Path(t_nav.__file__).read_text(encoding="utf-8")
+    assert "_hud().set(" not in src and "_hud().clear(" not in src
+    monkeypatch.setattr(paths, "log", lambda name: tmp_path / name)
+    monkeypatch.setattr(t_nav, "_hud", lambda: None)
+    monkeypatch.setattr(hud_state, "_hud", lambda: None)
+    monkeypatch.setattr(halo, "where", lambda g: {"band": 3})
+    monkeypatch.setattr(halo, "where_text", lambda w, band: "在第3带")
+    published = []
+    monkeypatch.setattr(t_nav.bus, "publish", lambda kind, data: published.append(kind))
+    ran = []
+    monkeypatch.setattr(
+        threading,
+        "Timer",
+        lambda secs, fn: types.SimpleNamespace(start=lambda: ran.append(fn())),
+    )  # 「仅用于手动定位」那条 5 秒后清提示：马上跑，看清提示那一步也不抛
+    t_nav._HALO.update(plan={"text": "方案", "band": 5}, last=None, seen=None)
+    try:
+        w = t_nav.halo_check(
+            (1.0, 2.0, 3.0), "Coordinates: x:1 y:2 z:3", t_nav._HALO["sess"]
+        )
+        assert w and w["text"] == "在第3带" and published == ["halo"]
+    finally:
+        assert t_nav.halo_unpin() == {"ok": True}
+    deps = types.SimpleNamespace(
+        nav=types.SimpleNamespace(target=None, space_mode=False)
+    )
+    got = t_nav.fix_here(deps)  # type: ignore[arg-type]  # 只用到 deps.nav，给个假的
+    assert got == {"error": "当前未导航到太空路标"} and ran == [None]

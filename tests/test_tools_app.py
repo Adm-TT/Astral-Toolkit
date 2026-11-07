@@ -578,3 +578,35 @@ def test_feedback_upload_pack_send_retry(tmp_path, monkeypatch):
         F.send(later, "auto")[1] == "自动发送已关闭" and len(sent) == n
     )  # 关掉后排队的也不发
     assert F.retry_pending(fb) == 0 and len(sent) == n
+
+
+def test_set_settings_tells_when_not_saved(monkeypatch, tmp_path):
+    """设置文件暂时读不到（被杀毒、同步软件占着）或写不进去：这次改动没存上，设置页要告诉玩家再点一次，
+    不能装作存好了（以前只在控制台打一行；待做原第 468 行）；读写正常照旧存上"""
+    from astral_toolkit import bootstrap
+    from astral_toolkit.app import bus
+    from astral_toolkit.core import paths, settings
+    from astral_toolkit.tasks import system as t_sys
+    from tests.bootstrap_helpers import app_for_test
+
+    monkeypatch.setattr(bus, "publish", lambda *a, **k: None)
+    with app_for_test() as app:
+        sources = bootstrap.status_sources(app)
+        locked = tmp_path / "locked.json"
+        locked.mkdir()  # 读这个「文件」报 OSError：和被别的程序占着一样
+        monkeypatch.setattr(settings, "FILE", locked)
+        r = t_sys.set_settings(sources, theme="light")
+        assert "没存上" in r["error"] and "再点一次" in r["error"]
+        ok = tmp_path / "ok.json"
+        monkeypatch.setattr(settings, "FILE", ok)
+
+        def busy(*a, **k):
+            raise PermissionError("被别的程序占着")
+
+        real = paths.write_json
+        monkeypatch.setattr(paths, "write_json", busy)
+        r = t_sys.set_settings(sources, theme="light")
+        assert "写不进去" in r["error"] and "没存上" in r["error"]
+        monkeypatch.setattr(paths, "write_json", real)
+        r = t_sys.set_settings(sources, theme="light")
+        assert r.get("theme") == "light" and settings.load()["theme"] == "light"

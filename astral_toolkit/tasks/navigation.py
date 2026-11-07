@@ -99,6 +99,23 @@ QT_SPEED = 50_000  # 米/秒：比这快就是在量子跳跃（普通飞行最�
 # 2026-10-30 重构阶段 2：悬浮窗从 app.hud_state 拿，引擎和最近结果（ResultStore）由 bootstrap 造好的 NavDeps 当参数传进来（F 段 B5），
 # 不再经 services 转发、出错也不再回头找 services 兜底。接口由 app/api/navigation.py 的 ROUTES 注册，不再用 api 装饰器。
 from ..app.hud_state import _hud, _note_hud  # noqa: E402
+
+
+def _hud_set(section, text):
+    """悬浮窗写一段字；悬浮窗建不起来（_hud() 是 None）就不写，小行星带、一键定位照常跑（以前直接
+    _hud().set 会抛 AttributeError，待做原第 342 行）"""
+    h = _hud()
+    if h is not None:
+        h.set(section, text)
+
+
+def _hud_clear(section):
+    """悬浮窗收起一段字；悬浮窗建不起来就不管"""
+    h = _hud()
+    if h is not None:
+        h.clear(section)
+
+
 from ..runtime.results import MINING_SCAN  # noqa: E402
 
 
@@ -1077,7 +1094,7 @@ def halo_pin(deps: NavDeps, /, frm="", to="", band=5, qd=""):
             _HALO["seen"] = n.read_clipboard()  # 挂上之前剪贴板里的旧坐标不算
         except Exception:
             _HALO["seen"] = None
-        _hud().set("小行星带", r["text"])
+        _hud_set("小行星带", r["text"])
     threading.Thread(
         target=_halo_watch, args=(deps, sess, ev), daemon=True, name="halo"
     ).start()
@@ -1090,7 +1107,7 @@ def halo_unpin():
         _HALO["ev"].set()
         _HALO["sess"] += 1
         _HALO.update(plan=None, last=None)
-        _hud().clear("小行星带")
+        _hud_clear("小行星带")
     return {"ok": True}
 
 
@@ -1149,7 +1166,7 @@ def halo_check(g, clip=None, sess=None):
         w = halo.where(g)
         w["text"] = halo.where_text(w, p["band"])
         _HALO["last"] = w
-        _hud().set(
+        _hud_set(
             "小行星带", p["text"] + "\n" + w["text"]
         )  # 退出距离、安全区间一直留着（审查 2026-10-27：自动核对不能把它盖掉）
         bus.publish("halo", w)
@@ -1169,23 +1186,23 @@ def fix_here(deps: NavDeps, /):
         with _HALO["lock"]:
             plan = _HALO["plan"] if _HALO["sess"] == sess else None
             if not g and plan:
-                _hud().set("小行星带", plan["text"] + f"\n本次定位失败：{clip}")
+                _hud_set("小行星带", plan["text"] + f"\n本次定位失败：{clip}")
         if not g:
             return {"error": clip}
         return halo_check(g, clip, sess) or {
             "error": "小行星带方案已移除或更换，本次定位无效"
         }
     if not nav.target or not nav.space_mode:
-        _hud().set("导航", "一键定位仅用于手动定位（可在导航页切换）")
+        _hud_set("导航", "一键定位仅用于手动定位（可在导航页切换）")
         threading.Timer(
-            5, lambda: _hud().clear("导航") if not nav.target else None
+            5, lambda: _hud_clear("导航") if not nav.target else None
         ).start()
         return {"error": "当前未导航到太空路标"}
     sess = nav.session  # 等坐标期间导航结束或换了目标，这次结果就作废
     g, clip = _wait_showloc()
     if not g:
         if nav.session == sess and nav.target:
-            _hud().set("导航", f"→ {n.label(nav.target)}\n这次没定位成功：{clip}")
+            _hud_set("导航", f"→ {n.label(nav.target)}\n这次没定位成功：{clip}")
         return {"error": clip}
     return nav.add_fix(g, clip, session=sess) or {
         "error": "导航已结束或目标已更换，本次定位无效"

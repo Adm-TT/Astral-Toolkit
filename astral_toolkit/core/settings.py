@@ -137,6 +137,23 @@ def update(**kw):
         return cfg
 
 
+class NotSaved(OSError):
+    """这次改动没存上：设置文件暂时读不到（被杀毒、同步软件占着）"""
+
+
+def update_checked(**kw):
+    """和 update 一样，但设置文件暂时读不到、这次没存上时抛 NotSaved：设置页要告诉玩家再点一次
+    （以前只在控制台打一行，设置页显示改了其实没存上）。写不进去照旧抛原来的 OSError"""
+    with _LOCK:
+        _unread.flag = False
+        cfg = update(**kw)
+        if getattr(_unread, "flag", False):
+            raise NotSaved(
+                "设置文件暂时读不到（可能被杀毒或同步软件占着），这次没存上，再点一次"
+            )
+        return cfg
+
+
 class View:
     """每帧都要看的设置（调试模式、导航记号……）：内存里留一份，平时不读盘（NV-B5）。
 

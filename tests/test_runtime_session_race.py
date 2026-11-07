@@ -773,11 +773,16 @@ def test_pure_output_commit_is_blocked_after_stop():
     loop, worker, out = make_loop()
     try:
         sid = _start(loop, worker)
+        assert worker.ticked.wait(WAIT), (
+            "第一次 tick 还没记下会话"
+        )  # 不然 session 是 None，挡住了也不说明什么
         session = worker.session
         loop.request_stop_current(StopInfo("user"))
         out.clear()
         assert not loop.commit(session, ("bus", "log", {"task": "live"}))
-        assert out.ops == []
+        # 停止以后循环线程自己还会异步输出（停了的状态等），可能落在 clear 之后：只看被挡的这条没出去
+        # （以前断言 out.ops == []，11-06 FS-B3 全量时偶发红过一次）
+        assert all(r.op != ("bus", "log", {"task": "live"}) for r in out.ops)
         assert loop.join(session_id=sid)
     finally:
         loop.request_stop_current(StopInfo("user"))
