@@ -1061,7 +1061,7 @@ PAGES.craft = () => {
       $("#ccats").innerHTML = [{ key: "", label: "全部", count: r.cats.reduce((a, c) => a + c.count, 0) }, ...r.cats]
         .map((c) => `<button class="btn small${c.key === f.cat ? " primary" : ""}" data-cat="${esc(c.key)}">${esc(c.label)} <span class="faint">${c.count}</span></button>`).join("");
       $("#cfil").innerHTML = sel("csub", "子类", r.subs, f.sub) + sel("cpart", "部位", r.parts, f.part) + sel("cmaker", "厂商", r.makers, f.maker)
-        + sel("csize", "尺寸", r.sizes || [], f.size) + sel("cgrade", "等级", r.grades || [], f.grade) + sel("ccls", "类别", r.clss || [], f.cls);   // 后三个只有船零件有（CR-D1）
+        + sel("csize", "尺寸", r.sizes || [], f.size) + sel("cgrade", "等级", r.grades || [], f.grade) + sel("ccls", "分类", r.clss || [], f.cls);   // 后三个只有船零件有（CR-D1）
       const FIL = ["csub", "cpart", "cmaker", "csize", "cgrade", "ccls"], KEY = { csub: "sub", cpart: "part", cmaker: "maker", csize: "size", cgrade: "grade", ccls: "cls" };
       FIL.forEach((id, i) => { const e = $("#" + id); if (e) e.onchange = () => { f[KEY[id]] = e.value; FIL.slice(i + 1).forEach((x) => { f[KEY[x]] = ""; }); load(); }; });   // 换了前面的，后面的清掉
       $("#clist").innerHTML = "";

@@ -320,7 +320,7 @@ def _head_weapon(note=""):
         "zh": "测试步枪",
         "en": "Test Rifle",
         "kind": "个人武器",
-        "tags": ["S3", "A 级", "军用"],
+        "tags": [],
         "maker": "MakerW",
         "sec": 125,
         "unlocked": True,
@@ -348,7 +348,7 @@ def _head_laser(note=""):
         "zh": "霍夫斯泰德 S2 采矿激光器",
         "en": "Hofstede-S2 Mining Laser",
         "kind": "采矿激光器",
-        "tags": ["S2", "B 级", "工业"],
+        "tags": ["S2"],
         "maker": "Shubin",
         "sec": 300,
         "unlocked": True,
@@ -851,7 +851,7 @@ def _browse_rows_default():
             "Hofstede-S2 Mining Laser",
             "霍夫斯泰德 Hofstede-S2 Mining Laser",
             "采矿激光器",
-            "S2 · B 级 · 工业",
+            "S2",
             "Shubin",
             True,
         ),
@@ -1423,10 +1423,10 @@ def test_craft_browse_spec_tags_and_filters(monkeypatch):
     monkeypatch.setattr(itemstats, "item", lambda u: extra.get(u) or _fake_item(u))
     try:
         laser = api.craft_browse(cat="vehiclegear/mininglaser")
-        assert [r["tags"] for r in laser["rows"]] == ["S2 · B 级 · 工业"]
+        # 采矿激光器游戏里只写尺寸：等级、类别不写也不给下拉（审查 2026-11-08）
+        assert [r["tags"] for r in laser["rows"]] == ["S2"]
         assert laser["sizes"] == []  # 子类就是 S2
-        assert laser["grades"] == [{"key": "B", "label": "B 级", "count": 1}]
-        assert laser["clss"] == [{"key": "Industrial", "label": "工业", "count": 1}]
+        assert laser["grades"] == [] and laser["clss"] == []
         cooler = api.craft_browse(cat="vehiclegear/cooler")
         assert [r["tags"] for r in cooler["rows"]] == [
             "S1 · C 级 · 民用 · 配方 1/2 · 2 分钟",
@@ -1440,8 +1440,9 @@ def test_craft_browse_spec_tags_and_filters(monkeypatch):
         assert [r["tags"] for r in armour["rows"]] == ["头盔 · 战斗 · 重型"]
         assert not {"sizes", "grades", "clss"} & set(armour)
         assert api.craft_browse(cat="fpsgear/weapons")["rows"][0]["tags"] == "突击步枪"
-        assert G.craft_detail("Test Helmet")["head"]["tags"] == ["S1", "A 级", "重型"]
-        assert G.craft_detail("Test Rifle")["head"]["tags"] == ["S3", "A 级", "军用"]
+        # 护甲、个人武器的尺寸 / 等级是物品属性里的默认值：标题只写轻重
+        assert G.craft_detail("Test Helmet")["head"]["tags"] == ["重型"]
+        assert G.craft_detail("Test Rifle")["head"]["tags"] == []
     finally:
         G.clear_caches()
 

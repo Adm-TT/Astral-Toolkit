@@ -39,7 +39,8 @@ def browse(
     """蓝图字典：按条件筛，按名字排（同一系列排在一起）。返回 {rows, total, cats, subs, parts, makers}
     mat：只看用到这种矿的蓝图（从扫描结果、矿物页点过来）
     spec(蓝图) → 物品属性（itemstats.tags 那样的字典）：选了船零件类（vehiclegear/…）时按它再给
-    grades / clss 两组筛选，子类里没有尺寸的（舰船武器是实弹 / 激光……）还给 sizes，返回里多这三个键；
+    grades / clss 两组筛选（只有冷却器、发电机这些游戏说明里写等级的类才有选项，见 labels.GRADED），
+    子类里没有尺寸的（舰船武器是实弹 / 激光……）还给 sizes，返回里多这三个键；
     别的类、没给 spec 时没有这三个键，size / grade / cls 传了也不筛（CR-D1）"""
     allbp = blueprints()
     if mat:
@@ -75,7 +76,7 @@ def browse(
         rows = [b for b in rows if (b["m"] or "") == maker]
     extra = {}
     if spec is not None and cat.startswith("vehiclegear/"):
-        sp = {id(b): spec_parts(spec(b) or {}, b["s"] or "") for b in rows}
+        sp = {id(b): spec_parts(spec(b) or {}, b["s"] or "", b["t"]) for b in rows}
         extra["sizes"] = []
         if not any((b["s"] or "").startswith("size") for b in rows):
             # 子类就是 S1 / S2 的（冷却器、发电机……）不重复给尺寸；按数字排（"2" 在 "10" 前面）

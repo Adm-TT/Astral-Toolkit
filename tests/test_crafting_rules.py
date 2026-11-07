@@ -510,6 +510,19 @@ def test_spec_tags_and_browse_spec_facets():
     assert labels.weight_zh({"sub": "Heavy"}) == "重型"
     assert labels.weight_zh({"sub": "LightArmor"}) == "轻型"
     assert labels.weight_zh({"sub": "Personal"}) == labels.weight_zh({}) == ""
+    # 只写游戏说明里有的：舰船武器的等级 A、刮削模块的 S1 都是数据默认值（审查 2026-11-08）
+    assert labels.spec_tags(
+        {"size": 2, "grade": "A", "cls": "Military"}, kind="weapons"
+    ) == ["S2"]
+    assert labels.spec_tags({"size": 1, "grade": "A"}, "medium", kind="salvage") == []
+    assert labels.spec_tags(
+        {"size": 1, "grade": "C", "cls": "Competition"}, "size1", kind="cooler"
+    ) == ["S1", "C 级", "竞赛"]
+    bag = {"sub": "Personal", "type": "Char_Armor_Backpack", "size": 3}
+    assert labels.weight_zh(bag) == "重型"
+    assert labels.weight_zh({**bag, "size": 1}) == "轻型"
+    assert labels.weight_zh(bag, "H4-PBF Ammo Carrier") == ""  # 能配中型、重型护甲
+    assert labels.weight_zh({"sub": "Personal", "size": 3}) == ""  # 不是背包
 
     def bp(n, t, s, u):
         return _bp(n, n, "vehiclegear", t, s, u, "M", 1, True, [])
@@ -569,11 +582,8 @@ def test_spec_tags_and_browse_spec_facets():
         {"key": "2", "label": "S2", "count": 1},
         {"key": "10", "label": "S10", "count": 1},
     ]
-    assert gun["grades"] == [
-        {"key": "A", "label": "A 级", "count": 1},
-        {"key": "B", "label": "B 级", "count": 1},
-    ]
-    assert gun["clss"] == []
+    # 舰船武器游戏里没有等级、分类（数据里的等级是默认值）：不给这两组
+    assert gun["grades"] == [] and gun["clss"] == []
     assert names(cat="vehiclegear/weapons", size="10") == ["Gun A"]
     assert names(cat="vehiclegear/weapons", size=2) == ["Gun B"]
     # 后面的筛选跟着前面的算：选了 C 级，类别里就没有民用；选了激光，尺寸里就没有 S2

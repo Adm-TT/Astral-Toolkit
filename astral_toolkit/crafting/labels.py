@@ -196,32 +196,46 @@ def clean_title(t: str) -> str:
 
 # ---------------------------------------------------------------- 船零件的尺寸 / 等级 / 类别，护甲的轻 / 中 / 重（CR-D1）
 
-# 物品属性里的类别（cls）
+# 物品属性里的类别（cls）；游戏汉化包写「分类：民用」「分类：竞赛」
 CLS_ZH = {
     "Civilian": "民用",
     "Military": "军用",
     "Industrial": "工业",
     "Stealth": "隐形",
-    "Competition": "竞速",
+    "Competition": "竞赛",
 }
 # 护甲的子类型（物品属性里的 sub）；游戏汉化包写「物品类型：重型护甲」
 WEIGHT_ZH = {"Light": "轻型", "LightArmor": "轻型", "Medium": "中型", "Heavy": "重型"}
+# 背包的子类型大多是 Personal：按物品尺寸 1 / 2 / 3 写（游戏汉化包写「轻型背包 / 中型背包 / 重型背包」，审查 2026-11-08）
+BACKPACK_ZH = {1: "轻型", 2: "中型", 3: "重型"}
+# 船零件里游戏说明写「等级 / 分类」的只有这五类；舰船武器、采矿激光器这些，物品属性里的等级 A 是数据默认值（审查 2026-11-08）
+GRADED = frozenset({"cooler", "powerplant", "quantumdrive", "radar", "shield"})
+# 物品属性里尺寸都是默认的 1、游戏说明里也不写尺寸的船零件（采矿模组、矿石吊舱、燃料喷嘴、刮削模块）
+UNSIZED = frozenset({"miningmodule", "orepod", "refuelling", "salvage"})
 
 
-def spec_parts(t, sub=""):
+def spec_parts(t, sub="", kind=None):
     """物品属性里的（尺寸, 等级, 类别）。t 是 itemstats.tags() 那样的字典，sub 是蓝图子类。
-    尺寸：属性里的值，没有时从子类「sizeN」推，都没有是 None；等级只认 A～D，别的当没有（""）；类别是英文（Military…）或 ""。"""
+    尺寸：属性里的值，没有时从子类「sizeN」推，都没有是 None；等级只认 A～D，别的当没有（""）；类别是英文（Military…）或 ""。
+    kind 是船零件的蓝图类型（bp["t"]）：给了就只留游戏说明里有的——GRADED 才有等级、类别，UNSIZED 没有尺寸"""
     size = t.get("size")
     if size is None and sub.startswith("size") and sub[4:].isdigit():
         size = int(sub[4:])
     grade = t.get("grade")
     grade = str(grade) if grade and str(grade).upper() in "ABCD" else ""
-    return size, grade, t.get("cls") or ""
+    cls = t.get("cls") or ""
+    if kind is not None:
+        if kind in UNSIZED:
+            size = None
+        if kind not in GRADED:
+            grade = cls = ""
+    return size, grade, cls
 
 
-def spec_tags(t, sub="", size=True):
-    """「S2」「A 级」「军用」这几枚标签（制造页标题、蓝图列表用）；size=False 不写尺寸（列表里子类已经写了 S2）"""
-    n, grade, cls = spec_parts(t, sub)
+def spec_tags(t, sub="", size=True, kind=None):
+    """「S2」「A 级」「军用」这几枚标签（制造页标题、蓝图列表用）；size=False 不写尺寸（列表里子类已经写了 S2）；
+    kind 见 spec_parts"""
+    n, grade, cls = spec_parts(t, sub, kind)
     out = []
     if size and n is not None:
         out.append(f"S{n}")
@@ -232,6 +246,10 @@ def spec_tags(t, sub="", size=True):
     return out
 
 
-def weight_zh(t):
-    """护甲的「轻型」「中型」「重型」；t 是 itemstats.tags() 那样的字典，没有或是别的（Personal、UNDEFINED…）返回空串"""
-    return WEIGHT_ZH.get(t.get("sub") or "", "")
+def weight_zh(t, name=""):
+    """护甲的「轻型」「中型」「重型」；t 是 itemstats.tags() 那样的字典，name 是英文名。
+    背包的子类型是 Personal 时按尺寸写（弹药携具能配中型、重型护甲，不写）；别的没有或是 UNDEFINED… 返回空串"""
+    w = WEIGHT_ZH.get(t.get("sub") or "", "")
+    if not w and t.get("type") == "Char_Armor_Backpack" and "Ammo Carrier" not in name:
+        w = BACKPACK_ZH.get(t.get("size"), "")
+    return w

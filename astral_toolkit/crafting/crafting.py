@@ -37,12 +37,17 @@ def stats(bp, qualities):
 
 
 def header(bp):
-    """制造页的标题信息：中文名、英文名、类别、尺寸 / 等级 / 类别标签（护甲再加轻 / 中 / 重）、厂商、制造时间"""
+    """制造页的标题信息：中文名、英文名、类别、标签（船零件写尺寸 / 等级 / 类别，护甲写轻 / 中 / 重）、厂商、制造时间"""
     from . import itemstats
 
     t = itemstats.tags(bp.get("u"))
-    tags = _labels.spec_tags(t, bp.get("s") or "")
-    weight = _labels.weight_zh(t) if bp["t"] == "armour" else ""
+    # 尺寸 / 等级 / 类别只写船零件的，而且只写游戏说明里有的；个人武器、护甲物品属性里的是默认值（审查 2026-11-08）
+    tags = (
+        _labels.spec_tags(t, bp.get("s") or "", kind=bp["t"])
+        if bp["g"] == "vehiclegear"
+        else []
+    )
+    weight = _labels.weight_zh(t, bp["n"]) if bp["t"] == "armour" else ""
     if weight:
         tags.append(weight)
     return {

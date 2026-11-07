@@ -76,13 +76,13 @@ def search_blueprints(q=""):
 
 
 def _row_spec(bp):
-    """蓝图列表那行的标签（CR-D1）：船零件写尺寸 / 等级 / 类别（子类已经写了 S2 的不再写尺寸），
+    """蓝图列表那行的标签（CR-D1）：船零件写尺寸 / 等级 / 类别（只写游戏说明里有的；子类已经写了 S2 的不再写尺寸），
     护甲写轻 / 中 / 重，别的没有"""
     if bp["g"] == "vehiclegear":
         sized = (bp["s"] or "").startswith("size")
-        return spec_tags(itemstats.tags(bp.get("u")), size=not sized)
+        return spec_tags(itemstats.tags(bp.get("u")), size=not sized, kind=bp["t"])
     if bp["t"] == "armour":
-        weight = weight_zh(itemstats.tags(bp.get("u")))
+        weight = weight_zh(itemstats.tags(bp.get("u")), bp["n"])
         return [weight] if weight else []
     return []
 
