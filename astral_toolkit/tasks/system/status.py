@@ -67,11 +67,13 @@ def status(sources: StatusSources, /):
         out["game_size"] = (
             game_size()
         )  # 游戏画面多大：低于 1080 高时页面上提醒识别会不准
+    log_t = 0.0
     try:
         from ...navigation.position import current
 
         here = current()
         if here:
+            log_t = here["t"]
             out["position"] = {
                 "label": here["label"],
                 "minutes": int(here["age"] // 60),
@@ -97,14 +99,6 @@ def status(sources: StatusSources, /):
     # 只有游戏日志里有更新的地点（比如到别的站开了库存）才换掉它
     lab_t, lab = src.pos_label()
     if lab and time.time() - lab_t < 3 * 3600:
-        log_t = 0.0
-        try:
-            from ...navigation.position import from_log
-
-            hit = from_log()
-            log_t = hit[0] if hit else 0.0
-        except Exception:
-            pass
         if lab_t >= log_t:
             sys_t, sysname = src.pos_system()
             out["position"] = {

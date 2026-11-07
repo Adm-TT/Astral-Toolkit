@@ -450,7 +450,7 @@ try { applyTheme(localStorage.getItem("theme")); } catch (e) { /* 读不了就�
 function renderTop() {
   const s = state.status;
   if (!s) return;
-  applyTheme(s.settings?.theme);
+  if ((s.settings?.theme === "light") !== (document.documentElement.dataset.theme === "light")) applyTheme(s.settings?.theme);
   $("#hk").textContent = s.hover_key;
   const p = s.position;
   const sysZh = { Stanton: "斯坦顿", Pyro: "派罗", Nyx: "尼克斯" };
@@ -1862,7 +1862,10 @@ function openModal({ title, sub = "", body = "", foot = "", wide = false, onClos
     if (onClose) onClose();
   };
   MODALS.push(md);
-  m.addEventListener("mousedown", (e) => { if (e.target === m) md.close(); });
+  // 输入型弹窗只通过明确的关闭、取消或 Esc 退出，避免误点遮罩丢掉内容。
+  m.addEventListener("mousedown", (e) => {
+    if (e.target === m && !m.querySelector('input, select, textarea, [contenteditable]:not([contenteditable="false"])')) md.close();
+  });
   m.querySelectorAll("[data-close]").forEach((b) => (b.onclick = md.close));
   return md;
 }
@@ -3031,10 +3034,11 @@ async function showDisclaimer() {
   box.innerHTML = `<div class="gate-card" role="dialog" aria-modal="true"><div class="legal" style="max-height:60vh">${await disclaimerHTML()}</div>
     <button class="btn" id="gate-close">关闭</button></div>`;
   document.body.appendChild(box);
-  const close = () => box.remove();
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  const close = () => { document.removeEventListener("keydown", onKey); box.remove(); };
   $("#gate-close").onclick = close;
   box.addEventListener("click", (e) => { if (e.target === box) close(); });
-  document.addEventListener("keydown", function esc(e) { if (e.key === "Escape") { close(); document.removeEventListener("keydown", esc); } });
+  document.addEventListener("keydown", onKey);
 }
 
 
