@@ -834,7 +834,8 @@ def test_navigation_analysis_forwards_to_navigate(monkeypatch):
 
 
 def test_setup_loads_nav_data_only_for_ground(monkeypatch):
-    """开导航（setup）：地面导航先经注入的分析读一次导航数据，太空 / 手动定位不读（R2 改坏检查补的，以前没人测）"""
+    """开导航（setup）：地面导航先经注入的分析读一次导航数据，手动定位（space_mode：只用 /showlocation 的坐标，
+    太空路标默认走它）不读（R2 改坏检查补的，以前没人测）"""
     from astral_toolkit.navigation import navigate as n
 
     loads = []
@@ -849,7 +850,8 @@ def test_setup_loads_nav_data_only_for_ground(monkeypatch):
 
 
 def test_ground_tick_no_steer_when_close_in_city(monkeypatch):
-    """城里离目标不到 CITY_NEAR_M 米不给转向，远一点照给（R2 改坏检查补的，以前没人测）"""
+    """城里离目标不到 CITY_NEAR_M 米不给转向，正好等于或更远照给；阈值经注入的分析取（这里换成 50，真值是 15，
+    近的那次放在两者之间）（R2 改坏检查补的，以前没人测）"""
     from astral_toolkit.navigation import navigate as n
 
     for name, value in (
@@ -868,7 +870,9 @@ def test_ground_tick_no_steer_when_close_in_city(monkeypatch):
     ):
         monkeypatch.setattr(n, name, value)
     monkeypatch.setattr(n, "CITY_NEAR_M", 50.0)
-    dist = {"m": 10.0}
+    dist = {
+        "m": 30.0
+    }  # 在真值 15 和换的 50 之间：线程写死 15、或不经分析取阈值，这次就会给转向
     monkeypatch.setattr(
         present_nav,
         "ground_view_of",
@@ -897,8 +901,9 @@ def test_ground_tick_no_steer_when_close_in_city(monkeypatch):
     ctx.first = False
     ctx.state["here"] = {}  # 不走「刚开始用 current」那条
     worker._ground_tick(session, ctx, now)
+    assert ctx.state["here"]["direct_m"] == 30.0  # 第一圈真算了视图
     assert "steer" not in ctx.state["here"], ctx.state["here"]
-    dist["m"] = 80.0
+    dist["m"] = 50.0  # 正好等于阈值：不算近（是 < 不是 <=），照给转向
     later = now + 1.0
     pos.latest = (later, (4.0, 5.0, 6.0), {"t": later, "camdir": (1.0, 2.0, 3.0)})
     pos.current = pos.latest
@@ -918,7 +923,8 @@ def test_nav_target_label_goes_through_analysis(monkeypatch):
 
 
 def test_start_ops_emits_starting_activity(monkeypatch):
-    """开始导航那一刻（loop 锁里）先发一条「正在开始」的活动磁贴；payload 不对不发（R2 改坏检查补的，以前没人测）"""
+    """开始导航那一刻的钩子 start_ops（SessionLoop 在锁里调，锁序由上面几条测着）先给一条「正在开始」的活动磁贴；
+    payload 不对不给（R2 改坏检查补的，以前没人测）"""
     monkeypatch.setattr(present_nav, "activity", lambda sid, p, v: ("活动", sid, p, v))
     worker = nav_helpers.worker(_FakePos(), _FakeCam(), threading.Lock())
     payload = navmod.NavPayload({"n": "X"}, {"key": "x"}, False)
