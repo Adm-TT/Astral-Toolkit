@@ -699,6 +699,47 @@ def test_mining_analysis_stays_in_its_layer():
         assert _mining_analysis_violations(ok) == [], ok
 
 
+# 盘点分析（目录迁移 R5）照采矿那条的写法：本项目模块只许 trade/inspector、tasks/count 和它们里面的名字
+_COUNT_ANALYSIS_ONLY = ("astral_toolkit.trade.inspector", "astral_toolkit.tasks.count")
+
+
+def test_count_analysis_and_presenter_stay_in_their_layers():
+    """目录迁移 R5 拆出来的两块：盘点分析（tasks/count_analysis）只往下转给 trade/inspector、tasks/count（界面、runtime、
+    装配、别的 tasks、trade 别的模块都不许，拿整个包再走属性也不许），文件顶上只 import typing（调用时才取）；
+    盘点的悬浮窗文字（app/presenters/count）只排版：不导入本项目任何模块（数量写法由 bootstrap 传进来），不用字符串导入"""
+    path = _ROOT / "tasks" / "count_analysis.py"
+    source = path.read_text(encoding="utf-8")
+    pkg = "astral_toolkit.tasks"
+    assert _allowlist_violations(source, pkg, _COUNT_ANALYSIS_ONLY) == []
+    top = [
+        n for n in ast.parse(source).body if isinstance(n, (ast.Import, ast.ImportFrom))
+    ]
+    assert [ast.unparse(n) for n in top] == ["from typing import Any"]
+    for bad in (
+        "def f():\n    from ..trade import console\n",
+        "def f():\n    from . import stock\n",
+        "def f():\n    from .. import trade\n",
+        "def f():\n    from ..app import hud_state\n",
+        "def f():\n    from ..runtime.workers import count\n",
+        "from .. import bootstrap\n",
+        "import importlib\nimportlib.import_module('astral_toolkit.tasks.count')\n",
+        "import astral_toolkit\n",
+    ):
+        assert _allowlist_violations(bad, pkg, _COUNT_ANALYSIS_ONLY), bad
+    for ok in (
+        "def f():\n    from ..trade import inspector\n\n    return inspector\n",
+        "def f():\n    from . import count\n\n    return count\n",
+    ):
+        assert _allowlist_violations(ok, pkg, _COUNT_ANALYSIS_ONLY) == [], ok
+    present = (_ROOT / "app" / "presenters" / "count.py").read_text(encoding="utf-8")
+    ours = [
+        m
+        for m in _imports_in_source(present, "astral_toolkit.app.presenters")
+        if m == "astral_toolkit" or m.startswith("astral_toolkit.")
+    ]
+    assert ours == [] and _dynamic_imports(present) == []
+
+
 _INFRA_FORBIDDEN = (
     "astral_toolkit.app",
     "astral_toolkit.tasks",

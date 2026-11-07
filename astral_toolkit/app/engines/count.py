@@ -3,60 +3,71 @@
 会话循环只管线程、暂停、计时、停止和输出通道；这里只写盘点的「一轮」：
 读光标、认物品、记格子、出新格 HUD、收尾时算对账。
 
-用到的任务模块运行时才取，避免互相 import：
-_T("mining").xxx = tasks/mining.py，_H().xxx = app/hud_state.py，
-_T("count")._read_item / _count_review = tasks/count.py。
+目录迁移 R5（2026-11-07）：外面的东西都由 bootstrap 接进来，本模块不再经 _T / _H 动态去 tasks、app 取——
+一轮要用的分析（analysis：光标在截图上的哪儿、认鼠标指着的物品、收尾时和账上对；tasks/count_analysis 原样转给
+trade/inspector、tasks/count）、悬浮窗文字（views：app/presenters/count）、外面的东西（CountLinks：读光标、抓图、
+游戏在不在前台、热键名、调试图目录、开始时在哪个地点、悬浮窗短提示、正在退出时不让开始）。
 """
 
 from __future__ import annotations
 
-import importlib
 import sys
 import threading
 import traceback
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any, Callable, Protocol
 
 from ...runtime.results import ResultStore
 from ...runtime.session import SessionLoop, StopInfo, Tick
-from ..output import BusOutput
 
-WIN = sys.platform == "win32"
 REVIEW = "count.review"
 
 
-def _T(name):
-    """astral_toolkit.tasks 里的模块（运行时才取，避免互相 import）"""
-    return importlib.import_module(f"astral_toolkit.tasks.{name}")
+class CountAnalysis(Protocol):
+    """盘点一轮要用的分析（tasks/count_analysis 实现，调用时才去取）"""
+
+    def cursor_on_image(self, img: Any) -> Any:
+        """光标在这张截图上的位置"""
+        ...
+
+    def read_item(self, img: Any, cursor: Any) -> Any:
+        """鼠标指着的物品：{zh, en, quality, qty, unit, sure, craft}；认不出是 None"""
+        ...
+
+    def review(self, place: Any, items: Any) -> Any:
+        """这轮看到的和账上对：{rows, missing, ...}"""
+        ...
 
 
-def _H():
-    from .. import hud_state
+@dataclass(frozen=True)
+class CountViews:
+    """盘点要的排版（app/presenters/count）"""
 
-    return hud_state
-
-
-def _foreground():
-    """游戏在不在最前面：判断不了返回 None，照常跑"""
-    return _T("mining")._game_front()
+    # 悬浮窗里的盘点文字：(地点, 这轮记下的物品) → 文字
+    hud_text: Callable[[Any, Any], str]
 
 
-def _hotkey_now():
-    """收尾提示里的热键名；只在锁外调用"""
-    try:
-        return _T("navigation").settings_key("count_key", "F6")
-    except Exception:
-        return "F6"
+@dataclass(frozen=True)
+class CountLinks:
+    """盘点线程要的外面的东西（bootstrap 接）"""
 
-
-def _win_cursor_pos() -> tuple[int, int]:
-    """读一次 Windows 光标位置；导入本模块时不碰 Win32"""
-    import ctypes
-    from ctypes import wintypes
-
-    pt = wintypes.POINT()
-    ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
-    return (pt.x, pt.y)
+    # 读一次光标位置 (x, y)（infrastructure/platform/cursor）
+    cursor_pos: Callable[[], tuple[int, int]]
+    # 抓一张游戏画面（mining/screen.grab）
+    grab: Callable[[], Any]
+    # 游戏在不在最前面：True / False，判断不了是 None（tasks/mining）
+    foreground: Callable[[], bool | None]
+    # 收尾提示里的热键名（设置里的盘点键，读不了就是 F6）；只在锁外调用
+    hotkey: Callable[[], str]
+    # 这次盘点的调试图放进同一个时间戳目录：开始时绑、结束时解（trade/debug_shots，线程本地）
+    debug_bind: Callable[[], None]
+    debug_unbind: Callable[[], None]
+    # 开始盘点时在哪个库存地点（不知道是空字符串）
+    place_now: Callable[[], str]
+    # 悬浮窗短提示：(分区, 文字)（app/hud_state）
+    note: Callable[[str, str], None]
+    # 正在退出时不让开始：要回的错误；不拦是 None（app/lifecycle_gate）
+    refuse: Callable[[], dict[str, str] | None]
 
 
 def _key(r):  # 制造出来的同名东西，各槽品质不一样就分开记
@@ -66,18 +77,6 @@ def _key(r):  # 制造出来的同名东西，各槽品质不一样就分开记
         r["unit"],
         tuple(x["q"] for x in r.get("craft") or []),
     )
-
-
-def _hud_text(place, items) -> str:
-    """悬浮窗里的盘点文字：最近 8 项，品质为空时不带 Q"""
-    lines = [f"盘点｜{place}"]
-    for v in list(items.values())[-8:]:
-        q = "" if v["quality"] is None else f" Q{v['quality']}"
-        lines.append(
-            f"{v['zh'] or v['en']}{q} ×{v['cells']}  "
-            f"{_T('hover').qty_text(v['qty'], v['unit'])}"
-        )
-    return "\n".join(lines)
 
 
 @dataclass
@@ -108,11 +107,15 @@ class _CountWorker:
     STILL = 0.35
     loop: Any = None
 
-    def __init__(self, cursor_pos: Callable[[], tuple[int, int]] | None = None) -> None:
-        self._cursor_pos = cursor_pos or _win_cursor_pos
+    def __init__(
+        self, analysis: CountAnalysis, views: CountViews, links: CountLinks
+    ) -> None:
+        self._an = analysis
+        self._views = views
+        self._links = links
 
     def hotkey(self) -> str:
-        return _hotkey_now()
+        return self._links.hotkey()
 
     def start_ops(self, session: Any) -> list[tuple[Any, ...]]:
         place = session.payload
@@ -129,14 +132,12 @@ class _CountWorker:
         return []
 
     def setup(self, session: Any) -> _CountCtx:
-        from ...trade import debug_shots
-
         # 调试图：这次盘点的识别都放进同一个时间戳目录（线程本地，setup / teardown 都在会话线程上跑）
-        debug_shots.bind_count_run()
+        self._links.debug_bind()
         return _CountCtx()
 
     def tick(self, session: Any, ctx: _CountCtx, now: float) -> Tick:
-        pos = self._cursor_pos()
+        pos = self._links.cursor_pos()
         if pos != ctx.prev_pos:
             ctx.prev_pos, ctx.still_since = pos, now
             if (
@@ -149,13 +150,10 @@ class _CountWorker:
         if now - ctx.still_since < self.STILL or ctx.done_pos == pos:
             return Tick(0.1)
 
-        from ...mining.screen import grab
-        from ...trade import console as C
-
-        img = grab()
-        cursor = C._cursor_on_image(img)
+        img = self._links.grab()
+        cursor = self._an.cursor_on_image(img)
         try:
-            r = _T("count")._read_item(img, cursor)
+            r = self._an.read_item(img, cursor)
         except Exception as e:
             r = None
             if repr(e) != ctx.logged:
@@ -201,7 +199,8 @@ class _CountWorker:
         v["qty"] = round(v["qty"] + r["qty"], 6)
         v["cells"] += 1
         self.loop.commit(
-            session, ("hud.set", "盘点", _hud_text(session.payload, ctx.items))
+            session,
+            ("hud.set", "盘点", self._views.hud_text(session.payload, ctx.items)),
         )
         return Tick(0.0, seen)
 
@@ -242,7 +241,7 @@ class _CountWorker:
         items = ctx.items if ctx is not None else {}
         ops: list[tuple[Any, ...]] = [("hud.clear", "盘点")]
         try:
-            review = _T("count")._count_review(place, items) if items else None
+            review = self._an.review(place, items) if items else None
         except Exception as e:
             review = None
             ops.append(("bus", "log", {"task": "count", "line": f"盘点对账失败：{e}"}))
@@ -261,13 +260,12 @@ class _CountWorker:
         return ops
 
     def teardown(self, session: Any, ctx: _CountCtx | None) -> None:
-        from ...trade import debug_shots
-
-        debug_shots.unbind_count_run()
+        self._links.debug_unbind()
 
 
 class _Count:
-    """兼容外壳（RT-B7 删）：对外接口照旧，里面换成会话循环"""
+    """兼容外壳（RT-B7 删）：对外接口照旧，里面换成会话循环。
+    output、analysis、views、links、enabled（只有 Windows 能开始）都由 bootstrap 给；worker 给了就用给的（测试）"""
 
     IDLE_CLOSE = 60
     STILL = 0.35
@@ -275,25 +273,31 @@ class _Count:
     def __init__(
         self,
         results=None,
-        output=None,
         *,
+        output,
+        analysis,
+        views,
+        links,
+        enabled,
         clock=None,
         closing=None,
-        foreground=None,
-        cursor_pos=None,
         worker=None,
         join_timeout=3.0,
         _loop_factory=None,
     ):
         self._start_lock = threading.Lock()
         self._last_place = ""
-        self._worker = worker if worker is not None else _CountWorker(cursor_pos)
+        self._links = links
+        self._enabled = enabled
+        self._worker = (
+            worker if worker is not None else _CountWorker(analysis, views, links)
+        )
         factory = _loop_factory or SessionLoop
         self.loop = factory(
             self._worker,
             results=results or ResultStore(),
-            output=output or BusOutput(),
-            foreground=foreground or _foreground,
+            output=output,
+            foreground=links.foreground,
             clock=clock,
             join_timeout=join_timeout,
             closing=closing or (lambda: False),
@@ -322,26 +326,15 @@ class _Count:
         return self._worker.hotkey()
 
     def start(self):
-        from ..lifecycle_gate import closing_error
-
-        refused = closing_error()
+        refused = self._links.refuse()
         if refused:
             return refused
         with self._start_lock:
-            if not WIN or self.running():
+            if not self._enabled or self.running():
                 return {"running": self.running()}
-            from ...crafting import stockplaces as SP
-
-            here = SP.current_place()
-            place = (
-                here["label"]
-                if here
-                else _T("stock")._place_of(
-                    _T("trade").trade().db.get("last_location", "") or ""
-                )[0]
-            )
+            place = self._links.place_now()
             if not place:
-                _H()._note_hud("盘点", "盘点：当前位置未知｜先在游戏中打开一次库存")
+                self._links.note("盘点", "盘点：当前位置未知｜先在游戏中打开一次库存")
                 return {"error": "当前位置未知：先在游戏中打开一次库存"}
             sid = self.loop.start(place)
             if sid is None:
