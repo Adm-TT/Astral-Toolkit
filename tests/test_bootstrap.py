@@ -11,7 +11,6 @@ from PIL import Image
 
 from astral_toolkit import bootstrap
 from astral_toolkit.app import lifecycle_gate
-from astral_toolkit.app.engines import count as count_engine
 from astral_toolkit.app import nav_marker
 from astral_toolkit.crafting import stockplaces
 from astral_toolkit.mining import screen as mining_screen
@@ -402,7 +401,6 @@ def test_mining_session_starts_and_stops_with_fake_screen(monkeypatch):
 
 
 def test_count_session_uses_fake_worker(monkeypatch):
-    monkeypatch.setattr(count_engine, "WIN", True)
     monkeypatch.setattr(stockplaces, "current_place", lambda: {"label": "测试站"})
     worker = FakeWorker(name="count")
     with app_for_test(
@@ -411,6 +409,7 @@ def test_count_session_uses_fake_worker(monkeypatch):
         output=RecordingOutput(),
         count_worker=worker,
     ) as app:
+        app.count._enabled = True  # 原来换模块常量 WIN：不在 Windows 上跑也照样能开始
         result = app.count.start()
         assert result.get("running") is True, result
         assert _wait_until(app.count.running)
@@ -662,6 +661,129 @@ def test_hotkeys_are_wired_by_bootstrap():
         assert len(hover) == 1 and getattr(hover[0], "_target", None) is app.hotkeys
     finally:
         bootstrap.shutdown(app, budget=0.2)
+
+
+def test_count_analysis_views_and_links_are_wired_by_bootstrap(monkeypatch):
+    """目录迁移 R5：盘点线程的分析（tasks/count_analysis）、悬浮窗文字（app/presenters/count）、外面的东西（CountLinks）
+    由 bootstrap 接；装配时一样都不取（各模块上的函数先换成「取了就炸」再造），造好以后换成记调用的，走的都是新换的；
+    热键名读不了是 F6，开始时不知道在哪就按上次记的位置找；只有 Windows 能开始"""
+    import sys
+
+    from astral_toolkit.app import hud_state
+    from astral_toolkit.app import lifecycle_gate as gate
+    from astral_toolkit.app.presenters import count as present_count
+    from astral_toolkit.infrastructure.platform import cursor as cursor_platform
+    from astral_toolkit.tasks import count_analysis
+    from astral_toolkit.tasks import hover as hover_tasks
+    from astral_toolkit.tasks import stock as stock_tasks
+    from astral_toolkit.trade import debug_shots, inspector
+
+    def boom(*a, **k):
+        raise AssertionError("装配时不该取")
+
+    names = [
+        (cursor_platform, "pos"),
+        (mining_screen, "grab"),
+        (mining_tasks, "_game_front"),
+        (nav_tasks, "settings_key"),
+        (debug_shots, "bind_count_run"),
+        (debug_shots, "unbind_count_run"),
+        (stockplaces, "current_place"),
+        (hud_state, "_note_hud"),
+        (gate, "closing_error"),
+        (present_count, "hud_text"),
+        (inspector, "_cursor_on_image"),
+        (count_tasks, "_read_item"),
+        (count_tasks, "_count_review"),
+    ]
+    for mod, name in names:
+        monkeypatch.setattr(mod, name, boom)
+    app = bootstrap.build("test")
+    try:
+        worker = app.count._worker
+        links = app.count._links
+        assert worker._an is count_analysis and worker._links is links
+        assert app.count._enabled is (sys.platform == "win32")
+        rec = []
+
+        def fake(tag, ret=None):
+            def f(*a, **k):
+                rec.append((tag, a))
+                return ret
+
+            return f
+
+        monkeypatch.setattr(cursor_platform, "pos", fake("cursor", (5, 6)))
+        monkeypatch.setattr(mining_screen, "grab", fake("grab", "img"))
+        monkeypatch.setattr(mining_tasks, "_game_front", fake("front", False))
+        monkeypatch.setattr(nav_tasks, "settings_key", fake("key", "F9"))
+        monkeypatch.setattr(debug_shots, "bind_count_run", fake("bind"))
+        monkeypatch.setattr(debug_shots, "unbind_count_run", fake("unbind"))
+        monkeypatch.setattr(
+            stockplaces, "current_place", fake("place", {"label": "测试站"})
+        )
+        monkeypatch.setattr(hud_state, "_note_hud", fake("note"))
+        monkeypatch.setattr(
+            gate, "closing_error", fake("refuse", {"error": "正在退出"})
+        )
+        monkeypatch.setattr(present_count, "hud_text", fake("hud", "文字"))
+        monkeypatch.setattr(hover_tasks, "qty_text", "数量写法")
+        monkeypatch.setattr(inspector, "_cursor_on_image", fake("on_image", (1, 2)))
+        monkeypatch.setattr(count_tasks, "_read_item", fake("read", "物品"))
+        monkeypatch.setattr(count_tasks, "_count_review", fake("review", "对账"))
+        assert links.cursor_pos() == (5, 6)
+        assert links.grab() == "img"
+        assert links.foreground() is False
+        assert links.hotkey() == "F9"
+        links.debug_bind()
+        links.debug_unbind()
+        assert links.place_now() == "测试站"
+        links.note("盘点", "一句话")
+        assert links.refuse() == {"error": "正在退出"}
+        assert worker._views.hud_text("站", {"k": 1}) == "文字"
+        assert worker._an.cursor_on_image("img") == (1, 2)
+        assert worker._an.read_item("img", (1, 2)) == "物品"
+        assert worker._an.review("站", {}) == "对账"
+        assert rec == [
+            ("cursor", ()),
+            ("grab", ()),
+            ("front", ()),
+            ("key", ("count_key", "F6")),
+            ("bind", ()),
+            ("unbind", ()),
+            ("place", ()),
+            ("note", ("盘点", "一句话")),
+            ("refuse", ()),
+            ("hud", ("站", {"k": 1}, "数量写法")),
+            ("on_image", ("img",)),
+            ("read", ("img", (1, 2))),
+            ("review", ("站", {})),
+        ]
+        monkeypatch.setattr(nav_tasks, "settings_key", boom)
+        assert links.hotkey() == "F6"
+        monkeypatch.setattr(stockplaces, "current_place", lambda: None)
+        monkeypatch.setattr(
+            trade_tasks, "trade", lambda: SimpleNamespace(db={"last_location": "某处"})
+        )
+        monkeypatch.setattr(stock_tasks, "_place_of", lambda loc: (f"地点:{loc}", None))
+        assert links.place_now() == "地点:某处"
+    finally:
+        bootstrap.shutdown(app, budget=0.2)
+    cp, fg = (lambda: (1, 1)), (lambda: True)
+    given = bootstrap._count_links({"cursor_pos": cp, "foreground": fg})
+    assert given.cursor_pos is cp and given.foreground is fg
+    # 给的是 None 就当没给（tests/count_helpers 总是把两个键都带上）
+    dflt = bootstrap._count_links({"cursor_pos": None, "foreground": None})
+    monkeypatch.setattr(cursor_platform, "pos", lambda: (7, 8))
+    monkeypatch.setattr(mining_tasks, "_game_front", lambda: None)
+    assert dflt.cursor_pos() == (7, 8) and dflt.foreground() is None
+    # 装配那一步：build 把 overrides 里的 cursor_pos / foreground 交给盘点
+    app2 = bootstrap.build("test", overrides={"cursor_pos": cp, "foreground": fg})
+    try:
+        assert app2.count._links.cursor_pos is cp
+        assert app2.count.loop._foreground is fg
+    finally:
+        bootstrap.shutdown(app2, budget=0.2)
 
 
 def test_routes_hold_this_apps_live(monkeypatch):

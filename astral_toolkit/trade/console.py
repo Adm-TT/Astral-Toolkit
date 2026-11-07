@@ -1,5 +1,5 @@
 """交易的旧总入口里库存那半边：Trade（库存库 + 物品目录 + 行情查询）、data_directory、ore_item、_quality，
-和给冻结调用方（库存、盘点、目标）留的几个旧名字。
+和给冻结调用方（目标）留的两个旧名字（SOURCE_ZH、material_source；盘点那个 _cursor_on_image 目录迁移 R5 删了）。
 
 命令行版 2026-11-06 删了（F 段 B3）；行情显示搬到 trade/market_text，名字比较搬到 trade/matching，
 维科洛材料来源搬到 crafting/acquire（F 段 B1；目录迁移 Q3b 起在 tasks/catalog_queries/acquire）；库存这半边等新库存。
@@ -21,9 +21,6 @@ from .providers.uex import UexProvider
 from .storage import Database
 
 # 旧名字：只留给还冻着的调用方，别处一律从新家拿（test_runtime_arch 管着）
-from .inspector import (
-    _cursor_on_image as _cursor_on_image,
-)  # 盘点（app/engines/count）：盘点改从 trade.inspector 拿时删
 from .market_text import (
     SOURCE_ZH as SOURCE_ZH,
 )  # 目标（tasks/goals）：目标链改从 trade.market_text 拿时删

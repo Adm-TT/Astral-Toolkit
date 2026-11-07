@@ -2,7 +2,7 @@
 
 import time
 
-from astral_toolkit.app.engines.count import _CountWorker
+from astral_toolkit.runtime.workers.count import _CountWorker
 from astral_toolkit.runtime.workers.mining import _Live
 from astral_toolkit.runtime.workers.navigation import _NavWorker
 from astral_toolkit.runtime.session import RunState, StopInfo

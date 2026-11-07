@@ -174,17 +174,18 @@ def test_hotkeys_worker_starts_and_stops(monkeypatch):
 
 def test_count_service_stops_session_loop(monkeypatch):
     from astral_toolkit.app import lifecycle_gate
-    from astral_toolkit.app.engines import count as count_mod
+    from tests.count_helpers import (
+        count as _Count,
+    )  # 分析、排版、外面的东西、output 由测试工具补上（R5）
     from astral_toolkit.crafting import stockplaces
     from astral_toolkit.tasks import navigation
     from tests.runtime_fakes import RecordingOutput
 
-    monkeypatch.setattr(count_mod, "WIN", True)
     monkeypatch.setattr(lifecycle_gate, "closing_error", lambda: None)
     monkeypatch.setattr(stockplaces, "current_place", lambda: {"label": "测试站"})
     monkeypatch.setattr(navigation, "settings_key", lambda key, default=None: default)
     ticks = iter(range(100000))
-    count = count_mod._Count(
+    count = _Count(
         output=RecordingOutput(),
         foreground=lambda: True,
         cursor_pos=lambda: (next(ticks), 0),

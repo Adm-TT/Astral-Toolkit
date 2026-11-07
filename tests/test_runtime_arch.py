@@ -554,6 +554,26 @@ def test_hotkeys_worker_import_is_light():
     assert _run(code) == "True []"
 
 
+def test_count_worker_import_is_light():
+    """导入盘点线程（runtime/workers/count，目录迁移 R5）不带进 app、tasks、system、trade、mining、crafting、
+    infrastructure、ctypes（读屏、认物品、库存、读光标都由 bootstrap 接），导入时也不起线程（起了马上结束的也算）；
+    再导入盘点分析（tasks/count_analysis，属于 tasks 层，带进 tasks 包是允许的）也不起线程"""
+    code = (
+        "import sys, threading\n"
+        "n = threading.active_count()\n"
+        "started = []\n"
+        "_start = threading.Thread.start\n"
+        "threading.Thread.start = lambda self: started.append(self.name) or _start(self)\n"
+        "import astral_toolkit.runtime.workers.count\n"
+        "heavy = ('astral_toolkit.app', 'astral_toolkit.tasks', 'astral_toolkit.system', 'astral_toolkit.trade', "
+        "'astral_toolkit.mining', 'astral_toolkit.crafting', 'astral_toolkit.infrastructure', 'ctypes')\n"
+        "a = sorted(m for m in sys.modules if m.startswith(heavy))\n"
+        "import astral_toolkit.tasks.count_analysis\n"
+        "print(threading.active_count() == n and not started, a)\n"
+    )
+    assert _run(code) == "True []"
+
+
 # 导航分析的本项目导入只许 navigation/navigate 和它里面的名字：照 runtime 的做法用允许清单，导入记下的、绑到名字上的
 # 都查（R2 两轮审查改的）；采矿识别分析（R3）照同一个写法，只许下面那几个模块
 _NAV_ANALYSIS_ONLY = "astral_toolkit.navigation.navigate"
@@ -697,6 +717,47 @@ def test_mining_analysis_stays_in_its_layer():
         "def f():\n    from ..core import paths\n\n    return paths\n",
     ):
         assert _mining_analysis_violations(ok) == [], ok
+
+
+# 盘点分析（目录迁移 R5）照采矿那条的写法：本项目模块只许 trade/inspector、tasks/count 和它们里面的名字
+_COUNT_ANALYSIS_ONLY = ("astral_toolkit.trade.inspector", "astral_toolkit.tasks.count")
+
+
+def test_count_analysis_and_presenter_stay_in_their_layers():
+    """目录迁移 R5 拆出来的两块：盘点分析（tasks/count_analysis）只往下转给 trade/inspector、tasks/count（界面、runtime、
+    装配、别的 tasks、trade 别的模块都不许，拿整个包再走属性也不许），文件顶上只 import typing（调用时才取）；
+    盘点的悬浮窗文字（app/presenters/count）只排版：不导入本项目任何模块（数量写法由 bootstrap 传进来），不用字符串导入"""
+    path = _ROOT / "tasks" / "count_analysis.py"
+    source = path.read_text(encoding="utf-8")
+    pkg = "astral_toolkit.tasks"
+    assert _allowlist_violations(source, pkg, _COUNT_ANALYSIS_ONLY) == []
+    top = [
+        n for n in ast.parse(source).body if isinstance(n, (ast.Import, ast.ImportFrom))
+    ]
+    assert [ast.unparse(n) for n in top] == ["from typing import Any"]
+    for bad in (
+        "def f():\n    from ..trade import console\n",
+        "def f():\n    from . import stock\n",
+        "def f():\n    from .. import trade\n",
+        "def f():\n    from ..app import hud_state\n",
+        "def f():\n    from ..runtime.workers import count\n",
+        "from .. import bootstrap\n",
+        "import importlib\nimportlib.import_module('astral_toolkit.tasks.count')\n",
+        "import astral_toolkit\n",
+    ):
+        assert _allowlist_violations(bad, pkg, _COUNT_ANALYSIS_ONLY), bad
+    for ok in (
+        "def f():\n    from ..trade import inspector\n\n    return inspector\n",
+        "def f():\n    from . import count\n\n    return count\n",
+    ):
+        assert _allowlist_violations(ok, pkg, _COUNT_ANALYSIS_ONLY) == [], ok
+    present = (_ROOT / "app" / "presenters" / "count.py").read_text(encoding="utf-8")
+    ours = [
+        m
+        for m in _imports_in_source(present, "astral_toolkit.app.presenters")
+        if m == "astral_toolkit" or m.startswith("astral_toolkit.")
+    ]
+    assert ours == [] and _dynamic_imports(present) == []
 
 
 _INFRA_FORBIDDEN = (
@@ -1281,9 +1342,10 @@ def _nav_presenter_violations(source):
 
 
 def test_nav_and_mining_workers_do_not_reach_into_tasks():
-    """导航线程（目录迁移 R2 起在 runtime/workers/navigation）、采矿线程（R3 起在 runtime/workers/mining）只在 bootstrap
+    """导航线程（目录迁移 R2 起在 runtime/workers/navigation）、采矿线程（R3 起在 runtime/workers/mining）、
+    盘点线程（R5 起在 runtime/workers/count）只在 bootstrap
     接好的依赖上跑：不再静态 / 动态导入 tasks，也不再留 _T / _H（runtime 门禁另外只许 runtime、contracts、core.run_records）。"""
-    for name in ("navigation.py", "mining.py"):
+    for name in ("navigation.py", "mining.py", "count.py"):
         path = _ROOT / "runtime" / "workers" / name
         source = path.read_text(encoding="utf-8")
         assert _nav_engine_violations(source) == [], path.name
@@ -2261,10 +2323,21 @@ def _thread_starts_in_source(source):
     return out
 
 
-def test_count_engine_does_not_start_its_own_threads():
-    """RT-B5a：盘点线程由会话循环起，app/engines/count.py 里不自己起线程"""
-    source = (_ROOT / "app" / "engines" / "count.py").read_text(encoding="utf-8")
+def test_count_worker_does_not_start_its_own_threads():
+    """RT-B5a：盘点线程由会话循环起；目录迁移 R5 起在 runtime/workers/count.py，里面不自己起线程"""
+    source = (_ROOT / "runtime" / "workers" / "count.py").read_text(encoding="utf-8")
     assert _thread_starts_in_source(source) == []
+    assert "_loop_factory or SessionLoop" in source, "盘点要接会话循环"
+
+
+def test_count_worker_does_not_read_the_cursor_itself():
+    """目录迁移 R5：读光标交给平台层（infrastructure/platform/cursor，bootstrap 接进 CountLinks），
+    盘点线程里连函数里也不 import ctypes（原来的 _win_cursor_pos 就是在函数里 import 的，导入时查不出）"""
+    source = (_ROOT / "runtime" / "workers" / "count.py").read_text(encoding="utf-8")
+    pkg = "astral_toolkit.runtime.workers"
+    assert _forbidden(list(_imports_in_source(source, pkg)), ("ctypes",)) == []
+    bad = "def f():\n    import ctypes\n\n    return ctypes\n"
+    assert _forbidden(list(_imports_in_source(bad, pkg)), ("ctypes",)), bad
 
 
 def test_mining_worker_does_not_start_its_own_scan_loop():
@@ -2282,7 +2355,6 @@ def test_mining_worker_does_not_start_its_own_scan_loop():
 
 _FS_B1_CONSOLE = "astral_toolkit.trade.console"
 _FS_B1_OLD_ALIASES = {
-    f"{_FS_B1_CONSOLE}._cursor_on_image": {"astral_toolkit/app/engines/count.py"},
     f"{_FS_B1_CONSOLE}.SOURCE_ZH": {"astral_toolkit/tasks/goals.py"},
     f"{_FS_B1_CONSOLE}.material_source": {"astral_toolkit/crafting/goals.py"},
 }
@@ -2303,6 +2375,7 @@ _FS_B1_DELETED = {
         "tooltip_pick",
         "tooltip_name",
         "plausible_name",
+        "_cursor_on_image",  # 盘点（目录迁移 R5）改从 trade.inspector 拿，旧名字删了
     )
 }
 

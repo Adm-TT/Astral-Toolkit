@@ -11,7 +11,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable
 
-from .app.engines.count import _Count
+from .runtime.workers.count import CountAnalysis, CountLinks, CountViews, _Count
 from .app.inputs.hotkeys import HotkeyCommands
 from .runtime.workers.hotkeys import HotkeyLinks, HotkeyWorker
 from .runtime.workers.mining import MiningAnalysis, MiningLinks, MiningViews, _Live
@@ -359,6 +359,104 @@ def _mining_links(options: Mapping[str, Any]) -> MiningLinks:
     )
 
 
+def _count_analysis() -> CountAnalysis:
+    """盘点线程一轮要用的分析（目录迁移 R5）：tasks/count_analysis 这个模块（原样转给 trade/inspector、tasks/count）"""
+    from .tasks import count_analysis
+
+    return count_analysis
+
+
+def _count_views() -> CountViews:
+    """盘点要的排版（目录迁移 R5）：悬浮窗文字在 app/presenters/count，数量写法用的时候现取 tasks/hover.qty_text"""
+    from .app.presenters import count as present_count
+
+    def hud_text(place: Any, items: Any) -> str:
+        from .tasks import hover as hover_tasks
+
+        return present_count.hud_text(place, items, hover_tasks.qty_text)
+
+    return CountViews(hud_text=hud_text)
+
+
+def _count_links(options: Mapping[str, Any]) -> CountLinks:
+    """盘点线程要的外面的东西（目录迁移 R5：以前盘点线程在构造器里自己造、或经 `_T` / `_H` 动态去 tasks、app 取）。
+    读光标（infrastructure/platform/cursor）、抓图（mining/screen）、游戏在不在前台（tasks/mining）、热键名（tasks/navigation
+    读设置，读不了就是 F6）、调试图目录（trade/debug_shots）、开始时在哪个库存地点（crafting/stockplaces；不知道就按上次
+    记的位置经 tasks/stock 找）、悬浮窗短提示（app/hud_state）、正在退出时不让开始（app/lifecycle_gate）都是用的时候才取；
+    overrides 给了 cursor_pos / foreground 就用给的（测试用）"""
+
+    def cursor_pos() -> tuple[int, int]:
+        from .infrastructure.platform import cursor
+
+        return cursor.pos()
+
+    def grab() -> Any:
+        from .mining import screen
+
+        return screen.grab()
+
+    def foreground() -> bool | None:
+        from .tasks import mining as mining_tasks
+
+        return mining_tasks._game_front()
+
+    def hotkey() -> str:
+        try:
+            from .tasks import navigation as navigation_tasks
+
+            return navigation_tasks.settings_key("count_key", "F6")
+        except Exception:
+            return "F6"
+
+    def debug_bind() -> None:
+        from .trade import debug_shots
+
+        debug_shots.bind_count_run()
+
+    def debug_unbind() -> None:
+        from .trade import debug_shots
+
+        debug_shots.unbind_count_run()
+
+    def place_now() -> str:
+        from .crafting import stockplaces
+
+        here = stockplaces.current_place()
+        if here:
+            return here["label"]
+        # 不知道当前地点才按上次记的位置找（和以前一样，这时才导入 tasks/stock、tasks/trade）
+        from .tasks import stock as stock_tasks
+        from .tasks import trade as trade_tasks
+
+        return stock_tasks._place_of(
+            trade_tasks.trade().db.get("last_location", "") or ""
+        )[0]
+
+    def note(section: str, text: str) -> None:
+        from .app import hud_state
+
+        hud_state._note_hud(section, text)
+
+    def refuse() -> dict[str, str] | None:
+        from .app import lifecycle_gate
+
+        return lifecycle_gate.closing_error()
+
+    given_cursor = options.get("cursor_pos")
+    given_front = options.get("foreground")
+    return CountLinks(
+        cursor_pos=given_cursor if given_cursor is not None else cursor_pos,
+        grab=grab,
+        foreground=given_front if given_front is not None else foreground,
+        hotkey=hotkey,
+        debug_bind=debug_bind,
+        debug_unbind=debug_unbind,
+        place_now=place_now,
+        note=note,
+        refuse=refuse,
+    )
+
+
 def _hotkeys(commands: HotkeyCommands) -> HotkeyWorker:
     """热键线程（目录迁移 R4 起在 runtime/workers/hotkeys，只管看键）：绑定、按下去做什么、出错清「忙」都接键盘入口
     （app/inputs/hotkeys 的 HotkeyCommands），读键接 infrastructure/platform/keys；只有 Windows 起线程"""
@@ -408,6 +506,8 @@ def build(
     mode: str = "desktop", *, overrides: Mapping[str, Any] | None = None
 ) -> DesktopApp:
     """造对象、登记服务；desktop 模式最后再做全局绑定。"""
+    import sys
+
     from .tasks import navigation as navigation_tasks
     from .tasks import system as system_tasks
 
@@ -493,10 +593,12 @@ def build(
     count = _Count(
         results,
         output=output,
+        analysis=_count_analysis(),
+        views=_count_views(),
+        links=_count_links(options),
+        enabled=sys.platform == "win32",
         clock=options.get("clock"),
         closing=lifecycle.is_closing,
-        foreground=options.get("foreground"),
-        cursor_pos=options.get("cursor_pos"),
         worker=options.get("count_worker"),
     )
     hover_links = _hover_links()
