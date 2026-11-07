@@ -59,6 +59,7 @@ function harness() {
   const context = vm.createContext({
     document, window, localStorage: { getItem: () => "dark", setItem() { writes++; } },
     state: { status: null }, esc: String, $: (s) => document.querySelector(s),
+    setTimeout: () => 0, clearTimeout: () => {},
     requestAnimationFrame: (fn) => fn(), disclaimerHTML: async () => "<p>说明</p>",
   });
   const blocks = [
@@ -74,6 +75,7 @@ function send(el, name, props = {}) {
   const event = new Event(name, { cancelable: true });
   for (const [key, value] of Object.entries(props)) Object.defineProperty(event, key, { value });
   el.dispatchEvent(event);
+  return event;
 }
 
 test("填过内容的弹窗点外面不关（卡片跳一下），关闭和取消照旧能关", () => {
@@ -89,13 +91,23 @@ test("填过内容的弹窗点外面不关（卡片跳一下），关闭和取�
     const md = h.evaluate(`openModal({ title: "编辑", body: ${JSON.stringify(body)}, foot: '<button data-close>取消</button>' })`);
     md.q("#value").value = "未保存内容";
     send(md.el, name, { target: md.q("#value") });
-    send(md.el, "mousedown");
+    const down = send(md.el, "mousedown");
     assert.equal(md.el.removed, false, body);
-    assert.equal(md.q("#value").value, "未保存内容");
+    assert.ok(down.defaultPrevented, body);                         // 输入框不失焦
     assert.ok(md.q(".modal-card").classes.has("nudge"), body);
+    assert.ok(md.el.closeButtons.every((b) => b.classes.has("hint")), body);   // 关了动画也看得到
     md.el.closeButtons[1].onclick();
     assert.equal(md.el.removed, true);
   }
+});
+
+test("真弹窗里的标记都在：搜索框带 data-filter，分段选择和换地点的事件会冒泡到弹窗，带进来的数量算填过", () => {
+  assert.match(source, /id="pp-q" data-filter/);                                    // 选存放地点的搜索框
+  assert.match(source, /placeholder="搜索地点" aria-label="搜索地点" data-filter/);  // 库存页地点菜单的搜索框
+  assert.match(source, /if \(!e\.target\.closest\?\.\("\[data-filter\]"\)\) p\.dirty = true;/);   // 小表单也认 data-filter
+  assert.match(source, /this\.dispatchEvent\(new Event\("change", \{ bubbles: true \}\)\)/);   // x-seg
+  assert.match(source, /new CustomEvent\("placechange", \{ bubbles: true/);
+  assert.match(source, /if \(\(pre\.qty \?\? ""\) !== "" \|\| \(pre\.quality \?\? ""\) !== ""\) md\.dirty = true;/);
 });
 
 test("没填过的弹窗、只在搜索框里打过字的，点外面照旧关", () => {

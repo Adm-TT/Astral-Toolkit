@@ -82,8 +82,8 @@ def test_hotkey_conflicts_and_about():
 
 def test_status_reuses_log_position_and_preserves_probe_contract(monkeypatch):
     """状态快照同一轮只读一次游戏日志（以前地点那段还会再读一遍）；status 自己读一次设置、查一次游戏是不是管理员权限开的。
-    from_log 整个换掉了，所以数不到找日志（system.gamelog.find_log）里那次读设置、game_size 那次翻窗口——
-    这两样还在，是待做 124 没做完的那半。"""
+    from_log、game_size 都换成了假的，所以数不到找日志（system.gamelog.find_log）里那次读设置、game_size 那次翻窗口——
+    这两样还在，是待做「status() 太重」那条没做完的那半。"""
     from types import SimpleNamespace
 
     from astral_toolkit.core import capture, settings
