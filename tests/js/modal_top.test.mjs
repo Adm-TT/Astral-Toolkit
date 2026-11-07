@@ -9,7 +9,8 @@ class Element extends EventTarget {
   constructor() {
     super();
     this.dataset = {};
-    this.classList = { add() {} };
+    this.classes = new Set();
+    this.classList = { add: (c) => this.classes.add(c), remove: (c) => this.classes.delete(c) };
     this.children = [];
     this.nodes = new Map();
     this.removed = false;
@@ -17,14 +18,24 @@ class Element extends EventTarget {
   set innerHTML(html) {
     this.html = html;
     this.nodes.clear();
-    for (const match of html.matchAll(/id="([^"]+)"/g)) this.nodes.set(`#${match[1]}`, new Element());
+    for (const [, attrs] of html.matchAll(/<[\w-]+\b([^>]*)>/g)) {
+      const id = /\bid="([^"]+)"/.exec(attrs)?.[1];
+      if (!id) continue;
+      const el = new Element();
+      Object.assign(el, { attrs, parentNode: this });
+      this.nodes.set(`#${id}`, el);
+    }
+    if (html.includes('class="modal-card')) this.nodes.set(".modal-card", new Element());
     this.closeButtons = [...html.matchAll(/data-close/g)].map(() => new Element());
   }
   get innerHTML() { return this.html; }
-  querySelector(selector) {
-    if (selector.includes("input") && /<(input|select|textarea)\b|contenteditable/.test(this.html || "")) return new Element();
-    return this.nodes.get(selector) || null;
+  // 只认 [属性] 这一种写法：顺着替身的父节点找带这个属性的
+  closest(selector) {
+    const attr = /^\[([\w-]+)\]$/.exec(selector)?.[1];
+    for (let el = this; attr && el; el = el.parentNode) if (new RegExp(`(^|\\s)${attr}(=|\\s|$)`).test(el.attrs || "")) return el;
+    return null;
   }
+  querySelector(selector) { return this.nodes.get(selector) || null; }
   querySelectorAll(selector) { return selector === "[data-close]" ? this.closeButtons : []; }
   appendChild(el) { this.children.push(el); return el; }
   remove() { this.removed = true; }
@@ -65,17 +76,42 @@ function send(el, name, props = {}) {
   el.dispatchEvent(event);
 }
 
-test("输入弹窗的遮罩保留输入，显式关闭与取消仍可用", () => {
+test("填过内容的弹窗点外面不关（卡片跳一下），关闭和取消照旧能关", () => {
   const h = harness();
-  for (const body of ['<input id="value">', '<select id="value"></select>', '<textarea id="value"></textarea>']) {
+  const cases = [
+    ['<input id="value">', "input"],
+    ['<select id="value"></select>', "change"],
+    ['<textarea id="value"></textarea>', "input"],
+    ['<x-seg id="value"></x-seg>', "change"],                           // 分段选择只发 change
+    ['<button class="place-pick" id="value"></button>', "placechange"], // 选地点按钮换了地点
+  ];
+  for (const [body, name] of cases) {
     const md = h.evaluate(`openModal({ title: "编辑", body: ${JSON.stringify(body)}, foot: '<button data-close>取消</button>' })`);
     md.q("#value").value = "未保存内容";
+    send(md.el, name, { target: md.q("#value") });
     send(md.el, "mousedown");
-    assert.equal(md.el.removed, false);
+    assert.equal(md.el.removed, false, body);
     assert.equal(md.q("#value").value, "未保存内容");
+    assert.ok(md.q(".modal-card").classes.has("nudge"), body);
     md.el.closeButtons[1].onclick();
     assert.equal(md.el.removed, true);
   }
+});
+
+test("没填过的弹窗、只在搜索框里打过字的，点外面照旧关", () => {
+  const h = harness();
+  const blank = h.evaluate(`openModal({ title: "入库", body: '<input id="value" value="带进来的">' })`);
+  send(blank.el, "mousedown");
+  assert.equal(blank.el.removed, true);
+  const pick = h.evaluate(`openModal({ title: "选择存放地点", body: '<input id="q" data-filter><input id="name">' })`);
+  send(pick.el, "input", { target: pick.q("#q") });
+  send(pick.el, "change", { target: pick.q("#q") });
+  send(pick.el, "mousedown");
+  assert.equal(pick.el.removed, true);
+  const named = h.evaluate(`openModal({ title: "选择存放地点", body: '<input id="q" data-filter><input id="name">' })`);
+  send(named.el, "input", { target: named.q("#name") });
+  send(named.el, "mousedown");
+  assert.equal(named.el.removed, false);
 });
 
 test("查看弹窗可点遮罩关闭，卡片内点击不关；关闭回调只执行一次", () => {

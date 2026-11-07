@@ -81,7 +81,9 @@ def test_hotkey_conflicts_and_about():
 
 
 def test_status_reuses_log_position_and_preserves_probe_contract(monkeypatch):
-    """状态快照不在同一轮重复读日志；热路径的设置和权限探针各一次。"""
+    """状态快照同一轮只读一次游戏日志（以前地点那段还会再读一遍）；status 自己读一次设置、查一次游戏是不是管理员权限开的。
+    from_log 整个换掉了，所以数不到找日志（system.gamelog.find_log）里那次读设置、game_size 那次翻窗口——
+    这两样还在，是待做 124 没做完的那半。"""
     from types import SimpleNamespace
 
     from astral_toolkit.core import capture, settings
@@ -134,6 +136,7 @@ def test_status_reuses_log_position_and_preserves_probe_contract(monkeypatch):
         results=SimpleNamespace(),
     )
     out = status_mod.status(sources)
+    # settings 只数 status 自己读的那次（见上面）
     assert calls == {"settings": 1, "elevated": 1, "log": 1}
     assert out["settings"] == cfg
     assert out["hover_key"] == "F9"
