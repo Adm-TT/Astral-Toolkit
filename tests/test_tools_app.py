@@ -610,3 +610,29 @@ def test_set_settings_tells_when_not_saved(monkeypatch, tmp_path):
         monkeypatch.setattr(paths, "write_json", real)
         r = t_sys.set_settings(sources, theme="light")
         assert r.get("theme") == "light" and settings.load()["theme"] == "light"
+
+
+def test_set_hotkey_unread_settings_says_not_saved(monkeypatch, tmp_path):
+    """改热键先读设置查撞键：设置文件暂时读不到时拿到的只是默认值，按默认值查会误报「F8 已用于物品识别」，
+    要直接说这次没存上、再点一次（s1 复查）；读得到时按真实设置查"""
+    import json
+
+    from astral_toolkit import bootstrap
+    from astral_toolkit.app import bus
+    from astral_toolkit.core import settings
+    from astral_toolkit.tasks import system as t_sys
+    from tests.bootstrap_helpers import app_for_test
+
+    monkeypatch.setattr(bus, "publish", lambda *a, **k: None)
+    with app_for_test() as app:
+        sources = bootstrap.status_sources(app)
+        locked = tmp_path / "locked.json"
+        locked.mkdir()  # 读这个「文件」报 OSError：和被别的程序占着一样
+        monkeypatch.setattr(settings, "FILE", locked)
+        r = t_sys.set_settings(sources, live_key="F8")  # 默认值里 F8 是物品识别
+        assert "没存上" in r["error"] and "已用于" not in r["error"]
+        ok = tmp_path / "ok.json"
+        ok.write_text(json.dumps({"trade_capture_key": "F11"}), encoding="utf-8")
+        monkeypatch.setattr(settings, "FILE", ok)
+        r = t_sys.set_settings(sources, live_key="F8")  # 物品识别早改成 F11：F8 空着
+        assert r.get("live_key") == "F8" and settings.load()["live_key"] == "F8"

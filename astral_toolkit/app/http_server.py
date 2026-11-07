@@ -51,8 +51,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def _drain(self, n):
         """拒绝前把小请求体读掉再关连接：请求体留在连接里就关，Windows 会回 RST，客户端常常读不到这次的回答
-        （WinError 10053，11-07 电脑满负荷时测试红过）。只读不超过 DRAIN_MAX 字节、最多等 1 秒；大的照旧不读
-        （不让本机别的程序用大请求体耗 AT 的内存，审查 2026-10-31）"""
+        （WinError 10053，11-07 电脑满负荷时测试红过）。只读不超过 DRAIN_MAX 字节，每次收数据最多等 1 秒
+        （对方一直慢慢送会更久，只占着这一条连接的线程）；大的照旧不读（不让本机别的程序用大请求体耗 AT 的内存，审查 2026-10-31）"""
         if not 0 < n <= DRAIN_MAX:
             return
         sock = self.connection
@@ -113,7 +113,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, f.read_bytes(), ctype)
 
     def do_POST(self):
-        # 拒绝时不读请求体，答完就关连接（请求体留在连接里，这条连接不能再复用）。
+        # 拒绝时只读掉 DRAIN_MAX 以内的小请求体（见 _drain），大的不读；答完就关连接（请求体留在连接里，这条连接不能再复用）。
         # 审查 2026-10-31：以前先按 Content-Length 把请求体整个读进内存再验令牌，本机任何程序不带令牌就能让 AT 吃掉上 GB 内存
         if not self.path.startswith("/api/"):
             self.close_connection = True

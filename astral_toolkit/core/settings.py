@@ -141,6 +141,9 @@ class NotSaved(OSError):
     """这次改动没存上：设置文件暂时读不到（被杀毒、同步软件占着）"""
 
 
+_NOT_READ = "设置文件暂时读不到（可能被杀毒或同步软件占着），这次没存上，再点一次"
+
+
 def update_checked(**kw):
     """和 update 一样，但设置文件暂时读不到、这次没存上时抛 NotSaved：设置页要告诉玩家再点一次
     （以前只在控制台打一行，设置页显示改了其实没存上）。写不进去照旧抛原来的 OSError"""
@@ -148,9 +151,18 @@ def update_checked(**kw):
         _unread.flag = False
         cfg = update(**kw)
         if getattr(_unread, "flag", False):
-            raise NotSaved(
-                "设置文件暂时读不到（可能被杀毒或同步软件占着），这次没存上，再点一次"
-            )
+            raise NotSaved(_NOT_READ)
+        return cfg
+
+
+def load_checked():
+    """和 load 一样，但设置文件暂时读不到（拿到的只是默认值）时抛 NotSaved：
+    改热键前查撞键不能拿默认值查，会误报「已用于…」（s1 复查）"""
+    with _LOCK:
+        _unread.flag = False
+        cfg = load()
+        if getattr(_unread, "flag", False):
+            raise NotSaved(_NOT_READ)
         return cfg
 
 

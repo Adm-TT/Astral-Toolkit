@@ -104,7 +104,12 @@ def set_settings(sources: StatusSources, /, **kw):
             continue
         if not re.fullmatch(r"F([1-9]|1[0-2])", k):
             return {"error": "热键仅支持 F1–F12"}
-        cur = cur or settings.load()
+        if cur is None:
+            # 设置文件暂时读不到时拿到的只是默认值：拿它查撞键会误报「已用于…」，直接说没存上
+            try:
+                cur = settings.load_checked()
+            except settings.NotSaved as e:
+                return {"error": str(e)}
         taken = {key: lab for key, lab, n in _hotkey_values(cur) if n != name and key}
         if k in taken:
             return {"error": f"{k} 已用于「{taken[k]}」，需更换按键"}
