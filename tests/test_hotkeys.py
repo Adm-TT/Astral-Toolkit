@@ -19,7 +19,7 @@ from astral_toolkit.tasks.system.settings import HOTKEYS
 
 class _Ticks(threading.Event):
     """假的 stop_ev：线程每看完一遍键调一次 wait(0.03)，就算过了一遍；过满 limit 遍说「该停了」。出错后的 wait(1) 也记下、
-    不算一遍；别的等法也算一遍（间隔改坏了测试照样停得下来，由断言抓）"""
+    不算一遍；别的等法也算一遍。一共等的次数到 limit + 20 也说该停（间隔改成 1 秒之类的改坏也不会卡死，由断言抓）"""
 
     def __init__(self, limit):
         super().__init__()
@@ -43,6 +43,8 @@ class _Ticks(threading.Event):
             self.polls += 1
             if self.polls >= self.limit:
                 self._stop = True
+        if len(self.waits) >= self.limit + 20:
+            self._stop = True
         return self._stop
 
 
@@ -354,11 +356,15 @@ def test_f8_retry_waits_for_the_last_run_and_uses_the_pressed_key(monkeypatch):
     running = {}
     monkeypatch.setattr(task_runner, "_running", running)
 
+    made = []
+
     class _Now:
-        def __init__(self, target, **kw):
+        def __init__(self, target, daemon=None, name=None):
             self.target = target
+            made.append((target, daemon, name))
 
         def start(self):
+            made.append("start")
             self.target()
 
     class _Last:
@@ -373,6 +379,8 @@ def test_f8_retry_waits_for_the_last_run_and_uses_the_pressed_key(monkeypatch):
     outcomes[:] = [None, None]
     cmd.pressed("trade_capture_key", "F11")
     assert tries == ["item", "hover", "hover"]
+    # 重试另起守护短线程（热键线程不跟着等那 0.3 秒）
+    assert made == [(cmd._retry_hover, True, "hover-retry"), "start"]
     assert logs == ["捕获到 F11 快捷键，触发悬停识别...", "F11 正在识别中，请稍候..."]
     assert cmd.busy is False
 

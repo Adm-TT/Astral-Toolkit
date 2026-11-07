@@ -538,15 +538,18 @@ def test_mining_worker_import_is_light():
 
 def test_hotkeys_worker_import_is_light():
     """导入热键线程（runtime/workers/hotkeys，目录迁移 R4）不带进 app、tasks、system、infrastructure 和 ctypes（读键的
-    平台读数）、core.settings（读绑定）——这些都由 bootstrap 接；导入也不起线程"""
+    平台读数）、core.settings（读绑定）——这些都由 bootstrap 接；导入也不起线程（起了马上结束的也算：记下 Thread.start）"""
     code = (
         "import sys, threading\n"
         "n = threading.active_count()\n"
+        "started = []\n"
+        "_start = threading.Thread.start\n"
+        "threading.Thread.start = lambda self: started.append(self.name) or _start(self)\n"
         "import astral_toolkit.runtime.workers.hotkeys\n"
         "heavy = ('astral_toolkit.app', 'astral_toolkit.tasks', 'astral_toolkit.system', "
         "'astral_toolkit.infrastructure', 'astral_toolkit.core.settings', 'ctypes')\n"
         "a = sorted(m for m in sys.modules if m.startswith(heavy))\n"
-        "print(threading.active_count() == n, a)\n"
+        "print(threading.active_count() == n and not started, a)\n"
     )
     assert _run(code) == "True []"
 
