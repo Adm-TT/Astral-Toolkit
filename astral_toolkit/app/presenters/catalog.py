@@ -94,12 +94,43 @@ def present_search_results(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any
     ]
 
 
+def distance_text(m):
+    """买点离你多远 → 文字（目录迁移收尾从 navigation/position.fmt_distance 搬来）：不在一个星系「要跳星系」、
+    1000 公里内「就在附近」、10 亿米内按千公里、再远按 Gm"""
+    if m >= 1e15:
+        return "要跳星系"
+    if m < 1e6:
+        return "就在附近"
+    if m < 1e9:
+        return f"{m / 1e6:,.0f} 千公里"
+    return f"{m / 1e9:,.1f} Gm"
+
+
+def _buy_row(r):
+    """买点一行：用例给的 dist_m（米；None 是不知道你在哪）换成 dist 文字，键和先后跟以前一样（dist、price、shop、place）"""
+    m = r.get("dist_m")
+    return {
+        "dist": "" if m is None else distance_text(m),
+        "price": r["price"],
+        "shop": r["shop"],
+        "place": r["place"],
+    }
+
+
 def present_item_info(info: ItemInfo) -> dict[str, Any]:
-    """物品卡片：facts 照抄一份（不改用例给的字典），换上中文名；有分类才换成中文分类；最后加目标提示"""
+    """物品卡片：facts 照抄一份（不改用例给的字典），换上中文名；有分类才换成中文分类；买点（含同系列的）的距离
+    写成文字；最后加目标提示。窗口物品查询页和 F8 卡片都是这一份"""
     d = dict(info.facts)
     d["zh"] = info.zh
     if d.get("category"):
         d["category"] = shop_cat_zh(d["category"])
+    if d.get("buy"):
+        d["buy"] = [_buy_row(r) for r in d["buy"]]
+    if d.get("variants"):
+        d["variants"] = [
+            {**v, "buy": [_buy_row(r) for r in v.get("buy") or []]}
+            for v in d["variants"]
+        ]
     d["goal"] = info.goal
     return d
 

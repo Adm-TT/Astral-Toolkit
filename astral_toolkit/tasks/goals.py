@@ -149,9 +149,9 @@ def _goals_view():
     for g in p["goals"]:
         for r in g["rows"]:
             if r["short"] > 0:
-                r["tip"] = G.where_to_get(r["en"])
+                r["tip"] = _present_wikelo.source_text(G.where_to_get(r["en"]))
     for t_item in p["shortfall"]:
-        t_item["tip"] = G.where_to_get(t_item["en"])
+        t_item["tip"] = _present_wikelo.source_text(G.where_to_get(t_item["en"]))
     for g in p["goals"]:
         if g.get("kind") != "craft" or g.get("missing"):
             continue

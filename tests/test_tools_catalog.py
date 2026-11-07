@@ -166,7 +166,8 @@ def test_finder_cheapest_first(monkeypatch, tmp_path):
         1700
     )  # 没有商店卖、商店收最高 1,200（原来比 where_text 的文字，Q2 删了 where_text）
     assert not buy and sell[0][0] == 1200
-    assert "Orison" in shops.where_by_name("SureGrip S1 Tractor Beam")
+    best = shops.cheapest_buy("SureGrip S1 Tractor Beam")  # (价格, 商店, 位置)
+    assert best is not None and "Orison" in best[2]
 
 
 def test_item_record_matches_shops_json_items(monkeypatch, tmp_path):
@@ -251,8 +252,9 @@ def test_limited_variant_recommends_base(monkeypatch, tmp_path):
 
 
 def test_buy_rows_nearest_first_when_position_known(monkeypatch, tmp_path):
-    """买点：有位置、算得出距离就按远近给最近 3 处并写上距离（贵的离得近也排前面）；没有位置给最便宜 3 处、
-    不写距离（目录迁移 Q3b 改坏检查补的：上面那条最近和最便宜碰巧同序，不按远近也看不出来）"""
+    """买点：有位置、算得出距离就按远近给最近 3 处并给米数 dist_m（贵的离得近也排前面）；没有位置给最便宜 3 处、
+    dist_m 是 None（目录迁移 Q3b 改坏检查补的：上面那条最近和最便宜碰巧同序，不按远近也看不出来）。
+    目录迁移收尾起距离写成文字在 app/presenters/catalog，见 test_presenters_write_distance_and_source_text"""
     setup(monkeypatch, tmp_path)
     monkeypatch.setattr(loot, "info", lambda en="", zh="", **kw: None)
     monkeypatch.setattr(
@@ -260,11 +262,12 @@ def test_buy_rows_nearest_first_when_position_known(monkeypatch, tmp_path):
     )
     d = acquire.info("MaxLift Tractor Beam", "", 1700)
     assert d["buy"][0]["shop"] == "Shop NB"  # 在微科：新巴贝奇最近，虽然最贵
-    assert all(r["dist"] for r in d["buy"]), d["buy"]
+    ds = [r["dist_m"] for r in d["buy"]]
+    assert all(isinstance(x, float) for x in ds) and ds == sorted(ds), d["buy"]
     monkeypatch.setattr(position, "current", lambda: None)
     d = acquire.info("MaxLift Tractor Beam", "", 1700)
     assert [r["shop"] for r in d["buy"]] == ["Shop Orison", "Shop ARC-L4", "Shop NB"]
-    assert [r["dist"] for r in d["buy"]] == ["", "", ""]
+    assert [r["dist_m"] for r in d["buy"]] == [None, None, None]
 
 
 def test_resolve_order(monkeypatch):
@@ -591,7 +594,9 @@ def test_wikelo_materials_all_have_source(monkeypatch):
 
 def test_material_source_order_and_sentence(monkeypatch):
     """维科洛材料去哪弄那一句（目录迁移 Q3b 改坏检查补的）：维科洛说明 → 商店最便宜的 → 挖矿最好的矿点（纯净的要精炼）
-    → 开箱掉落（只看本机，不联网）；开箱那句写最常见的箱子、超过 3 个地方写「等」，副本专属矿说只能开采，刷在场景里的不说箱子"""
+    → 开箱掉落（只看本机，不联网）；开箱那句写最常见的箱子、超过 3 个地方写「等」，副本专属矿说只能开采，刷在场景里的不说箱子。
+    目录迁移收尾起查询给事实、那一句由 app/presenters/wikelo.source_text 拼：两边一起测，字和以前一样"""
+    from astral_toolkit.app.presenters.wikelo import source_text
     from astral_toolkit.mining import locations
 
     monkeypatch.setattr(
@@ -599,8 +604,12 @@ def test_material_source_order_and_sentence(monkeypatch):
     )
     monkeypatch.setattr(
         shops,
-        "where_by_name",
-        lambda n: "可买：某店" if n in ("Wikelo Favor", "ASD Secure Drive") else "",
+        "cheapest_buy",
+        lambda n: (
+            (1234.4, "某店", "某地")
+            if n in ("Wikelo Favor", "ASD Secure Drive")
+            else None
+        ),
     )
     monkeypatch.setattr(
         locations,
@@ -634,25 +643,91 @@ def test_material_source_order_and_sentence(monkeypatch):
         return found.get(en)
 
     monkeypatch.setattr(loot, "info", fake_info)
-    assert acquire.material_source("Wikelo Favor") == "维科洛说明"  # 商店也有，说明在先
-    assert acquire.material_source("ASD Secure Drive") == "可买：某店"
-    assert acquire.material_source("Carinite") == "挖矿：甲地 42%"
-    assert (
-        acquire.material_source("Carinite (Pure)") == "挖矿：甲地 42%（要精炼成纯净的）"
-    )
-    assert (
-        acquire.material_source("Pearl")
-        == "开箱：区一、区二（Box A 箱，单箱最高约 25%）"
-    )
-    assert (
-        acquire.material_source("Many")
-        == "开箱：一、二、三等（Crate 箱，单箱最高约 50%）"
-    )
-    assert acquire.material_source("Shelf") == "场景里刷出：奖励室（最高约 30%）"
-    assert acquire.material_source("Ore") == "副本专属矿，只能开采：副本（洞里）"
-    assert acquire.material_source("Nothing") == ""
+
+    def said(n):
+        return source_text(acquire.material_source(n))
+
+    assert acquire.material_source("Wikelo Favor") == {
+        "note": "维科洛说明"
+    }  # 商店也有，说明在先
+    assert said("Wikelo Favor") == "维科洛说明"
+    assert acquire.material_source("ASD Secure Drive") == {
+        "buy": (1234.4, "某店", "某地")
+    }
+    assert said("ASD Secure Drive") == "可买：某店（某地）1,234 aUEC"
+    assert acquire.material_source("Carinite") == {
+        "mine": {"where": "甲地", "pct": 42.4, "pure": False}
+    }
+    assert said("Carinite") == "挖矿：甲地 42%"
+    assert said("Carinite (Pure)") == "挖矿：甲地 42%（要精炼成纯净的）"
+    assert said("Pearl") == "开箱：区一、区二（Box A 箱，单箱最高约 25%）"
+    assert said("Many") == "开箱：一、二、三等（Crate 箱，单箱最高约 50%）"
+    assert said("Shelf") == "场景里刷出：奖励室（最高约 30%）"
+    assert said("Ore") == "副本专属矿，只能开采：副本（洞里）"
+    assert acquire.material_source("Nothing") is None and said("Nothing") == ""
     # 只看本机：每次都要明说 online=False（loot.info 默认联网，漏传就会联网），不在页面里逐个材料联网等
     assert online and all(v is False for v in online), online
+
+
+def test_presenters_write_distance_and_source_text():
+    """目录迁移收尾：距离写成文字（原 navigation/position.fmt_distance）、材料去哪弄那一句挪到展示层。
+    物品卡片（窗口物品查询页、F8 共用）把买点和同系列买点的 dist_m 换成 dist 文字，键和先后照旧，不改用例给的字典"""
+    from astral_toolkit.app.presenters import catalog as present
+    from astral_toolkit.app.presenters.wikelo import source_text
+    from astral_toolkit.catalog.results import ItemInfo
+
+    dt = present.distance_text
+    assert dt(1e15) == "要跳星系" and dt(float("inf")) == "要跳星系"
+    assert dt(999_999) == "就在附近" and dt(2.5e8) == "250 千公里"
+    assert dt(3.21e10) == "32.1 Gm" and dt(1e9) == "1.0 Gm"
+    row = {"dist_m": 5e5, "price": 1, "shop": "店甲", "place": "地甲"}
+    far = {"dist_m": 1e15, "price": 3, "shop": "店丙", "place": "地丙"}
+    unknown = {"dist_m": None, "price": 2, "shop": "店乙", "place": "地乙"}
+    facts = {
+        "name": "X",
+        "zh": "",
+        "category": "",
+        "buy": [row, far],
+        "variants": [{"id": 7, "name": "V", "total": 1, "buy": [unknown]}],
+    }
+    d = present.present_item_info(ItemInfo(facts=facts, zh="叉", goal=""))
+    assert d["buy"] == [
+        {"dist": "就在附近", "price": 1, "shop": "店甲", "place": "地甲"},
+        {"dist": "要跳星系", "price": 3, "shop": "店丙", "place": "地丙"},
+    ]
+    assert list(d["buy"][0]) == ["dist", "price", "shop", "place"]
+    assert d["variants"] == [
+        {
+            "id": 7,
+            "name": "V",
+            "total": 1,
+            "buy": [{"dist": "", "price": 2, "shop": "店乙", "place": "地乙"}],
+        }
+    ]
+    assert (
+        facts["buy"][0] is row and row["dist_m"] == 5e5 and "dist" not in row
+    )  # 用例给的不动
+    assert (
+        list(d)[:5] == ["name", "zh", "category", "buy", "variants"] and d["zh"] == "叉"
+    )
+    empty = present.present_item_info(
+        ItemInfo(facts={"buy": [], "variants": []}, zh="", goal="")
+    )
+    assert empty["buy"] == [] and empty["variants"] == []
+    assert source_text(None) == "" and source_text({}) == ""
+    assert source_text({"note": "说明"}) == "说明"
+    loot = {
+        "regions": ["甲"],
+        "more": True,
+        "mine": False,
+        "note": "",
+        "box": "12 号",
+        "placed": False,
+        "p": 0.1,
+    }
+    assert (
+        source_text({"loot": loot}) == "开箱：甲等（，单箱最高约 10%）"
+    )  # 箱子名是数字开头的不写
 
 
 def test_names_follow_game_localization(tmp_path, monkeypatch):

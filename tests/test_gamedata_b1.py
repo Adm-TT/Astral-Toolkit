@@ -72,7 +72,7 @@ def test_shops_queries_empty_when_db_unavailable(monkeypatch, tmp_path):
     assert shops.find("Lawson") == []
     assert shops.find_close("Lawson Arms") is None
     assert shops.where(200) == ([], [])
-    assert shops.where_by_name("Lawson") == ""
+    assert shops.cheapest_buy("Lawson") is None
     assert shops.nearest(200, None) == []
     assert shops.buyable(200) is False
     assert shops.variants("Lawson Arms") == []
@@ -758,13 +758,16 @@ def test_variants_prefers_buyable(monkeypatch, tmp_path):
     ]
 
 
-def test_where_by_name_first_buyable(monkeypatch, tmp_path):
+def test_cheapest_buy_first_buyable(monkeypatch, tmp_path):
+    """按英文名找第一件有商店卖的、给它最便宜那处（以前直接拼「可买：…」一行；目录迁移收尾那句挪到
+    app/presenters/wikelo.source_text，字照旧）"""
+    from astral_toolkit.app.presenters.wikelo import source_text
+
     shops = _shop_setup(monkeypatch, tmp_path)
-    assert (
-        shops.where_by_name("Lawson Mining Laser")
-        == "可买：Shop C2（Pyro · Z）900 aUEC"
-    )
-    assert shops.where_by_name("nothing") == ""
+    best = shops.cheapest_buy("Lawson Mining Laser")
+    assert best == (900, "Shop C2", "Pyro · Z")
+    assert source_text({"buy": best}) == "可买：Shop C2（Pyro · Z）900 aUEC"
+    assert shops.cheapest_buy("nothing") is None
 
 
 # ---------------------------------------------------------------- Task 6：物品搜索索引改从数据层建

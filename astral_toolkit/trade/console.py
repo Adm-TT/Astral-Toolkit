@@ -28,7 +28,8 @@ from .market_text import (
 
 def material_source(name_en):
     """目标（crafting/goals）用的旧名字：目标改用新实现时删。目录迁移 Q3b 起转给 tasks/catalog_queries/acquire——
-    trade 往上调 tasks 只许这一处（老大 11-07 定：留着转发、钉住这一条；门禁 test_trade_reaches_up_into_tasks_only_where_listed）"""
+    trade 往上调 tasks 只许这一处（老大 11-07 定：留着转发、钉住这一条；门禁 test_trade_reaches_up_into_tasks_only_where_listed）。
+    目录迁移收尾起转过来的是事实，那一句话由 tasks/goals 调 app/presenters/wikelo.source_text 拼"""
     from ..tasks.catalog_queries.acquire import material_source as f
 
     return f(name_en)
