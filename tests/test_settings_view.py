@@ -68,3 +68,64 @@ def test_save_bumps_counter(monkeypatch, tmp_path):
     before = settings._SAVED[0]
     settings.save(dict(settings.DEFAULTS))
     assert settings._SAVED[0] == before + 1
+
+
+def test_unreadable_settings_keep_last_read(monkeypatch, tmp_path):
+    """这个进程读到过的设置文件后来暂时读不到（被杀毒、同步软件占着）：先用上次读到的，不退回默认值——
+    不然窗口会闪回深色、设置页显示默认值、按默认值查撞键（s1 第二轮复查）；这次照样不存盘、要报没存上"""
+    import json
+
+    f = tmp_path / "settings.json"
+    f.write_text(
+        json.dumps({"agreed": True, "keys_v5": True, "ocr_v2": True, "theme": "light"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(settings, "FILE", f)
+    assert settings.load()["theme"] == "light"
+    f.unlink()
+    f.mkdir()  # 同一个位置读不出来：和被别的程序占着一样
+    assert settings.load()["theme"] == "light"
+    try:
+        settings.update_checked(theme="dark")
+    except settings.NotSaved:
+        pass
+    else:
+        raise AssertionError("读不到时要报没存上")
+    assert f.is_dir()  # 没有拿默认值盖掉
+
+
+def test_just_saved_settings_survive_unreadable(monkeypatch, tmp_path):
+    """刚存上的就是最新的：存完马上读不到（杀毒、同步软件常在文件刚改完时去扫），给的是刚存的，不闪回改之前的
+    （s1 第三轮复查：以前只记读到的，窗口外观、识别设备会退回改之前的）"""
+    import json
+
+    f = tmp_path / "settings.json"
+    f.write_text(
+        json.dumps(
+            {"keys_v5": True, "ocr_v2": True, "theme": "dark", "ocr_device": "gpu"}
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(settings, "FILE", f)
+    assert settings.load()["theme"] == "dark"
+    settings.update_checked(theme="light", ocr_device="cpu")
+    f.unlink()
+    f.mkdir()  # 存完马上读不到
+    cfg = settings.load()
+    assert cfg["theme"] == "light" and cfg["ocr_device"] == "cpu"
+
+
+def test_mining_gadgets_saved_and_read_back(monkeypatch, tmp_path):
+    """带了哪些手持工具：存上就读得到，存别的设置时也不会被抹掉（s1 第三轮复查：以前不在默认值里，存了也读不到）"""
+    from astral_toolkit.mining import laser
+
+    f = tmp_path / "settings.json"
+    monkeypatch.setattr(settings, "FILE", f)
+    assert (
+        settings.load()["mining_gadgets"] is None and len(laser.carried_gadgets()) > 1
+    )
+    settings.update(mining_gadgets=["sabir"])
+    assert settings.load()["mining_gadgets"] == ["sabir"]
+    settings.update(theme="light")
+    assert settings.load()["mining_gadgets"] == ["sabir"]
+    assert laser.carried_gadgets() == ("sabir",)

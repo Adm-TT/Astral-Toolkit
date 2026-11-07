@@ -814,3 +814,61 @@ def test_old_events_endpoint_is_unchanged(monkeypatch):
         sock.close()
         srv.shutdown()
         srv.server_close()
+
+
+def test_rejected_post_drains_small_body():
+    """拒绝请求前把小请求体读掉再关连接（不读就关，Windows 回 RST，客户端常读不到 403——11-07 满负荷时
+    test_new_endpoints_reject_bad_token 红过的根）；超过 DRAIN_MAX 的照旧不读；读的时候临时设超时、读完放回"""
+    import io
+
+    from astral_toolkit.app import http_server
+
+    class _Sock:
+        def __init__(self):
+            self.timeouts = []
+
+        def gettimeout(self):
+            return None
+
+        def settimeout(self, t):
+            self.timeouts.append(t)
+
+    h = http_server.Handler.__new__(http_server.Handler)
+    h.connection = _Sock()
+    h.rfile = io.BytesIO(b"{}" + b"x" * 10)
+    h._drain(2)
+    assert h.rfile.tell() == 2 and h.connection.timeouts == [1.0, None]
+    big = http_server.DRAIN_MAX + 1
+    h.rfile = io.BytesIO(b"x" * big)
+    h.connection = _Sock()
+    h._drain(big)
+    h._drain(0)
+    assert h.rfile.tell() == 0 and h.connection.timeouts == []
+
+
+def test_rejected_post_goes_through_drain(monkeypatch):
+    """令牌不对的 POST：拒绝那条路先读掉请求体（_drain 拿到 Content-Length）再答 403"""
+    from astral_toolkit.app import http_server
+
+    _reset(monkeypatch)
+    seen = []
+    orig = http_server.Handler._drain
+
+    def spy(self, n):
+        seen.append(n)
+        return orig(self, n)
+
+    monkeypatch.setattr(http_server.Handler, "_drain", spy)
+    srv = _start_server()
+    base = f"http://127.0.0.1:{srv.server_address[1]}"
+    try:
+        req = urllib.request.Request(base + "/api/status", data=b"{}", method="POST")
+        try:
+            urllib.request.urlopen(req, timeout=2)
+            raise AssertionError("应当返回 403")
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 403
+        assert seen == [2]
+    finally:
+        srv.shutdown()
+        srv.server_close()

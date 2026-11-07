@@ -2714,7 +2714,7 @@ function goalsDraw() {
 // 设置页「文字识别硬件」里的当前状态（实际在哪算、为什么没用上显卡）：status 每秒推一次，只更新这一段
 function ocrStateHtml(s, c) {
   return `当前实际运行：<b style="color:${s.ocr_device === '显卡' ? 'var(--ok,#2e7d32)' : 'inherit'}">${esc(s.ocr_device || 'CPU')}</b>
-      ${!s.gpu_available && (c.ocr_device || 'gpu') === 'gpu' ? `<br><span class="muted" style="font-size:12px;color:var(--warn,#d9822b)">⚠️ 当前 Python 环境未检测到 DirectML 支持，已自动切换为 CPU 运行。<br>如需显卡加速，请在终端执行：<code>.venv\\Scripts\\pip install onnxruntime-directml</code></span>` : ''}
+      ${!s.gpu_available && (c.ocr_device || 'cpu') === 'gpu' ? `<br><span class="muted" style="font-size:12px;color:var(--warn,#d9822b)">⚠️ 当前 Python 环境未检测到 DirectML 支持，已自动切换为 CPU 运行。<br>如需显卡加速，请在终端执行：<code>.venv\\Scripts\\pip install onnxruntime-directml</code></span>` : ''}
       ${s.ocr_error ? `<br><span class="muted" style="font-size:12px;color:var(--err,#d32f2f)">错误详情：${esc(s.ocr_error)}</span>` : ''}`;
 }
 
@@ -2778,10 +2778,10 @@ PAGES.settings = () => {
       <p>F8 识别物品时，将名字那一行文字的小截图和正确名字发给作者（认错的都发，认对的抽一部分），用于改进识别。不含整屏截图。</p></div>
       <button class="switch ${c.train_upload !== false ? "on" : ""}" id="train-sw" aria-label="帮助改进识别"></button></div>
     <div class="set"><div>文字识别硬件 (OCR)
-      <p>选择文字识别（F8 物品识别、全屏扫描）使用的硬件设备。<br>
+      <p>选择文字识别（F8 物品识别、盘点、采矿助手、导航）用处理器还是显卡。默认用处理器；显卡识别快一些（作者电脑上 F8 每次约快 0.2 秒），但 AT 会多占两三百 MB 内存。<br>
       <span id="ocr-state">${ocrStateHtml(s, c)}</span>
       </p></div>
-      ${segH("ocr-device", [["gpu", "显卡 (GPU)"], ["cpu", "处理器 (CPU)"]], (c.ocr_device || (c.always_use_gpu !== false ? "gpu" : "cpu")), "文字识别硬件")}</div>
+      ${segH("ocr-device", [["gpu", "显卡 (GPU)"], ["cpu", "处理器 (CPU)"]], (c.ocr_device || "cpu"), "文字识别硬件")}</div>
     <div class="set"><div>调试模式
       <p>开启后，F8 物品识别与 F6 盘点会把裁切阶段、停因写入运行日志，并在 userdata/shots/debug/ 落下识别区域调试图；导航读游戏右上角时每读一次在 userdata/logs/di_log.txt 记一行（导航记号收起的原因也记在这里），没读出的画面存到 userdata/shots/di_fail/。都只在本机，不上传，便于排查认错、偏慢、裁切区域不对或导航记号消失。日志和磁盘占用会明显增加；平时请保持关闭。</p></div>
       <button class="switch ${c.debug_mode ? "on" : ""}" id="debug-sw" aria-label="调试模式"></button></div>
@@ -2837,31 +2837,32 @@ PAGES.settings = () => {
   };
   $("#fb-clear").onclick = (e) => popconfirm(e.currentTarget, { title: "清空反馈记录？", sub: "已导出的文件不受影响", okText: "清空", danger: true,
     onOk: async () => { try { await api("feedback_clear"); fbList(); toast("已清空"); } catch (err) { toast(err.message); } } });
-  $("#ui-theme").onchange = async (e) => {
-    applyTheme(e.target.value);
-    try { state.status.settings = await api("set_settings", { theme: e.target.value }); } catch (err) { toast(err.message); }
-  };
-  for (const [id, key] of [["#ov-scale", "hud_scale"], ["#ov-plate", "hud_plate"], ["#nav-fps", "nav_fps"]]) {
-    $(id).onchange = async (e) => {
-      try { state.status.settings = await api("set_settings", { [key]: +e.target.value }); toast("已保存"); } catch (err) { toast(err.message); }
-    };
-  }
-  $("#ov-theme").onchange = async (e) => {
-    try { state.status.settings = await api("set_settings", { hud_theme: e.target.value }); toast("已保存"); } catch (err) { toast(err.message); }
-  };
-  const ocrDev = $("#ocr-device");
-  if (ocrDev) {
-    ocrDev.onchange = async (e) => {
-      try {
-        state.status.settings = await api("set_settings", { ocr_device: e.target.value });
-        state.status = await api("status");
-        renderPage();
-        toast(`已切换为${e.target.value === "gpu" ? "显卡 (GPU)" : "处理器 (CPU)"}`);
-      } catch (err) {
+  // 分段选择和开关都是先变界面再存。没存上（设置文件被杀毒、同步软件占着等）就退回上次存上的样子，
+  // 玩家照提示「再点一次」才对得上；等结果时玩家又点了别的，不退（s1 复查）
+  const saveSeg = (id, key, { num = false, show = null, done = null } = {}) => {
+    const el = $(id);
+    if (!el) return;
+    let saved = el.value;
+    el.onchange = async () => {
+      const v = el.value;
+      show?.(v);
+      try { state.status.settings = await api("set_settings", { [key]: num ? +v : v }); }
+      catch (err) {
+        if (el.value === v) { el.value = saved; show?.(saved); }
         toast(err.message);
+        return;
       }
+      saved = v;
+      if (done) await done(v); else toast("已保存");
     };
-  }
+  };
+  saveSeg("#ui-theme", "theme", { show: applyTheme, done: () => {} });
+  for (const [id, key] of [["#ov-scale", "hud_scale"], ["#ov-plate", "hud_plate"], ["#nav-fps", "nav_fps"]]) saveSeg(id, key, { num: true });
+  saveSeg("#ov-theme", "hud_theme");
+  saveSeg("#ocr-device", "ocr_device", { done: async (v) => {
+    try { state.status = await api("status"); renderPage(); } catch (err) { toast(err.message); return; }
+    toast(`已切换为${v === "gpu" ? "显卡 (GPU)" : "处理器 (CPU)"}`);
+  } });
   $("#ov-move").onclick = async () => {
     state.overlayMove = !state.overlayMove;
     await api("overlay_move", { on: state.overlayMove });
@@ -2892,26 +2893,17 @@ PAGES.settings = () => {
     try { upgList(await api("upgrade_check", { online: true })); } catch (err) { toast(err.message); }
     b.disabled = false; b.textContent = "检查更新";
   };
-  $("#fb-sw").onclick = async (e) => {
-    const on = !e.currentTarget.classList.contains("on");
-    e.currentTarget.classList.toggle("on", on);
-    try { state.status.settings = await api("set_settings", { feedback_upload: on }); } catch (err) { toast(err.message); }
-  };
-  $("#train-sw").onclick = async (e) => {
-    const on = !e.currentTarget.classList.contains("on");
-    e.currentTarget.classList.toggle("on", on);
-    try { state.status.settings = await api("set_settings", { train_upload: on }); } catch (err) { toast(err.message); }
-  };
-  $("#debug-sw").onclick = async (e) => {
-    const on = !e.currentTarget.classList.contains("on");
-    e.currentTarget.classList.toggle("on", on);
-    try { state.status.settings = await api("set_settings", { debug_mode: on }); } catch (err) { toast(err.message); }
-  };
-  $("#upd-sw").onclick = async (e) => {
-    const on = !e.currentTarget.classList.contains("on");
-    e.currentTarget.classList.toggle("on", on);
-    try { state.status.settings = await api("set_settings", { update_online: on }); } catch (err) { toast(err.message); }
-  };
+  // 开关同理（见上面 saveSeg）：先拨过去再存，没存上拨回上次存上的样子
+  for (const [id, key] of [["#fb-sw", "feedback_upload"], ["#train-sw", "train_upload"], ["#debug-sw", "debug_mode"], ["#upd-sw", "update_online"]]) {
+    const sw = $(id);
+    let saved = sw.classList.contains("on");
+    sw.onclick = async () => {
+      const on = !sw.classList.contains("on");
+      sw.classList.toggle("on", on);
+      try { state.status.settings = await api("set_settings", { [key]: on }); saved = on; }
+      catch (err) { if (sw.classList.contains("on") === on) sw.classList.toggle("on", saved); toast(err.message); }
+    };
+  }
   $("#upg").addEventListener("click", async (e) => {
     const back = e.target.closest(".upg-back");
     if (back) {
@@ -2935,8 +2927,8 @@ PAGES.settings = () => {
   });
 
   $("#admin-sw").onclick = async () => {
-    state.status.settings = await api("set_settings", { admin: c.admin === false });
-    renderPage();
+    try { state.status.settings = await api("set_settings", { admin: c.admin === false }); renderPage(); }
+    catch (err) { toast(err.message); }  // 没存上：开关没动过（存上了才重画）
   };
   // 1.6.60：热键不用下拉框选，点一下、按一下要用的键（F1–F12；Esc 取消）。1.6.70：所有热键都能改；默认不设的按 Delete 清掉
   document.querySelectorAll("[data-hk]").forEach((b) => (b.onclick = () => {

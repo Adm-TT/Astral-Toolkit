@@ -104,12 +104,24 @@ def set_settings(sources: StatusSources, /, **kw):
             continue
         if not re.fullmatch(r"F([1-9]|1[0-2])", k):
             return {"error": "热键仅支持 F1–F12"}
-        cur = cur or settings.load()
+        if cur is None:
+            # 设置文件暂时读不到时拿到的不一定是文件里现在的：拿它查撞键会误报「已用于…」，直接说没存上
+            try:
+                cur = settings.load_checked()
+            except settings.NotSaved as e:
+                return {"error": str(e)}
         taken = {key: lab for key, lab, n in _hotkey_values(cur) if n != name and key}
         if k in taken:
             return {"error": f"{k} 已用于「{taken[k]}」，需更换按键"}
         kw[name] = k
-    cfg = settings.update(**{k: v for k, v in kw.items() if k in allowed})
+    try:
+        cfg = settings.update_checked(**{k: v for k, v in kw.items() if k in allowed})
+    except OSError as e:  # 没存上：告诉玩家再点一次，别装作存好了（后面跟着改的悬浮窗、识别设备也不动）
+        if isinstance(e, settings.NotSaved):
+            return {"error": str(e)}
+        return {
+            "error": "设置文件写不进去（可能被杀毒或同步软件占着），这次没存上，再点一次"
+        }
     if clear_train:
         try:
             from ...system import train_data
