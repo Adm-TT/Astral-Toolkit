@@ -375,7 +375,12 @@ def _count_views() -> CountViews:
 
         return present_count.hud_text(place, items, hover_tasks.qty_text)
 
-    return CountViews(hud_text=hud_text)
+    def item_line(r: Any) -> str:
+        from .tasks import hover as hover_tasks
+
+        return present_count.item_line(r, hover_tasks.qty_text)
+
+    return CountViews(hud_text=hud_text, item_line=item_line)
 
 
 def _count_links(options: Mapping[str, Any]) -> CountLinks:

@@ -10,7 +10,6 @@ def test_record_writes_daily_file(monkeypatch, tmp_path):
     logs = tmp_path / "logs"
     logs.mkdir()
     monkeypatch.setattr(paths, "LOGS", logs)
-    run_records._LAST_CLEANUP_DAY = None
     mirrored = []
 
     def fake_runtime_log(line, tag="SYS", level="INFO"):
@@ -71,10 +70,12 @@ def test_read_tail_limit(monkeypatch, tmp_path):
 
 
 def test_record_swallows_errors(monkeypatch, tmp_path):
+    from astral_toolkit.core import day_logs
+
     def boom(*_a, **_k):
         raise OSError("nope")
 
-    monkeypatch.setattr(run_records, "path_for", boom)
+    monkeypatch.setattr(day_logs, "path_for", boom)  # 运行记录也经 day_logs 写文件
     run_records.record("SYSTEM", "应被吞掉")  # 不得抛出
 
 
@@ -180,37 +181,62 @@ def test_record_still_mirrors_when_logs_unwritable(monkeypatch, tmp_path):
 
 
 def test_day_logs_write_cap_and_cleanup(monkeypatch, tmp_path):
-    """按天的日志文件（窗口运行日志 runlog、调试细节 debug，core/day_logs）：记一行带时分秒；不认识的种类、
-    写不进去都不抛；当天写到上限就停（最后一行说明）；过了保留天数的删掉，别的种类、没过期的不动"""
+    """按天的日志文件（core/day_logs：运行记录 runrec、窗口运行日志 runlog、调试细节 debug）：记一行带时分秒；
+    不认识的种类、写不进去都不抛；当天写到上限就停，几个线程一起写也只记一次说明；每天第一次写哪一种都把
+    各种的过期文件清一遍——只写运行日志，旧调试日志也清掉（关了调试模式以后就是这样）；「留 N 天」含今天"""
+    import threading
+
     from astral_toolkit.core import day_logs
 
     logs = tmp_path / "logs"
     logs.mkdir()
     monkeypatch.setattr(paths, "LOGS", logs)
-    today = time.strftime("%Y-%m-%d")
-    old = time.strftime("%Y-%m-%d", time.localtime(time.time() - 10 * 86400))
-    (logs / f"debug_{old}.log").write_text("旧\n", encoding="utf-8")
-    (logs / f"runlog_{old}.log").write_text(
+
+    def ago(n):
+        return time.strftime("%Y-%m-%d", time.localtime(time.time() - n * 86400))
+
+    today = ago(0)
+    for name in (
+        f"debug_{ago(3)}",
+        f"debug_{ago(2)}",
+        f"runlog_{ago(10)}",
+        f"runrec_{ago(30)}",
+        f"runrec_{ago(29)}",
+    ):
+        (logs / f"{name}.log").write_text("旧\n", encoding="utf-8")
+    (logs / f"debug_{ago(9)}.log.bak").write_text(
         "旧\n", encoding="utf-8"
-    )  # 运行日志留 30 天
-    (logs / f"runrec_{old}.log").write_text(
-        "旧\n", encoding="utf-8"
-    )  # 别的种类不归这里管
-    day_logs.write("debug", "[DEBUG] [识别] 裁切 30-50%@title")
-    text = (logs / f"debug_{today}.log").read_text(encoding="utf-8")
-    assert "[DEBUG] [识别] 裁切 30-50%@title" in text and text[2] == ":"  # 前面是时分秒
-    assert not (logs / f"debug_{old}.log").exists()  # 调试日志只留最近 3 天
-    assert (logs / f"runlog_{old}.log").exists() and (
-        logs / f"runrec_{old}.log"
-    ).exists()
+    )  # 名字不完全对的不动
+    day_logs.write("runlog", "[INFO] [HOVER] F8 价格与数据同步完成")
+    text = (logs / f"runlog_{today}.log").read_text(encoding="utf-8")
+    assert (
+        "[INFO] [HOVER] F8 价格与数据同步完成" in text and text[2] == ":"
+    )  # 前面是时分秒
+    left = sorted(p.name for p in logs.iterdir())
+    assert (
+        f"debug_{ago(3)}.log" not in left and f"debug_{ago(2)}.log" in left
+    )  # 调试日志留 3 天（含今天）
+    assert (
+        f"runrec_{ago(30)}.log" not in left and f"runrec_{ago(29)}.log" in left
+    )  # 运行记录留 30 天
+    assert f"runlog_{ago(10)}.log" in left and f"debug_{ago(9)}.log.bak" in left
     day_logs.write("没有这种", "x")  # 不认识的种类：不抛、不写
     assert not list(logs.glob("没有这种_*"))
     monkeypatch.setattr(day_logs, "KINDS", {**day_logs.KINDS, "debug": (3, 200)})
-    for i in range(20):
+    for i in range(3):
         day_logs.write("debug", f"第 {i} 行 " + "字" * 20)
+    threads = [
+        threading.Thread(
+            target=lambda: [day_logs.write("debug", "字" * 30) for _ in range(20)]
+        )
+        for _ in range(8)
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
     text = (logs / f"debug_{today}.log").read_text(encoding="utf-8")
-    assert text.rstrip().endswith("后面的不记了") and "第 19 行" not in text
-    assert text.count("后面的不记了") == 1
+    assert text.rstrip().endswith("后面的不记了") and text.count("后面的不记了") == 1
     blocked = tmp_path / "不是目录.txt"
     blocked.write_text("", encoding="utf-8")
     monkeypatch.setattr(paths, "LOGS", blocked)

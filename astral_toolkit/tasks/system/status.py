@@ -224,8 +224,15 @@ def export_logs():
                 set(paths.LOGS.glob("*.txt*"))
                 | {p for pat in _DAY_LOGS for p in paths.LOGS.glob(pat)}
             )  # 含轮换 .txt.old、运行记录、窗口运行日志、调试日志
+        from .feedback import _scrub
+
         for p in log_files:
-            z.write(p, f"logs/{p.name}")
+            try:
+                text = p.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            # 抹掉 Windows 用户名这类个人信息（问题反馈那条早就抹了，导出这条以前原样带走；调试模式复查）
+            z.writestr(f"logs/{p.name}", _scrub(text))
             files += 1
         for name in ("settings.json", "goals.json"):
             p = paths.USER / name
