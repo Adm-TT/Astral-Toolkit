@@ -520,12 +520,10 @@ def test_navigation_workers_import_is_light():
     assert _run(code) == "True []"
 
 
-_NAV_ANALYSIS_FORBIDDEN = (
-    "astral_toolkit.app",
-    "astral_toolkit.runtime",
-    "astral_toolkit.bootstrap",
-    "astral_toolkit.infrastructure",
-    "astral_toolkit.system",
+# 导航分析只许往下拿 navigation/navigate（和标准库），别的本项目模块一律不许：照 runtime 的做法用允许清单（R2 审查改的）
+_NAV_ANALYSIS_ALLOWED = (
+    "astral_toolkit.navigation",
+    "astral_toolkit.navigation.navigate",
 )
 _NAV_MARKER_FORBIDDEN = (
     "astral_toolkit.tasks",
@@ -543,16 +541,24 @@ def _nav_layer_violations(source, pkg, forbidden):
     return _forbidden(mods, forbidden) + bare + dynamic
 
 
+def _nav_analysis_violations(source):
+    pkg = "astral_toolkit.tasks"
+    mods = [
+        m
+        for m in _imports_in_source(source, pkg)
+        if (m == "astral_toolkit" or m.startswith("astral_toolkit."))
+        and m not in _NAV_ANALYSIS_ALLOWED
+    ]
+    return mods + _nav_layer_violations(source, pkg, ())
+
+
 def test_navigation_analysis_and_marker_stay_in_their_layers():
-    """目录迁移 R2 拆出来的两块：导航分析（tasks/navigation_analysis）只往下转给 navigation，不碰界面、runtime、装配、
-    平台、系统，文件顶上只 import typing（navigate 调用时才取）；HUD 记号（app/nav_marker）不碰 tasks、runtime、装配。
-    都不许字符串导入、不许裸 import astral_toolkit 再走属性"""
+    """目录迁移 R2 拆出来的两块：导航分析（tasks/navigation_analysis）只往下转给 navigation/navigate——本项目模块只许
+    导入这一个（tasks 里别的、core、ocr、界面、runtime 都不许），文件顶上只 import typing（navigate 调用时才取）；
+    HUD 记号（app/nav_marker）不碰 tasks、runtime、装配。都不许字符串导入、不许裸 import astral_toolkit 再走属性"""
     path = _ROOT / "tasks" / "navigation_analysis.py"
     source = path.read_text(encoding="utf-8")
-    assert (
-        _nav_layer_violations(source, "astral_toolkit.tasks", _NAV_ANALYSIS_FORBIDDEN)
-        == []
-    )
+    assert _nav_analysis_violations(source) == []
     top = [
         n for n in ast.parse(source).body if isinstance(n, (ast.Import, ast.ImportFrom))
     ]
@@ -567,10 +573,14 @@ def test_navigation_analysis_and_marker_stay_in_their_layers():
         "from ..runtime.workers import navigation\n",
         "import importlib\nimportlib.import_module('astral_toolkit.app')\n",
         "import astral_toolkit\n",
+        "def f():\n    from . import navigation\n",
+        "def f():\n    from .navigation import nav_log\n",
+        "def f():\n    from ..core import settings\n",
+        "def f():\n    from ..ocr import read\n",
     ):
-        assert _nav_layer_violations(
-            bad, "astral_toolkit.tasks", _NAV_ANALYSIS_FORBIDDEN
-        ), bad
+        assert _nav_analysis_violations(bad), bad
+    ok = "def f():\n    from ..navigation import navigate\n\n    return navigate\n"
+    assert _nav_analysis_violations(ok) == []
     for bad in (
         "from ..tasks import navigation\n",
         "def f():\n    from ..runtime.workers import navigation\n",

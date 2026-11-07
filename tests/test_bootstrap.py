@@ -770,3 +770,14 @@ def test_nav_analysis_views_trace_and_game_events_are_wired_by_bootstrap(monkeyp
     assert ev._tail() == "tail" and made == [1]
     ev._publish({"kind": "k"})
     assert sent == [("gamelog", {"kind": "k"})]
+
+    from astral_toolkit.runtime.workers.game_events import GameEventsWorker
+
+    app = bootstrap.build("test")  # 真装配出来的也是这几样（不只工厂函数对）
+    worker = app.nav._worker
+    assert worker._an is navigation_analysis
+    assert worker._views == bootstrap._nav_views()
+    assert worker._links.trace is navigation_tasks.nav_log
+    assert isinstance(app.game_events, GameEventsWorker)
+    assert app.game_events.on_qt_arrived == app.pos.request_read_now
+    assert app.game_events._enabled is (sys.platform == "win32")

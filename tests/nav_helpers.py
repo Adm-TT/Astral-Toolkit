@@ -1,8 +1,10 @@
 """直接造导航线程的测试用（目录迁移 R2 起导航分析、排版由 bootstrap 接进去）。
 
 默认接真的分析（tasks/navigation_analysis，原样转给 navigation/navigate，测试换 navigate 上的函数照样生效）
-和真的排版；排版每次现取 app/presenters/nav 上的函数，测试换那边的函数（先造线程再换也一样）都生效。
-没给 links 时用 QUIET_LINKS，只是导航日志那一行照旧现取 tasks/navigation.nav_log（以前线程里直接调它）。
+和真的排版；排版那几个函数每次现取 app/presenters/nav 上的，测试换那边的函数（先造线程再换也一样）都生效；
+读位置那句说明（DI_HELP）是字符串，造的时候取，要换得先换再造。
+没给 links（关键字给 None 也算；按位置给的照原样）时用 QUIET_LINKS，只是导航日志那一行照旧现取
+tasks/navigation.nav_log（以前线程里直接调它；和生产不接就不写不一样，要测「不写」就自己传 links）。
 """
 
 import dataclasses

@@ -695,6 +695,7 @@ def test_no_synthetic_input_in_nav_files():
         root / "runtime" / "workers" / "game_events.py",
         root / "tasks" / "navigation_analysis.py",
         root / "app" / "nav_marker.py",
+        root / "app" / "presenters" / "nav.py",  # 三个视图、读位置的说法（R2 搬来）
         root / "runtime" / "workers" / "position.py",
         root / "tasks" / "position.py",
         root / "app" / "hud_state.py",

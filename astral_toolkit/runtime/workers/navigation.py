@@ -1012,7 +1012,7 @@ class _Nav:
 
     def use_space(self, target: Any) -> bool:
         """「手动定位」（只用 /showlocation 的坐标）还是「实时定位」（读右上角）：玩家在导航页自己切，默认实时。
-        太空路标在实时定位下按星系坐标给距离和机头转向（_space_view + steer）"""
+        太空路标在实时定位下按星系坐标给距离和机头转向（views.space + steer）"""
         mode = self._links.setting("nav_mode", "auto")
         return mode == "space"
 
