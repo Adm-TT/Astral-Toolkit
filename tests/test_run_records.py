@@ -3,7 +3,7 @@
 import time
 from datetime import datetime, timedelta, timezone
 
-from astral_toolkit.core import paths, run_records
+from astral_toolkit.core import day_logs, paths, run_records
 
 
 def test_record_writes_daily_file(monkeypatch, tmp_path):
@@ -25,10 +25,12 @@ def test_record_writes_daily_file(monkeypatch, tmp_path):
     assert p.exists()
     text = p.read_text(encoding="utf-8")
     assert "[HOVER] 触发 F8 物品识别" in text
+    assert text.startswith(today + " ")  # 运行记录自己带完整时间，前面不再加时分秒
     assert mirrored and mirrored[0][1] == "HOVER"
 
 
 def test_cleanup_removes_old_files(monkeypatch, tmp_path):
+    """运行记录留 30 天：按文件名里的日期清（day_logs 每天第一次写日志时清）"""
     logs = tmp_path / "logs"
     logs.mkdir()
     monkeypatch.setattr(paths, "LOGS", logs)
@@ -38,12 +40,7 @@ def test_cleanup_removes_old_files(monkeypatch, tmp_path):
     keep = logs / f"runrec_{keep_day}.log"
     old.write_text("old\n", encoding="utf-8")
     keep.write_text("keep\n", encoding="utf-8")
-    # 把 mtime 也拨到够旧，避免仅靠文件名时区边界误判
-    old_ts = time.time() - 31 * 86400
-    import os
-
-    os.utime(old, (old_ts, old_ts))
-    others = [  # 名字不完全是 runrec_日期.log 的，再旧也不能删
+    others = [  # 名字不完全是 runrec_日期.log 的不删
         logs / "app_log.txt",
         logs / "perf_log.txt",
         logs / "runrec_foo.log",
@@ -51,8 +48,7 @@ def test_cleanup_removes_old_files(monkeypatch, tmp_path):
     ]
     for f in others:
         f.write_text("x\n", encoding="utf-8")
-        os.utime(f, (old_ts, old_ts))
-    n = run_records.cleanup_retention(days=30)
+    n = day_logs.cleanup("runrec", 30)
     assert n == 1
     assert not old.exists()
     assert keep.exists()

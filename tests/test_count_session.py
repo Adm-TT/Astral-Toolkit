@@ -287,6 +287,8 @@ def test_same_cell_refreshes_seen_but_hud_once(monkeypatch):
     first = worker.tick(session, ctx, 0.4)
     assert first.observed == {"item": 0.4}
     assert sum(1 for op in loop.ops if op[0] == "hud.set") == 1
+    # 运行日志「盘点认出」也只记一次
+    assert sum(1 for op in loop.ops if op[0] == "log") == 1
 
     # 挪到同一格（曼哈顿距离 > 8，会解除 done_pos，但格号一样）
     current["pos"] = (101, 109)
@@ -295,6 +297,7 @@ def test_same_cell_refreshes_seen_but_hud_once(monkeypatch):
     again = worker.tick(session, ctx, 1.0)
     assert again.observed == {"item": 1.0}
     assert sum(1 for op in loop.ops if op[0] == "hud.set") == 1
+    assert sum(1 for op in loop.ops if op[0] == "log") == 1
 
     # 光标在动：不算看到
     current["pos"] = (300, 300)

@@ -43,11 +43,6 @@ def path_for(date_str: Optional[str] = None) -> Path:
     return day_logs.path_for("runrec", date_str)
 
 
-def cleanup_retention(days: int = 30) -> int:
-    """删掉早于最近 days 天（含今天）的 runrec_日期.log，返回删了几个（day_logs 每天第一次写日志时自己也会清）"""
-    return day_logs.cleanup("runrec", days)
-
-
 def record(
     module: str,
     action: str,
