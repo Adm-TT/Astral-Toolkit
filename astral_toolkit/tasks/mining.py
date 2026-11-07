@@ -373,9 +373,22 @@ def mining_gear():
     return out
 
 
+def _save_settings(**kw):
+    """存采矿的设置：没存上（设置文件暂时读不到、写不进去）返回给窗口的那句话，存上了返回 None。
+    以前不看存没存上：页面说「已保存」，悬浮窗和下次读到的却还是旧的（审查 2026-11-08）"""
+    from ..core import settings
+
+    try:
+        settings.update_checked(**kw)
+    except settings.NotSaved as e:
+        return str(e)
+    except OSError:
+        return settings.NOT_WRITTEN
+    return None
+
+
 def set_mining_focus(live: _LiveLike, /, keys=None):
     """关注列表只过滤悬浮窗；None 恢复全部，空列表不显示矿物。"""
-    from ..core import settings
     from ..mining.data import SIGNATURES
 
     if keys is not None:
@@ -384,7 +397,9 @@ def set_mining_focus(live: _LiveLike, /, keys=None):
         ):
             raise ValueError("关注的矿要从列表中选择")
         keys = [key for key in SIGNATURES if key in keys]
-    settings.update(mining_focus=keys)
+    err = _save_settings(mining_focus=keys)
+    if err:
+        return {"error": err}
     live.config_changed()
     return mining_gear()
 
@@ -402,14 +417,15 @@ def set_mining_gear(live: _LiveLike, /, ship="mole", loadout=None, reset=False):
         saved.pop(ship, None)
     elif loadout is not None:
         saved[ship] = clean_loadout(ship, loadout)
-    settings.update(mining_ship=ship, mining_loadouts=saved)
+    err = _save_settings(mining_ship=ship, mining_loadouts=saved)
+    if err:
+        return {"error": err}
     live.config_changed()
     return mining_gear()
 
 
 def set_mining_gadgets(live: _LiveLike, /, keys=None):
     """带了哪些手持工具（列表；空列表 = 一样都不带，破碎方案只给不贴的）"""
-    from ..core import settings
     from ..mining.data import GADGETS
 
     if not isinstance(keys, list):
@@ -418,7 +434,9 @@ def set_mining_gadgets(live: _LiveLike, /, keys=None):
     bad = want - set(GADGETS)
     if bad:
         raise ValueError(f"没有这种手持工具：{'、'.join(sorted(bad))}")
-    settings.update(mining_gadgets=[k for k in GADGETS if k in want])
+    err = _save_settings(mining_gadgets=[k for k in GADGETS if k in want])
+    if err:
+        return {"error": err}
     live.config_changed()
     return mining_gear()
 

@@ -181,6 +181,7 @@ class NotSaved(OSError):
 
 
 _NOT_READ = "设置文件暂时读不到（可能被杀毒或同步软件占着），这次没存上，再点一次"
+NOT_WRITTEN = "设置文件写不进去（可能被杀毒或同步软件占着），这次没存上，再点一次"
 
 
 def update_checked(**kw):

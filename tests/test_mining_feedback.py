@@ -83,6 +83,33 @@ def test_focus_save_validates_and_persists(monkeypatch, tmp_path):
     assert settings.load()["mining_focus"] is None
 
 
+def test_mining_settings_not_saved_say_so(monkeypatch, tmp_path):
+    """关注的矿、配装、手持工具存不上（设置文件被占着读不到、写不进去）：告诉窗口没存上（不带本机路径），
+    悬浮窗也不跟着重算（审查 2026-11-08）"""
+    monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
+    changes = []
+    live = mining_helpers.live()
+    monkeypatch.setattr(live, "config_changed", lambda: changes.append(True))
+
+    def unread(**kw):
+        raise settings.NotSaved("这次没存上，再点一次")
+
+    def locked(**kw):
+        raise PermissionError(
+            13, "Permission denied", r"C:\Users\someone\settings.json"
+        )
+
+    for boom, want in (
+        (unread, "这次没存上，再点一次"),
+        (locked, settings.NOT_WRITTEN),
+    ):
+        monkeypatch.setattr(settings, "update_checked", boom)
+        assert mining.set_mining_focus(live, keys=["Copper"]) == {"error": want}
+        assert mining.set_mining_gear(live, ship="mole", reset=True) == {"error": want}
+        assert mining.set_mining_gadgets(live, keys=[]) == {"error": want}
+    assert changes == []
+
+
 def test_idle_setting_normalizes_and_updates_running_worker(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
     for value, expected in [

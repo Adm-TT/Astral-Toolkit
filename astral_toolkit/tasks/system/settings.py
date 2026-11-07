@@ -122,9 +122,7 @@ def set_settings(sources: StatusSources, /, **kw):
     except OSError as e:  # 没存上：告诉玩家再点一次，别装作存好了（后面跟着改的悬浮窗、识别设备也不动）
         if isinstance(e, settings.NotSaved):
             return {"error": str(e)}
-        return {
-            "error": "设置文件写不进去（可能被杀毒或同步软件占着），这次没存上，再点一次"
-        }
+        return {"error": settings.NOT_WRITTEN}
     if clear_train:
         try:
             from ...system import train_data
