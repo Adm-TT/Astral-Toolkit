@@ -796,6 +796,28 @@ def test_mining_analysis_views_and_links_are_wired_by_bootstrap(monkeypatch, tmp
     assert bootstrap._mining_analysis() is mining_analysis
     assert bootstrap._mining_views().activity is present_mining.activity
 
+    def boom(*args, **kwargs):
+        raise AssertionError("装配时不该去取")
+
+    spots = (
+        (mining_screen, "grab"),
+        (mining_tasks, "_game_front"),
+        (nav_tasks, "settings_key"),
+        (paths, "log"),
+        (paths, "shots"),
+        (displayinfo, "yield_ocr"),
+    )
+    for mod, name in spots:
+        monkeypatch.setattr(mod, name, boom)
+    flags = []
+    monkeypatch.setattr(
+        bootstrap,
+        "setting_run_flag",
+        lambda key: flags.append(key) or RunFlag(key, lambda k, v: None),
+    )
+    links = bootstrap._mining_links({})  # 装配时一样都不取（取了就炸）
+
+    # 造好以后再换：用的时候才去那几个模块取，换了照样生效（以前构造器里的默认值也是现取）
     calls = []
     monkeypatch.setattr(mining_screen, "grab", lambda: calls.append("grab") or "图")
     monkeypatch.setattr(
@@ -809,15 +831,6 @@ def test_mining_analysis_views_and_links_are_wired_by_bootstrap(monkeypatch, tmp
     monkeypatch.setattr(paths, "log", lambda name: tmp_path / "logs" / name)
     monkeypatch.setattr(paths, "shots", lambda name: tmp_path / "shots" / name)
     monkeypatch.setattr(displayinfo, "yield_ocr", lambda: calls.append("yield"))
-    flags = []
-    monkeypatch.setattr(
-        bootstrap,
-        "setting_run_flag",
-        lambda key: flags.append(key) or RunFlag(key, lambda k, v: None),
-    )
-
-    links = bootstrap._mining_links({})
-    assert calls == []
     assert links.grab() == "图" and links.foreground() is False
     assert links.hotkey() == "F6"
     links.yield_ocr()

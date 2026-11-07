@@ -2,9 +2,14 @@
 
 采矿线程在 runtime/workers，不能 import 这里；bootstrap 把本模块当成 MiningAnalysis 接进去。这里只原样转给
 mining/screen、mining/signals、mining/mining_area、core/paths（读数文件改没改过）、tasks/goals（信号行标出目标要的矿）、
-tasks/mining（扫描结果：破碎方案、精炼、目标，排成窗口和悬浮窗要的样子）：调用时才取（导入时机和以前线程里现 import
-一样），不另存状态、不另做缓存。mining/screen 上的几个常数和最近一次的读数（INTERVAL、VOTE_FRAMES、SEARCH、
-LAST_RAW、LAST_PANEL）也是每次现取，测试换掉它们照样生效。
+tasks/mining（扫描结果：破碎方案、精炼、目标，排成窗口和悬浮窗要的样子）：调用时才取，不另存状态、不另做缓存。
+mining/screen 上的几个常数和最近一次的读数（INTERVAL、VOTE_FRAMES、SEARCH、LAST_RAW、LAST_PANEL）也是每次现取，
+测试换掉它们照样生效。
+
+导入时机和搬家前差两处（R3 审查记下，影响可以不计）：mining/screen 以前在造采矿线程时就在主线程导入，现在到第一次
+开会话（取投票帧数）时才在工作线程里导入；mining/signals 以前在每轮开头、认信号的 try 外面导入，现在在 try 里第一次
+用到时导入——真导入失败时，以前整轮出错、重试几次后关掉采矿助手，现在扫描面板照常出、每轮报一条「信号识别失败」
+（signals 只导入 re、numpy 和 mining/data，data 导入时唯一可能出错的一步本来就包在 try 里）。
 """
 
 from typing import Any

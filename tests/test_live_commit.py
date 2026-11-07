@@ -930,3 +930,39 @@ def test_mining_analysis_forwards_to_screen_signals_and_tasks(monkeypatch):
     monkeypatch.setattr(paths, "file_stamp", lambda p: ("戳", p))
     assert an.rocks_stamp() == "石头表戳"
     assert an.mine_file_stamp() == ("戳", "读数文件")
+
+
+def test_mining_worker_takes_paths_shots_and_hotkey_from_links(tmp_path):
+    """目录迁移 R3：日志写 MiningLinks 给的 live_log.txt，认出的石头截图放 shots("live")，没出结果的画面交给
+    MiningLinks 的截图服务、放 shots("miss")、留 MISS_KEEP 张；收尾提示的热键名现取 MiningLinks.hotkey；
+    投票队列长度取分析给的 VOTE_FRAMES"""
+    import dataclasses
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    from astral_toolkit.runtime.session import Session
+
+    submitted = []
+    (tmp_path / "logs").mkdir()
+    links = dataclasses.replace(
+        mining_helpers.links(),
+        log_file=lambda name: tmp_path / "logs" / name,
+        shots=lambda name: tmp_path / "shots" / name,
+        miss_shots=SimpleNamespace(
+            submit=lambda d, stamp, img, keep: submitted.append((d, img, keep))
+        ),
+        hotkey=lambda: "F9",
+    )
+    live = mining_helpers.live(links=links)
+    assert live.miss_shots is links.miss_shots
+    assert live.hotkey() == "F9"
+    ctx = live.setup(Session(1, threading.Event()))
+    try:
+        assert Path(ctx.log.name) == tmp_path / "logs" / "live_log.txt"
+        assert ctx.shots == tmp_path / "shots" / "live"
+        assert ctx.recent.maxlen == screen.VOTE_FRAMES == ctx.part.maxlen
+        img = object()
+        live._save_miss(ctx, img, "读不全", None)
+        assert submitted == [(tmp_path / "shots" / "miss", img, live.MISS_KEEP)]
+    finally:
+        ctx.close()
