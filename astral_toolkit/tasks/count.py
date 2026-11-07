@@ -85,7 +85,8 @@ def _kl(k):
 
 
 def _count_review(place, items):
-    """本轮盘点 → 和账上对：rows（看到的，账上多少 → 游戏里多少）、missing（账上有、这轮没看到）"""
+    """本轮盘点 → 和账上对：rows（看到的，账上多少 → 游戏里多少）、missing（账上有、这轮没看到；same：和这轮盘到的
+    哪件挂着同一个中文名，可能是同一件记在了另一条名下）"""
     from ..crafting import goals as G
 
     t = trade()
@@ -98,6 +99,7 @@ def _count_review(place, items):
         if _place_of(l.key.location)[0] == place  # noqa: E741
     ]  # noqa: E741
     used, rows = set(), []
+    same_zh = {}  # 同一个中文名带出来、没并进来的条目 → 盘到的那件叫什么（「未盘到」那行注明，审查 2026-11-08 第三轮）
     # 同一物品 + 品质 + 单位分成了几组（制造品各槽品质不同、两个名字是同一物品）：会配到同一批库存行，先合成一行
     # （各槽品质只留第一组的——库存还不分变体，见待做 #10；复审 2026-10-28）
     merged = {}
@@ -120,21 +122,25 @@ def _count_review(place, items):
             iid for iid in ids if not iid.startswith("local:") and t.catalog.get(iid)
         }
         if named:
-            # 英文名明确对上正式物品：拿它、本地副本（旧库存的另一种记法），和名字像英文名的（F8 当时模糊配到的
-            # 那条、旧英文名）去配账；汉化名撞到的、名字不像的别的物品不算——以前整笔拒绝，原来能确认的盘点也被拒；
-            # 只拿英文名那条又会漏掉记在变体名下的旧库存，确认后变两份（审查 2026-11-08）。
-            # 挂着这个中文名的物品全拿来比（by_alias 只给一条）
-            from ..trade.matching import names_alike
-
-            keep = set(named) | {iid for iid in ids if iid.startswith("local:")}
-            extra = (
-                {i.id: i for i in t.catalog.all_by_alias(v["zh"])} if v["zh"] else {}
+            # 英文名明确对上正式物品：只拿它和英文名自己的本地副本（旧库存的另一种记法）去配账。同一个中文名带出来的
+            # 别的条目一律不并：英文名像的也可能是另一件东西——F8 模糊配上时会把本体的中文名记到变体上（轻机枪和它的
+            # 电池、同一件衣服的几种颜色），并了确认时会悄悄扣掉它的库存（审查 2026-11-08 第三轮）。它们在这个地点
+            # 有库存、这轮又没盘到，就进「未盘到」并注明和谁挂着同一个中文名，清不清零让玩家自己定
+            kept = frozenset(
+                named
+                | {
+                    item.id
+                    for item in t.catalog.search(en)
+                    if item.id.startswith("local:")
+                    and item.name.casefold() == en.casefold()
+                }
             )
-            for iid in set(ids) | set(extra):
-                item = extra.get(iid) or t.catalog.get(iid)
-                if item is not None and names_alike(item.name, en):
-                    keep.add(iid)
-            ids = frozenset(keep)
+            alias_ids = (
+                {i.id for i in t.catalog.all_by_alias(v["zh"])} if v["zh"] else set()
+            )
+            for iid in (set(ids) | alias_ids) - kept:
+                same_zh.setdefault(iid, v["zh"] or en)
+            ids = kept
         lines = [
             line
             for line in book
@@ -208,6 +214,7 @@ def _count_review(place, items):
                 "qty": scu_amount(l.quantity, l.key.unit) if u == "SCU" else l.quantity,
                 "unit": u,
                 "key": _kl(l.key),
+                "same": same_zh.get(l.key.item_id, ""),
             }
         )
     return {
