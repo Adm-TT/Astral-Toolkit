@@ -1167,7 +1167,7 @@ def test_halo_services(monkeypatch, tmp_path):
             p = t_nav.halo_pin(app.nav_deps, frm="ARC-L1", to="CRU-L4", band=5)
             # 断开后按 F9：在航线上、比断开点往前 50 Mm，说多飞了多少（手动定位没法测起跳，只看离起点多远）
             A, B = halo.points()["ARC-L1"], halo.points()["CRU-L4"]
-            k = (p["dropout"] - 0.05) / p["total"]
+            k = (float(p["dropout"]) - 0.05) / float(p["total"])
             g = tuple((B[i] - (B[i] - A[i]) * k) * 1e9 for i in range(3))
             monkeypatch.setattr(
                 showloc, "showlocation", lambda log=None: (g, "Coordinates: on-route")
