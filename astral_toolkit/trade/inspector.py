@@ -545,7 +545,9 @@ def _read_tooltip(img, cursor, whole_screen=True):
        认出的名字在汉化包 / 矿物表里**精确**对上了就停（高把握库命中，像素最省）。
     2. 对不上就把高度放大到说明框主体（24%~70%），宽度顺序照旧。
     3. 再对不上用原来的全高竖条（0%~100%）：说明框标题完整（英文名下面紧跟体积 / 物品类型…）
-       就照旧当认到了——没入库的物品不再为它多跑一次整屏。
+       就照旧当认到了——没入库的物品不再为它多跑一次整屏。F8 第一遍（whole_screen=False）前两档里
+       连说明框的样子（锚点 / 像样名字）都没见到就不认全高：说明框还没出来或根本没有，全高也认不出，
+       直接回去等第二遍（2026-11-07 PR #17 跟进）。
     4. 都还没有：鼠标在屏幕中间带、且从没见过说明框锚点 → 多半在驾驶位，不整屏；否则整屏兜底。
     whole_screen=False（F8 第一遍）：不整屏兜底，认不出由调用方等一下再截一次（2026-11-06 老大验收：说明框没出完就按了）。
     """
@@ -579,6 +581,18 @@ def _read_tooltip(img, cursor, whole_screen=True):
     for box, label, stage, native in get_stage_regions(
         get_hover_regions(cursor, W), W, H
     ):
+        if (
+            stage == "full"
+            and not whole_screen
+            and not anchor_seen
+            and best_candidate is None
+        ):
+            # F8 第一遍：标题带、说明框带（屏高 24%~70%）里连说明框的样子都没见到——说明框还没出来，或者根本没有
+            # （驾驶位、没指着物品），全高也认不出来：不认那两条，直接回去让 F8 等一下再截，第二遍照旧全认。
+            # PR #17 以后认不出时一遍要认 6 次字（2026-11-07 跟进：612 张截图里第一遍这样跳过，认出的结果一张不变）
+            if dbg:
+                _dbg(f"裁切 {label}｜跳过·第一遍前两档没见到说明框的样子")
+            continue
         t0 = time.perf_counter()
         crop = img.crop(box)
         _shot_attempt(box, label, stage, crop)
