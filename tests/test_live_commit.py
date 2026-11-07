@@ -932,7 +932,7 @@ def test_mining_analysis_forwards_to_screen_signals_and_tasks(monkeypatch):
     assert an.mine_file_stamp() == ("戳", "读数文件")
 
 
-def test_mining_worker_takes_paths_shots_and_hotkey_from_links(tmp_path):
+def test_mining_worker_takes_paths_shots_and_hotkey_from_links(tmp_path, monkeypatch):
     """目录迁移 R3：日志写 MiningLinks 给的 live_log.txt，认出的石头截图放 shots("live")，没出结果的画面交给
     MiningLinks 的截图服务、放 shots("miss")、留 MISS_KEEP 张；收尾提示的热键名现取 MiningLinks.hotkey；
     投票队列长度取分析给的 VOTE_FRAMES"""
@@ -954,16 +954,21 @@ def test_mining_worker_takes_paths_shots_and_hotkey_from_links(tmp_path):
         hotkey=lambda: keys[-1],
     )
     keys = ["F9"]
+    monkeypatch.setattr(
+        screen, "VOTE_FRAMES", 4
+    )  # 不用真值 5（也不用别处写死的 3）：写死成哪个都测得出
     live = mining_helpers.live(links=links)
     assert live.miss_shots is links.miss_shots
     assert live.hotkey() == "F9"
-    keys.append("F7")  # 造好以后改了热键：收尾提示照新的说
+    keys.append(
+        "F7"
+    )  # 造好以后改了热键：现取的是新的（stop 和会话循环收尾都经 hotkey() 取）
     assert live.hotkey() == "F7"
     ctx = live.setup(Session(1, threading.Event()))
     try:
         assert Path(ctx.log.name) == tmp_path / "logs" / "live_log.txt"
         assert ctx.shots == tmp_path / "shots" / "live"
-        assert ctx.recent.maxlen == screen.VOTE_FRAMES == ctx.part.maxlen
+        assert ctx.recent.maxlen == 4 == ctx.part.maxlen
         img = object()
         live._save_miss(ctx, img, "读不全", None)
         assert submitted == [(tmp_path / "shots" / "miss", img, live.MISS_KEEP)]
@@ -1026,11 +1031,11 @@ def test_mining_tick_signals_use_analysis_and_links(tmp_path, monkeypatch):
     石头表、自己起名的读数文件变了，同一组信号也重发；看着扫描面板时不认信号、也让出识别"""
     from astral_toolkit.runtime.session import Session
 
-    yields, asked = [], []
+    yields, asked, looked = [], [], []
     st = {"rocks": 1, "mine": 1, "panel": False, "known": True}
     an = _fake_an(
         panel_seen=lambda scan, raw: st["panel"],
-        find_signatures=lambda img: [] if st["panel"] else [(7200, 1), (3400, 1)],
+        find_signatures=lambda img: looked.append(1) or [(7200, 1), (3400, 1)],
         match_signature=lambda v: st["known"],
         guesses=lambda v, where, area: [("铜", v == 7200)],
         mark_goal_lines=lambda lines: [x + "｜目标" for x in lines],
@@ -1055,7 +1060,11 @@ def test_mining_tick_signals_use_analysis_and_links(tmp_path, monkeypatch):
     session = Session(1, threading.Event())
     ctx = live.setup(session)
     try:
-        for k in range(3):
+        live.tick(session, ctx, 1.0)
+        assert sigs_sent() == [] and yields == [
+            1
+        ]  # 第一帧认出也不发：同一组信号连续两帧才发
+        for k in range(1, 3):
             live.tick(session, ctx, 1.0 + k)
         views = sigs_sent()
         assert len(views) == 1 and len(yields) == 3
@@ -1073,10 +1082,11 @@ def test_mining_tick_signals_use_analysis_and_links(tmp_path, monkeypatch):
         st["known"], st["rocks"] = False, 3  # 有认不得的信号：这次发之前问现在在哪
         live.tick(session, ctx, 7.0)
         assert asked == [1] and len(sigs_sent()) == 4
-        st["panel"] = True  # 看着扫描面板：不认信号，也让出识别
+        st["panel"] = True  # 看着扫描面板：连信号都不找，也让出识别
         yields.clear()
+        looked.clear()
         live.tick(session, ctx, 8.0)
-        assert yields == [1] and len(sigs_sent()) == 4
+        assert yields == [1] and looked == [] and len(sigs_sent()) == 4
     finally:
         ctx.close()
 
@@ -1088,6 +1098,7 @@ def test_mining_full_and_cut_scans_ask_analysis_differently(tmp_path, monkeypatc
 
     views, votes = [], []
     an = _fake_an(
+        vote_frames=lambda: 3,  # 不用真值 5：写死成 5 也测得出
         enqueue_rock=lambda q, scan, bag=None: q.append((scan, bag)) or False,
         vote=lambda scans: votes.append("全") or (scans[-1], True),
         vote_partial=lambda scans: votes.append("挡") or (scans[-1], True),
@@ -1103,16 +1114,25 @@ def test_mining_full_and_cut_scans_ask_analysis_differently(tmp_path, monkeypatc
         rock, bag = _rock(), ({}, "袋")
         live._tick_scan(session, ctx, rock, bag, img, 1.0, 1)
         assert views == [] and votes == []  # 一帧不投票
-        ctx.done_here = 5
+        ctx.done_here = 2
         live._tick_scan(session, ctx, rock, bag, img, 1.1, 1)
         assert views == [((rock, bag), {})] and votes == ["全"]
+        assert (
+            ctx.settled is False
+        )  # 结果出了，这块石头还没认够一轮（分析给的投票帧数是 3）
+        ctx.done_here = 3
+        live._tick_scan(session, ctx, rock, bag, img, 1.2, 1)
+        assert views == [((rock, bag), {})] and votes == [
+            "全",
+            "全",
+        ]  # 一样的结果不重发
         assert ctx.settled is True
         views.clear()
         part = _rock(9000.0)
         ctx.part.extend([(part, None), (part, None)])
-        ctx.done_here = 4
+        ctx.done_here = 2
         live._tick_part(session, ctx, bag, 2.0, 1)
-        assert views == [((part, bag), {"cut": True})] and votes == ["全", "挡"]
+        assert views == [((part, bag), {"cut": True})] and votes == ["全", "全", "挡"]
         assert ctx.settled is False  # 还没认够一轮
     finally:
         ctx.close()
@@ -1120,7 +1140,7 @@ def test_mining_full_and_cut_scans_ask_analysis_differently(tmp_path, monkeypatc
 
 def test_mining_tick_compares_the_panel_region_from_analysis(tmp_path, monkeypatch):
     """目录迁移 R3 改坏检查补的（老代码也没人测）：省电比画面时，扫描面板那块（分析给的 search 范围）单独细比——
-    面板里的数变了、整屏几乎没变，也要每帧重新认"""
+    面板里的数变了、整屏几乎没变，也要每帧重新认；画面真没变、连着几帧也没面板，才省电跳过"""
     from PIL import ImageDraw
 
     from astral_toolkit.runtime.session import Session
@@ -1129,15 +1149,19 @@ def test_mining_tick_compares_the_panel_region_from_analysis(tmp_path, monkeypat
     an = _fake_an(analyse=lambda img: calls.append(1) or (Scan(), ({}, None, None)))
     a = Image.new("RGB", (320, 180), (100, 100, 100))
     b = a.copy()
-    # 32×18 的一小块亮一点，在面板范围（屏幕右上那块）里：整屏平均差 0.4、面板那块平均差 2.0
+    # 32×18 的一小块亮一点，在假分析给的面板范围（search）里：整屏平均差 0.4、面板那块平均差 2.0
     ImageDraw.Draw(b).rectangle((200, 40, 231, 57), fill=(140, 140, 140))
-    frames = iter([a, b] * 10)
+    frames = iter([a, b] * 3 + [a] * 6)
     live, sent = _quiet_live(tmp_path, monkeypatch, an, {"grab": lambda: next(frames)})
     session = Session(1, threading.Event())
     ctx = live.setup(session)
     try:
         for k in range(6):
             live.tick(session, ctx, 1.0 + 0.1 * k)
-        assert len(calls) == 6
+        assert len(calls) == 6  # 面板那块每帧都在变：每帧都认
+        for k in range(6, 12):
+            live.tick(session, ctx, 1.0 + 0.1 * k)
+        # 画面不变了：变后第 1 帧照认，再认两帧（连着两帧没变才算认完），之后跳过
+        assert len(calls) == 9
     finally:
         ctx.close()
