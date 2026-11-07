@@ -8,7 +8,7 @@ trade/inspector、tasks/count；悬浮窗文字用 app/presenters/count（数量
 """
 
 from astral_toolkit import bootstrap
-from astral_toolkit.app.engines import count as countmod
+from astral_toolkit.runtime.workers import count as countmod
 from astral_toolkit.app.output import BusOutput
 
 

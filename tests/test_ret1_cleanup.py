@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_no_off_calls_left():
-    for sub in ("runtime", "app/engines", "app/inputs", "tasks"):
+    for sub in ("runtime", "app/inputs", "tasks"):
         for p in (ROOT / "astral_toolkit" / sub).rglob("*.py"):
             text = p.read_text(encoding="utf-8")
             assert "_off(" not in text, p

@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 from astral_toolkit import bootstrap
 from astral_toolkit.app import lifecycle_gate
-from astral_toolkit.app.engines import count as count_mod
+from astral_toolkit.runtime.workers import count as count_mod
 from astral_toolkit.app.presenters import count as present_count
 from astral_toolkit.crafting import stockplaces
 from astral_toolkit.runtime.session import RunState, Session, StopInfo

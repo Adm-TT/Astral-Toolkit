@@ -21,9 +21,6 @@ from .providers.uex import UexProvider
 from .storage import Database
 
 # 旧名字：只留给还冻着的调用方，别处一律从新家拿（test_runtime_arch 管着）
-from .inspector import (
-    _cursor_on_image as _cursor_on_image,
-)  # 盘点（app/engines/count）：盘点改从 trade.inspector 拿时删
 from .market_text import (
     SOURCE_ZH as SOURCE_ZH,
 )  # 目标（tasks/goals）：目标链改从 trade.market_text 拿时删

@@ -1,4 +1,4 @@
-"""库存盘点读屏（_Count）
+"""库存盘点读屏（_Count；目录迁移 R5 从 app/engines/count 搬来）
 
 会话循环只管线程、暂停、计时、停止和输出通道；这里只写盘点的「一轮」：
 读光标、认物品、记格子、出新格 HUD、收尾时算对账。
@@ -17,8 +17,8 @@ import traceback
 from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol
 
-from ...runtime.results import ResultStore
-from ...runtime.session import SessionLoop, StopInfo, Tick
+from ..results import ResultStore
+from ..session import SessionLoop, StopInfo, Tick
 
 REVIEW = "count.review"
 

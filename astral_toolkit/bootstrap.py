@@ -11,7 +11,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable
 
-from .app.engines.count import CountAnalysis, CountLinks, CountViews, _Count
+from .runtime.workers.count import CountAnalysis, CountLinks, CountViews, _Count
 from .app.inputs.hotkeys import HotkeyCommands
 from .runtime.workers.hotkeys import HotkeyLinks, HotkeyWorker
 from .runtime.workers.mining import MiningAnalysis, MiningLinks, MiningViews, _Live
