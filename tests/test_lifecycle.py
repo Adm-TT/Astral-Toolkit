@@ -3,7 +3,7 @@
 import threading
 import time
 
-from astral_toolkit.app.engines import hover as hover_mod
+from astral_toolkit.runtime.workers import hotkeys as hotkeys_worker
 from astral_toolkit.runtime.lifecycle import (
     Lifecycle,
     OneShot,
@@ -146,29 +146,30 @@ def test_stop_is_idempotent_and_request_error_does_not_block_others(monkeypatch)
     assert ("join", "good") in [(e[0], e[1]) for e in events]
 
 
-def test_hover_shell_starts_and_stops(monkeypatch):
-    from types import SimpleNamespace
-
+def test_hotkeys_worker_starts_and_stops(monkeypatch):
+    """热键线程（目录迁移 R4 起在 runtime/workers/hotkeys）：起得来，叫停以后等得到退出"""
     started = threading.Event()
 
     def fake_run(self):
         started.set()
         self.stop_ev.wait()
 
-    monkeypatch.setattr(hover_mod, "WIN", True)
-    monkeypatch.setattr(hover_mod._Hover, "_run", fake_run)
+    monkeypatch.setattr(hotkeys_worker.HotkeyWorker, "_run", fake_run)
 
-    hover = hover_mod._Hover(
-        live=SimpleNamespace(running=lambda: False),
-        count=SimpleNamespace(running=lambda: False),
-        links=None,
-        feedback=None,
-        nav=None,
+    worker = hotkeys_worker.HotkeyWorker(
+        hotkeys_worker.HotkeyLinks(
+            bindings=lambda: [],
+            code=lambda key: None,
+            down=lambda vk: False,
+            pressed=lambda name, key: None,
+            failed=lambda: None,
+        ),
+        enabled=True,
     )
-    hover.start()
+    worker.start()
     assert started.wait(2.0)
-    hover.request_stop()
-    assert hover.join(2.0) is True
+    worker.request_stop()
+    assert worker.join(2.0) is True
 
 
 def test_count_service_stops_session_loop(monkeypatch):

@@ -536,6 +536,24 @@ def test_mining_worker_import_is_light():
     assert _run(code) == "True []"
 
 
+def test_hotkeys_worker_import_is_light():
+    """导入热键线程（runtime/workers/hotkeys，目录迁移 R4）不带进 app、tasks、system、infrastructure 和 ctypes（读键的
+    平台读数）、core.settings（读绑定）——这些都由 bootstrap 接；导入也不起线程（起了马上结束的也算：记下 Thread.start）"""
+    code = (
+        "import sys, threading\n"
+        "n = threading.active_count()\n"
+        "started = []\n"
+        "_start = threading.Thread.start\n"
+        "threading.Thread.start = lambda self: started.append(self.name) or _start(self)\n"
+        "import astral_toolkit.runtime.workers.hotkeys\n"
+        "heavy = ('astral_toolkit.app', 'astral_toolkit.tasks', 'astral_toolkit.system', "
+        "'astral_toolkit.infrastructure', 'astral_toolkit.core.settings', 'ctypes')\n"
+        "a = sorted(m for m in sys.modules if m.startswith(heavy))\n"
+        "print(threading.active_count() == n and not started, a)\n"
+    )
+    assert _run(code) == "True []"
+
+
 # 导航分析的本项目导入只许 navigation/navigate 和它里面的名字：照 runtime 的做法用允许清单，导入记下的、绑到名字上的
 # 都查（R2 两轮审查改的）；采矿识别分析（R3）照同一个写法，只许下面那几个模块
 _NAV_ANALYSIS_ONLY = "astral_toolkit.navigation.navigate"
@@ -1277,6 +1295,63 @@ def test_nav_and_mining_workers_do_not_reach_into_tasks():
         "x = _H()",
     ):
         assert _nav_engine_violations(bad), bad
+
+
+# 键盘入口（热键按下去做什么，目录迁移 R4）：不反过来拿热键线程（runtime）、不自己读键（ctypes、infrastructure 的平台读数）、
+# 不碰装配；也不留 _T / _H 这种字符串导入
+_KEYBOARD_ENTRY = ("app", "inputs", "hotkeys.py")
+_KEYBOARD_ENTRY_PKG = "astral_toolkit.app.inputs"
+_KEYBOARD_ENTRY_FORBIDDEN = (
+    "astral_toolkit.runtime",
+    "astral_toolkit.infrastructure",
+    "astral_toolkit.bootstrap",
+    "ctypes",
+)
+
+
+def _keyboard_entry_violations(source, pkg=_KEYBOARD_ENTRY_PKG):
+    defs = [
+        node.name
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name in ("_T", "_H")
+    ]
+    return (
+        _nav_layer_violations(source, pkg, _KEYBOARD_ENTRY_FORBIDDEN)
+        + _calls_named(source, ("_T", "_H"))
+        + defs
+    )
+
+
+def test_hotkeys_worker_and_keyboard_entry_stay_apart():
+    """目录迁移 R4：热键线程（runtime/workers/hotkeys）只看键——不导入 tasks、不留 _T / _H、不自己用 ctypes 读键（原始按键
+    读数在 infrastructure/platform/keys，bootstrap 接）；键盘入口（按下去做什么）不反过来拿热键线程、不自己读键、不碰装配，
+    也不留 _T / _H、不用字符串导入"""
+    worker = (_ROOT / "runtime" / "workers" / "hotkeys.py").read_text(encoding="utf-8")
+    assert _nav_engine_violations(worker) == []
+    mods = list(_imports_in_source(worker, "astral_toolkit.runtime.workers"))
+    assert _forbidden(mods, ("ctypes",)) == []
+    entry = _ROOT.joinpath(*_KEYBOARD_ENTRY).read_text(encoding="utf-8")
+    assert _keyboard_entry_violations(entry) == []
+    for bad in (
+        "from ...runtime.workers import hotkeys\n",
+        "def f():\n    from ...runtime.workers.hotkeys import HotkeyWorker\n",
+        "def f():\n    from ...infrastructure.platform import keys\n",
+        "import ctypes\n",
+        "def f():\n    import ctypes\n",
+        "from ... import bootstrap\n",
+        "def _T(name):\n    return name\n",
+        "x = _H()\n",
+        "import importlib\nimportlib.import_module('astral_toolkit.tasks.mining')\n",
+        "import astral_toolkit\n",
+    ):
+        assert _keyboard_entry_violations(bad), bad
+    for ok in (
+        "def f():\n    from ...tasks import mining\n\n    return mining\n",
+        "from .. import bus, task_runner\n",
+        "import threading\n",
+    ):
+        assert _keyboard_entry_violations(ok) == [], ok
 
 
 def test_navigation_views_and_marker_stay_pure():

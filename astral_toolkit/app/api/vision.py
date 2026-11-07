@@ -14,7 +14,7 @@ def bound(links):
     """要 F8 物品查询接线（HoverLinks）的接口（F 段 B5）：bootstrap.routes 把这个 app 的 links 交进来"""
 
     def hover_trigger():
-        """手动触发一次 F8 物品悬停识别；F8 热键那次还没识别完就不再起（同一个任务名，见 engines/hover.py）"""
+        """手动触发一次 F8 物品悬停识别；F8 热键那次还没识别完就不再起（同一个任务名，见 app/inputs/hotkeys.py）"""
         th = task_runner.run_task_once(
             "hover", _hover.hover_once, links, title="F8物品识别"
         )

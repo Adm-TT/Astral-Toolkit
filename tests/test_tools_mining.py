@@ -262,7 +262,7 @@ def test_live_scan_resumes_after_restart(monkeypatch, tmp_path):
     from astral_toolkit import bootstrap
     from astral_toolkit import gamedata
     from astral_toolkit import ocr as OCR
-    from astral_toolkit.app.engines import hover as hover_engine
+    from astral_toolkit.runtime.workers import hotkeys as hotkeys_worker
     from astral_toolkit.runtime.workers import mining as live_engine
     from astral_toolkit.core import settings
     from astral_toolkit.core.perfmon import monitor
@@ -282,7 +282,7 @@ def test_live_scan_resumes_after_restart(monkeypatch, tmp_path):
         live_engine._Live, "stop", lambda self: StopAttempt(None, False, False)
     )
     for cls in (
-        hover_engine._Hover,
+        hotkeys_worker.HotkeyWorker,
         pos_worker.PositionWorker,
         pos_worker.LogWatchWorker,
         events_worker.GameEventsWorker,
@@ -1001,7 +1001,7 @@ def test_live_key_hint_says_stopping_when_refused(monkeypatch):
 
     from PIL import Image
 
-    from astral_toolkit.app.engines import hover as hover_mod
+    from astral_toolkit.app import hud_state
     from astral_toolkit import bootstrap
     from astral_toolkit.mining import screen as mining_screen
     from astral_toolkit.mining import signals
@@ -1024,7 +1024,7 @@ def test_live_key_hint_says_stopping_when_refused(monkeypatch):
     monkeypatch.setattr(nav_tasks, "settings_key", lambda *a, **k: "F5")
     notes = []
     hud = SimpleNamespace(_note_hud=lambda section, text: notes.append(text))
-    monkeypatch.setattr(hover_mod, "_H", lambda: hud)
+    monkeypatch.setattr(hud_state, "_note_hud", hud._note_hud)
 
     frame = Image.new("RGB", (320, 180), (30, 20, 20))
     gate = Gate()
@@ -1047,12 +1047,12 @@ def test_live_key_hint_says_stopping_when_refused(monkeypatch):
             assert sid is not None
             assert gate.entered.wait(10)
             app.live.loop.request_stop_current(StopInfo("user"))  # 不 join：停止中
-            app.hover._toggle_live()
+            app.hotkey_commands._toggle_live()
             assert notes[-1] == "正在停止，请稍候", "被拒时不能说「已开启」"
             assert "已开启" not in notes[-1]
             gate.release.set()
             assert app.live.loop.join(session_id=sid)
-            app.hover._toggle_live()
+            app.hotkey_commands._toggle_live()
             assert notes[-1] == "采矿助手已开启｜按 F5 关闭"
             app.live.stop()
         finally:

@@ -142,16 +142,16 @@ def test_build_desktop_binds_everything_to_this_app(monkeypatch):
             assert app.nav_deps == nav_tasks.NavDeps(
                 app.nav, app.pos, app.game_events, app.results
             )
-            assert app.hover._nav is app.nav_deps
+            assert app.hotkey_commands._nav is app.nav_deps
             assert count_tasks._count is app.count
             assert not hasattr(hover_tasks, "_links")
             assert app.hover_links.loot is catalog_tasks.get_item_loot
-            assert app.hover._links is app.hover_links
+            assert app.hotkey_commands._links is app.hover_links
             assert not hasattr(system_common, "_status") and not hasattr(
                 system_common, "_start"
             )
             assert (
-                app.hover._feedback is not None
+                app.hotkey_commands._feedback is not None
                 and app.pos._publish_status is not None
                 and app.logwatch._publish_status is not None
             )
@@ -564,9 +564,9 @@ def test_nav_deps_reach_hotkeys_live_and_routes(monkeypatch):
     app = bootstrap.build("test")
     try:
         d = app.nav_deps
-        app.hover._mark()
-        app.hover._ore()
-        app.hover._fix()
+        app.hotkey_commands._mark()
+        app.hotkey_commands._ore()
+        app.hotkey_commands._fix()
         app.live._where_now()
         app.live._area_now()
         assert bootstrap.routes(app).call("nav_stop") == {"ok": True, "data": {}}
@@ -601,7 +601,7 @@ def test_status_callbacks_read_this_app(monkeypatch):
     try:
         app.pos._publish(force=True)
         app.logwatch._publish_status()
-        app.hover._report()
+        app.hotkey_commands._report()
         assert bootstrap.routes(app).call("status") == {"ok": True, "data": {}}
         assert got == [
             ("status", app.results),
@@ -614,12 +614,12 @@ def test_status_callbacks_read_this_app(monkeypatch):
 
 
 def test_hover_links_shared_by_hotkey_and_route(monkeypatch):
-    """F 段 B5b：F8 热键（app.hover）和窗口「识别」接口（routes 的 hover_trigger）用同一份 HoverLinks"""
+    """F 段 B5b：F8 热键（app.hotkey_commands）和窗口「识别」接口（routes 的 hover_trigger）用同一份 HoverLinks"""
     from astral_toolkit.app import task_runner
 
     app = bootstrap.build("test")
     try:
-        assert app.hover._links is app.hover_links
+        assert app.hotkey_commands._links is app.hover_links
         got = []
         monkeypatch.setattr(
             task_runner,
@@ -635,8 +635,31 @@ def test_hover_links_shared_by_hotkey_and_route(monkeypatch):
             "hover_once",
             lambda links, img=None: seen.append(links) or {"ok": True},
         )
-        app.hover._recognize()
+        app.hotkey_commands._recognize()
         assert seen == [app.hover_links]
+    finally:
+        bootstrap.shutdown(app, budget=0.2)
+
+
+def test_hotkeys_are_wired_by_bootstrap():
+    """目录迁移 R4：热键线程（runtime/workers/hotkeys）只管看键——绑定、按下去做什么、出错清「忙」接这个 app 的
+    键盘入口（HotkeyCommands），读键接 infrastructure/platform/keys；只有 Windows 起线程；lifecycle 起停的
+    （服务名照旧 hover）就是这个线程"""
+    import sys
+
+    from astral_toolkit.infrastructure.platform import keys
+
+    app = bootstrap.build("test")
+    try:
+        links = app.hotkeys._links
+        commands = app.hotkey_commands
+        assert links.bindings == commands.bindings
+        assert links.pressed == commands.pressed
+        assert links.failed == commands.failed
+        assert links.code is keys.code and links.down is keys.down
+        assert app.hotkeys._enabled is (sys.platform == "win32")
+        hover = [svc for svc, _ in app.lifecycle._services if svc.name == "hover"]
+        assert len(hover) == 1 and getattr(hover[0], "_target", None) is app.hotkeys
     finally:
         bootstrap.shutdown(app, budget=0.2)
 

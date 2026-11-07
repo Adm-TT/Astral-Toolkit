@@ -82,6 +82,7 @@ MODULES = [
     "tests.test_di_live",
     "tests.test_lifecycle",
     "tests.test_lifecycle_gates",
+    "tests.test_hotkeys",
     "tests.test_gadget_pick",
     "tests.test_station_lifts",
     "tests.test_stage0",
