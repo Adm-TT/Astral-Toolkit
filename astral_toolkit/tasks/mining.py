@@ -387,7 +387,7 @@ def _save_settings(**kw):
     return None
 
 
-def set_mining_focus(live: _LiveLike, /, keys=None):
+def set_mining_focus(live: _LiveLike, /, keys=None) -> dict[str, Any]:
     """关注列表只过滤悬浮窗；None 恢复全部，空列表不显示矿物。"""
     from ..mining.data import SIGNATURES
 
@@ -404,7 +404,9 @@ def set_mining_focus(live: _LiveLike, /, keys=None):
     return mining_gear()
 
 
-def set_mining_gear(live: _LiveLike, /, ship="mole", loadout=None, reset=False):
+def set_mining_gear(
+    live: _LiveLike, /, ship="mole", loadout=None, reset=False
+) -> dict[str, Any]:
     """选船 / 保存这条船的配置（reset=True 恢复出厂配置）"""
     from ..core import settings
     from ..mining.data import SHIPS
@@ -424,7 +426,7 @@ def set_mining_gear(live: _LiveLike, /, ship="mole", loadout=None, reset=False):
     return mining_gear()
 
 
-def set_mining_gadgets(live: _LiveLike, /, keys=None):
+def set_mining_gadgets(live: _LiveLike, /, keys=None) -> dict[str, Any]:
     """带了哪些手持工具（列表；空列表 = 一样都不带，破碎方案只给不贴的）"""
     from ..mining.data import GADGETS
 

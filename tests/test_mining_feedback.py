@@ -110,6 +110,20 @@ def test_mining_settings_not_saved_say_so(monkeypatch, tmp_path):
     assert changes == []
 
 
+def test_gear_panel_redraws_saved_gear_when_save_fails():
+    """配装存不上时照存着的配装重画：选船、人数、矿头、来源、品质这些控件是先在界面上变了才去存的，
+    不重画就停在没存上的值上，下面的总功率、读数还是旧配装的，再点同一项也不会触发（审查 2026-11-08）"""
+    from pathlib import Path
+
+    js = (Path(__file__).parents[1] / "astral_toolkit/app/web/app.js").read_text(
+        encoding="utf-8"
+    )
+    start = js.index("function gearRender()")
+    body = js[start : js.index("\nfunction ", start)]
+    assert "catch (e) { toast(e.message); gearRender(); }" in body  # 改配装
+    assert "catch (er) { toast(er.message); gearRender(); }" in body  # 换船
+
+
 def test_idle_setting_normalizes_and_updates_running_worker(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
     for value, expected in [

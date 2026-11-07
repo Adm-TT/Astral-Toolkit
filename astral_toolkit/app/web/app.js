@@ -780,11 +780,11 @@ function gearRender() {
     const cur = JSON.parse(JSON.stringify(lo));
     patch(cur);
     try { state.gear = await api("set_mining_gear", { ship: ship.key, loadout: cur }); gearRender(); toast("已保存"); }
-    catch (e) { toast(e.message); }
+    catch (e) { toast(e.message); gearRender(); }   // 存不上：照存着的配装重画，控件退回原样，和下面的读数对得上（审查 2026-11-08）
   };
   $("#g-close").onclick = () => { state.gearOpen = false; gearRender(); };
   $("#g-ship").onchange = async (e) => {
-    try { state.gear = await api("set_mining_gear", { ship: e.target.value }); gearRender(); } catch (er) { toast(er.message); }
+    try { state.gear = await api("set_mining_gear", { ship: e.target.value }); gearRender(); } catch (er) { toast(er.message); gearRender(); }
   };
   if ($("#g-crew")) $("#g-crew").onchange = (e) => save((c) => { c.crew = +e.target.value; });
   box.querySelectorAll(".g-pre").forEach((b) => (b.onclick = async () => {
