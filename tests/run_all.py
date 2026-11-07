@@ -121,6 +121,7 @@ MODULES = [
     "tests.test_mining_inputs",
     "tests.test_mining_analysis",
     "tests.test_mining_presenter",
+    "tests.test_mining_feedback",
     "tests.test_gamedata_b4",
     "tests.test_gamedata_b6",
     "tests.test_gamedata_b5",

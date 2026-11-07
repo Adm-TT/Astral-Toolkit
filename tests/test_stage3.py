@@ -12,6 +12,7 @@ MINING_BOUND = (
     "live_stop",
     "set_mining_gear",
     "set_mining_gadgets",
+    "set_mining_focus",
 )
 MINING = MINING_STATIC + MINING_BOUND
 VISION_STATIC = ("count_toggle", "count_state", "count_apply", "count_cancel")

@@ -6,6 +6,7 @@
 """
 
 import re
+from typing import Literal, overload
 
 import numpy as np
 
@@ -500,9 +501,21 @@ def set_my_signature(value, name):
 MIX_MAX = 2  # 混合最多列几种可能
 
 
-def mixed(value, local):
+@overload
+def mixed(
+    value, local, *, details: Literal[True]
+) -> list[tuple[str, int, bool, frozenset[str]]]: ...
+
+
+@overload
+def mixed(
+    value, local, *, details: Literal[False] = False
+) -> list[tuple[str, int, bool]]: ...
+
+
+def mixed(value, local, *, details=False):
     """两种当地会刷的石头挨在一团、信号加在一起正好等于 value：[(说明, 0, False)]，按当地概率 × 成团常见程度排。
-    只在知道当地刷什么时试（不知道的话组合太多，什么数都凑得出来）"""
+    只在知道当地刷什么时试（不知道的话组合太多，什么数都凑得出来）；details=True 附带矿种集合供 HUD 过滤。"""
     from ..core.i18n import mineral_zh
 
     if not local:
@@ -529,24 +542,31 @@ def mixed(value, local):
                     found.append(
                         (
                             w,
+                            frozenset((a, b)),
                             f"可能两种混在一团：{mineral_zh(a)} ×{n} + {mineral_zh(b)} ×{m}"
                             f"｜此地 {local[a]:g}% / {local[b]:g}%",
                         )
                     )
     found.sort(key=lambda x: -x[0])
-    return [(t, 0, False) for _, t in found[:MIX_MAX]]
+    out = [(t, 0, False, ores) for _, ores, t in found[:MIX_MAX]]
+    return out if details else [g[:3] for g in out]
 
 
 def guesses(value, where=None, area=None):
     """_guesses 的结果，再加上：玩家自己记过这个信号 → 排第一；对不上单一种矿时，试两种混在一团（加起来正好相等才算）"""
+    return [g[:3] for g in _guess_details(value, where, area)]
+
+
+def _guess_details(value, where=None, area=None):
+    """候选的矿种集合只用于呈现过滤，不改变推断、排序或置信度。"""
     out = _guesses(value, where, area)
-    if not any(exact for *_, exact in out):
-        mix = mixed(value, _local_table(area))
+    if not any(g[2] for g in out):
+        mix = mixed(value, _local_table(area), details=True)
         if mix:
             out = mix + [g for g in out if g[0] != "未知"]
     mine = my_signatures().get(str(value))
     if mine:
-        out = [(f"{mine}（自己记的）", 0, True)] + out
+        out = [(f"{mine}（自己记的）", 0, True, frozenset())] + out
     return out
 
 
@@ -577,6 +597,7 @@ def _guesses(value, where=None, area=None):
                 f"{mineral_zh(mineral)} ×{n}｜{rarity}{_local_note(mineral, local)}",
                 best_price(mineral)[0],
                 True,
+                frozenset((mineral,)),
             )
         )
     sources = (GROUND_SOURCES if where != "space" else ()) + (
@@ -591,6 +612,7 @@ def _guesses(value, where=None, area=None):
                     f"{head}{name} ×{value // base}" + (f"（{what}）" if what else ""),
                     0,
                     True,
+                    frozenset(),
                 )
             )
     if out:
@@ -605,6 +627,7 @@ def _guesses(value, where=None, area=None):
                     f"地面小矿叠在一起（ROC 车矿 4,000 / 车矿或手采 3,000 一处），约 {lo_n}~{hi_n} 处",
                     0,
                     False,
+                    frozenset(),
                 )
             ]
     # 都对不上：按 SCMiner 的做法取最接近的飞船矿（可信度 = 1 − 差值 / 那个合法值，scminer.rocks 查 12200 →
@@ -634,6 +657,7 @@ def _guesses(value, where=None, area=None):
                     f"{area.get('zh') or '此处不刷船挖矿'}，多半是残骸或其他信号{extra}",
                     0,
                     False,
+                    frozenset(),
                 )
             ]
         return []
@@ -646,6 +670,7 @@ def _guesses(value, where=None, area=None):
         (
             max(0.0, 1 - diff / target),
             f"{mineral_zh(m)} ×{n}（{target:,}）｜{RARITY[m]}{_local_note(m, local)}{why}",
+            frozenset((m, *(sm for sm, _ in skipped[:1]))),
         )
     ]
     for src in sources:
@@ -656,6 +681,7 @@ def _guesses(value, where=None, area=None):
             (
                 1 - abs(base * k - value) / (base * k),
                 f"{head}{name} ×{k}" + (f"（{what}）" if what else ""),
+                frozenset(),
             )
         )
     # SCMiner 为准：飞船矿可信度够（≥90%）就排第一；地面矿/残骸要很接近（≥97%）才列，按可信度排
@@ -664,19 +690,22 @@ def _guesses(value, where=None, area=None):
     if not good:
         good = [c for c in others if c[0] >= 0.9][:1]
     if not good:
-        return [("未知", 0, False)]  # 实在对不上：浮窗就写「未知」（用户 2026-10-23）
+        return [
+            ("未知", 0, False, frozenset())
+        ]  # 实在对不上：浮窗就写「未知」（用户 2026-10-23）
     # 没正好对上的最多写 99.9%（铝 ×7 = 29,995 对 30,000 是 99.98%，四舍五入成 100.0% 像是完全对上）
     return [
         (
             ("最接近 " if i == 0 else "或 ") + f"{t}（可信度 {min(c, 0.999):.1%}）",
             0,
             False,
+            ores,
         )
-        for i, (c, t) in enumerate(good[:3])
+        for i, (c, t, ores) in enumerate(good[:3])
     ]
 
 
-def describe_all(found, where=None, area=None):
+def describe_all(found, where=None, area=None, *, focus=None):
     """把找到的信号整理成几行中文说明，按矿的价值从高到低排；对不上信号表的给最可能的解释。
     where：玩家在 "ground" / "space" / None（不知道）；area：所在产矿区（只报当地会刷的矿），None = 不过滤"""
     groups, seen = [], set()
@@ -686,7 +715,16 @@ def describe_all(found, where=None, area=None):
         seen.add(value)
         note = f"（读成 {raw}，改过一位，可能有误）" if fixed else ""
         lines = []
-        for text, price, exact in guesses(value, where, area):
+        candidates = (
+            guesses(value, where, area)
+            if focus is None
+            else [
+                g[:3]
+                for g in _guess_details(value, where, area)
+                if g[3] and g[3].issubset(focus)
+            ]
+        )
+        for text, price, exact in candidates:
             tail = f"｜精炼后 {price:,}/SCU" if price else ""
             # 读数是按形近数字改过的：不算准确，排到后面（2026-10-27）
             lines.append(

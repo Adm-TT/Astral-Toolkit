@@ -159,7 +159,10 @@ class Worker(Protocol):
     # 可选类属性 activity_kind（如 "mining"）、log_tag（如 "NAV"）/ display_name（如「导航」）：
     # 有就由 _confirm_stop_locked 发展示终态、框架日志按它标；不在协议里声明，按 getattr 读
     retries: int
-    idle_close: float | None
+
+    @property
+    def idle_close(self) -> float | None: ...
+
     stale_after: dict[str, float]
     needs_foreground: bool
     restart_while_stopping: bool
@@ -996,6 +999,8 @@ class SessionLoop:
         """记 observed、判过期；返回要不要自动关闭"""
         stale: list[str] = []
         idle = False
+        # idle_close 可能要读设置（采矿助手的自动关闭时间）：锁外取，锁里不做文件读写（审查 2026-11-08）
+        limit_idle = self._worker.idle_close
         with self._lock:
             cur = self._current
             if (
@@ -1016,7 +1021,6 @@ class SessionLoop:
                 if active - cur.last_seen.get(channel, active) > float(limit):
                     cur.freshness[channel] = Freshness.STALE
                     stale.append(channel)
-            limit_idle = self._worker.idle_close
             if limit_idle is not None:
                 last = max(cur.last_seen.values(), default=cur.attempt_started)
                 idle = active - last > float(limit_idle)

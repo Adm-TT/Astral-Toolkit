@@ -586,6 +586,7 @@ def test_routes_table_static_plus_bound(monkeypatch):
             "live_stop",
             "set_mining_gear",
             "set_mining_gadgets",
+            "set_mining_focus",
             "hover_trigger",
             "status",
             "feedback_report",

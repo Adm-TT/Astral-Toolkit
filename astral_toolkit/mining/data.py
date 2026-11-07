@@ -40,6 +40,14 @@ SIGNATURES = {
     "Ice": 4300,
 }
 
+
+def focus_keys(value):
+    """读取关注矿物偏好：坏类型按全部；列表只留已知矿种，空选保持为空。"""
+    if not isinstance(value, list):
+        return None
+    return [key for key in SIGNATURES if key in value]
+
+
 RARITY = {
     **dict.fromkeys(["Quantainium", "Stileron", "Savrilium"], "传说"),
     **dict.fromkeys(["Ouratite", "Riccite", "Lindinium"], "史诗"),

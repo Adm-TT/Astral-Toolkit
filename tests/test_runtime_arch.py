@@ -2749,6 +2749,7 @@ _FS_B5_FIRST_ARG = {
         "live_stop": "live*",
         "set_mining_gear": "live*",
         "set_mining_gadgets": "live*",
+        "set_mining_focus": "live*",
     },
     "hover.py": {
         "hover_once": "links*",
@@ -2794,6 +2795,7 @@ _FS_B5_BOUND = {
         "live_stop",
         "set_mining_gear",
         "set_mining_gadgets",
+        "set_mining_focus",
     },
     "vision.py": {"hover_trigger"},
     "system.py": {"status", "feedback_report", "set_settings", "agree"},

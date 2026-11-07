@@ -37,6 +37,9 @@ def bound(live):
     def set_mining_gear(**kw):
         return _t.set_mining_gear(live, **kw)
 
+    def set_mining_focus(**kw):
+        return _t.set_mining_focus(live, **kw)
+
     def set_mining_gadgets(**kw):
         return _t.set_mining_gadgets(live, **kw)
 
@@ -45,6 +48,7 @@ def bound(live):
         "live_stop": live_stop,
         "set_mining_gear": set_mining_gear,
         "set_mining_gadgets": set_mining_gadgets,
+        "set_mining_focus": set_mining_focus,
     }
 
 

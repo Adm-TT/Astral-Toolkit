@@ -190,7 +190,7 @@ function menu(anchor, items) {
 })();
 
 // 游戏里的热键（和 tasks/system/settings.py 的 HOTKEYS 一样）：[设置名, 默认键, 名字, 说明]
-const HOTKEYS = [["live_key", "F5", "采矿助手开关", "开启后 120 秒未检测到扫描面板和信号自动关闭"], ["count_key", "F6", "盘点", "开始 / 结束盘点"],
+const HOTKEYS = [["live_key", "F5", "采矿助手开关", "自动关闭时间可在下方「采矿助手」调整"], ["count_key", "F6", "盘点", "开始 / 结束盘点"],
   ["mark_key", "", "记录路标", "按下后在聊天框输入 /showlocation，将当前位置保存为路标"], ["trade_capture_key", "F8", "物品识别", "鼠标停在物品上时按下；鼠标移开自动收起，按住 Ctrl 不收；按住 Shift 再按钉住"],
   ["fix_key", "", "一键定位", "手动定位时按下，再在聊天框输入 /showlocation"], ["report_key", "F10", "问题反馈", "保存当前截图和识别结果"],
   ["ore_key", "", "原矿记录", "记录当前矿石和坐标"]];
@@ -608,7 +608,7 @@ PAGES.live = () => {
   const plans = (sc?.plans || []).map(planHTML).join("");
   $("#page").innerHTML = `
     <div class="row" style="justify-content:space-between;align-items:flex-start">
-      <div><h1>采矿助手</h1><p class="lede">扫描石头后识别成分，按下方「配置」计算破碎方案和精炼收益。按 <kbd>${esc(state.status?.settings?.live_key || "F5")}</kbd> 开关，120 秒未检测到扫描面板和信号自动关闭；游戏建议使用无边框全屏，窗口模式也可用，画面越小识别越不准。</p></div>
+      <div><h1>采矿助手</h1><p class="lede">扫描石头后识别成分，按下方「配装」计算破碎方案和精炼收益。按 <kbd>${esc(state.status?.settings?.live_key || "F5")}</kbd> 开关，${esc(s.settings?.mining_idle_close ?? 120)} 秒未检测到扫描面板和信号自动关闭；游戏建议使用无边框全屏，窗口模式也可用，画面越小识别越不准。</p></div>
       <div class="row" style="gap:8px;flex:none"><button type="button" class="btn" id="ore-open">原矿记录</button>
       ${s.live ? `<button class="btn stop" id="live-toggle">停止扫描</button>` : `<button class="btn primary" id="live-toggle">开始扫描</button>`}</div>
     </div>
@@ -644,8 +644,10 @@ PAGES.live = () => {
     ${state.signals ? `<h2>雷达信号 <span class="faint" style="font-weight:400;font-size:13px">${esc(state.signals.at)}${state.signals.area ? `｜${esc(state.signals.area)}` : ""}</span>${state.signals.stale ? ` <span class="tag noqt">已过期：${esc(state.signals.stale)} 之后未检测到信号</span>` : ""} <span style="float:right">${fbBtn("signal")}</span></h2><div class="panel">${state.signals.lines.map((l) => `<div>${esc(l)}</div>`).join("")}${(state.signals.unknown || []).map((v) => `<div class="row" style="margin-top:8px;gap:8px;align-items:center"><span class="muted">${money(v)}</span><input class="input sig-name" data-v="${v}" size="16" placeholder="起个名字"><button class="btn small" data-sig="${v}">记下</button></div>`).join("")}</div>` : ""}
     ${state.scans.length > 1 ? `<h2>本次扫描记录</h2><div class="panel"><table class="t"><tr><th>时间</th><th>矿物</th><th class="n">质量</th><th class="n">抗性</th><th>方案</th></tr>
       ${state.scans.map((x) => `<tr><td class="faint">${esc(x.at)}</td><td>${esc(x.rock)}</td><td class="n">${money(x.mass)}</td><td class="n">${x.resistance}%</td><td class="muted">${esc(x.plans[0]?.short || "")}</td></tr>`).join("")}</table></div>` : ""}
-    <h2>配置</h2>
-    <div class="panel" id="gear">加载中…</div>
+    <div class="two" style="align-items:start">
+      <div><h2>配装</h2><div class="panel" id="gear">加载中…</div></div>
+      <div><h2>关注的矿</h2><div class="panel" id="mining-focus">加载中…</div></div>
+    </div>
     <h2>手动计算</h2>
     <div class="panel"><div class="row">
       <label class="field">质量 kg<input class="input" id="m-mass" inputmode="decimal" size="9"></label>
@@ -655,7 +657,7 @@ PAGES.live = () => {
       <div id="m-out" style="margin-top:10px"></div></div>`;
   $("#live-toggle").onclick = async () => {
     const on = !(state.status && state.status.live);
-    if (on && state.gear && !state.gear.chosen) { toast("先在下方「配置」中选择采矿船"); $("#gear").scrollIntoView({ behavior: "smooth" }); return; }
+    if (on && state.gear && !state.gear.chosen) { toast("先在下方「配装」中选择采矿船"); $("#gear").scrollIntoView({ behavior: "smooth" }); return; }
     $("#live-toggle").disabled = true;
     try {
       await api(on ? "live_start" : "live_stop");
@@ -678,6 +680,23 @@ PAGES.live = () => {
 async function gearInit() {
   try { state.gear = await api("mining_gear"); } catch (e) { $("#gear").innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
   gearRender();
+  miningFocusRender();
+}
+
+function miningFocusRender() {
+  const box = $("#mining-focus"), items = state.gear?.focus;
+  if (!box || !items) return;
+  box.innerHTML = `<p class="muted" style="margin-top:0">只筛选游戏悬浮窗；窗口和记录保留全部。全部不选时不显示矿物。</p>
+    <div class="row" style="margin-bottom:10px;gap:8px"><button class="btn small" data-focus-all="1">全部</button><button class="btn small" data-focus-all="0">清空</button></div>
+    <div class="chips">${items.map((x) => `<button type="button" class="chip${x.on ? " on" : ""}" data-focus="${esc(x.key)}" aria-pressed="${x.on}">${esc(x.name)}</button>`).join("")}</div>`;
+  const save = async (keys) => {
+    box.querySelectorAll("button").forEach((b) => b.disabled = true);
+    try { state.gear = await api("set_mining_focus", { keys }); toast("已保存"); }
+    catch (e) { toast(e.message); }
+    miningFocusRender();
+  };
+  box.querySelectorAll("[data-focus-all]").forEach((b) => b.onclick = () => save(b.dataset.focusAll === "1" ? null : []));
+  box.querySelectorAll("[data-focus]").forEach((b) => b.onclick = () => save(items.filter((x) => x.key === b.dataset.focus ? !x.on : x.on).map((x) => x.key)));
 }
 
 const GEAR_STATS = [["power", "功率"], ["res", "抗性"], ["instab", "不稳定性"], ["window", "绿区"], ["rate", "充能"]];
@@ -711,7 +730,7 @@ function gearRender() {
       <span class="chips">${lo.heads.map(([k, mods], i) => `<span class="chip">${esc(headName(k))}${(lo.craft || [])[i] ? "（自制）" : ""}${mods.length ? ` <i>+${esc(gearModsText(g, mods))}</i>` : ""}</span>`).join("")}</span>
       <span class="muted num">总功率 <b>${money(sum.power)}</b> W</span>
       ${(g.gadgets || []).length ? `<span class="muted">手持工具 ${g.gadgets.filter((x) => x.on).length}/${g.gadgets.length}</span>` : ""}
-      <button class="btn small" id="g-open" style="margin-left:auto">修改配置</button></div>
+      <button class="btn small" id="g-open" style="margin-left:auto">选择矿头 / 模组</button></div>
       ${ship.is_default ? `<p class="gear-hint">当前为出厂配置。按实际安装的矿头和模组修改后，破碎方案才准确</p>` : ""}`;
     $("#g-open").onclick = () => { state.gearOpen = true; gearRender(); };
     return;
@@ -723,7 +742,7 @@ function gearRender() {
     const h = g.heads.find((x) => x.key === hk), c = craft[i], cd = ship.cards[i], pw = (ship.power || [])[i];
     const slots = Array.from({ length: h.slots }, (_, j) => {
       const m = mods[j] ? g.modules.find((x) => x.key === mods[j]) : null;
-      return `<button type="button" class="chip g-slot${m ? "" : " empty"}" data-h="${i}" data-m="${j}" title="${esc(m ? m.desc : "点击选择模组")}">${m ? esc(m.name) : "空槽"}</button>`;
+      return `<button type="button" class="chip g-slot${m ? "" : " empty"}" data-h="${i}" data-m="${j}" title="${esc(m ? m.desc : "点击选择模组")}">${m ? esc(m.name) : "＋ 选择模组"}</button>`;
     }).join("");
     return `<div class="gear-card">
       <div class="gear-k"><span>矿头 ${lo.heads.length > 1 ? i + 1 : ""}</span>
@@ -731,7 +750,7 @@ function gearRender() {
       <select class="input g-head" data-h="${i}"${ship.fixed ? " disabled" : ""} title="${esc(h.desc)}">${heads.map((x) => `<option value="${x.key}"${x.key === hk ? " selected" : ""}>${esc(x.name)}</option>`).join("")}</select>
       <div class="gear-pw num">${cd.power !== cd.base ? `<span class="faint">${money(cd.base)} →</span> ` : ""}<b>${money(cd.power)}</b> W</div>
       <div class="gear-stats num">${GEAR_STATS.map(([k, l]) => `<div><span>${l}</span><b class="${gearGood(k, cd.stats[k])}">${cd.stats[k] ? pctTxt(cd.stats[k]) : "0"}</b></div>`).join("")}</div>
-      ${h.slots ? `<div class="chips">${slots}</div>` : `<div class="faint" style="font-size:13px">此矿头没有模组槽</div>`}
+      ${h.slots ? `<div class="faint" style="font-size:13px">模组（点击槽位选择）</div><div class="chips">${slots}</div>` : `<div class="faint" style="font-size:13px">此矿头没有模组槽</div>`}
       ${c ? `<div class="g-craft">
         <div class="faint" style="font-size:12.5px">${pw ? `自制品质使激光功率 ${pw.pct >= 0 ? "+" : ""}${pw.pct}%（两个槽合计）；框架（铁）的品质只影响耐久` : ""}</div>
         <div class="row" style="gap:6px"><button class="btn small g-preset" data-h="${i}" data-q="500" type="button">商店品质 500</button><button class="btn small g-preset" data-h="${i}" data-q="1000" type="button">最佳 1000</button></div>
@@ -2764,6 +2783,10 @@ PAGES.settings = () => {
       <div class="set"><div>大小</div>${segH("ov-scale", [["0.5", "50%"], ["0.75", "75%"], ["1", "100%"]], String(Math.min(1, +(c.hud_scale ?? 1))), "悬浮窗大小")}</div>
       <div class="set"><div>底板</div>${segH("ov-plate", [["0.6", "浅"], ["0.72", "标准"], ["0.85", "深"]], String(+(c.hud_plate ?? 0.72)), "底板")}</div>
       <div class="set"><div>配色</div>${segH("ov-theme", [["默认", "默认"], ["蓝金", "蓝金"], ["浅色", "浅色"]], c.hud_theme || "默认", "悬浮窗配色")}</div></div>
+    <h2>采矿助手</h2>
+    <div class="panel"><div class="set" style="border:0;padding:0"><div>自动关闭时间
+      <p>连续未检测到扫描面板和信号多久后关闭；切出游戏暂停计时。可设 30–1800 秒，默认 120 秒。</p></div>
+      <label class="field">秒<input class="input" id="mining-idle" type="number" min="30" max="1800" step="1" value="${esc(c.mining_idle_close ?? 120)}" style="width:100px"></label></div></div>
     <h2>导航</h2>
     <div class="panel"><div class="set" style="border:0;padding:0"><div>帧数
       <p>导航时每秒读几次游戏右上角、刷新几次记号和转向提示。越高转镜头时记号越跟手，也越占 CPU；电脑忙时实际会低一些。默认 5。</p></div>
@@ -2863,6 +2886,14 @@ PAGES.settings = () => {
     try { state.status = await api("status"); renderPage(); } catch (err) { toast(err.message); return; }
     toast(`已切换为${v === "gpu" ? "显卡 (GPU)" : "处理器 (CPU)"}`);
   } });
+  $("#mining-idle").onchange = async (e) => {
+    const el = e.target, seconds = Number(el.value);
+    if (!el.value || !Number.isInteger(seconds) || seconds < 30 || seconds > 1800) {
+      toast("自动关闭时间请填 30–1800 秒的整数"); el.value = state.status.settings.mining_idle_close ?? 120; return;
+    }
+    try { state.status.settings = await api("set_settings", { mining_idle_close: seconds }); el.value = state.status.settings.mining_idle_close; toast("已保存"); }
+    catch (err) { el.value = state.status.settings.mining_idle_close ?? 120; toast(err.message); }
+  };
   $("#ov-move").onclick = async () => {
     state.overlayMove = !state.overlayMove;
     await api("overlay_move", { on: state.overlayMove });

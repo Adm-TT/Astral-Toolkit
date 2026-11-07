@@ -317,7 +317,10 @@ def _mining_links(options: Mapping[str, Any]) -> MiningLinks:
     app/miss_shots 的后台队列存（lifecycle 登记它）；设置里的 live_on 跟着开关写。overrides 给了 grab /
     foreground 就用给的（测试用）"""
     from .app.miss_shots import MissShotsService
-    from .core import paths
+    from .core import paths, settings
+    from .mining.data import focus_keys
+
+    view = settings.View()
 
     def grab() -> Any:
         from .mining import screen
@@ -356,6 +359,10 @@ def _mining_links(options: Mapping[str, Any]) -> MiningLinks:
         miss_shots=MissShotsService(),
         yield_ocr=yield_ocr,
         run_flag=setting_run_flag("live_on"),
+        idle_seconds=lambda: settings.mining_idle_seconds(
+            view.get("mining_idle_close")
+        ),
+        focus=lambda: focus_keys(view.get("mining_focus")),
     )
 
 

@@ -139,7 +139,12 @@ def scan_view(scan, bag, cut=False):
     """一块石头的读屏结果（窗口用）。cut=True：面板被屏幕右边挡住，品质和总 SCU 读不到，只有破碎方案和成分占比"""
     result = _analysis.analyze(scan, bag, collect_inputs(scan), cut=cut)
     out = _present.to_view(result)
-    out["hud"], out["hud_rich"] = _present.to_hud(result)
+    from ..core import settings
+    from ..mining.data import focus_keys
+
+    out["hud"], out["hud_rich"] = _present.to_hud(
+        result, focus=focus_keys(settings.load().get("mining_focus"))
+    )
     return out
 
 
@@ -355,7 +360,33 @@ def _gear(ship=None):
 
 
 def mining_gear():
-    return _gear()
+    from ..core import settings
+    from ..core.i18n import mineral_zh
+    from ..mining.data import SIGNATURES, focus_keys
+
+    out = _gear()
+    focus = focus_keys(settings.load().get("mining_focus"))
+    out["focus"] = [
+        {"key": key, "name": mineral_zh(key), "on": focus is None or key in focus}
+        for key in SIGNATURES
+    ]
+    return out
+
+
+def set_mining_focus(live: _LiveLike, /, keys=None):
+    """关注列表只过滤悬浮窗；None 恢复全部，空列表不显示矿物。"""
+    from ..core import settings
+    from ..mining.data import SIGNATURES
+
+    if keys is not None:
+        if not isinstance(keys, list) or any(
+            not isinstance(key, str) or key not in SIGNATURES for key in keys
+        ):
+            raise ValueError("关注的矿要从列表中选择")
+        keys = [key for key in SIGNATURES if key in keys]
+    settings.update(mining_focus=keys)
+    live.config_changed()
+    return mining_gear()
 
 
 def set_mining_gear(live: _LiveLike, /, ship="mole", loadout=None, reset=False):
@@ -373,7 +404,7 @@ def set_mining_gear(live: _LiveLike, /, ship="mole", loadout=None, reset=False):
         saved[ship] = clean_loadout(ship, loadout)
     settings.update(mining_ship=ship, mining_loadouts=saved)
     live.config_changed()
-    return _gear()
+    return mining_gear()
 
 
 def set_mining_gadgets(live: _LiveLike, /, keys=None):
@@ -389,7 +420,7 @@ def set_mining_gadgets(live: _LiveLike, /, keys=None):
         raise ValueError(f"没有这种手持工具：{'、'.join(sorted(bad))}")
     settings.update(mining_gadgets=[k for k in GADGETS if k in want])
     live.config_changed()
-    return _gear()
+    return mining_gear()
 
 
 def manual_scan(mass=0, resistance=0, instability=0):

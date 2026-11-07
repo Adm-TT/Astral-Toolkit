@@ -79,6 +79,9 @@ class MiningLinks:
     yield_ocr: Callable[[], Any]
     # 设置里的 live_on 跟着开关写（app/output.setting_run_flag）；一定要给
     run_flag: RunFlag
+    # 设置在 bootstrap 缓存读取，运行中改动下一轮生效；默认保留原有行为。
+    idle_seconds: Callable[[], float] = lambda: 120.0
+    focus: Callable[[], Any] = lambda: None
 
 
 def _pub(kind, data):
@@ -190,7 +193,12 @@ class _Live:
     display_name = "采矿助手"
     activity_kind = "mining"
     retries = 3
-    idle_close: float | None = 120.0  # 所有通道最近一次「看到」都超过这么久：自动关闭
+
+    @property
+    def idle_close(self) -> float:
+        """所有通道最近一次「看到」都超过设置时间后自动关闭。"""
+        return self._links.idle_seconds()
+
     stale_after: dict[str, float] = {"panel": 20.0, "signals": 20.0}
     needs_foreground = True
     restart_while_stopping = True
@@ -566,6 +574,7 @@ class _Live:
                 (area or {}).get("zh"),
                 n.rocks_stamp(),
                 n.mine_file_stamp(),
+                self.loop.config_rev,
             )  # 换了石头表、读数改没改过、自己起了名都重发
             if (
                 sigs
@@ -580,6 +589,14 @@ class _Live:
                     else None
                 )
                 lines = n.mark_goal_lines(n.describe_all(found, where, area))
+                focus = self._links.focus()
+                hud_lines = (
+                    lines
+                    if focus is None
+                    else n.mark_goal_lines(
+                        n.describe_all(found, where, area, focus=focus)
+                    )
+                )
                 unknown = [
                     v
                     for v in sorted(sigs)
@@ -600,8 +617,9 @@ class _Live:
                         "信号",
                         "\n".join(
                             x.split("｜精炼后")[0].replace("信号 ", "")
-                            for x in lines[:4]
-                        ),
+                            for x in hud_lines[:4]
+                        )
+                        or "未发现关注的矿",
                     ),
                     _say(
                         f"雷达信号: {sorted(sigs)} 产区: {(area or {}).get('zh') or '未知'}",
