@@ -5,6 +5,7 @@ import sys
 import threading
 import time
 from types import SimpleNamespace
+from typing import Any
 
 from astral_toolkit import bootstrap
 from astral_toolkit.app import lifecycle_gate
@@ -728,3 +729,80 @@ def test_app_registers_count_as_session_loop_service():
         assert isinstance(service, SessionLoopService)
         assert service.phase is Phase.SESSIONS
         assert service._loop is app.count.loop
+
+
+def _fake_links(**over):
+    """假的 CountLinks：屏幕光标 (100, 100)、热键名 F9、在「测试站」；调试图绑 / 解和悬浮窗短提示记进 rec"""
+    rec = []
+    base = dict(
+        cursor_pos=lambda: (100, 100),
+        grab=_image,
+        foreground=lambda: True,
+        hotkey=lambda: "F9",
+        debug_bind=lambda: rec.append("bind"),
+        debug_unbind=lambda: rec.append("unbind"),
+        place_now=lambda: "测试站",
+        note=lambda section, text: rec.append(("note", section, text)),
+        refuse=lambda: None,
+    )
+    base.update(over)
+    return count_mod.CountLinks(**base), rec
+
+
+def test_worker_uses_analysis_views_and_links():
+    """目录迁移 R5：一轮里认物品、记格子用的是分析给的「光标在截图上的位置」，不是屏幕上的光标；悬浮窗文字走接进来的
+    排版；调试图目录开始时绑、结束时解；收尾时没带热键名就现取接进来的"""
+    links, rec = _fake_links()
+    reads = []
+    analysis: Any = SimpleNamespace(
+        cursor_on_image=lambda img: (650, 1100),
+        read_item=lambda img, cursor: reads.append(cursor) or _item(),
+        review=lambda place, items: None,
+    )
+    views = count_mod.CountViews(hud_text=lambda place, items: f"{place}:{len(items)}")
+    worker = count_mod._CountWorker(analysis, views, links)
+    loop = _CommitRecorder()
+    worker.loop = loop
+    session = SimpleNamespace(payload="测试站")
+    ctx = worker.setup(session)
+    assert rec == ["bind"]
+    worker.tick(session, ctx, 0.0)
+    worker.tick(session, ctx, 0.4)
+    assert reads == [(650, 1100)]
+    assert [op for op in loop.ops if op[0] == "hud.set"] == [
+        ("hud.set", "盘点", "测试站:1")
+    ]
+    # 格号按截图上的位置算：650 / (1000 × 0.065)、1100 / (1000 × 0.11)
+    assert [cell[2:] for cell in ctx.cells] == [(10, 10)]
+    ops = worker.finish(session, None, StopInfo("idle"))
+    assert ("note", "盘点", "盘点结束｜未识别到物品｜按 F9 重新开始", 8) in ops
+    worker.teardown(session, ctx)
+    assert rec == ["bind", "unbind"]
+
+
+def test_start_refused_while_closing_or_not_windows():
+    """正在退出时不让开始（回接进来的那句、不碰会话）；不是 Windows（enabled 关着）只回「没在跑」；
+    都不拦就按接进来的地点开始"""
+    starts = []
+
+    class _Loop:
+        def running(self):
+            return False
+
+        def start(self, payload):
+            starts.append(payload)
+            return 1
+
+    def factory(worker, **kwargs):
+        return _Loop()
+
+    links, _ = _fake_links(refuse=lambda: {"error": "正在退出"})
+    closing = count_helpers.count(links=links, _loop_factory=factory)
+    assert closing.start() == {"error": "正在退出"}
+    links, _ = _fake_links()
+    off = count_helpers.count(links=links, enabled=False, _loop_factory=factory)
+    assert off.start() == {"running": False}
+    assert starts == []
+    on = count_helpers.count(links=links, _loop_factory=factory)
+    assert on.start() == {"running": True, "place": "测试站"}
+    assert starts == ["测试站"] and on.place == "测试站"
