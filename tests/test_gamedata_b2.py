@@ -536,7 +536,7 @@ _STATION_ROWS = [
     dict(city="rr_jp_stantonpyro", city_zh="派罗星门", site_en="Pyro Gateway"),
     dict(city="rr_hur_leo", city_zh="埃弗勒斯空间站", site_en="Everus Harbor"),
     dict(city="rr_p3_leo", city_zh="", site_en="Orbituary"),
-]  # 照真实的站内地点表（city_places）：游戏把通往尼克斯的星门建在了原来马格努斯、卡斯塔跳跃点的位置
+]  # 照真实的站内地点表（city_places）：斯坦顿和尼克斯之间的星门建在了原来马格努斯（斯坦顿这头）、卡斯塔（尼克斯这头）跳跃点的位置
 
 
 def test_place_name_gateway_and_leo_stations(monkeypatch, tmp_path):
