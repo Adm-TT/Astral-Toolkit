@@ -236,7 +236,7 @@ def overshoot(plan, g, pts: dict | None = None):
     }
 
 
-def route_off(a, b, g):
+def route_gap(a, b, g):
     """坐标 g（米）离「a→b」这段直线多远（Gm）；a、b 是 Gm 坐标"""
     p = [float(v) / 1e9 for v in g]
     ab = [b[i] - a[i] for i in range(3)]

@@ -1250,7 +1250,7 @@ def halo_check(g, clip=None, sess=None):
             ends
             and not _near_start(g)
             and (clip is not None or _HALO["jumped"])
-            and halo.route_off(ends[0], ends[1], g) <= ROUTE_NEAR
+            and halo.route_gap(ends[0], ends[1], g) <= ROUTE_NEAR
         ):
             over = halo.overshoot(p, g, {p.get("to"): ends[1]})
             if over and over["left"] < AT_TARGET:
