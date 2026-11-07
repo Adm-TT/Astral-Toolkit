@@ -540,17 +540,22 @@ def test_no_extra_scan_when_no_blueprint_or_bonus_in_tokens(monkeypatch):
 
 
 def test_debug_mode_logs_read_tooltip_path(monkeypatch):
-    """调试模式开着：_read_tooltip 每档裁切与停因打进 runtime_log；关着不打逐步日志。"""
+    """调试模式开着：_read_tooltip 每档裁切与停因记进调试日志文件（logs/debug_日期.log）；关着不记。
+    细节只进文件、不进窗口运行日志（2026-11-08 老大定）"""
     from astral_toolkit import ocr
     from astral_toolkit.app import bus
-    from astral_toolkit.core import settings
+    from astral_toolkit.core import day_logs, settings
     from astral_toolkit.trade import inspector
 
     lines = []
+    shown = []
     monkeypatch.setattr(
         bus,
         "runtime_log",
-        lambda line, tag="SYS", level="INFO": lines.append(str(line)),
+        lambda line, tag="SYS", level="INFO": shown.append(str(line)),
+    )
+    monkeypatch.setattr(
+        day_logs, "write", lambda kind, line: lines.append(f"{kind}|{line}")
     )
     monkeypatch.setattr(
         inspector,
@@ -576,16 +581,19 @@ def test_debug_mode_logs_read_tooltip_path(monkeypatch):
 
     monkeypatch.setattr(settings, "load", lambda: {"debug_mode": False})
     inspector._read_tooltip(MockImage(1000, 1000), (400, 500))
-    assert lines == []
+    inspector._dbg("关着时直接调也不记")
+    assert lines == [] and shown == []
 
     lines.clear()
     monkeypatch.setattr(settings, "load", lambda: {"debug_mode": True})
     toks, name, where = inspector._read_tooltip(MockImage(1000, 1000), (400, 500))
     assert name == ("塔兰导电石", "Taranite") and where == "30-50%@title"
+    assert lines and all(x.startswith("debug|") for x in lines)
     blob = "\n".join(lines)
     assert "识别路径开始" in blob
     assert "30-50%@title" in blob
     assert "停·库精确" in blob
+    assert shown == []  # 细节只进文件，不进窗口运行日志
 
 
 def test_debug_mode_default_off():

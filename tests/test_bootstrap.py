@@ -763,6 +763,7 @@ def test_count_analysis_views_and_links_are_wired_by_bootstrap(monkeypatch):
         (hud_state, "_note_hud"),
         (gate, "closing_error"),
         (present_count, "hud_text"),
+        (present_count, "item_line"),
         (inspector, "_cursor_on_image"),
         (count_tasks, "_read_item"),
         (count_tasks, "_count_review"),
@@ -798,6 +799,7 @@ def test_count_analysis_views_and_links_are_wired_by_bootstrap(monkeypatch):
             gate, "closing_error", fake("refuse", {"error": "正在退出"})
         )
         monkeypatch.setattr(present_count, "hud_text", fake("hud", "文字"))
+        monkeypatch.setattr(present_count, "item_line", fake("line", "一行"))
         monkeypatch.setattr(hover_tasks, "qty_text", "数量写法")
         monkeypatch.setattr(inspector, "_cursor_on_image", fake("on_image", (1, 2)))
         monkeypatch.setattr(count_tasks, "_read_item", fake("read", "物品"))
@@ -812,6 +814,7 @@ def test_count_analysis_views_and_links_are_wired_by_bootstrap(monkeypatch):
         links.note("盘点", "一句话")
         assert links.refuse() == {"error": "正在退出"}
         assert worker._views.hud_text("站", {"k": 1}) == "文字"
+        assert worker._views.item_line({"zh": "铁矿"}) == "一行"
         assert worker._an.cursor_on_image("img") == (1, 2)
         assert worker._an.read_item("img", (1, 2)) == "物品"
         assert worker._an.review("站", {}) == "对账"
@@ -826,6 +829,7 @@ def test_count_analysis_views_and_links_are_wired_by_bootstrap(monkeypatch):
             ("note", ("盘点", "一句话")),
             ("refuse", ()),
             ("hud", ("站", {"k": 1}, "数量写法")),
+            ("line", ({"zh": "铁矿"}, "数量写法")),
             ("on_image", ("img",)),
             ("read", ("img", (1, 2))),
             ("review", ("站", {})),

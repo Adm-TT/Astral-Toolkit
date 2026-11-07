@@ -205,6 +205,10 @@ def _system_info():
     return "\n".join(lines) + "\n"
 
 
+# 按天的日志文件：运行记录（core/run_records）、窗口运行日志和调试日志（core/day_logs）
+_DAY_LOGS = ("runrec_*.log", "runlog_*.log", "debug_*.log")
+
+
 def export_logs():
     """「导出日志」：运行日志 + 设置 + 一页系统说明打成一个压缩包，放到桌面，并在文件夹里选中它"""
     from ...core import paths
@@ -217,10 +221,18 @@ def export_logs():
         log_files = []
         if paths.LOGS.exists():
             log_files = sorted(
-                set(paths.LOGS.glob("*.txt*")) | set(paths.LOGS.glob("runrec_*.log"))
-            )  # 含轮换 .txt.old 与运行记录
+                set(paths.LOGS.glob("*.txt*"))
+                | {p for pat in _DAY_LOGS for p in paths.LOGS.glob(pat)}
+            )  # 含轮换 .txt.old、运行记录、窗口运行日志、调试日志
+        from .feedback import _scrub
+
         for p in log_files:
-            z.write(p, f"logs/{p.name}")
+            try:
+                text = p.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            # 抹掉 Windows 用户名这类个人信息（问题反馈那条早就抹了，导出这条以前原样带走；调试模式复查）
+            z.writestr(f"logs/{p.name}", _scrub(text))
             files += 1
         for name in ("settings.json", "goals.json"):
             p = paths.USER / name

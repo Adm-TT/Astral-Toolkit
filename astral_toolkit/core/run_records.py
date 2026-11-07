@@ -1,6 +1,6 @@
 """运行记录：按天记下功能模块的调用过程，方便对照调了哪些工具
 
-- 文件：userdata/logs/runrec_YYYY-MM-DD.log，默认保留 30 天
+- 文件：userdata/logs/runrec_YYYY-MM-DD.log，留 30 天（按天的文件统一在 core/day_logs：放哪、怎么追加、过期清理）
 - 只记启停/触发等过程，不记识别结果内容
 - 可选镜像到运行日志面板：装配（bootstrap.bind_all）用 set_ui_sink 接 bus.runtime_log，core 不再反过来 import 界面
   （CL-C5）；没接（不是桌面程序）就只写文件
@@ -8,16 +8,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from pathlib import Path
-import re
-import threading
 import time
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Optional
 
-_LOCK = threading.Lock()
-_LAST_CLEANUP_DAY: Optional[str] = None
-_DATE_PATTERN = re.compile(r"^runrec_(\d{4}-\d{2}-\d{2})\.log$")
+from . import day_logs
 
 # 落盘 MODULE → 面板 tag（缺省 ui_tag 时用）
 UI_TAGS = {
@@ -42,51 +38,9 @@ def set_ui_sink(fn):
     _ui_sink = fn
 
 
-def _logs_dir() -> Path:
-    from . import paths
-
-    paths.LOGS.mkdir(parents=True, exist_ok=True)
-    return paths.LOGS
-
-
 def path_for(date_str: Optional[str] = None) -> Path:
     """指定日期（YYYY-MM-DD，默认当天）的运行记录文件路径"""
-    if not date_str:
-        date_str = time.strftime("%Y-%m-%d")
-    return _logs_dir() / f"runrec_{date_str}.log"
-
-
-def cleanup_retention(days: int = 30) -> int:
-    """删除超过 days 天的 runrec_*.log，返回删除个数"""
-    d = _logs_dir()
-    if not d.exists():
-        return 0
-    cutoff_ts = time.time() - (days * 86400)
-    removed = 0
-    with _LOCK:
-        for p in list(d.glob("runrec_*.log")):
-            m = _DATE_PATTERN.match(p.name)
-            if not m:
-                continue
-            expired = False
-            try:
-                if p.stat().st_mtime < cutoff_ts:
-                    expired = True
-                else:
-                    dt = datetime.strptime(m.group(1), "%Y-%m-%d").replace(
-                        tzinfo=timezone.utc
-                    )
-                    if dt.timestamp() < cutoff_ts:
-                        expired = True
-            except Exception:
-                continue
-            if expired:
-                try:
-                    p.unlink(missing_ok=True)
-                    removed += 1
-                except OSError:
-                    pass
-    return removed
+    return day_logs.path_for("runrec", date_str)
 
 
 def record(
@@ -99,16 +53,7 @@ def record(
     mirror_ui: bool = True,
 ) -> None:
     """写一条运行过程记录；失败一律吞掉，不拖垮主功能"""
-    global _LAST_CLEANUP_DAY
     try:
-        today = time.strftime("%Y-%m-%d")
-        if _LAST_CLEANUP_DAY != today:
-            _LAST_CLEANUP_DAY = today
-            try:
-                cleanup_retention(days=30)
-            except Exception:
-                pass
-
         now = datetime.now()
         timestamp_str = now.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
         mod = str(module or "SYSTEM").upper()
@@ -117,14 +62,9 @@ def record(
             detail_str = ""
         else:
             detail_str = f" | {details}"
-        line = f"{timestamp_str} [{level}] [{mod}] {act}{detail_str}\n"
-        try:
-            path = path_for(today)
-            with _LOCK:
-                with open(path, "a", encoding="utf-8") as f:
-                    f.write(line)
-        except Exception:
-            pass  # 写不进文件（连 logs 目录都建不了）也别丢面板那条
+        # 写不进文件（连 logs 目录都建不了）day_logs 自己吞掉，也别丢面板那条
+        line = f"{timestamp_str} [{level}] [{mod}] {act}{detail_str}"
+        day_logs.write("runrec", line, stamp=False)
 
         sink = _ui_sink
         if mirror_ui and sink is not None:
@@ -143,7 +83,7 @@ def read_tail(date_str: Optional[str] = None, limit: int = 100) -> list[str]:
     path = path_for(date_str)
     if not path.exists():
         return []
-    with _LOCK:
+    with day_logs.LOCK:
         try:
             lines = path.read_text(encoding="utf-8").splitlines()
             return lines[-limit:] if limit > 0 else lines

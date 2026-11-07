@@ -287,6 +287,8 @@ def test_same_cell_refreshes_seen_but_hud_once(monkeypatch):
     first = worker.tick(session, ctx, 0.4)
     assert first.observed == {"item": 0.4}
     assert sum(1 for op in loop.ops if op[0] == "hud.set") == 1
+    # 运行日志「盘点认出」也只记一次
+    assert sum(1 for op in loop.ops if op[0] == "log") == 1
 
     # 挪到同一格（曼哈顿距离 > 8，会解除 done_pos，但格号一样）
     current["pos"] = (101, 109)
@@ -295,6 +297,7 @@ def test_same_cell_refreshes_seen_but_hud_once(monkeypatch):
     again = worker.tick(session, ctx, 1.0)
     assert again.observed == {"item": 1.0}
     assert sum(1 for op in loop.ops if op[0] == "hud.set") == 1
+    assert sum(1 for op in loop.ops if op[0] == "log") == 1
 
     # 光标在动：不算看到
     current["pos"] = (300, 300)
@@ -759,7 +762,10 @@ def test_worker_uses_analysis_views_and_links():
         read_item=lambda img, cursor: reads.append(cursor) or _item(),
         review=lambda place, items: None,
     )
-    views = count_mod.CountViews(hud_text=lambda place, items: f"{place}:{len(items)}")
+    views = count_mod.CountViews(
+        hud_text=lambda place, items: f"{place}:{len(items)}",
+        item_line=lambda r: f"认出:{r['zh']}",
+    )
     worker = count_mod._CountWorker(analysis, views, links)
     loop = _CommitRecorder()
     worker.loop = loop
@@ -772,6 +778,17 @@ def test_worker_uses_analysis_views_and_links():
     assert [op for op in loop.ops if op[0] == "hud.set"] == [
         ("hud.set", "盘点", "测试站:1")
     ]
+    # 每认出一格运行日志记一行（老大 11-08 定平时也记）
+    assert [op for op in loop.ops if op[0] == "log"] == [
+        ("log", "认出:铁矿", "COUNT", "INFO")
+    ]
+    assert (
+        present_count.item_line(_item(), lambda q, u: f"{q} {u}")
+        == "盘点认出：铁矿  5 个"
+    )
+    assert "Q750" in present_count.item_line(
+        {**_item(), "quality": 750}, lambda q, u: ""
+    )
     # 格号按截图上的位置算：650 / (1000 × 0.065)、1100 / (1000 × 0.11)
     assert [cell[2:] for cell in ctx.cells] == [(10, 10)]
     ops = worker.finish(session, None, StopInfo("idle"))

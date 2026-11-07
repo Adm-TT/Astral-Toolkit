@@ -45,6 +45,8 @@ class CountViews:
 
     # 悬浮窗里的盘点文字：(地点, 这轮记下的物品) → 文字
     hud_text: Callable[[Any, Any], str]
+    # 每认出一格，运行日志里记的那一行：(这一格认出的物品) → 文字
+    item_line: Callable[[Any], str]
 
 
 @dataclass(frozen=True)
@@ -201,6 +203,7 @@ class _CountWorker:
         self.loop.commit(
             session,
             ("hud.set", "盘点", self._views.hud_text(session.payload, ctx.items)),
+            ("log", self._views.item_line(r), "COUNT", "INFO"),
         )
         return Tick(0.0, seen)
 

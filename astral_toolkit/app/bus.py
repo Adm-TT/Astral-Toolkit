@@ -5,6 +5,8 @@ import queue
 import threading
 import time
 
+from ..core import day_logs
+
 _subs = []
 _lock = threading.Lock()
 _last = {}  # 每类消息最后一条（窗口刷新/新打开时补发）
@@ -26,7 +28,8 @@ _runtime_logs = collections.deque(maxlen=300)
 
 
 def runtime_log(line, tag="SYS", level="INFO"):
-    """向前端 UI 广播运行时日志（等宽终端显示）"""
+    """向前端 UI 广播运行时日志（等宽终端显示），同时记进 logs/runlog_日期.log：窗口那份只留最近 300 行、
+    「清空」只清窗口，文件里的关了 AT 也查得到、导出日志带上（2026-11-08 老大定日志和窗口分开）"""
     entry = {
         "time": time.strftime("%H:%M:%S"),
         "line": str(line),
@@ -36,6 +39,7 @@ def runtime_log(line, tag="SYS", level="INFO"):
     with _lock:
         _runtime_logs.append(entry)
     publish("runtime_log", entry)
+    day_logs.write("runlog", f"[{entry['level']}] [{entry['tag']}] {entry['line']}")
 
 
 def clear_runtime_logs():

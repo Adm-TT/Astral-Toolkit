@@ -511,15 +511,12 @@ def _debug_on() -> bool:
 
 
 def _dbg(msg: str, level: str = "DEBUG") -> None:
-    """调试模式才往运行日志打一行（tag=HOVER）。"""
+    """调试模式才记一行识别细节：只进 logs/debug_日期.log，不进窗口运行日志（2026-11-08 老大定细节只进文件）"""
     if not _debug_on():
         return
-    try:
-        from ..app import bus
+    from ..core import day_logs
 
-        bus.runtime_log(str(msg), tag="HOVER", level=level)
-    except Exception:
-        pass
+    day_logs.write("debug", f"[{level}] [识别] {msg}")
 
 
 def _dbg_name(name: Optional[Tuple[str, str]]) -> str:

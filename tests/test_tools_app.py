@@ -234,10 +234,19 @@ def test_export_logs(monkeypatch, tmp_path):
 
     user = tmp_path / "userdata"
     (user / "logs").mkdir(parents=True)
-    (user / "logs" / "app_log.txt").write_text("启动", encoding="utf-8")
+    (user / "logs" / "app_log.txt").write_text(
+        "启动\n→ C:\\Users\\SomeUser\\AppData\\Local\\AT\\data\\prices.json\n",
+        encoding="utf-8",
+    )
     (user / "logs" / "nav_log.txt").write_text("导航", encoding="utf-8")
     (user / "logs" / "runrec_2099-01-01.log").write_text(
         "2099-01-01 00:00:00.000 [INFO] [SYSTEM] 本机服务已启动\n", encoding="utf-8"
+    )
+    (user / "logs" / "runlog_2099-01-01.log").write_text(
+        "00:00:00 [INFO] [HOVER] F8 价格与数据同步完成\n", encoding="utf-8"
+    )
+    (user / "logs" / "debug_2099-01-01.log").write_text(
+        "00:00:00 [DEBUG] [识别] 识别路径开始\n", encoding="utf-8"
     )
     (user / "settings.json").write_text("{}", encoding="utf-8")
     (user / "window").mkdir()
@@ -254,9 +263,15 @@ def test_export_logs(monkeypatch, tmp_path):
         "logs/app_log.txt",
         "logs/nav_log.txt",
         "logs/runrec_2099-01-01.log",
+        "logs/runlog_2099-01-01.log",
+        "logs/debug_2099-01-01.log",
         "settings.json",
         "系统信息.txt",
     } <= set(names)
+    log = zipfile.ZipFile(r["path"]).read("logs/app_log.txt").decode("utf-8")
+    assert (
+        "启动" in log and "SomeUser" not in log
+    )  # 导出时抹掉 Windows 用户名（调试模式复查）
     assert not any("window" in n or "Cookies" in n for n in names)
     info = zipfile.ZipFile(r["path"]).read("系统信息.txt").decode("utf-8")
     assert "AT 版本" in info and "Python" in info
