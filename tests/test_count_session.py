@@ -734,7 +734,7 @@ def test_app_registers_count_as_session_loop_service():
 def _fake_links(**over):
     """假的 CountLinks：屏幕光标 (100, 100)、热键名 F9、在「测试站」；调试图绑 / 解和悬浮窗短提示记进 rec"""
     rec = []
-    base = dict(
+    base: dict[str, Any] = dict(
         cursor_pos=lambda: (100, 100),
         grab=_image,
         foreground=lambda: True,
