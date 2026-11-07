@@ -26,7 +26,7 @@ function api(name, args = {}) {
       j = await r.json();
     } catch (e) { throw new Error("连不上 AT 后台（可能正在重启），稍后再试"); }
     if (!j.ok) throw new Error(j.error || "操作失败");
-    if (j.data && j.data.error) throw new Error(j.data.error);
+    if (j.data && j.data.error) { const error = new Error(j.data.error); error.data = j.data; throw error; }
     return j.data;
   })();
   if (key) { _inflight.set(key, p); p.finally(() => _inflight.delete(key)).catch(() => {}); }
@@ -2122,10 +2122,10 @@ function countDraw() {
       <td class="n"><label style="white-space:nowrap"><input type="checkbox" data-zero="${i}"> 清零</label></td></tr>`).join("")}</table>
     ${same ? `<p class="faint" style="margin:6px 0 0">${same} 项数量一致</p>` : ""}
     <div class="row" style="justify-content:flex-end;gap:8px;margin-top:10px"><button type="button" class="btn small" id="cr-no">取消</button><button type="button" class="btn small primary" id="cr-ok">确认</button></div></div>`;
-  $("#cr-no").onclick = async () => { await api("count_cancel"); state.count = { ...c, review: null }; countDraw(); };
+  $("#cr-no").onclick = async () => { await api("count_cancel"); if (state.count?.review === rv) state.count = { ...state.count, review: null }; countDraw(); };
   $("#cr-ok").onclick = async () => {
     const zero = [...box.querySelectorAll("[data-zero]:checked")].map((x) => rv.missing[+x.dataset.zero].key);
-    try { stockShow(await api("count_apply", { zero })); state.count = { ...c, review: null }; countDraw(); toast("已按盘点结果更新"); }
+    try { stockShow(await api("count_apply", { zero })); if (state.count?.review === rv) state.count = { ...state.count, review: null }; countDraw(); toast("已按盘点结果更新"); }
     catch (err) { toast(err.message); }
   };
 }
@@ -2348,6 +2348,23 @@ async function stockLedgerDialog() {
   load();
 }
 
+async function countToggle() {
+  try {
+    let r;
+    try { r = await api("count_toggle"); }
+    catch (err) { if (!err.data?.need_place) throw err; r = err.data; }
+    if (r.need_place) {
+      toast(r.error);
+      const place = await pickPlace("");
+      if (!place) return;
+      r = await api("count_toggle", { place });
+    }
+    if (r.error) toast(r.error);
+    state.count = { ...(state.count || {}), ...r, running: !!r.running };
+    countDraw();
+  } catch (err) { toast(err.message); }
+}
+
 PAGES.stock = async () => {
   const f = (state.stockF ||= { q: "", kind: "", qr: "", goal: "", sort: "name", desc: false });
   f.goal ??= "";
@@ -2373,10 +2390,7 @@ PAGES.stock = async () => {
   $("#sf-reset").onclick = () => { Object.assign(f, { q: "", kind: "", qr: "", goal: "", sort: "name", desc: false }); renderPage(); };
   $("#st-ledger").onclick = $("#st-ledger2").onclick = () => stockLedgerDialog();
   $("#st-mode").onchange = (e) => stockSetMode(e.target.value);
-  $("#st-count").onclick = async () => {
-    try { const r = await api("count_toggle"); if (r.error) toast(r.error); state.count = { ...(state.count || {}), running: !!r.running }; countDraw(); }
-    catch (err) { toast(err.message); }
-  };
+  $("#st-count").onclick = countToggle;
   api("count_state").then((r) => { state.count = r; countDraw(); }).catch(() => {});
   $("#st-in").onclick = () => {
     const { place, bin } = stockSelParts();
@@ -2487,10 +2501,7 @@ async function stockSimple() {
   $("#st-ledger").onclick = () => stockLedgerDialog();
   $("#ss-q").oninput = () => { f.q = $("#ss-q").value; stockSimpleDraw(); };
   $("#st-in").onclick = () => stockInDialog(f.place ? { place: f.place } : {});
-  $("#st-count").onclick = async () => {
-    try { const r = await api("count_toggle"); if (r.error) toast(r.error); state.count = { ...(state.count || {}), running: !!r.running }; countDraw(); }
-    catch (err) { toast(err.message); }
-  };
+  $("#st-count").onclick = countToggle;
   api("count_state").then((r) => { state.count = r; countDraw(); }).catch(() => {});
   $("#ss-undo").onclick = (e) => {                             // 撤的是全部地点里最近的一笔（不管筛选），先写清楚撤哪笔再确认
     const last = stockLastUndo();

@@ -322,20 +322,30 @@ class _Count:
     def take_review(self):
         return self.loop.shared_take(REVIEW)
 
+    def publish_review(self, *, restore=None, clear=False):
+        self.loop.shared_publish(
+            REVIEW, "count", "review", restore=restore, clear=clear
+        )
+
     def hotkey(self):
         return self._worker.hotkey()
 
-    def start(self):
+    def start(self, place=""):
         refused = self._links.refuse()
         if refused:
             return refused
         with self._start_lock:
             if not self._enabled or self.running():
                 return {"running": self.running()}
-            place = self._links.place_now()
+            place = place or self._links.place_now()
             if not place:
-                self._links.note("盘点", "盘点：当前位置未知｜先在游戏中打开一次库存")
-                return {"error": "当前位置未知：先在游戏中打开一次库存"}
+                self._links.note(
+                    "盘点", "盘点：当前位置未知｜请到 AT 库存页选择盘点地点"
+                )
+                return {
+                    "error": "当前位置未知：请到 AT 库存页选择盘点地点，或在游戏中打开一次库存",
+                    "need_place": True,
+                }
             sid = self.loop.start(place)
             if sid is None:
                 return {"running": self.running()}

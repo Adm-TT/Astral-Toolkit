@@ -149,6 +149,7 @@ MODULES = [
     "tests.test_pos_service",
     "tests.test_nav_fps",
     "tests.test_count_session",
+    "tests.test_stock_count_fixes",
 ]
 
 if __name__ == "__main__":

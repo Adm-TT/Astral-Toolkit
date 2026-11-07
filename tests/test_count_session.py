@@ -419,8 +419,11 @@ def test_location_unknown_only_note(monkeypatch):
     )
 
     count = count_helpers.count(_loop_factory=factory)
-    assert count.start() == {"error": "当前位置未知：先在游戏中打开一次库存"}
-    assert notes == [("盘点", "盘点：当前位置未知｜先在游戏中打开一次库存")]
+    assert count.start() == {
+        "error": "当前位置未知：请到 AT 库存页选择盘点地点，或在游戏中打开一次库存",
+        "need_place": True,
+    }
+    assert notes == [("盘点", "盘点：当前位置未知｜请到 AT 库存页选择盘点地点")]
     assert calls == []
 
 
@@ -687,7 +690,6 @@ def test_review_shared_store_and_cancel(monkeypatch):
     from tests.bootstrap_helpers import bind_for_test
 
     count = count_helpers.count(
-        output=RecordingOutput(),
         foreground=lambda: True,
         cursor_pos=lambda: (1, 2),
     )

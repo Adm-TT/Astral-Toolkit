@@ -311,11 +311,14 @@ class SessionLoop:
     def running(self) -> bool:
         """逻辑运行中：当前会话 ∈ STARTING / RUNNING / PAUSED（STOPPING 时为 False）"""
         with self._lock:
-            return self._current is not None and self._current.state in (
-                RunState.STARTING,
-                RunState.RUNNING,
-                RunState.PAUSED,
-            )
+            return self._running_locked()
+
+    def _running_locked(self) -> bool:
+        return self._current is not None and self._current.state in (
+            RunState.STARTING,
+            RunState.RUNNING,
+            RunState.PAUSED,
+        )
 
     def worker_alive(self) -> bool:
         return self.state().worker_alive
@@ -345,6 +348,30 @@ class SessionLoop:
         """命令层原子地取走共享结果（取走后读到 None）"""
         with self._lock:
             return self._shared.pop(name, None)
+
+    def shared_publish(
+        self,
+        name: str,
+        topic: str,
+        field: str,
+        *,
+        restore: Any = None,
+        clear: bool = False,
+    ) -> None:
+        """命令层与 worker 共用的发布边界：锁内读结果并入队，不能被 finish 的新结果越过。
+
+        restore 只在空闲且没有新结果时放回；clear 供玩家明确取消。
+        Output 的 bus 操作与 worker 的锁内输出一样，只入队、不回调会话。
+        """
+        with self._lock:
+            running = self._running_locked()
+            if clear:
+                self._shared.pop(name, None)
+            elif restore is not None and not running and self._shared.get(name) is None:
+                self._shared[name] = restore
+            self._output.apply(
+                ("bus", topic, {"running": running, field: self._shared.get(name)})
+            )
 
     def lock_held_by_me(self) -> bool:
         """测试辅助：当前线程是否持有 loop 锁"""
