@@ -951,11 +951,14 @@ def test_mining_worker_takes_paths_shots_and_hotkey_from_links(tmp_path):
         miss_shots=SimpleNamespace(
             submit=lambda d, stamp, img, keep: submitted.append((d, img, keep))
         ),
-        hotkey=lambda: "F9",
+        hotkey=lambda: keys[-1],
     )
+    keys = ["F9"]
     live = mining_helpers.live(links=links)
     assert live.miss_shots is links.miss_shots
     assert live.hotkey() == "F9"
+    keys.append("F7")  # 造好以后改了热键：收尾提示照新的说
+    assert live.hotkey() == "F7"
     ctx = live.setup(Session(1, threading.Event()))
     try:
         assert Path(ctx.log.name) == tmp_path / "logs" / "live_log.txt"
@@ -964,5 +967,177 @@ def test_mining_worker_takes_paths_shots_and_hotkey_from_links(tmp_path):
         img = object()
         live._save_miss(ctx, img, "读不全", None)
         assert submitted == [(tmp_path / "shots" / "miss", img, live.MISS_KEEP)]
+    finally:
+        ctx.close()
+
+
+def _fake_an(**over):
+    """不碰真识别的 MiningAnalysis：每样都是最简单的假货，测试按需换"""
+    from types import SimpleNamespace
+
+    base = dict(
+        interval=lambda: 0,
+        vote_frames=lambda: 5,
+        search=lambda: (0.5, 0.1, 0.9, 0.6),
+        analyse=lambda img: (Scan(), ({}, None, None)),
+        last_raw=lambda: {},
+        last_panel=lambda: {},
+        panel_seen=lambda scan, raw: False,
+        enqueue_rock=lambda q, scan, bag=None: False,
+        miss_reason=lambda img: None,
+        vote=lambda scans: (scans[-1], True),
+        vote_partial=lambda scans: (scans[-1], True),
+        find_signatures=lambda img: [],
+        match_signature=lambda v: True,
+        describe_all=lambda found, where, area: [f"信号 {v}" for v, *_ in found],
+        guesses=lambda v, where, area: [("铜", True)],
+        mark_goal_lines=lambda lines: lines,
+        rocks_stamp=lambda: 1,
+        mine_file_stamp=lambda: 1,
+        scan_view=lambda *a, **k: {"hud": "HUD", "bag_text": "", "rock": "铜"},
+    )
+    base.update(over)
+    return SimpleNamespace(**base)
+
+
+def _quiet_live(tmp_path, monkeypatch, an, link_over=None, **live_kw):
+    """不起线程：拿提交戳、提交都换成直接给 / 记下来；日志和截图放 tmp_path"""
+    import dataclasses
+
+    (tmp_path / "logs").mkdir(exist_ok=True)
+    links = dataclasses.replace(
+        mining_helpers.links(),
+        log_file=lambda name: tmp_path / "logs" / name,
+        shots=lambda name: tmp_path / "shots" / name,
+        **(link_over or {}),
+    )
+    live = mining_helpers.live(analysis=an, links=links, **live_kw)
+    sent = []
+    monkeypatch.setattr(live.loop, "stamp", lambda session, wall: 1)
+    monkeypatch.setattr(
+        live.loop, "commit", lambda session, *ops, **kw: sent.append((ops, kw)) or True
+    )
+    return live, sent
+
+
+def test_mining_tick_signals_use_analysis_and_links(tmp_path, monkeypatch):
+    """目录迁移 R3 改坏检查补的（老代码也没人测）：认出信号时让读位置让出识别引擎；同一组信号连续两帧才发，发的那几行
+    经 mark_goal_lines 标过目标，guesses 里一个都不确定的信号列进 unknown；都认得时不问现在在哪，有认不得的才问；
+    石头表、自己起名的读数文件变了，同一组信号也重发；看着扫描面板时不认信号、也让出识别"""
+    from astral_toolkit.runtime.session import Session
+
+    yields, asked = [], []
+    st = {"rocks": 1, "mine": 1, "panel": False, "known": True}
+    an = _fake_an(
+        panel_seen=lambda scan, raw: st["panel"],
+        find_signatures=lambda img: [] if st["panel"] else [(7200, 1), (3400, 1)],
+        match_signature=lambda v: st["known"],
+        guesses=lambda v, where, area: [("铜", v == 7200)],
+        mark_goal_lines=lambda lines: [x + "｜目标" for x in lines],
+        rocks_stamp=lambda: st["rocks"],
+        mine_file_stamp=lambda: st["mine"],
+    )
+    imgs = [Image.new("RGB", (320, 180), (20 + 40 * k, 20, 20)) for k in range(6)]
+    frames = iter(imgs * 10)  # 每帧都不一样：不省电跳过
+    live, sent = _quiet_live(
+        tmp_path,
+        monkeypatch,
+        an,
+        {"grab": lambda: next(frames), "yield_ocr": lambda: yields.append(1)},
+        where_now=lambda: asked.append(1) or "space",
+    )
+
+    def sigs_sent():
+        return [
+            kw["value"]["view"] for ops, kw in sent if kw.get("slot") == MINING_SIGNALS
+        ]
+
+    session = Session(1, threading.Event())
+    ctx = live.setup(session)
+    try:
+        for k in range(3):
+            live.tick(session, ctx, 1.0 + k)
+        views = sigs_sent()
+        assert len(views) == 1 and len(yields) == 3
+        assert views[0]["lines"] == ["信号 7200｜目标", "信号 3400｜目标"]
+        assert views[0]["unknown"] == [3400]
+        assert asked == []
+        st["rocks"] = 2  # 石头表换了：同一组信号重发
+        live.tick(session, ctx, 4.0)
+        assert len(sigs_sent()) == 2
+        st["mine"] = 2  # 自己起名的读数文件改了：也重发
+        live.tick(session, ctx, 5.0)
+        assert len(sigs_sent()) == 3
+        live.tick(session, ctx, 6.0)  # 什么都没变：不重发
+        assert len(sigs_sent()) == 3
+        st["known"], st["rocks"] = False, 3  # 有认不得的信号：这次发之前问现在在哪
+        live.tick(session, ctx, 7.0)
+        assert asked == [1] and len(sigs_sent()) == 4
+        st["panel"] = True  # 看着扫描面板：不认信号，也让出识别
+        yields.clear()
+        live.tick(session, ctx, 8.0)
+        assert yields == [1] and len(sigs_sent()) == 4
+    finally:
+        ctx.close()
+
+
+def test_mining_full_and_cut_scans_ask_analysis_differently(tmp_path, monkeypatch):
+    """目录迁移 R3 改坏检查补的（老代码也没人测）：读全的石头用 vote 投票、扫描结果不带 cut；面板被屏幕挡住一截的用
+    vote_partial、只算破碎方案（cut=True）；结果出了、这块石头也认够一轮（done_here 到了投票帧数）才算认完"""
+    from astral_toolkit.runtime.session import Session
+
+    views, votes = [], []
+    an = _fake_an(
+        enqueue_rock=lambda q, scan, bag=None: q.append((scan, bag)) or False,
+        vote=lambda scans: votes.append("全") or (scans[-1], True),
+        vote_partial=lambda scans: votes.append("挡") or (scans[-1], True),
+        scan_view=lambda *a, **k: (
+            views.append((a, k)) or {"hud": "HUD", "bag_text": "", "rock": "铜"}
+        ),
+    )
+    live, sent = _quiet_live(tmp_path, monkeypatch, an)
+    session = Session(1, threading.Event())
+    ctx = live.setup(session)
+    img = Image.new("RGB", (8, 8))
+    try:
+        rock, bag = _rock(), ({}, "袋")
+        live._tick_scan(session, ctx, rock, bag, img, 1.0, 1)
+        assert views == [] and votes == []  # 一帧不投票
+        ctx.done_here = 5
+        live._tick_scan(session, ctx, rock, bag, img, 1.1, 1)
+        assert views == [((rock, bag), {})] and votes == ["全"]
+        assert ctx.settled is True
+        views.clear()
+        part = _rock(9000.0)
+        ctx.part.extend([(part, None), (part, None)])
+        ctx.done_here = 4
+        live._tick_part(session, ctx, bag, 2.0, 1)
+        assert views == [((part, bag), {"cut": True})] and votes == ["全", "挡"]
+        assert ctx.settled is False  # 还没认够一轮
+    finally:
+        ctx.close()
+
+
+def test_mining_tick_compares_the_panel_region_from_analysis(tmp_path, monkeypatch):
+    """目录迁移 R3 改坏检查补的（老代码也没人测）：省电比画面时，扫描面板那块（分析给的 search 范围）单独细比——
+    面板里的数变了、整屏几乎没变，也要每帧重新认"""
+    from PIL import ImageDraw
+
+    from astral_toolkit.runtime.session import Session
+
+    calls = []
+    an = _fake_an(analyse=lambda img: calls.append(1) or (Scan(), ({}, None, None)))
+    a = Image.new("RGB", (320, 180), (100, 100, 100))
+    b = a.copy()
+    # 32×18 的一小块亮一点，在面板范围（屏幕右上那块）里：整屏平均差 0.4、面板那块平均差 2.0
+    ImageDraw.Draw(b).rectangle((200, 40, 231, 57), fill=(140, 140, 140))
+    frames = iter([a, b] * 10)
+    live, sent = _quiet_live(tmp_path, monkeypatch, an, {"grab": lambda: next(frames)})
+    session = Session(1, threading.Event())
+    ctx = live.setup(session)
+    try:
+        for k in range(6):
+            live.tick(session, ctx, 1.0 + 0.1 * k)
+        assert len(calls) == 6
     finally:
         ctx.close()
