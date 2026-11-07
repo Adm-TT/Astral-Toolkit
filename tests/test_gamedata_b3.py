@@ -650,7 +650,7 @@ def test_itemstats_version(monkeypatch, tmp_path):
 def test_ships_with(monkeypatch, tmp_path):
     """部件名折叠（小写、只留字母数字）后对上；返回新列表；没有 → []"""
     import astral_toolkit.gamedata as G
-    from astral_toolkit.crafting import acquire
+    from astral_toolkit.tasks.catalog_queries import acquire
 
     _setup(monkeypatch, tmp_path)
     want = ["剜度 死镰", "埃斯佩里亚 刀锋"]

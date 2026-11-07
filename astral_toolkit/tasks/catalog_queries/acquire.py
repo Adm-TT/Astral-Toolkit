@@ -1,46 +1,33 @@
-"""一件东西怎么弄到：商店买（按离你远近推荐 3 处）→ 买不到就推荐能买到的原型/同系列 → 掉落 → 维科洛用途
+"""一件东西怎么弄到（目录迁移 Q3b 从 crafting/acquire.py 搬来）：商店买（按离你远近推荐 3 处）→ 买不到就推荐能买到的原型/同系列
+→ 掉落 → 维科洛用途
 
-游戏里 F8 识别、物品查询、维科洛材料来源都用这里。IQ-C2 把 info 里不夹着取数据的组合规则（挑同款、「哪都没有」、
-要不要查掉落、各块的样子、详情字典骨架）搬到 catalog/acquire.py，这里查数据（商店、物品查询、掉落、维科洛、蓝图、
-当前位置）。还夹着取数据、留在这里的规则：_buy_rows（有位置、算得出距离就给最近 3 处，不然给最便宜 3 处）、
-resolve（名字找物品 id 的先后）、material_source / loot_source（维科洛材料来源那一句），
-目录迁移 Q3 把 acquire 搬进 tasks/catalog_queries 时一起处理（商店那部分 Q2 已搬完）。
-命令行「哪买」2026-11-06 删了，它用的整段文字版（text / buy_lines）也跟着删了。
+游戏里 F8 识别、物品查询、维科洛材料来源都用这里。一次查询按原来的先后取数据：商店、物品搜索、掉落（都在本目录）、
+维科洛和蓝图（crafting）、当前位置（navigation）；挑同款、「哪都没有」、要不要查掉落、各块的样子、详情字典骨架这些组合规则
+在 catalog/acquire.py（IQ-C2）。还夹着取数据、留在这里的规则：_buy_rows（有位置、算得出距离就给最近 3 处，不然给最便宜 3 处）、
+resolve（名字找物品 id 的先后）、material_source / loot_source（维科洛材料来源那一句）。
+距离写成文字、材料来源那句话目前还在这里拼好交出去（展示层和目标链都在用，目标链经 trade/console 转过来），
+挪去展示层另开一批，和路径搬家分开。命令行「哪买」2026-11-06 删了，它用的整段文字版（text / buy_lines）也跟着删了。
 """
 
 import re as _re
+from typing import Any
 
-from ..catalog import acquire as _rules
-from ..contracts.textkeys import fold_en_loose
-
-
-def _shops():
-    """商店查询（目录迁移 Q2 搬到 tasks/catalog_queries/shops）：调用时才取。本文件 Q3 也搬过去以后改回直接导入，
-    这条往上调 tasks 的临时边随之消失（门禁 test_crafting_reaches_up_into_tasks_only_where_listed 钉着）"""
-    from ..tasks.catalog_queries import shops
-
-    return shops
-
-
-def _loot():
-    """掉落查询（目录迁移 Q3 搬到 tasks/catalog_queries/loot）：调用时才取，和 _shops() 一样是临时往上调 tasks 的边，
-    本文件 Q3 收口时也搬过去以后删（门禁 test_crafting_reaches_up_into_tasks_only_where_listed 钉着）"""
-    from ..tasks.catalog_queries import loot
-
-    return loot
+from ...catalog import acquire as _rules
+from ...contracts.textkeys import fold_en_loose
+from . import loot, shops
 
 
 def _buy_rows(item_id, here, top=3):
     if here:
-        rows = _shops().nearest(item_id, here, top)
+        rows = shops.nearest(item_id, here, top)
         if rows and rows[0][0] != float("inf"):
-            from ..navigation.position import fmt_distance
+            from ...navigation.position import fmt_distance
 
             return [
                 {"dist": fmt_distance(d), "price": p, "shop": shop, "place": place}
                 for d, p, shop, place in rows
             ]
-    buy, _ = _shops().where(item_id)
+    buy, _ = shops.where(item_id)
     return [
         {"dist": "", "price": p, "shop": shop, "place": place}
         for p, shop, place in buy[:top]
@@ -52,28 +39,28 @@ def resolve(name_en="", name_zh="", item_id=None):
     if item_id is not None or not (name_en or name_zh):
         return item_id
     if name_en:
-        hits = _shops().find(name_en, limit=3)
+        hits = shops.find(name_en, limit=3)
         exact = [h for h in hits if fold_en_loose(h[1]) == fold_en_loose(name_en)]
         if exact:
             return exact[0][0]
     if name_zh:
-        hits = _shops().find(name_zh, limit=3)
+        hits = shops.find(name_zh, limit=3)
         if hits:
             return hits[0][0]
     if name_en:
-        close = _shops().find_close(name_en)
+        close = shops.find_close(name_en)
         if close:
             return close[0]
         if not name_zh:
-            hits = _shops().find(name_en, limit=3)
+            hits = shops.find(name_en, limit=3)
             return hits[0][0] if hits else None
     return None
 
 
 def ships_with(name):
     """自带这个部件出厂的船（ship_items.json，由数据构建脚本从游戏数据生成，2026-10-27；读库）→ [船中文名]"""
-    from .. import gamedata
-    from ..contracts.textkeys import fold_en as _fold_en
+    from ... import gamedata
+    from ...contracts.textkeys import fold_en as _fold_en
 
     try:
         return gamedata.itemstats.ships_with(_fold_en(name))
@@ -90,7 +77,7 @@ def info(
     nowhere：商店和掉落数据里都没有（只有汉化包里有名字）；craft：这种东西有制造蓝图时的蓝图。
     这里按原来的先后查数据；挑同款、「哪都没有」、要不要查掉落、各块的样子见 catalog/acquire.py，
     买点那块（_buy_rows）还在这里"""
-    from ..navigation.position import current
+    from ...navigation.position import current
 
     here = None
     try:
@@ -99,8 +86,7 @@ def info(
         pass
     hit = None
     if exact and name_en:
-        # 物品搜索 Q1 搬到 tasks/catalog_queries/search；本文件 Q3 也搬过去，这条旧位置调新位置的边随之消失
-        from ..tasks.catalog_queries.search import lookup
+        from .search import lookup
 
         hit = lookup(name_en)
     if hit:
@@ -109,14 +95,14 @@ def info(
     else:
         item_id = resolve(name_en, name_zh, item_id)
     name, category = _rules.name_and_category(
-        _shops().item_record(item_id) if item_id is not None else None,
+        shops.item_record(item_id) if item_id is not None else None,
         item_id,
         name_en,
         name_zh,
     )
     ships = ships_with(name_en or name) or ships_with(name)
     try:
-        from .wikelo import source_note
+        from ...crafting.wikelo import source_note
 
         how = source_note(name_en or name) or source_note(name)
     except Exception:
@@ -127,7 +113,7 @@ def info(
     if hit:
         entry = hit
     else:
-        from ..tasks.catalog_queries.search import lookup
+        from .search import lookup
 
         entry = lookup(name)
     out["desc"], out["aka"] = _rules.desc_and_aka(
@@ -135,7 +121,7 @@ def info(
     )  # 描述：wiki 的游戏官方中文说明（1.6.49）
     if out["nowhere"]:
         try:
-            from .crafting import for_item, bp_key, display_name
+            from ...crafting.crafting import for_item, bp_key, display_name
 
             bp = for_item(name_en, name_zh)
             if bp:
@@ -143,31 +129,29 @@ def info(
         except Exception:
             pass
     out["here"] = _rules.here_summary(here)
-    if item_id is not None and _shops().buyable(item_id):
+    if item_id is not None and shops.buyable(item_id):
         out["buyable"] = True
-        out["buy_total"] = len(_shops().where(item_id)[0])
+        out["buy_total"] = len(shops.where(item_id)[0])
         out["buy"] = _buy_rows(item_id, here)
     elif name:
-        for iid, vname, _ in _rules.pick_variants(
-            name, _shops().variants(name, limit=6)
-        ):
+        for iid, vname, _ in _rules.pick_variants(name, shops.variants(name, limit=6)):
             out["variants"].append(
                 {
                     "id": iid,
                     "name": vname,
-                    "total": len(_shops().where(iid)[0]),
+                    "total": len(shops.where(iid)[0]),
                     "buy": _buy_rows(iid, here),
                 }
             )
     if item_id is not None:
-        out["sell"] = _rules.sell_summary(_shops().where(item_id)[1])
+        out["sell"] = _rules.sell_summary(shops.where(item_id)[1])
     if _rules.shows_loot(show_loot, hit):
         try:
-            out["loot"] = _loot().info(name_en or name, name_zh, online=loot_online)
+            out["loot"] = loot.info(name_en or name, name_zh, online=loot_online)
         except Exception as e:
             out["loot"] = {"error": f"掉落数据出错：{e}"}
     try:
-        from .wikelo import uses
+        from ...crafting.wikelo import uses
 
         out["wikelo"] = _rules.wikelo_rows(uses(name_en or name, name_zh))
     except Exception:
@@ -177,16 +161,16 @@ def info(
 
 def material_source(name_en):
     """维科洛材料去哪弄：商店能买就给最便宜的店；是矿就给最好的矿点"""
-    from ..crafting.wikelo import source_note
+    from ...crafting.wikelo import source_note
 
     note = source_note(name_en)
     if note:
         return note
-    tip = _shops().where_by_name(name_en)
+    tip = shops.where_by_name(name_en)
     if tip:
         return tip
     try:
-        from ..mining.locations import where as mine_where, zh_name
+        from ...mining.locations import where as mine_where, zh_name
 
         base = _re.sub(r"\s*\(.*?\)", "", name_en).strip()
         rows = mine_where(base)
@@ -203,7 +187,7 @@ def material_source(name_en):
 def loot_source(name_en, name_zh=""):
     """开箱掉落一句话（scl.miao.network 的掉落表）：概率最高的箱子在哪些地方；没有掉落返回空"""
     try:
-        d = _loot().info(
+        d: Any = loot.info(
             name_en, name_zh, top=2, online=False
         )  # 本机没有明细就算没有，不在页面里逐个材料联网等（细查 2026-10-28）
     except Exception:

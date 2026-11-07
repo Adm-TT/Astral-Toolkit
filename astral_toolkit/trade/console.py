@@ -2,7 +2,7 @@
 和给冻结调用方（库存、盘点、目标）留的几个旧名字。
 
 命令行版 2026-11-06 删了（F 段 B3）；行情显示搬到 trade/market_text，名字比较搬到 trade/matching，
-维科洛材料来源搬到 crafting/acquire（F 段 B1）；库存这半边等新库存。
+维科洛材料来源搬到 crafting/acquire（F 段 B1；目录迁移 Q3b 起在 tasks/catalog_queries/acquire）；库存这半边等新库存。
 """
 
 import os
@@ -30,8 +30,9 @@ from .market_text import (
 
 
 def material_source(name_en):
-    """目标（crafting/goals）用的旧名字：目标链改从 crafting.acquire 拿时删"""
-    from ..crafting.acquire import material_source as f
+    """目标（crafting/goals）用的旧名字：目标改用新实现时删。目录迁移 Q3b 起转给 tasks/catalog_queries/acquire——
+    trade 往上调 tasks 只许这一处（老大 11-07 定：留着转发、钉住这一条；门禁 test_trade_reaches_up_into_tasks_only_where_listed）"""
+    from ..tasks.catalog_queries.acquire import material_source as f
 
     return f(name_en)
 

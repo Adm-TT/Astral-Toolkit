@@ -30,6 +30,7 @@ MODULES = (
     "tasks.catalog_queries.shops",
     "update.shops",
     "tasks.catalog_queries.loot",
+    "tasks.catalog_queries.acquire",
     "update.loot",
     "infrastructure.providers.loot_site",
     "infrastructure.persistence.loot_details",

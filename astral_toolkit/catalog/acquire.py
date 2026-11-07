@@ -2,10 +2,10 @@
 买不到时推荐哪几件同款、卖给商店最高的那家、要不要查掉落、算不算「哪都没有」，
 以及物品查询 / F8 用的详情字典的骨架和各块的样子。
 
-原 crafting/acquire.info 里不夹着取数据的规则搬到这里；查商店、物品查询、掉落、维科洛、蓝图、当前位置留在旧文件。
-还夹着取数据、留在 crafting/acquire 的规则：买点给最近 3 处还是最便宜 3 处（_buy_rows，按条件才去查）、
-名字找物品 id 的先后（resolve）、维科洛材料来源那一句（material_source / loot_source）；
-目录迁移 Q3 把 acquire 搬进 tasks/catalog_queries 时一起处理（商店那部分 Q2 已搬完）。
+原 crafting/acquire.info 里不夹着取数据的规则搬到这里；查商店、物品查询、掉落、维科洛、蓝图、当前位置在
+tasks/catalog_queries/acquire.py（目录迁移 Q3b 从 crafting/acquire 搬去）。还夹着取数据、留在那边的规则：
+买点给最近 3 处还是最便宜 3 处（_buy_rows，按条件才去查）、名字找物品 id 的先后（resolve）、
+维科洛材料来源那一句（material_source / loot_source）。
 catalog 不读文件、不联网、不碰全局缓存（和 catalog/shops.py、catalog/loot.py 一样）。
 """
 

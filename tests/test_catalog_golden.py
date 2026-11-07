@@ -11,7 +11,7 @@ from typing import Any
 
 from astral_toolkit.app.api import trade as A
 from astral_toolkit.core import i18n
-from astral_toolkit.crafting import acquire
+from astral_toolkit.tasks.catalog_queries import acquire
 from astral_toolkit.tasks.catalog_queries import loot
 from astral_toolkit.tasks.catalog_queries import search as itemsearch
 from astral_toolkit.tasks import catalog as C
