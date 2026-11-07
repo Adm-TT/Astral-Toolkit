@@ -842,7 +842,7 @@ def test_count_analysis_views_and_links_are_wired_by_bootstrap(monkeypatch):
             trade_tasks, "trade", lambda: SimpleNamespace(db={"last_location": "某处"})
         )
         monkeypatch.setattr(stock_tasks, "_place_of", lambda loc: (f"地点:{loc}", None))
-        assert links.place_now() == "地点:某处"
+        assert links.place_now() == ""
     finally:
         bootstrap.shutdown(app, budget=0.2)
     cp, fg = (lambda: (1, 1)), (lambda: True)

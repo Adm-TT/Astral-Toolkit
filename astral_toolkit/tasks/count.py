@@ -10,8 +10,6 @@
 import time
 from typing import Any, Dict, List, Optional, Set, Tuple  # noqa: F401
 
-from ..app import bus
-
 API = {}
 
 
@@ -107,23 +105,70 @@ def _count_review(place, items):
         ids = frozenset(G.resolve_all(t, v["en"], v["zh"]))
         qkey = "unknown" if v["quality"] is None else f"exact:{int(v['quality'])}"
         ukey = G.USCU if v["unit"] == "SCU" else "unit"
-        k = (ids or (v["en"] or v["zh"]), qkey, ukey)
-        if k in merged:
-            m = merged[k]
-            merged[k] = {
-                **m,
-                "qty": m["qty"] + v["qty"],
-                "cells": m["cells"] + v["cells"],
-            }
-        else:
-            merged[k] = v
-    for (ids, qkey, ukey), v in merged.items():
-        ids = ids if isinstance(ids, frozenset) else frozenset()
+        # 当前地点没库存不代表它和另一个物品同名：英文明确对应的真实目录身份不能丢。
+        en = v["en"]
+        named = {
+            item.id
+            for item in (t.catalog.search(en) if en else [])
+            if item.name.casefold() == en.casefold()
+            and not item.id.startswith("local:")
+        }
+        alias = t.catalog.by_alias(en) if en and not named else None
+        if alias and not alias.id.startswith("local:"):
+            named.add(alias.id)
+        real_ids = {
+            iid for iid in ids if not iid.startswith("local:") and t.catalog.get(iid)
+        }
+        if named:
+            # 英文名明确对上正式物品：只拿它和英文名自己的本地副本（旧库存的另一种记法）去配账，
+            # 汉化名撞到的别的物品不算（以前整笔拒绝、看不出是哪件，原来能确认的盘点也被拒；审查 2026-11-08）
+            ids = frozenset(
+                named
+                | {
+                    item.id
+                    for item in t.catalog.search(en)
+                    if item.id.startswith("local:")
+                    and item.name.casefold() == en.casefold()
+                }
+            )
         lines = [
-            l
-            for l in book  # noqa: E741
-            if l.key.item_id in ids and l.key.quality == qkey and l.key.unit == ukey
-        ]  # noqa: E741
+            line
+            for line in book
+            if line.key.item_id in ids
+            and line.key.quality == qkey
+            and line.key.unit == ukey
+        ]
+        # 候选名可能多带一个账上没有的 id；只要实际命中的库存行相同，就共用一份账面数量。
+        matched = frozenset(line.key for line in lines)
+        identity = frozenset(
+            named
+            or {
+                line.key.item_id
+                for line in lines
+                if not line.key.item_id.startswith("local:")
+            }
+            or real_ids
+        )
+        # 没配到账上的行时，英文名明确的按它对上的正式物品分组：同一物品两个英文名在新地点也合成一行（审查 2026-11-08）
+        k = (
+            matched or frozenset(named) or ids or (en or v["zh"]),
+            qkey,
+            ukey,
+            identity,
+        )
+        if k in merged:
+            m, _ = merged[k]
+            merged[k] = (
+                {
+                    **m,
+                    "qty": m["qty"] + v["qty"],
+                    "cells": m["cells"] + v["cells"],
+                },
+                lines,
+            )
+        else:
+            merged[k] = (v, lines)
+    for (_, qkey, ukey, _identity), (v, lines) in merged.items():
         have = sum(l.quantity for l in lines)  # noqa: E741
         game = int(round(v["qty"] * 1_000_000)) if ukey == G.USCU else int(v["qty"])
         used.update(l.key for l in lines)  # noqa: E741
@@ -171,7 +216,7 @@ def _count_review(place, items):
 
 
 # ================================================================ 盘点控制与对账 API
-def count_toggle():
+def count_toggle(place=""):
     """盘点开关（窗口按钮；游戏里是 F6）。正在退出时只拦「开」，正在盘点照样能停（RT-B6）"""
     count = _need_count()
     if not count.running():
@@ -179,7 +224,23 @@ def count_toggle():
 
         if is_closing():
             return {"error": "正在退出"}
-    return count.stop() if count.running() else count.start()
+    if count.running():
+        # 选地点框还开着时游戏里已经按 F6 开始了：选了地点不把刚开始的盘点停掉（审查 2026-11-08）
+        if place:
+            return count_state()
+        return count.stop()
+    if not isinstance(place, str):
+        return {"error": "请选择有效的盘点地点"}
+    if place:
+        from ..crafting import stockplaces as SP
+
+        try:
+            name = SP.check_name(place)
+        except ValueError as exc:
+            return {"error": str(exc)}
+        known = SP.match(name)
+        return count.start(place=known["label"] if known else name)
+    return count.start()
 
 
 def count_state():
@@ -254,29 +315,24 @@ def count_apply(zero=None):
             list(targets.items()), rv.get("revision"), source="盘点"
         )
     except ValueError as e:  # 一行都没改：库存变过了要重新盘；别的错把这轮对账放回去
-        if "重新盘点" not in str(e) and count.review is None and not count.running():
-            count.review = rv
-        else:
-            bus.publish("count", {"running": count.running(), "review": None})
+        count.publish_review(restore=rv if "重新盘点" not in str(e) else None)
         return {"error": str(e)}
     except Exception:  # 数据库出错之类：对账放回去，窗口里还能再点确认
-        if count.review is None and not count.running():
-            count.review = rv
+        count.publish_review(restore=rv)
         raise
     for iid, q, slots in crafts:  # 制造品各槽品质：不是库存数，批次写完再记
         try:
             t.inventory.set_craft(iid, q, slots)
         except Exception:
             pass
-    count.review = None
-    bus.publish("count", {"running": count.running(), "review": None})
+    # take_review 已消费旧对账；提交期间另一轮可能收尾，不清掉它的新对账。
+    count.publish_review()
     return stock()
 
 
 def count_cancel():
     count = _need_count()
-    count.review = None
-    bus.publish("count", {"running": count.running(), "review": None})
+    count.publish_review(clear=True)
     return {"ok": True}
 
 

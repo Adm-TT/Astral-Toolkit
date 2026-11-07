@@ -393,8 +393,8 @@ def _count_views() -> CountViews:
 def _count_links(options: Mapping[str, Any]) -> CountLinks:
     """盘点线程要的外面的东西（目录迁移 R5：以前盘点线程在构造器里自己造、或经 `_T` / `_H` 动态去 tasks、app 取）。
     读光标（infrastructure/platform/cursor）、抓图（mining/screen）、游戏在不在前台（tasks/mining）、热键名（tasks/navigation
-    读设置，读不了就是 F6）、调试图目录（trade/debug_shots）、开始时在哪个库存地点（crafting/stockplaces；不知道就按上次
-    记的位置经 tasks/stock 找）、悬浮窗短提示（app/hud_state）、正在退出时不让开始（app/lifecycle_gate）都是用的时候才取；
+    读设置，读不了就是 F6）、调试图目录（trade/debug_shots）、开始时在哪个库存地点（crafting/stockplaces；未知返回空，
+    由盘点入口提示玩家手选）、悬浮窗短提示（app/hud_state）、正在退出时不让开始（app/lifecycle_gate）都是用的时候才取；
     overrides 给了 cursor_pos / foreground 就用给的（测试用）"""
 
     def cursor_pos() -> tuple[int, int]:
@@ -436,13 +436,7 @@ def _count_links(options: Mapping[str, Any]) -> CountLinks:
         here = stockplaces.current_place()
         if here:
             return here["label"]
-        # 不知道当前地点才按上次记的位置找（和以前一样，这时才导入 tasks/stock、tasks/trade）
-        from .tasks import stock as stock_tasks
-        from .tasks import trade as trade_tasks
-
-        return stock_tasks._place_of(
-            trade_tasks.trade().db.get("last_location", "") or ""
-        )[0]
+        return ""
 
     def note(section: str, text: str) -> None:
         from .app import hud_state

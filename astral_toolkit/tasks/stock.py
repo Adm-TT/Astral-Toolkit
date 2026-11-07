@@ -9,6 +9,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Any
 
 # ---------------------------------------------------------------- 依赖：交易库、别的任务
 # 2026-10-30 重构阶段 1：交易库和物品/矿物搜索直接用 tasks.trade 的（以前经 services 转发），出错不再吞掉。
@@ -161,7 +162,28 @@ def _history_view(t, limit=12):
 def _bins(t):
     """仓位：{地点: {"bins": [{name, desc}], "default": 默认仓位名或空}}（存在交易库的设置里）"""
     d = t.db.get("stock_bins", {}) or {}
-    return d if isinstance(d, dict) else {}
+    if not isinstance(d, dict):
+        return {}
+    merged = {}
+    # 正式名优先；旧名独有的仓位照样保留。只在读时合并，读库存不会改用户设置。
+    for place in sorted(d, key=lambda p: (_place_of(p)[0] != p, p)):
+        meta = d[place]
+        label = _place_of(place)[0]
+        if label not in merged:
+            merged[label] = {"bins": [], "default": meta.get("default", "")}
+        target = merged[label]
+        # 正式名的默认仓位、同名仓位的描述是空的（入库时自动建的就是空的）：用旧名设过的，别让空的盖掉（审查 2026-11-08）
+        if not target["default"] and meta.get("default"):
+            target["default"] = meta["default"]
+        have = {x["name"]: x for x in target["bins"]}
+        for x in meta.get("bins", []):
+            old = have.get(x["name"])
+            if old is None:
+                have[x["name"]] = dict(x)
+                target["bins"].append(have[x["name"]])
+            elif not old.get("desc") and x.get("desc"):
+                old["desc"] = x["desc"]
+    return merged
 
 
 def _price_index(t):
@@ -728,42 +750,59 @@ def stock_place_add(name=""):
     }
 
 
-def stock_bin_save(place="", name="", desc="", default=False, old=""):
+def _move_bin(t, place, old, new, note):
+    """等价地点下的同一仓位一笔移库；原始库存位置只在玩家主动改名 / 删除时改变。"""
+    from ..crafting import stockplaces as SP
+
+    n = sum(
+        _place_of(line.key.location)[:2] == (place, old)
+        for line in t.inventory.list_stock()
+    )
+    t.inventory.normalize_locations(
+        lambda loc: (
+            SP.join_loc(place, new) if _place_of(loc)[:2] == (place, old) else None
+        ),
+        note=note,
+        source="",  # 玩家自己改的仓位：记录来源不写成 AT（审查 2026-11-08）
+    )
+    return n
+
+
+def stock_bin_save(place="", name="", desc="", default=False, old="") -> dict[str, Any]:
     """新建仓位 / 改仓位（名字、描述、是不是默认）。改名时这个仓位里的东西一起换过去（一笔移库，能撤销）"""
     from ..crafting import stockplaces as SP
 
     _invalidate_short()
     t = trade()
     try:
-        label = SP.split_loc(_place_for(place, SP.MAIN_BIN))[0]
-        name = SP.check_bin(name)
-        bins = _bins(t)
-        meta = bins.setdefault(label, {"bins": [], "default": ""})
-        meta.setdefault("bins", [])
-        old = (old or "").strip()
-        if old and old != name:
-            if any(x["name"] == name for x in meta["bins"]):
+        with t.db.connection():
+            label = SP.split_loc(_place_for(place, SP.MAIN_BIN))[0]
+            name = SP.check_bin(name)
+            bins = _bins(t)
+            meta = bins.setdefault(label, {"bins": [], "default": ""})
+            meta.setdefault("bins", [])
+            old = (old or "").strip()
+            if old and old != name:
+                if any(x["name"] == name for x in meta["bins"]):
+                    raise ValueError(f"{label} 已有名为「{name}」的仓位")
+                _move_bin(t, label, old, name, note=f"仓位改名：{old} → {name}")
+                meta["bins"] = [x for x in meta["bins"] if x["name"] != old]
+                if meta.get("default") == old:
+                    meta["default"] = name
+            elif not old and any(x["name"] == name for x in meta["bins"]):
                 raise ValueError(f"{label} 已有名为「{name}」的仓位")
-            t.inventory.rename_location(
-                SP.join_loc(label, old),
-                SP.join_loc(label, name),
-                note=f"仓位改名：{old} → {name}",
-            )
-            meta["bins"] = [x for x in meta["bins"] if x["name"] != old]
-            if meta.get("default") == old:
+            hit = next((x for x in meta["bins"] if x["name"] == name), None)
+            if hit:
+                hit["desc"] = str(desc or "").strip()[:100]
+            else:
+                meta["bins"].append(
+                    {"name": name, "desc": str(desc or "").strip()[:100]}
+                )
+            if default:
                 meta["default"] = name
-        elif not old and any(x["name"] == name for x in meta["bins"]):
-            raise ValueError(f"{label} 已有名为「{name}」的仓位")
-        hit = next((x for x in meta["bins"] if x["name"] == name), None)
-        if hit:
-            hit["desc"] = str(desc or "").strip()[:100]
-        else:
-            meta["bins"].append({"name": name, "desc": str(desc or "").strip()[:100]})
-        if default:
-            meta["default"] = name
-        elif meta.get("default") == name:
-            meta["default"] = ""
-        t.db.set("stock_bins", bins)
+            elif meta.get("default") == name:
+                meta["default"] = ""
+            t.db.set("stock_bins", bins)
     except ValueError as e:
         return {"error": str(e)}
     out = stock()
@@ -771,29 +810,31 @@ def stock_bin_save(place="", name="", desc="", default=False, old=""):
     return out
 
 
-def stock_bin_delete(place="", name=""):
+def stock_bin_delete(place="", name="") -> dict[str, Any]:
     """删仓位：里面的东西放回这个地点的总仓（一笔移库，能撤销）"""
     from ..crafting import stockplaces as SP
 
     _invalidate_short()
     t = trade()
-    bins = _bins(t)
-    meta = bins.get(place) or {}
-    if not any(x["name"] == name for x in meta.get("bins", [])) and not any(
-        l.key.location == SP.join_loc(place, name)
-        for l in t.inventory.list_stock()  # noqa: E741
-    ):  # noqa: E741
-        return {"error": "未找到此仓位"}
     try:
-        n = t.inventory.rename_location(
-            SP.join_loc(place, name), place, note=f"删除仓位「{name}」：物品移回总仓"
-        )
+        with t.db.connection():
+            place = _place_of(place)[0]
+            bins = _bins(t)
+            meta = bins.get(place) or {}
+            if not any(x["name"] == name for x in meta.get("bins", [])) and not any(
+                _place_of(l.key.location)[:2] == (place, name)
+                for l in t.inventory.list_stock()  # noqa: E741
+            ):  # noqa: E741
+                return {"error": "未找到此仓位"}
+            n = _move_bin(
+                t, place, name, SP.MAIN_BIN, note=f"删除仓位「{name}」：物品移回总仓"
+            )
+            meta["bins"] = [x for x in meta.get("bins", []) if x["name"] != name]
+            if meta.get("default") == name:
+                meta["default"] = ""
+            t.db.set("stock_bins", bins)
     except ValueError as e:
         return {"error": str(e)}
-    meta["bins"] = [x for x in meta.get("bins", []) if x["name"] != name]
-    if meta.get("default") == name:
-        meta["default"] = ""
-    t.db.set("stock_bins", bins)
     out = stock()
     out["moved"] = n
     return out
