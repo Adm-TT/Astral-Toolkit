@@ -89,15 +89,18 @@ _HALO = {
     "seen": None,
     "last": None,
     "ends": None,  # 方案起点、目标的坐标（Gm）：挂上时查好，每秒核对不再碰星图库
-    "qt": False,  # 挂上以后测到过在量子里（悬浮窗已刷回只剩方案）
-    "first": True,  # 下一次带「多飞 / 少飞」的核对是量子后第一次：导航日志里标出来
+    "near": 0.1,  # 离起点多近（Gm）算还在起点：挂上时按路线算
+    "jumped": False,  # 挂上以后测到过起跳
+    "first": False,  # 这一跳是从起点跳的、断开后还没核对过：下一次带「多飞 / 少飞」的核对在导航日志里标出来
     "logged": None,  # 导航日志上一次记的核对：一样的不再记
     "ev": threading.Event(),
     "lock": threading.Lock(),
 }
 
 QT_SPEED = 50_000  # 米/秒：比这快就是在量子跳跃（普通飞行最快一千多米每秒）
-LEFT_START = 0.1  # Gm：离方案起点这么远才算跳过了（普通飞行一千多米每秒，要飞一天多）
+LEFT_START = (
+    0.1  # Gm：离方案起点这么近算还在起点（普通飞行一千多米每秒，飞 0.1 Gm 要一天多）
+)
 
 
 # ---------------------------------------------------------------- 依赖与辅助
@@ -1080,6 +1083,7 @@ def halo_pin(deps: NavDeps, /, frm="", to="", band=5, qd=""):
     from ..navigation import halo
     from ..navigation import navigate as n
 
+    pts: dict = {}
     try:
         pts = halo.points()
         r = halo.route(
@@ -1104,8 +1108,10 @@ def halo_pin(deps: NavDeps, /, frm="", to="", band=5, qd=""):
             last=None,
             ev=ev,
             ends=(pts[frm], pts[to]),
-            qt=False,
-            first=True,
+            # 断开点离起点很近的路线（CRU-L2 本身就在带里）：门槛缩到起点到安全窗口那段的一半
+            near=min(LEFT_START, (r["total"] - r["early"]) / 2),
+            jumped=False,
+            first=False,
             logged=None,
         )
         try:
@@ -1124,7 +1130,9 @@ def halo_unpin():
     with _HALO["lock"]:
         _HALO["ev"].set()
         _HALO["sess"] += 1
-        _HALO.update(plan=None, last=None, ends=None, qt=False, logged=None)
+        _HALO.update(
+            plan=None, last=None, ends=None, jumped=False, first=False, logged=None
+        )
         _hud_clear("小行星带")
     return {"ok": True}
 
@@ -1137,12 +1145,13 @@ def _halo_watch(deps: NavDeps, sess, ev):
     nav = deps.nav
     events = deps.game_events
     seen_live, live_at, prev, arr = None, 0.0, None, events.arrived_at
+    in_qt = False  # 上一次读数在量子里（每秒几万公里）
     while not ev.is_set():
         try:
             if (
                 events.arrived_at != arr
             ):  # 游戏日志说量子到了：马上核对，不用等测速（2026-10-27）
-                arr, prev, live_at = events.arrived_at, None, 0.0
+                arr, prev, live_at, in_qt = events.arrived_at, None, 0.0, False
             t, g_live, _ = _pos_current(
                 deps
             )  # 每次读到都更新（停着不动也有新的一份），latest 只在坐标变了才换（审查 2026-10-27）
@@ -1153,9 +1162,11 @@ def _halo_watch(deps: NavDeps, sess, ev):
                     and t > prev[0]
                     and math.dist(g_live, prev[1]) / (t - prev[0]) > QT_SPEED
                 )
+                # 从慢变快就是起跳了，每次起跳都算：起跳前最后一次读数在方案起点附近，就是从起点跳的那一趟
+                if fast and not in_qt:
+                    _halo_jump(sess, prev is not None and _near_start(prev[1]))
+                in_qt = bool(fast)
                 prev = (t, g_live)
-                if fast:
-                    _halo_qt(sess)
                 if (
                     not fast and time.time() - live_at >= 1.0
                 ):  # 量子途中（每秒几万公里）不核对，等断开
@@ -1170,14 +1181,24 @@ def _halo_watch(deps: NavDeps, sess, ev):
         ev.wait(0.3)
 
 
-def _halo_qt(sess):
-    """挂上方案以后第一次测到在量子里：悬浮窗刷回只剩方案那几行，起跳前那次核对别冻在上面（审查 2026-11-08）"""
+def _halo_jump(sess, from_start):
+    """挂着方案时测到一次起跳（每次起跳都算）：悬浮窗刷回只剩方案那几行，起跳前、上一跳的核对别冻在上面；
+    记下挂上以后跳过了（每秒自动核对这才说「多飞 / 少飞」）；从方案起点跳的这一趟，
+    断开后第一次说那句的核对在导航日志里标出来（审查 2026-11-08）"""
     with _HALO["lock"]:
         p = _HALO["plan"]
-        if not p or sess != _HALO["sess"] or _HALO["qt"]:
+        if not p or sess != _HALO["sess"]:
             return
-        _HALO["qt"] = True
+        _HALO.update(jumped=True, first=bool(from_start))
         _hud_set("小行星带", p["text"])
+
+
+def _near_start(g):
+    """坐标（米）离方案起点不超过 near（挂方案时按路线算好）"""
+    ends = _HALO["ends"]
+    return (
+        bool(ends) and math.dist(ends[0], [float(v) / 1e9 for v in g]) <= _HALO["near"]
+    )
 
 
 def halo_check(g, clip=None, sess=None):
@@ -1195,11 +1216,12 @@ def halo_check(g, clip=None, sess=None):
             _HALO["seen"] = clip
         w = halo.where(g)
         w["text"] = halo.where_text(w, p["band"])
-        # 比方案的断开点多飞 / 少飞多少：老大实飞量断开后船滑多远（2026-11-08）。
-        # 离开起点（跳过了）才说：还没跳就说「少飞了」像是玩家错了（审查 2026-11-08）
-        start, target = _HALO["ends"] or (None, None)
+        # 比方案的断开点多飞 / 少飞多少：老大实飞量断开后船滑多远（2026-11-08）。在方案起点附近不说；
+        # 每秒自动核对还要挂上以后测到过起跳才说（还没跳就说「少飞了」像是玩家错了）；
+        # 手动定位（剪贴板、F9）没有实时坐标测起跳，只看离起点多远（审查 2026-11-08）
+        target = (_HALO["ends"] or (None, None))[1]
         over, first = None, False
-        if start and math.dist(start, [float(v) / 1e9 for v in g]) > LEFT_START:
+        if target and not _near_start(g) and (clip is not None or _HALO["jumped"]):
             over = halo.overshoot(p, g, {p.get("to"): target})
         if over:
             w["left"], w["over"] = over["left"], over["over"]
