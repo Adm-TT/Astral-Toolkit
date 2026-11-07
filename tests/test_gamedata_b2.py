@@ -338,6 +338,85 @@ def test_from_log_and_shop_point_stanton_ooc_names(monkeypatch, tmp_path):
     assert (city or {}).get("i") == "OOC_Stanton_3_ArcCorp"
 
 
+def test_stanton_old_and_new_names_mixed(monkeypatch, tmp_path):
+    """星球是老叫法（Stanton3）、拉格朗日点是新叫法（OOC_Stanton3_L4），或者反过来：拉格朗日站商店照样找得到；
+    新旧两种都有时先认老叫法（和以前一样，from_code 也是）"""
+    from astral_toolkit.navigation import position
+
+    sm = json.loads(json.dumps(_NAV_SOURCES["starmap.json"]))
+    sm["points"] += [
+        dict(
+            n="ArcCorp", i="Stanton3", sys="Stanton", t="Planet", x=30.0, y=0.0, z=0.0
+        ),
+        dict(
+            n="ARC L4",
+            i="OOC_Stanton3_L4",
+            sys="Stanton",
+            t="Lagrange Point",
+            x=33.0,
+            y=3.0,
+            z=0.0,
+        ),
+        dict(
+            n="Crusader",
+            i="OOC_Stanton_2_Crusader",
+            sys="Stanton",
+            t="Planet",
+            x=20.0,
+            y=0.0,
+            z=0.0,
+        ),
+        dict(
+            n="CRU L1",
+            i="Stanton2_L1",
+            sys="Stanton",
+            t="Lagrange Point",
+            x=21.0,
+            y=0.0,
+            z=0.0,
+        ),
+        dict(
+            n="CRU L1 New",
+            i="OOC_Stanton2_L1",
+            sys="Stanton",
+            t="Lagrange Point",
+            x=22.0,
+            y=0.0,
+            z=0.0,
+        ),
+    ]
+    _setup(monkeypatch, tmp_path, **{"starmap.json": sm})
+    position._ooc_bodies.cache_clear()
+    arc = position.shop_point(
+        ["Stanton", "ArcCorp", "ArcCorp Lagrange Point 4", "", "", ""]
+    )
+    assert (arc or {}).get("i") == "OOC_Stanton3_L4"
+    cru = position.shop_point(
+        ["Stanton", "Crusader", "Crusader Lagrange Point 1", "", "", ""]
+    )
+    assert (cru or {}).get("i") == "Stanton2_L1"
+    assert (position.from_code("RR_CRU_L1") or {}).get("i") == "Stanton2_L1"
+
+
+def test_ooc_body_without_version_or_database(monkeypatch, tmp_path):
+    """拿不到游戏数据库的版本号时现查、不缓存（不然数据换了还用旧表）；游戏数据库不可用时给 None，不往外抛"""
+    from astral_toolkit.gamedata import GamedataError
+    from astral_toolkit.gamedata import starmap as gd_starmap
+    from astral_toolkit.navigation import position
+
+    _setup(monkeypatch, tmp_path, **_ooc_points())
+    position._ooc_bodies.cache_clear()
+    monkeypatch.setattr(position, "_data_version", lambda: None)
+    assert (position._ooc_body("Stanton4") or {}).get("i") == "OOC_Stanton_4_Microtech"
+    assert position._ooc_bodies.cache_info().currsize == 0
+
+    def down(*a, **k):
+        raise GamedataError("游戏数据库不可用")
+
+    monkeypatch.setattr(gd_starmap, "data_dict", down)
+    assert position._ooc_body("Stanton4") is None
+
+
 # ---------------------------------------------------------------- Task 3：地名对照
 
 

@@ -62,18 +62,23 @@ def shop_point(fields):
         if base:
             iname = base["i"]
             pm = re.fullmatch(r"(?i)pyro(\d)", iname)
-            # 斯坦顿的星球现在叫 OOC_Stanton_3_ArcCorp，它的拉格朗日点叫 OOC_Stanton3_L4：以前只按「星球内部名_L4」找，
-            # 斯坦顿的拉格朗日站商店算远近时被放到了星球中心（2026-11-07 跟着斯坦顿地点一起修）
-            sm = re.match(r"(?i)OOC_Stanton_(\d)_", iname)
+            # 斯坦顿的星球现在叫 OOC_Stanton_3_ArcCorp，它的拉格朗日点叫 OOC_Stanton3_L4（老数据 Stanton3、Stanton3_L4）：
+            # 以前只按「星球内部名_L4」找，斯坦顿的拉格朗日站商店算远近时被放到了星球中心（2026-11-07 跟着斯坦顿地点
+            # 一起修）。新旧两种叫法都试，星球和拉格朗日点叫法不一样也找得到；两种都有先认老的（和 from_code 一样）
+            sm = re.match(r"(?i)(?:OOC_)?Stanton_?(\d)(?:_|$)", iname)
             if pm:
-                internal = f"P{pm.group(1)}_L{m.group(1)}"
+                tries = [f"P{pm.group(1)}_L{m.group(1)}"]
             elif sm:
-                internal = f"OOC_Stanton{sm.group(1)}_L{m.group(1)}"
+                tries = [
+                    f"Stanton{sm.group(1)}_L{m.group(1)}",
+                    f"OOC_Stanton{sm.group(1)}_L{m.group(1)}",
+                ]
             else:
-                internal = f"{iname}_L{m.group(1)}"
-            p = find_point(internal=internal)
-            if p:
-                return p
+                tries = [f"{iname}_L{m.group(1)}"]
+            for internal in tries:
+                p = find_point(internal=internal)
+                if p:
+                    return p
     for name in (planet, station, system and system + " Star"):
         if name:
             p = find_point(name=name)
@@ -107,17 +112,31 @@ def from_code(code):
 
 def _ooc_body(old):
     """旧的斯坦顿星球 / 卫星内部名（Stanton4、Stanton1b）→ 星图里现在叫 OOC_Stanton_4_Microtech 的那个点
-    （卫星的编号带字母，不会认成星球）；不是斯坦顿、星图里没有给 None。给出去的是一份新的，调用方改了不碰缓存"""
+    （卫星的编号带字母，不会认成星球）；不是斯坦顿、星图里没有、游戏数据库不可用都给 None。
+    给出去的是一份新的，调用方改了不碰缓存"""
+    from ..gamedata import GamedataError
+
     m = re.fullmatch(r"stanton(\d[a-z]?)", old, re.I)
     if not m:
         return None
-    p = _ooc_bodies(_data_version()).get(m.group(1).lower())
+    try:
+        v = _data_version()
+        # 拿不到版本号就现查、不缓存（不然数据换了还用旧表）
+        table = _ooc_bodies(v) if v is not None else _ooc_table()
+    except GamedataError:
+        return None
+    p = table.get(m.group(1).lower())
     return dict(p) if p else None
 
 
 @lru_cache(maxsize=1)
 def _ooc_bodies(_version):
-    """星图里 OOC_Stanton_<编号>_<名字> 的点按编号（4、1b）排成表，按库版本缓存、只留当前版本；同编号取源里第一个"""
+    """_ooc_table 按库版本缓存、只留当前版本"""
+    return _ooc_table()
+
+
+def _ooc_table():
+    """星图里 OOC_Stanton_<编号>_<名字> 的点按编号（4、1b）排成表；同编号取源里第一个"""
     from ..gamedata import starmap as gd_starmap
 
     out = {}
