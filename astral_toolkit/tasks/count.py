@@ -99,7 +99,7 @@ def _count_review(place, items):
         if _place_of(l.key.location)[0] == place  # noqa: E741
     ]  # noqa: E741
     used, rows = set(), []
-    same_zh = {}  # 同一个中文名带出来、没并进来的条目 → 盘到的那件叫什么（「未盘到」那行注明，审查 2026-11-08 第三轮）
+    same_zh = {}  # 同一个中文名带出来、没并进来的条目 → 盘到的那件「中文（英文）」（「未盘到」那行注明，审查 2026-11-08 第三轮）
     # 同一物品 + 品质 + 单位分成了几组（制造品各槽品质不同、两个名字是同一物品）：会配到同一批库存行，先合成一行
     # （各槽品质只留第一组的——库存还不分变体，见待做 #10；复审 2026-10-28）
     merged = {}
@@ -139,7 +139,7 @@ def _count_review(place, items):
                 {i.id for i in t.catalog.all_by_alias(v["zh"])} if v["zh"] else set()
             )
             for iid in (set(ids) | alias_ids) - kept:
-                same_zh.setdefault(iid, v["zh"] or en)
+                same_zh.setdefault(iid, f"{v['zh']}（{en}）" if v["zh"] else en)
             ids = kept
         lines = [
             line
