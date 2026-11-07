@@ -52,16 +52,23 @@ AT 靠截屏识别文字、读游戏写出的日志文件工作；不模拟按�
 
 | 位置 | 内容 |
 |---|---|
-| `astral_toolkit/app/` | 窗口和后台：`server.py` 启动、本机网页服务；`web/` 界面；`api/` 每个领域一个接口文件（Controller），`router.py` 汇总；`engines/` 后台读屏 / 导航引擎，`engines/manager.py` 统一管；`hud_state.py` 悬浮窗提示；`overlay.py` 悬浮窗；`tray.py` 托盘 |
-| `astral_toolkit/tasks/` | 各功能的业务逻辑：交易、库存、目标与制造、导航、采矿、F8 识别、F6 盘点、系统与更新；界面接口经 `app/api/` 转到这里 |
-| `astral_toolkit/core/` | 基础：路径、设置、版本、性能与识别设备、多语言 |
+| `astral_toolkit/app/` | 窗口和界面：`server.py` 启动、本机网页服务；`web/` 界面；`api/` 每个领域一个接口文件（Controller），`router.py` 汇总；`presenters/` 把结果排成窗口和悬浮窗上的内容；`inputs/` 热键按下去做什么；`hud_state.py` 悬浮窗提示；`overlay.py` 悬浮窗；`tray.py` 托盘 |
+| `astral_toolkit/bootstrap.py` | 唯一的装配入口：创建各部分，把后台线程要用的东西接进去，登记启动和退出顺序 |
+| `astral_toolkit/runtime/` | 后台运行：会话、结果、暂停和停止；`workers/` 是定位、导航、游戏事件、采矿、热键、盘点这几条后台线程，只用装配时接进来的东西，不直接调业务和界面 |
+| `astral_toolkit/tasks/` | 各功能的业务逻辑：交易、库存、目标与制造、导航、采矿、F8 识别、F6 盘点、系统与更新；`catalog_queries/` 是物品查询（搜索、商店、掉落、怎么弄到）；界面接口经 `app/api/` 转到这里 |
 | `astral_toolkit/mining/`、`navigation/`、`crafting/`、`trade/` | 各领域的计算和数据：采矿识别与破碎计算、星图与定位、制造与物品、查价与库存 |
+| `astral_toolkit/catalog/`、`contracts/` | 物品查询的纯规则（匹配、排序、筛选、汇总，不读文件、不联网）；跨模块共用的值类型 |
+| `astral_toolkit/gamedata/` | 本地游戏数据库（SQLite）和统一查询 |
 | `astral_toolkit/ocr/` | 读屏识别统一入口（各处认字都经这里），引擎本体在 `ocr/runtime.py` |
+| `astral_toolkit/infrastructure/` | 和外部打交道的适配：`platform/` 平台读数（按键、光标、窗口位置），`persistence/` 本机文件存取，`providers/` 外部网站下载 |
+| `astral_toolkit/core/` | 基础：路径、设置、版本、截屏、联网、运行记录、性能与识别设备、多语言 |
 | `astral_toolkit/system/`、`update/` | 和系统、游戏打交道（驾驶位检测、问题反馈等）；数据下载与升级 |
-| `astral_toolkit/run.py`、`selftest.py` | 命令行入口、自检 |
+| `astral_toolkit/run.py`、`frozen_main.py`、`selftest.py` | 命令行入口、安装版入口、自检 |
 | `tests/` | 测试，`run_all.py` 自带运行器，不用装 pytest |
 | `tools/` | 打包、发布、数据包生成等开发工具 |
 | `data/`、`userdata/` | 运行时生成：下载的数据、个人设置和记录（不在仓库里） |
+
+依赖只往下走：界面（`app`）→ 业务（`tasks`）→ 各领域和数据（`mining`、`navigation`、`crafting`、`trade`、`catalog`、`gamedata`）→ 共用的值类型和基础（`contracts`、`core`）；后台线程（`runtime`）不直接调业务和界面，要用的由 `bootstrap.py` 接进来。几处等新库存再拆的旧接口在门禁里单独列着；这些边界由 `tests/test_runtime_arch.py` 检查。
 
 ## 数据来源和致谢
 
