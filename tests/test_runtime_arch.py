@@ -1346,17 +1346,10 @@ def test_catalog_queries_code_starts_no_threads():
 
 def test_crafting_reaches_up_into_tasks_only_where_listed():
     """crafting 在 tasks 下层，不该反过来导入 tasks（目录迁移章程：兼容只许有明确调用者和删除批次），只许减不许加：
-    acquire → 物品搜索（Q1）、商店查询（Q2）、掉落查询（Q3a）是搬走以后留的临时边，Q3 把 acquire 搬进 catalog_queries 时删；
+    acquire 往上调物品搜索（Q1）、商店查询（Q2）、掉落查询（Q3a）那三条临时边，Q3b 把 acquire 搬进 catalog_queries 时删了；
     goals → tasks.trade 是老的，目标业务这轮不动。字符串导入（__import__ / import_module）本项目的模块一律算，
     往上往下都不许，免得绕过这条。"""
     allowed = {
-        "acquire.py": {
-            "astral_toolkit.tasks.catalog_queries.search",
-            "astral_toolkit.tasks.catalog_queries.search.lookup",
-            "astral_toolkit.tasks.catalog_queries",
-            "astral_toolkit.tasks.catalog_queries.shops",
-            "astral_toolkit.tasks.catalog_queries.loot",
-        },
         "goals.py": {"astral_toolkit.tasks.trade", "astral_toolkit.tasks.trade.trade"},
     }
     seen, sneaky = {}, []
@@ -1378,6 +1371,43 @@ def test_crafting_reaches_up_into_tasks_only_where_listed():
         ]
     assert seen == allowed, seen
     assert sneaky == [], sneaky
+
+
+def test_trade_reaches_up_into_tasks_only_where_listed():
+    """trade 在 tasks 下层，不该反过来导入 tasks，只许减不许加：console.material_source 转给
+    tasks/catalog_queries/acquire 是目录迁移 Q3b 搬走获取途径以后留的转发（目标链 crafting/goals 还在用；
+    老大 11-07 定留着转发、钉住这一条），目标改用新实现时删。字符串导入本项目的模块一律算"""
+    allowed = {
+        "console.py": {
+            "astral_toolkit.tasks.catalog_queries.acquire",
+            "astral_toolkit.tasks.catalog_queries.acquire.material_source",
+        },
+    }
+    seen, sneaky = {}, []
+    files = sorted((_ROOT / "trade").rglob("*.py"))
+    assert files
+    for path in files:
+        rel = path.relative_to(_ROOT / "trade").as_posix()
+        pkg = ".".join(("astral_toolkit", *path.relative_to(_ROOT).parent.parts))
+        source = path.read_text(encoding="utf-8")
+        up = {
+            m
+            for m in _imports_in_source(source, pkg)
+            if m == "astral_toolkit.tasks" or m.startswith("astral_toolkit.tasks.")
+        }
+        if up:
+            seen[rel] = up
+        sneaky += [
+            f"{rel}: {t}"
+            for t in _dynamic_import_targets(source)
+            if t.startswith((".", "astral_toolkit"))
+        ]
+    assert seen == allowed, seen
+    assert sneaky == [], sneaky
+    bad = "def f():\n    from ..tasks import catalog\n"
+    assert "astral_toolkit.tasks.catalog" in set(
+        _imports_in_source(bad, "astral_toolkit.trade")
+    )  # 检查本身认得出函数里的往上导入
 
 
 def test_only_trade_shell_imports_catalog_presenter():

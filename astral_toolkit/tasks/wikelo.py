@@ -3,7 +3,6 @@
 
 from ..crafting import wikelo
 from ..crafting.wikelo_rules import note_for, rewarding
-from ..crafting.acquire import material_source
 
 _wk_cache = {}
 
@@ -40,6 +39,9 @@ def exchange_detail(key=""):
             groups[-1][1].append(r)
         else:
             groups.append((k, [r]))
+    # 材料来源在物品查询内部实现里（目录迁移 Q3b）：调用时才取，tasks 包导入时（goals 顶上导入本文件）别把它带进来
+    from .catalog_queries.acquire import material_source
+
     out = []
     for _, rs in groups:
         try:

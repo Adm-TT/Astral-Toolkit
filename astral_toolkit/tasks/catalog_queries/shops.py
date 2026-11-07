@@ -36,7 +36,7 @@ def _rows_for(item_id):
 
 def item_record(item_id):
     """商店数据里这件的 [英文名, 类别]：按 str(编号) 对，和以前读 shops.json 的 items[str(编号)] 一样；
-    没有这件、库建不出来 → None（CL-C4 起 crafting/acquire.info 用它，替代 load()["items"]）"""
+    没有这件、库建不出来 → None（CL-C4 起获取途径 acquire.info 用它，替代 load()["items"]）"""
     key = str(item_id)
     for iid, en, cat, _ in _folded_items():
         if str(iid) == key:

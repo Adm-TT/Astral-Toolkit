@@ -6,7 +6,7 @@ from astral_toolkit.tasks.catalog_queries import shops
 from astral_toolkit.update import shops as shop_prices
 from astral_toolkit.crafting import wikelo
 from astral_toolkit.tasks.catalog_queries import loot
-from astral_toolkit.crafting import acquire
+from astral_toolkit.tasks.catalog_queries import acquire
 from astral_toolkit.navigation import position
 from astral_toolkit.gamedata._cache import VersionCache as _VC
 from tests.tools_helpers import _shops_db
@@ -532,7 +532,7 @@ def test_wikelo_materials_all_have_source(monkeypatch):
     import pytest
     from astral_toolkit.crafting import wikelo
     from astral_toolkit.update import loot as loot_index
-    from astral_toolkit.crafting.acquire import material_source
+    from astral_toolkit.tasks.catalog_queries.acquire import material_source
 
     cs = wikelo.load()
     if not cs or not loot_index.load_index(False):

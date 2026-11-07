@@ -11,7 +11,7 @@ import unicodedata
 
 
 def fold_en(text):
-    """名字比较键：小写、只留 a-z0-9；trade.names、trade.gamekey、crafting.acquire 和 gamedata 物品名 / 名字对照表在用。"""
+    """名字比较键：小写、只留 a-z0-9；trade.names、trade.gamekey、tasks/catalog_queries/acquire 和 gamedata 物品名 / 名字对照表在用。"""
     return re.sub(r"[^a-z0-9]", "", (text or "").lower())
 
 

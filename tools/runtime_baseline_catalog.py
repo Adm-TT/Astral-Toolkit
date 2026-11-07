@@ -858,7 +858,7 @@ def _pick_mineral():
 
 
 def _item_info_id(name):
-    from astral_toolkit.crafting import acquire
+    from astral_toolkit.tasks.catalog_queries import acquire
 
     data = acquire.info(
         name_en=name,

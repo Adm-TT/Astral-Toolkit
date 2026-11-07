@@ -66,7 +66,7 @@ def get_item_info(name="", zh="", id=None, loot=True, exact=False):
     """一件物品的详情。exact=True：从物品查询 / 顶上搜索框的结果点进来的（名字是准的）。
     掉落明细本机没有时不上网等（loot 里给 pending），窗口再调 item_loot 后台取（2026-10-28 用户反馈卡 10 秒）"""
     from ..core.i18n import gear_zh_of_item
-    from ..crafting import acquire
+    from .catalog_queries import acquire
 
     with _pinned():
         d = acquire.info(
