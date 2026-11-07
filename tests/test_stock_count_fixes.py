@@ -419,20 +419,15 @@ def test_real_catalog_english_name_wins_over_shared_label(monkeypatch, tmp_path)
     [
         ("rare", "Yormandi Eye (Rare)"),  # F8 当时模糊配到的那条
         ("local:Yormandi Eyes", "Yormandi Eyes"),  # 旧英文名的本地副本
-        (
-            "local:Old Eye Name",
-            "Old Eye Name",
-        ),  # 改名改得多的本地副本：本地副本照旧都算
+        ("local:Old Eye Name", "Old Eye Name"),  # 改名改得多的本地副本
     ],
 )
-def test_variant_entry_with_same_label_counts_once(monkeypatch, tmp_path, vid, name):
-    """同一件东西的库存记在另一条目录名下（F8 当时模糊配到的那条、旧英文名的本地副本），和英文名那条挂着同一个中文名：
-    盘点按英文名认时也配上它，确认后不变成两份；撞名、名字不像的别的物品照样不配（审查 2026-11-08）"""
-    from astral_toolkit.trade.matching import names_alike
+def test_same_label_entry_is_flagged_not_merged(monkeypatch, tmp_path, vid, name):
+    """同一个中文名带出来的别的条目（F8 当时模糊配到的那条、旧英文名的本地副本）不并进英文名那一行：这轮没盘到就进
+    「未盘到」并注明和谁挂着同一个中文名，玩家勾了清零才清，不勾照旧不动（审查 2026-11-08 第三轮：按名字像不像来并，
+    会把另一件真东西的库存悄悄扣掉）"""
     from astral_toolkit.trade.models import Item
 
-    assert names_alike(name, "Yormandi Eye") != (vid == "local:Old Eye Name")
-    assert not names_alike("Vanduul Plating", "Yormandi Eye")
     t = _context(monkeypatch, tmp_path)
     t.catalog.upsert([Item(vid, name)])
     for iid in ("eye", vid, "vp"):  # 英文名那条、变体、撞名的别的物品都挂着同一个中文名
@@ -450,15 +445,79 @@ def test_variant_entry_with_same_label_counts_once(monkeypatch, tmp_path, vid, n
     rv = count_task._count_review(
         "A", {1: {**_item("Yormandi Eye", 5), "zh": "约曼迪之眼"}}
     )
-    assert [(r["book"], r["game"], r["delta"]) for r in rv["rows"]] == [(5, 5, 0)]
-    assert [m["key"][0] for m in rv["missing"]] == ["vp"]
+    assert [(r["book"], r["game"], r["delta"]) for r in rv["rows"]] == [(0, 5, 5)]
+    assert {m["key"][0]: m["same"] for m in rv["missing"]} == {
+        vid: "约曼迪之眼",
+        "vp": "约曼迪之眼",
+    }
     count = count_helpers.count()
     count.review = rv
     monkeypatch.setattr(bus, "publish", lambda *args: None)
+    zero = [
+        m["key"] for m in rv["missing"] if m["key"][0] == vid
+    ]  # 玩家认出是同一件，勾了清零
+    with bind_for_test(count_task, count):
+        assert "error" not in count_task.count_apply(zero)
+    got = {
+        line.key.item_id: line.quantity
+        for line in t.inventory.list_stock()
+        if line.quantity
+    }
+    assert got == {"eye": 5, "vp": 7}
+
+
+def test_lookalike_other_item_keeps_its_stock(monkeypatch, tmp_path):
+    """F8 模糊配上时把本体的中文名记到了变体上（这里是轻机枪和它的电池）：盘点按英文名认本体，不把电池并进来，
+    确认后电池的库存不动；两样都盘到时各是各的（审查 2026-11-08 第三轮）"""
+    from astral_toolkit.trade.models import Item
+
+    t = _context(monkeypatch, tmp_path)
+    t.catalog.upsert(
+        [Item("lmg", "Demeco LMG"), Item("bat", "Demeco LMG Battery (100 cap)")]
+    )
+    for iid in ("lmg", "bat"):
+        t.catalog.add_alias(iid, "德美科 轻机枪")
+    t.inventory.commit(
+        t.inventory.prepare(
+            [
+                StockLine(StockKey("lmg", "unknown", "A"), 1),
+                StockLine(StockKey("bat", "unknown", "A"), 20),
+            ],
+            "add",
+        ),
+        allow_duplicate=True,
+    )
+    gun = {**_item("Demeco LMG", 1), "zh": "德美科 轻机枪"}
+    rv = count_task._count_review("A", {1: gun})
+    assert [(r["book"], r["game"]) for r in rv["rows"]] == [(1, 1)]
+    assert [(m["key"][0], m["same"]) for m in rv["missing"]] == [
+        ("bat", "德美科 轻机枪")
+    ]
+    count = count_helpers.count()
+    monkeypatch.setattr(bus, "publish", lambda *args: None)
+    count.review = rv
+    with bind_for_test(count_task, count):
+        assert "error" not in count_task.count_apply()
+    bat = {**_item("Demeco LMG Battery (100 cap)", 20), "zh": "德美科 轻机枪"}
+    both = count_task._count_review("A", {1: gun, 2: bat})
+    assert sorted((r["en"], r["book"], r["game"]) for r in both["rows"]) == [
+        ("Demeco LMG", 1, 1),
+        ("Demeco LMG Battery (100 cap)", 20, 20),
+    ]
+    assert both["missing"] == []
+    count.review = both
     with bind_for_test(count_task, count):
         assert "error" not in count_task.count_apply()
     got = {line.key.item_id: line.quantity for line in t.inventory.list_stock()}
-    assert got == {vid: 5, "vp": 7}
+    assert got == {"lmg": 1, "bat": 20}
+
+
+def test_frontend_flags_same_label_missing_rows():
+    """对账单「未盘到」那行：和盘到的挂着同一个中文名的，写出它的英文名和提示（审查 2026-11-08 第三轮）"""
+    source = _frontend()
+    start = source.index("function countDraw()")
+    draw = source[start : source.index("\nfunction ", start + 1)]
+    assert "m.same ?" in draw and "可能是同一件" in draw and "esc(m.en)" in draw
 
 
 def test_same_item_two_english_names_merge_at_new_place(monkeypatch, tmp_path):

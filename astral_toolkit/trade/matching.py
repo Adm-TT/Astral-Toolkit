@@ -26,7 +26,7 @@ def _similar(a, b):
 
 def name_score(name, target):
     """折叠后的物品名 name 和要找的名字 target 有多像：一样 1.0；name 以 target 开头且 target 至少 8 个字 0.95；
-    别的按 difflib 比。≥ 0.85 算同一件（F8 配物品、盘点认同一件东西用同一把尺子）"""
+    别的按 difflib 比。≥ 0.85 算配上（F8 配物品用；盘点不拿它并条目——前缀那档会把变体当成本体，审查 2026-11-08 第三轮）"""
     import difflib
 
     if name == target:
@@ -34,11 +34,6 @@ def name_score(name, target):
     if name.startswith(target) and len(target) >= 8:
         return 0.95
     return difflib.SequenceMatcher(None, name, target).ratio()
-
-
-def names_alike(name, target):
-    """两个英文名像到算同一件东西（折叠后 name_score ≥ 0.85）"""
-    return bool(name and target) and name_score(_fold(name), _fold(target)) >= 0.85
 
 
 def match_tooltip(t, zh, en, online=True):
