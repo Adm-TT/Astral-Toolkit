@@ -454,7 +454,8 @@ def test_hover_ignores_chat_hud_and_markers(monkeypatch):
     )
     # 新识别机制：高度阶段级联（标题带 24%~36% -> 说明框带 24%~70% -> 全高）
     # × 宽度条带（首选局部 -> 备选局部 30~70%），最后全屏兜底
-    STAGE_CROPS = 6  # 3 个高度阶段 × 2 个宽度条带
+    # 什么都没见到时只认前两档（标题带、说明框带）× 2 个宽度条带，全高不认（2026-11-07 PR #17 跟进）
+    STAGE_CROPS = 4
     calls = []
 
     def fake(img, urgent=False, offset=(0, 0), native=False):
