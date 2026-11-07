@@ -414,6 +414,53 @@ def test_real_catalog_english_name_wins_over_shared_label(monkeypatch, tmp_path)
     assert got == {"eye": 2, "vp": 4}
 
 
+@pytest.mark.parametrize(
+    "vid, name",
+    [
+        ("rare", "Yormandi Eye (Rare)"),  # F8 当时模糊配到的那条
+        ("local:Yormandi Eyes", "Yormandi Eyes"),  # 旧英文名的本地副本
+        (
+            "local:Old Eye Name",
+            "Old Eye Name",
+        ),  # 改名改得多的本地副本：本地副本照旧都算
+    ],
+)
+def test_variant_entry_with_same_label_counts_once(monkeypatch, tmp_path, vid, name):
+    """同一件东西的库存记在另一条目录名下（F8 当时模糊配到的那条、旧英文名的本地副本），和英文名那条挂着同一个中文名：
+    盘点按英文名认时也配上它，确认后不变成两份；撞名、名字不像的别的物品照样不配（审查 2026-11-08）"""
+    from astral_toolkit.trade.matching import names_alike
+    from astral_toolkit.trade.models import Item
+
+    assert names_alike(name, "Yormandi Eye") != (vid == "local:Old Eye Name")
+    assert not names_alike("Vanduul Plating", "Yormandi Eye")
+    t = _context(monkeypatch, tmp_path)
+    t.catalog.upsert([Item(vid, name)])
+    for iid in ("eye", vid, "vp"):  # 英文名那条、变体、撞名的别的物品都挂着同一个中文名
+        t.catalog.add_alias(iid, "约曼迪之眼")
+    t.inventory.commit(
+        t.inventory.prepare(
+            [
+                StockLine(StockKey(vid, "unknown", "A"), 5),
+                StockLine(StockKey("vp", "unknown", "A"), 7),
+            ],
+            "add",
+        ),
+        allow_duplicate=True,
+    )
+    rv = count_task._count_review(
+        "A", {1: {**_item("Yormandi Eye", 5), "zh": "约曼迪之眼"}}
+    )
+    assert [(r["book"], r["game"], r["delta"]) for r in rv["rows"]] == [(5, 5, 0)]
+    assert [m["key"][0] for m in rv["missing"]] == ["vp"]
+    count = count_helpers.count()
+    count.review = rv
+    monkeypatch.setattr(bus, "publish", lambda *args: None)
+    with bind_for_test(count_task, count):
+        assert "error" not in count_task.count_apply()
+    got = {line.key.item_id: line.quantity for line in t.inventory.list_stock()}
+    assert got == {vid: 5, "vp": 7}
+
+
 def test_same_item_two_english_names_merge_at_new_place(monkeypatch, tmp_path):
     """账上还没有这件东西的地点：同一物品的两个英文名也合成一行，确认时不报「出现了两次」（审查 2026-11-08）"""
     from astral_toolkit.trade.models import Item

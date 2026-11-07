@@ -24,6 +24,23 @@ def _similar(a, b):
     )
 
 
+def name_score(name, target):
+    """折叠后的物品名 name 和要找的名字 target 有多像：一样 1.0；name 以 target 开头且 target 至少 8 个字 0.95；
+    别的按 difflib 比。≥ 0.85 算同一件（F8 配物品、盘点认同一件东西用同一把尺子）"""
+    import difflib
+
+    if name == target:
+        return 1.0
+    if name.startswith(target) and len(target) >= 8:
+        return 0.95
+    return difflib.SequenceMatcher(None, name, target).ratio()
+
+
+def names_alike(name, target):
+    """两个英文名像到算同一件东西（折叠后 name_score ≥ 0.85）"""
+    return bool(name and target) and name_score(_fold(name), _fold(target)) >= 0.85
+
+
 def match_tooltip(t, zh, en, online=True):
     """说明框里的名字 → 物品。顺序：中文名查汉化包对照表 → 英文名（容忍 OCR 丢空格、II/ll、截断）。
     先查本机目录（以前查到过的物品、记下的中文名），查到就不联网；本机没有才去 UEX/SCM 搜（每次搜要零点几秒到几秒）。
@@ -46,8 +63,6 @@ def match_tooltip(t, zh, en, online=True):
 
 
 def _match_names(search, want):
-    import difflib
-
     candidates = {}
     for name in want:
         target = _fold(name)
@@ -66,14 +81,7 @@ def _match_names(search, want):
                 break
         scored = []
         for i in candidates.values():
-            f = _fold(i.name)
-            score = (
-                1.0
-                if f == target
-                else 0.95
-                if f.startswith(target) and len(target) >= 8
-                else difflib.SequenceMatcher(None, f, target).ratio()
-            )
+            score = name_score(_fold(i.name), target)
             scored.append((score, not i.id.startswith("scm:"), i))
         scored.sort(key=lambda x: (x[0], x[1]), reverse=True)
         if scored and scored[0][0] >= 0.85:

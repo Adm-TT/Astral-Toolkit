@@ -120,17 +120,21 @@ def _count_review(place, items):
             iid for iid in ids if not iid.startswith("local:") and t.catalog.get(iid)
         }
         if named:
-            # 英文名明确对上正式物品：只拿它和英文名自己的本地副本（旧库存的另一种记法）去配账，
-            # 汉化名撞到的别的物品不算（以前整笔拒绝、看不出是哪件，原来能确认的盘点也被拒；审查 2026-11-08）
-            ids = frozenset(
-                named
-                | {
-                    item.id
-                    for item in t.catalog.search(en)
-                    if item.id.startswith("local:")
-                    and item.name.casefold() == en.casefold()
-                }
+            # 英文名明确对上正式物品：拿它、本地副本（旧库存的另一种记法），和名字像英文名的（F8 当时模糊配到的
+            # 那条、旧英文名）去配账；汉化名撞到的、名字不像的别的物品不算——以前整笔拒绝，原来能确认的盘点也被拒；
+            # 只拿英文名那条又会漏掉记在变体名下的旧库存，确认后变两份（审查 2026-11-08）。
+            # 挂着这个中文名的物品全拿来比（by_alias 只给一条）
+            from ..trade.matching import names_alike
+
+            keep = set(named) | {iid for iid in ids if iid.startswith("local:")}
+            extra = (
+                {i.id: i for i in t.catalog.all_by_alias(v["zh"])} if v["zh"] else {}
             )
+            for iid in set(ids) | set(extra):
+                item = extra.get(iid) or t.catalog.get(iid)
+                if item is not None and names_alike(item.name, en):
+                    keep.add(iid)
+            ids = frozenset(keep)
         lines = [
             line
             for line in book
