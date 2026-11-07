@@ -221,6 +221,77 @@ def test_bind_all_wires_core_to_ui(monkeypatch):
         assert capture._overlay_state is not None and run_records._ui_sink is not None
 
 
+def test_bind_all_wires_platform_to_hud(monkeypatch):
+    """目录迁移收尾：悬浮窗状态（app/hud_state）读光标、读键用平台层那一份，bind_all 接上；test 模式只 build 不接"""
+    from astral_toolkit.app import hud_state
+    from astral_toolkit.infrastructure.platform import cursor, keys
+    from tests.bootstrap_helpers import app_for_test
+
+    monkeypatch.setattr(hud_state, "_cursor_reader", None)  # 测完还原
+    monkeypatch.setattr(hud_state, "_key_reader", None)
+    app = bootstrap.build("test")
+    try:
+        assert hud_state._cursor_reader is None and hud_state._key_reader is None
+    finally:
+        bootstrap.shutdown(app, budget=0.2)
+    with app_for_test():
+        assert (
+            hud_state._cursor_reader is cursor.pos
+            and hud_state._key_reader is keys.down
+        )
+
+
+def test_hud_state_reads_through_what_bootstrap_gave(monkeypatch):
+    """hud_state 的读光标、读键：没接当不知道、没按；接了就用接进来的；读不了吞掉（光标 None、键当没按）——
+    和以前自己调 Win32 时一样，不往外抛（平台层 keys.down 会抛，热键线程要知道）。按 F8 那一刻记 Shift 和光标"""
+    from astral_toolkit.app import hud_state
+
+    monkeypatch.setattr(hud_state, "_cursor_reader", None)
+    monkeypatch.setattr(hud_state, "_key_reader", None)
+    assert hud_state._cursor() is None and hud_state._key_down(0x10) is False
+    pressed = {0x10}
+    hud_state.set_platform(lambda: (12, 34), lambda vk: vk in pressed)
+    assert hud_state._cursor() == (12, 34)
+    assert hud_state._key_down(0x10) is True and hud_state._key_down(0x11) is False
+    monkeypatch.setattr(hud_state, "_ITEM_MODE", dict(hud_state._ITEM_MODE))
+    hud_state.item_key_pressed()
+    assert hud_state._ITEM_MODE["pinned"] is True and hud_state._ITEM_MODE[
+        "origin"
+    ] == (12, 34)
+
+    def boom(*a):
+        raise OSError("读不了")
+
+    hud_state.set_platform(boom, boom)
+    assert hud_state._cursor() is None and hud_state._key_down(0x10) is False
+
+
+def test_one_cursor_read_for_platform_and_capture(monkeypatch):
+    """读光标全项目一份（core/capture.cursor_pos）：平台层 cursor.pos 转过去，截图换算 cursor_on_image 也用它"""
+    from astral_toolkit.core import capture
+    from astral_toolkit.infrastructure.platform import cursor
+
+    monkeypatch.setattr(capture, "cursor_pos", lambda: (1500, 300))
+    assert cursor.pos() == (1500, 300)
+    monkeypatch.setattr(
+        capture,
+        "game_area",
+        lambda: {"left": 100, "top": 50, "width": 2000, "height": 1000},
+    )
+    monkeypatch.setattr(capture, "_scale", lambda mon: 1.0)
+    monkeypatch.setattr(
+        capture, "_sct", lambda: type("S", (), {"monitors": [None, {}]})()
+    )
+
+    class Img:
+        width, height = 1000, 500
+
+    assert capture.cursor_on_image(Img()) == (
+        (1500 - 100) * 1000 // 2000,
+        (300 - 50) * 500 // 1000,
+    )
+
+
 def test_debug_mode_gates_nav_diagnostics(monkeypatch, tmp_path):
     from astral_toolkit.core import paths, settings
 

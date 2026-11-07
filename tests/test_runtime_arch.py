@@ -902,6 +902,22 @@ def test_catalog_queries_hand_facts_not_sentences():
     ] == ["挖矿："]
 
 
+def test_cursor_and_key_reads_have_one_home():
+    """目录迁移收尾：读光标（GetCursorPos）只在 core/capture（托盘弹菜单定位置那句是界面自己的，另算），
+    读键（GetAsyncKeyState）只在 infrastructure/platform/keys；悬浮窗状态（app/hud_state）的由 bootstrap 接进来"""
+    where: dict[str, set[str]] = {"GetCursorPos": set(), "GetAsyncKeyState": set()}
+    for f in _ROOT.rglob("*.py"):
+        text = f.read_text(encoding="utf-8")
+        for k, seen in where.items():
+            if k in text:
+                seen.add(f.relative_to(_ROOT).as_posix())
+    assert where["GetCursorPos"] == {"core/capture.py", "app/tray.py"}, where
+    assert where["GetAsyncKeyState"] == {"infrastructure/platform/keys.py"}, where
+    hud = (_ROOT / "app" / "hud_state.py").read_text(encoding="utf-8")
+    mods = list(_imports_in_source(hud, "astral_toolkit.app"))
+    assert _forbidden(mods, ("astral_toolkit.infrastructure",)) == []
+
+
 def test_core_stays_below_app():
     """core/ 是基础工具：不反向依赖界面、用例、runtime 和装配入口（CL-C5 去掉了截图读悬浮窗、运行记录推面板
     这两处，改成装配接进来）。函数里的 import 也算"""

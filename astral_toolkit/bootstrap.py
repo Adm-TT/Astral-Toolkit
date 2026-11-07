@@ -641,10 +641,20 @@ def bind_all(app: DesktopApp, *, replace: bool = False) -> None:
     from .tasks import count as count_tasks
 
     _bind_core_to_ui()
+    _bind_platform_to_hud()
     navigate_data.HINTS = app.pos.hints
     count_tasks.bind(app.count, replace=replace)
     lifecycle_gate.bind_closing(app.lifecycle.is_closing, replace=replace)
     ui_stream.bind_switches(app.live, app.nav, app.pos, replace=replace)
+
+
+def _bind_platform_to_hud() -> None:
+    """悬浮窗「物品」按 Shift 钉住、按住 Ctrl 不收、挪开就收要读键、读光标：接平台层那一份
+    （目录迁移收尾；app 层不直接 import infrastructure，以前 hud_state 自己调 Win32）"""
+    from .app import hud_state
+    from .infrastructure.platform import cursor, keys
+
+    hud_state.set_platform(cursor.pos, keys.down)
 
 
 def _bind_core_to_ui() -> None:

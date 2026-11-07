@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from typing import Any
 
 from astral_toolkit import bootstrap
-from astral_toolkit.app import lifecycle_gate, ui_stream
+from astral_toolkit.app import hud_state, lifecycle_gate, ui_stream
 from astral_toolkit.core import capture, run_records
 from astral_toolkit.navigation import navigate
 from astral_toolkit.tasks import count
@@ -19,6 +19,10 @@ _BINDINGS = (
     (navigate, ("HINTS",)),
     (capture, ("_overlay_state",)),  # CL-C5：bind_all 接的截图涂黑悬浮窗
     (run_records, ("_ui_sink",)),  # CL-C5：bind_all 接的运行记录推面板
+    (
+        hud_state,
+        ("_cursor_reader", "_key_reader"),
+    ),  # 目录迁移收尾：bind_all 接的读光标、读键
 )
 
 
