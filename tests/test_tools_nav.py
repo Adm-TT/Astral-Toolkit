@@ -1309,7 +1309,7 @@ def test_halo_overshoot_after_each_jump(monkeypatch, tmp_path):
         t_nav._halo_jump(sess, True)
         aside = list(drop)
         aside[2] += 1e9
-        assert halo.route_off(A, B, aside) > t_nav.ROUTE_NEAR
+        assert halo.route_gap(A, B, aside) > t_nav.ROUTE_NEAR
         assert not says(t_nav.halo_check(aside, None, sess))
         assert says(t_nav.halo_check(drop, None, sess))
         assert len([x for x in log() if "（量子后第一次）" in x]) == 3
