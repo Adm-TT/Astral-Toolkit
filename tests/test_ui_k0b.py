@@ -11,14 +11,16 @@ from types import SimpleNamespace
 from PIL import Image
 
 from astral_toolkit.app import bus, hud_state, http_server, ui_stream
-from astral_toolkit.app.engines import live as live_mod
+from astral_toolkit.runtime.workers import mining as live_mod
 from astral_toolkit.app.output import BusOutput
+from astral_toolkit.app.presenters import mining as present_mining
 from astral_toolkit.core import paths
 from astral_toolkit.mining import screen, signals
 from astral_toolkit.mining.parse import Scan
 from astral_toolkit.runtime.results import MINING_SCAN, ResultStore
 from astral_toolkit.runtime.session import Session, SessionLoop, StopInfo, Tick
 from astral_toolkit.tasks import mining as t_mining
+from tests import mining_helpers
 
 WAIT = 10
 
@@ -492,7 +494,7 @@ def test_activity_sequence_start_scan_stop_user(monkeypatch, tmp_path):
     ui = _reset(monkeypatch)
     _world(monkeypatch, tmp_path)
     monkeypatch.setattr(t_mining, "scan_view", lambda *a, **k: _fake_view("铜"))
-    live = live_mod._Live()
+    live = mining_helpers.live()
     _, q = ui.subscribe(maxsize=500)
     assert q is not None
     sid = None
@@ -599,7 +601,7 @@ def test_stop_timeout_new_session_replaces_old_only(monkeypatch):
 
 def test_new_session_activity_is_empty_before_first_frame(monkeypatch):
     _reset(monkeypatch)
-    live = live_mod._Live()
+    live = mining_helpers.live()
     assert live.results.accept(
         MINING_SCAN, {"rock": "上一会话的矿"}, 99, 0, 1, 0.0, 0.0
     )
@@ -657,8 +659,8 @@ def test_terminal_reasons_once_and_error_text(monkeypatch):
 
 def test_tick_scan_rolls_back_ui_when_commit_fails(monkeypatch):
     _reset(monkeypatch)
-    live = live_mod._Live()
-    ctx = live_mod._Ctx(_Log(), Path("."), time.time())
+    live = mining_helpers.live()
+    ctx = live_mod._Ctx(_Log(), Path("."), time.time(), screen.VOTE_FRAMES)
     scan = _rock("坏")
     bag = ({}, "bag")
     ctx.recent.append((scan, bag))
@@ -930,7 +932,7 @@ def test_watchdog_sends_activity_end_when_self_stop_hangs(monkeypatch):
 
 def test_partial_quality_kept_for_later_activity_updates():
     ui = {"state": "running", "scan": {"rock": "铜"}, "quality": "partial"}
-    assert live_mod._mining_activity(3, ui)["quality"] == "partial"
+    assert present_mining.activity(3, ui)["quality"] == "partial"
     ui["state"] = "paused"
-    assert live_mod._mining_activity(3, ui)["quality"] == "partial"
-    assert live_mod._mining_activity(3, {"scan": None})["quality"] == "complete"
+    assert present_mining.activity(3, ui)["quality"] == "partial"
+    assert present_mining.activity(3, {"scan": None})["quality"] == "complete"

@@ -520,9 +520,33 @@ def test_navigation_workers_import_is_light():
     assert _run(code) == "True []"
 
 
+def test_mining_worker_import_is_light():
+    """导入采矿线程（runtime/workers/mining，目录迁移 R3）不带进 mining、navigation、app、tasks、system，也不带进 numpy
+    （画面变没变要到一轮里才比）；再导入识别分析（tasks/mining_analysis，属于 tasks 层，带进 tasks 包是允许的）也不起线程"""
+    code = (
+        "import sys, threading\n"
+        "n = threading.active_count()\n"
+        "import astral_toolkit.runtime.workers.mining\n"
+        "heavy = ('astral_toolkit.mining', 'astral_toolkit.navigation', 'astral_toolkit.app', 'astral_toolkit.tasks', "
+        "'astral_toolkit.system', 'numpy')\n"
+        "a = sorted(m for m in sys.modules if m.startswith(heavy))\n"
+        "import astral_toolkit.tasks.mining_analysis\n"
+        "print(threading.active_count() == n, a)\n"
+    )
+    assert _run(code) == "True []"
+
+
 # 导航分析的本项目导入只许 navigation/navigate 和它里面的名字：照 runtime 的做法用允许清单，导入记下的、绑到名字上的
-# 都查（R2 两轮审查改的）
+# 都查（R2 两轮审查改的）；采矿识别分析（R3）照同一个写法，只许下面那几个模块
 _NAV_ANALYSIS_ONLY = "astral_toolkit.navigation.navigate"
+_MINING_ANALYSIS_ONLY = (
+    "astral_toolkit.mining.screen",
+    "astral_toolkit.mining.signals",
+    "astral_toolkit.mining.mining_area",
+    "astral_toolkit.core.paths",
+    "astral_toolkit.tasks.goals",
+    "astral_toolkit.tasks.mining",
+)
 _NAV_MARKER_FORBIDDEN = (
     "astral_toolkit.tasks",
     "astral_toolkit.runtime",
@@ -539,26 +563,36 @@ def _nav_layer_violations(source, pkg, forbidden):
     return _forbidden(mods, forbidden) + bare + dynamic
 
 
-def _nav_analysis_violations(source):
-    """from ..navigation import navigate、from ..navigation.navigate import x、import astral_toolkit.navigation.navigate as y
-    都行；拿到整个 navigation 包（import astral_toolkit.navigation as nv、from .. import navigation）能顺着属性摸到
-    别的模块，不许"""
-    pkg = "astral_toolkit.tasks"
+def _allowlist_violations(source, pkg, allowed):
+    """本项目模块只许 allowed 里的和它们里面的名字：from ..navigation import navigate、from ..navigation.navigate import x、
+    import astral_toolkit.navigation.navigate as y 都行；拿到整个包（import astral_toolkit.navigation as nv、
+    from .. import navigation）能顺着属性摸到别的模块，不许；裸 import astral_toolkit、字符串导入也不许"""
 
     def ours(m):
         return m == "astral_toolkit" or m.startswith("astral_toolkit.")
 
     def ok(m):
-        return m == _NAV_ANALYSIS_ONLY or m.startswith(_NAV_ANALYSIS_ONLY + ".")
+        return any(m == a or m.startswith(a + ".") for a in allowed)
 
-    # from ..navigation import navigate 那一行会记下包本身，绑到名字上的另外查
+    # from ..navigation import navigate 那一行会记下包本身（根包 astral_toolkit 除外），绑到名字上的另外查
+    parents = {
+        ".".join(a.split(".")[:i]) for a in allowed for i in range(2, a.count(".") + 1)
+    }
     mods = [
         m
         for m in _imports_in_source(source, pkg)
-        if ours(m) and m != "astral_toolkit.navigation" and not ok(m)
+        if ours(m) and m not in parents and not ok(m)
     ]
     bound = [m for m in _bound_modules(source, pkg) if ours(m) and not ok(m)]
     return mods + bound + _nav_layer_violations(source, pkg, ())
+
+
+def _nav_analysis_violations(source):
+    return _allowlist_violations(source, "astral_toolkit.tasks", (_NAV_ANALYSIS_ONLY,))
+
+
+def _mining_analysis_violations(source):
+    return _allowlist_violations(source, "astral_toolkit.tasks", _MINING_ANALYSIS_ONLY)
 
 
 def test_navigation_analysis_and_marker_stay_in_their_layers():
@@ -608,6 +642,43 @@ def test_navigation_analysis_and_marker_stay_in_their_layers():
         assert _nav_layer_violations(
             bad, "astral_toolkit.app", _NAV_MARKER_FORBIDDEN
         ), bad
+
+
+def test_mining_analysis_stays_in_its_layer():
+    """目录迁移 R3 拆出来的采矿识别分析（tasks/mining_analysis）只往下转：本项目模块只许 mining/screen、mining/signals、
+    mining/mining_area、core/paths、tasks/goals、tasks/mining 和它们里面的名字（界面、runtime、装配、别的 tasks、mining
+    别的模块都不许，拿整个包再走属性也不许）；文件顶上只 import typing（调用时才取）；不许字符串导入、不许裸
+    import astral_toolkit 再走属性"""
+    path = _ROOT / "tasks" / "mining_analysis.py"
+    source = path.read_text(encoding="utf-8")
+    assert _mining_analysis_violations(source) == []
+    top = [
+        n for n in ast.parse(source).body if isinstance(n, (ast.Import, ast.ImportFrom))
+    ]
+    assert [ast.unparse(n) for n in top] == ["from typing import Any"]
+    for bad in (
+        "def f():\n    from ..app.presenters import mining\n",
+        "def f():\n    from ..runtime.workers import mining\n",
+        "from .. import bootstrap\n",
+        "def f():\n    from . import navigation\n",
+        "def f():\n    from ..mining import data\n",
+        "def f():\n    from ..core import settings\n",
+        "def f():\n    from .. import mining\n",
+        "def f():\n    from .. import core\n",
+        "def f():\n    import astral_toolkit.mining as m\n\n    return m.screen\n",
+        "def f():\n    import astral_toolkit.mining.screen\n",
+        "import importlib\nimportlib.import_module('astral_toolkit.mining.screen')\n",
+        "import astral_toolkit\n",
+    ):
+        assert _mining_analysis_violations(bad), bad
+    for ok in (
+        "def f():\n    from ..mining import screen\n\n    return screen\n",
+        "def f():\n    from ..mining.signals import guesses\n\n    return guesses\n",
+        "def f():\n    import astral_toolkit.mining.screen as s\n\n    return s\n",
+        "def f():\n    from . import goals, mining\n\n    return goals, mining\n",
+        "def f():\n    from ..core import paths\n\n    return paths\n",
+    ):
+        assert _mining_analysis_violations(ok) == [], ok
 
 
 _INFRA_FORBIDDEN = (
@@ -1167,7 +1238,7 @@ _NAV_PRESENTER_FORBIDDEN = (
 
 
 def _nav_engine_violations(source):
-    mods = list(_imports_in_source(source, "astral_toolkit.app.engines"))
+    mods = list(_imports_in_source(source, "astral_toolkit.runtime.workers"))
     dynamic = [d for d in _dynamic_imports(source) if d != "open"]
     calls = _calls_named(source, ("_T", "_H"))
     defs = [
@@ -1191,12 +1262,13 @@ def _nav_presenter_violations(source):
     return _forbidden(mods, _NAV_PRESENTER_FORBIDDEN) + dynamic
 
 
-def test_nav_engine_does_not_reach_into_tasks():
-    """导航线程（目录迁移 R2 起在 runtime/workers/navigation）只在 bootstrap 接好的依赖上跑：不再静态 / 动态导入 tasks，
-    也不再留 _T / _H（runtime 门禁另外只许 runtime、contracts、core.run_records）。"""
-    path = _ROOT / "runtime/workers/navigation.py"
-    source = path.read_text(encoding="utf-8")
-    assert _nav_engine_violations(source) == [], path.name
+def test_nav_and_mining_workers_do_not_reach_into_tasks():
+    """导航线程（目录迁移 R2 起在 runtime/workers/navigation）、采矿线程（R3 起在 runtime/workers/mining）只在 bootstrap
+    接好的依赖上跑：不再静态 / 动态导入 tasks，也不再留 _T / _H（runtime 门禁另外只许 runtime、contracts、core.run_records）。"""
+    for name in ("navigation.py", "mining.py"):
+        path = _ROOT / "runtime" / "workers" / name
+        source = path.read_text(encoding="utf-8")
+        assert _nav_engine_violations(source) == [], path.name
     for bad in (
         "from ...tasks import navigation",
         "import importlib\nimportlib.import_module('astral_toolkit.tasks.navigation')",
@@ -2120,10 +2192,10 @@ def test_count_engine_does_not_start_its_own_threads():
     assert _thread_starts_in_source(source) == []
 
 
-def test_live_engine_does_not_start_its_own_scan_loop():
+def test_mining_worker_does_not_start_its_own_scan_loop():
     """RT-B4：采矿助手的工作线程由会话循环起（runtime/session.py）；RT-B6 起存截图也交给 app/miss_shots.py 的队列，
-    live.py 里不再起任何线程"""
-    source = (_ROOT / "app" / "engines" / "live.py").read_text(encoding="utf-8")
+    采矿线程（目录迁移 R3 起在 runtime/workers/mining.py）里不再起任何线程"""
+    source = (_ROOT / "runtime" / "workers" / "mining.py").read_text(encoding="utf-8")
     assert _thread_starts_in_source(source) == []
     for bad in (
         "threading.Thread(target=self._run)",

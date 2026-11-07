@@ -1,5 +1,7 @@
-"""采矿结果的呈现（运行结构 RT-B1）：MiningResult → 窗口 JSON（to_view）、悬浮窗文字和结构化内容（to_hud）。只排版，不算数、不取数据"""
+"""采矿结果的呈现（运行结构 RT-B1）：MiningResult → 窗口 JSON（to_view）、悬浮窗文字和结构化内容（to_hud）；
+采矿助手的活动磁贴（activity，目录迁移 R3 从采矿线程搬来）。只排版，不算数、不取数据"""
 
+import time
 from collections.abc import Mapping
 
 from ...mining.analysis import MiningResult, PlanFacts, Rank
@@ -248,3 +250,49 @@ def to_hud(r: MiningResult):
             else "满功率也无法破碎",
         }
     return "\n".join(hud), rich
+
+
+def activity(session_id, ui, quality=None):
+    """采矿助手的活动磁贴（目录迁移 R3 从采矿线程搬来）：把本会话的展示状态拼成活动（纯函数：不读 DOM / 全局）。
+    quality 不传就用 ui 里记的"""
+    ui = ui or {}
+    if quality is None:
+        quality = ui.get("quality") or "complete"
+    scan = ui.get("scan")
+    if isinstance(scan, dict) and scan:
+        primary = {"value": scan.get("rock") or "岩石", "unit": ""}
+        secondary = []
+        for key, label, unit in (
+            ("mass", "质量", ""),
+            ("total_scu", "矿量", "SCU"),
+            ("difficulty", "难度", ""),
+        ):
+            if key in scan and scan[key] is not None:
+                item = {"label": label, "value": scan[key]}
+                if unit:
+                    item["unit"] = unit
+                secondary.append(item)
+        secondary = secondary[:3]
+    else:
+        primary = {"value": None, "unit": ""}
+        secondary = []
+        signals = ui.get("signals")
+        if signals:
+            lines = signals.get("lines") if isinstance(signals, dict) else None
+            secondary = [{"label": "信号", "value": lines[0] if lines else ""}]
+    return {
+        "activity_id": f"mining:{session_id}",
+        "kind": "mining",
+        "title": "采矿助手",
+        "state": ui.get("state") or "starting",
+        "primary": primary,
+        "secondary": secondary,
+        "progress": None,
+        "action": {"id": "stop", "label": "结束"},
+        "link": "live",
+        "stale_since": ui.get("stale_since"),
+        "error": None,
+        "updated_wall": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "quality": quality,
+        "detail_ref": None,
+    }
