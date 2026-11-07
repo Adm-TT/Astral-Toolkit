@@ -11,7 +11,7 @@ from typing import Any
 from PIL import Image
 
 from astral_toolkit.app import bus, hud_state
-from astral_toolkit.app.engines import live as live_mod
+from astral_toolkit.runtime.workers import mining as live_mod
 from astral_toolkit.core import paths
 from astral_toolkit.mining import screen, signals
 from astral_toolkit.mining.parse import Scan

@@ -1,4 +1,4 @@
-"""采矿助手：扫描面板识别、雷达信号、破碎方案、袋子（_Live）
+"""采矿线程（目录迁移 R3 从 app/engines/live.py 搬来）：扫描面板识别、雷达信号、破碎方案、袋子（_Live）
 
 目录迁移 R3（2026-11-07）：本模块只留扫描节奏、会话、取消和结果提交。一轮识别要用的分析（analysis：
 tasks/mining_analysis，原样转给 mining/screen、mining/signals、tasks/mining 等）、活动磁贴（views：
@@ -16,8 +16,8 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable, Protocol
 
-from ...runtime.results import MINING_SCAN, MINING_SIGNALS, ResultStore
-from ...runtime.session import (
+from ..results import MINING_SCAN, MINING_SIGNALS, ResultStore
+from ..session import (
     RunFlag,
     RunState,
     SessionLoop,

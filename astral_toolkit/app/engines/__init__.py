@@ -1,1 +1,1 @@
-"""读屏引擎（采矿、F8、盘点）；导航线程目录迁移 R2 起在 runtime/workers/navigation"""
+"""读屏引擎（F8、盘点）；导航、采矿线程目录迁移 R2、R3 起在 runtime/workers（navigation、mining）"""

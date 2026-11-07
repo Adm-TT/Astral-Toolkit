@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, Callable
 
 from .app.engines.count import _Count
 from .app.engines.hover import _Hover
-from .app.engines.live import MiningAnalysis, MiningLinks, MiningViews, _Live
+from .runtime.workers.mining import MiningAnalysis, MiningLinks, MiningViews, _Live
 from .runtime.workers.navigation import (
     _CamFilter,
     _Nav,

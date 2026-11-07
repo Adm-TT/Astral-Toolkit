@@ -1,4 +1,4 @@
-"""读屏核心（Windows，本地离线）：找扫描 / 货舱面板、识别、多帧投票；窗口的实时读屏（app/engines/live.py）调这里。
+"""读屏核心（Windows，本地离线）：找扫描 / 货舱面板、识别、多帧投票；采矿线程（runtime/workers/mining.py，目录迁移 R3 起经 tasks/mining_analysis）调这里。
 命令行版（python -m astral_toolkit.mining.screen）2026-11-06 删了（F 段 B3）。
 
 读取区域按屏幕比例定位，1080p / 1440p / 4K 都适用；区域故意取得比面板大，

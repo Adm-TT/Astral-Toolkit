@@ -8,7 +8,7 @@ MissShotsService；设置里的 live_on 照旧写（要换就在造线程之前�
 """
 
 from astral_toolkit import bootstrap
-from astral_toolkit.app.engines import live as livemod
+from astral_toolkit.runtime.workers import mining as livemod
 from astral_toolkit.app.output import BusOutput
 
 

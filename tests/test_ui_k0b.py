@@ -11,7 +11,7 @@ from types import SimpleNamespace
 from PIL import Image
 
 from astral_toolkit.app import bus, hud_state, http_server, ui_stream
-from astral_toolkit.app.engines import live as live_mod
+from astral_toolkit.runtime.workers import mining as live_mod
 from astral_toolkit.app.output import BusOutput
 from astral_toolkit.app.presenters import mining as present_mining
 from astral_toolkit.core import paths

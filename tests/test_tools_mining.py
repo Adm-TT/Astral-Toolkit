@@ -263,7 +263,7 @@ def test_live_scan_resumes_after_restart(monkeypatch, tmp_path):
     from astral_toolkit import gamedata
     from astral_toolkit import ocr as OCR
     from astral_toolkit.app.engines import hover as hover_engine
-    from astral_toolkit.app.engines import live as live_engine
+    from astral_toolkit.runtime.workers import mining as live_engine
     from astral_toolkit.core import settings
     from astral_toolkit.core.perfmon import monitor
     from astral_toolkit.runtime.session import StopAttempt
