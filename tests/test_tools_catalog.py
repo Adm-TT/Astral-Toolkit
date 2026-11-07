@@ -611,6 +611,8 @@ def test_material_source_order_and_sentence(monkeypatch):
         locations, "zh_name", lambda loc: {"LocA": "甲地"}.get(loc, loc)
     )
     box = {"p": 0.25, "box": "Box A · 1", "regions": ["区一", "区二"], "placed": False}
+    # 概率低的一组排在后面（loot.info 已按概率从高到低排好），不该被挑中
+    rare = {"p": 0.1, "box": "Box B", "regions": ["区三"], "placed": False}
     many = {
         "p": 0.5,
         "box": "Crate",
@@ -620,7 +622,7 @@ def test_material_source_order_and_sentence(monkeypatch):
     shelf = {"p": 0.3, "box": "x", "regions": ["奖励室"], "placed": True}
     ore = {"p": 1.0, "box": "洞里", "regions": ["副本"], "placed": False}
     found = {
-        "Pearl": {"groups": [box]},
+        "Pearl": {"groups": [box, rare]},
         "Many": {"groups": [many]},
         "Shelf": {"groups": [shelf]},
         "Ore": {"mine": True, "note": "副本专属矿：要开采", "groups": [ore]},
@@ -649,7 +651,8 @@ def test_material_source_order_and_sentence(monkeypatch):
     assert acquire.material_source("Shelf") == "场景里刷出：奖励室（最高约 30%）"
     assert acquire.material_source("Ore") == "副本专属矿，只能开采：副本（洞里）"
     assert acquire.material_source("Nothing") == ""
-    assert online and not any(online)  # 只看本机，不在页面里逐个材料联网等
+    # 只看本机：每次都要明说 online=False（loot.info 默认联网，漏传就会联网），不在页面里逐个材料联网等
+    assert online and all(v is False for v in online), online
 
 
 def test_names_follow_game_localization(tmp_path, monkeypatch):

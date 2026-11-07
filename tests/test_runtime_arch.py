@@ -1346,7 +1346,8 @@ def test_catalog_queries_code_starts_no_threads():
 
 def _reaches_up_into_tasks(source, pkg):
     """一个文件往上碰 tasks 的地方 → (导入到的 tasks 模块, 绕法)。导入：函数里的也算；绕法：字符串导入
-    （__import__ / import_module）本项目的模块（往上往下都算）、裸 import astral_toolkit 再走属性（等于绕开清单，Q3b 审查补的）"""
+    （__import__ / import_module）本项目的模块（往上往下都算）、裸 import astral_toolkit 再走属性（等于绕开清单，Q3b 审查补的；
+    不带 as 的 import astral_toolkit.x 绑的也是整个包，一样算，和适配层门禁的认法相同——产品代码一律写相对导入）"""
     up = {
         m
         for m in _imports_in_source(source, pkg)
