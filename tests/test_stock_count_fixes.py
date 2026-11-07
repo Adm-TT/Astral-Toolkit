@@ -447,8 +447,8 @@ def test_same_label_entry_is_flagged_not_merged(monkeypatch, tmp_path, vid, name
     )
     assert [(r["book"], r["game"], r["delta"]) for r in rv["rows"]] == [(0, 5, 5)]
     assert {m["key"][0]: m["same"] for m in rv["missing"]} == {
-        vid: "约曼迪之眼",
-        "vp": "约曼迪之眼",
+        vid: "约曼迪之眼（Yormandi Eye）",
+        "vp": "约曼迪之眼（Yormandi Eye）",
     }
     count = count_helpers.count()
     count.review = rv
@@ -491,7 +491,7 @@ def test_lookalike_other_item_keeps_its_stock(monkeypatch, tmp_path):
     rv = count_task._count_review("A", {1: gun})
     assert [(r["book"], r["game"]) for r in rv["rows"]] == [(1, 1)]
     assert [(m["key"][0], m["same"]) for m in rv["missing"]] == [
-        ("bat", "德美科 轻机枪")
+        ("bat", "德美科 轻机枪（Demeco LMG）")
     ]
     count = count_helpers.count()
     monkeypatch.setattr(bus, "publish", lambda *args: None)
@@ -513,11 +513,12 @@ def test_lookalike_other_item_keeps_its_stock(monkeypatch, tmp_path):
 
 
 def test_frontend_flags_same_label_missing_rows():
-    """对账单「未盘到」那行：和盘到的挂着同一个中文名的，写出它的英文名和提示（审查 2026-11-08 第三轮）"""
+    """对账单「未盘到」那行：和盘到的挂着同一个中文名的，注明盘到的那件「中文（英文）」，玩家比英文名分得清
+    （这一行自己的名字本来就带英文名，审查 2026-11-08）"""
     source = _frontend()
     start = source.index("function countDraw()")
     draw = source[start : source.index("\nfunction ", start + 1)]
-    assert "m.same ?" in draw and "可能是同一件" in draw and "esc(m.en)" in draw
+    assert "m.same ?" in draw and "可能是同一件" in draw and "esc(m.same)" in draw
 
 
 def test_same_item_two_english_names_merge_at_new_place(monkeypatch, tmp_path):
