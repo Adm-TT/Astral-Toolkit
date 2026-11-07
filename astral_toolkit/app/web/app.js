@@ -1044,13 +1044,13 @@ function drawMineral() {
 // ================================================================ 制造
 PAGES.craft = () => {
   // 蓝图字典：按类别 / 子类 / 部位 / 厂商筛选，点一份看要什么材料；也能直接搜名字
-  const f = (state.cb = state.cb || { cat: "", sub: "", part: "", maker: "", q: "", unlocked: false, mat: "", mq: null });
+  const f = (state.cb = state.cb || { cat: "", sub: "", part: "", maker: "", size: "", grade: "", cls: "", q: "", unlocked: false, mat: "", mq: null });
   if (state.craftMat) {                // 从扫描结果 / 矿物页点「可制造 N 份蓝图」过来：只按这种矿筛
-    f.cat = f.sub = f.part = f.maker = f.q = ""; f.unlocked = false;
+    f.cat = f.sub = f.part = f.maker = f.size = f.grade = f.cls = f.q = ""; f.unlocked = false;
     f.mat = state.craftMat.en; f.mq = state.craftMat.q; state.craftMat = null;
   }
   if (state.craftJump) {               // 从别处点「制造」跳过来：清掉所有筛选（包括「只看默认已解锁」），只按名字搜
-    f.cat = f.sub = f.part = f.maker = f.mat = ""; f.mq = null; f.unlocked = false; f.q = state.craftJump.replace(/#\d+$/, ""); state.craftJump = null;
+    f.cat = f.sub = f.part = f.maker = f.size = f.grade = f.cls = f.mat = ""; f.mq = null; f.unlocked = false; f.q = state.craftJump.replace(/#\d+$/, ""); state.craftJump = null;
   }
   $("#page").innerHTML = `<h1>制造</h1><p class="lede">查看蓝图所需材料、品质对属性的影响和蓝图来源任务。可按类别筛选或搜索名称。</p>
     <div class="row"><input class="input" id="cq" placeholder="例：P4-AR / 头盔 / Arrowhead" style="width:320px"><button class="btn primary" id="cgo">搜索</button>
@@ -1079,8 +1079,10 @@ PAGES.craft = () => {
       if ($("#cmatx")) $("#cmatx").onclick = () => { f.mat = ""; f.mq = null; load(); };
       $("#ccats").innerHTML = [{ key: "", label: "全部", count: r.cats.reduce((a, c) => a + c.count, 0) }, ...r.cats]
         .map((c) => `<button class="btn small${c.key === f.cat ? " primary" : ""}" data-cat="${esc(c.key)}">${esc(c.label)} <span class="faint">${c.count}</span></button>`).join("");
-      $("#cfil").innerHTML = sel("csub", "子类", r.subs, f.sub) + sel("cpart", "部位", r.parts, f.part) + sel("cmaker", "厂商", r.makers, f.maker);
-      ["csub", "cpart", "cmaker"].forEach((id) => { const e = $("#" + id); if (e) e.onchange = () => { f[{ csub: "sub", cpart: "part", cmaker: "maker" }[id]] = e.value; if (id === "csub") f.part = f.maker = ""; if (id === "cpart") f.maker = ""; load(); }; });
+      $("#cfil").innerHTML = sel("csub", "子类", r.subs, f.sub) + sel("cpart", "部位", r.parts, f.part) + sel("cmaker", "厂商", r.makers, f.maker)
+        + sel("csize", "尺寸", r.sizes || [], f.size) + sel("cgrade", "等级", r.grades || [], f.grade) + sel("ccls", "分类", r.clss || [], f.cls);   // 后三个只有船零件有（CR-D1）
+      const FIL = ["csub", "cpart", "cmaker", "csize", "cgrade", "ccls"], KEY = { csub: "sub", cpart: "part", cmaker: "maker", csize: "size", cgrade: "grade", ccls: "cls" };
+      FIL.forEach((id, i) => { const e = $("#" + id); if (e) e.onchange = () => { f[KEY[id]] = e.value; FIL.slice(i + 1).forEach((x) => { f[KEY[x]] = ""; }); load(); }; });   // 换了前面的，后面的清掉
       $("#clist").innerHTML = "";
       shown = 0;
     }
@@ -1093,7 +1095,7 @@ PAGES.craft = () => {
   $("#cgo").onclick = search;
   $("#cq").onkeydown = (e) => { if (e.key === "Enter") search(); };   // 只管回车，别的键（退格、删除、方向键）照常
   $("#cun").onchange = () => { f.unlocked = $("#cun").checked; load(); };
-  $("#ccats").onclick = (e) => { const b = e.target.closest("button[data-cat]"); if (b) { f.cat = b.dataset.cat; f.sub = f.part = f.maker = ""; load(); } };
+  $("#ccats").onclick = (e) => { const b = e.target.closest("button[data-cat]"); if (b) { f.cat = b.dataset.cat; f.sub = f.part = f.maker = f.size = f.grade = f.cls = ""; load(); } };
   $("#cmore").onclick = () => load(true);
   $("#clist").onclick = (e) => { const b = e.target.closest("button[data-k]"); if (b) showCraft(b.dataset.k, b); };
   load().then(() => state.craftKey && showCraft(state.craftKey));

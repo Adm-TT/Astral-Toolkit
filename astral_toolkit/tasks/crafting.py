@@ -20,6 +20,8 @@ from ..crafting.crafting import (
     uses_report,
     variant_note,
 )
+from ..crafting import itemstats
+from ..crafting.labels import spec_tags, weight_zh
 from ..crafting.listing import named
 from ..crafting.mix import mix_plan
 from ..crafting.quality import laser_total
@@ -73,10 +75,45 @@ def search_blueprints(q=""):
     return out
 
 
+def _row_spec(bp):
+    """蓝图列表那行的标签（CR-D1）：船零件写尺寸 / 等级 / 类别（只写游戏说明里有的；子类已经写了 S2 的不再写尺寸），
+    护甲写轻 / 中 / 重，别的没有"""
+    if bp["g"] == "vehiclegear":
+        sized = (bp["s"] or "").startswith("size")
+        return spec_tags(itemstats.tags(bp.get("u")), size=not sized, kind=bp["t"])
+    if bp["t"] == "armour":
+        weight = weight_zh(itemstats.tags(bp.get("u")), bp["n"])
+        return [weight] if weight else []
+    return []
+
+
 def browse_blueprints(
-    cat="", sub="", part="", maker="", q="", unlocked=False, offset=0, mat="", mq=None
+    cat="",
+    sub="",
+    part="",
+    maker="",
+    q="",
+    unlocked=False,
+    offset=0,
+    mat="",
+    mq=None,
+    size="",
+    grade="",
+    cls="",
 ):
-    r = browse(cat, sub, part, maker, q, bool(unlocked), int(offset or 0), mat=mat)
+    r = browse(
+        cat,
+        sub,
+        part,
+        maker,
+        q,
+        bool(unlocked),
+        int(offset or 0),
+        mat=mat,
+        size=size,
+        grade=grade,
+        cls=cls,
+    )
     try:
         mq = int(mq) if mq not in (None, "") else None
     except (TypeError, ValueError):
@@ -91,6 +128,7 @@ def browse_blueprints(
                 "key": key,
                 "note": variant_note(bp),
                 "name": display_name(bp),
+                "spec": _row_spec(bp),
             }
         )
     out = {"page": r, "rows": rows, "mat": mat, "mq": mq}
