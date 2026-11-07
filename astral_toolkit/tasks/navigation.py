@@ -104,7 +104,8 @@ LEFT_START = (
 NEAR_MIN = 0.01  # Gm：离起点多近算在起点，最少这么多（起点本身就在要去的带里时，按路线算出来是 0）
 STOP_S = 3.0  # 秒：一跳里读数慢下来连续这么久才算断开停下；游戏卡一下、掉进带里加载石头卡一两秒都不算（审查 2026-11-08）
 ROUTE_NEAR = 0.2  # Gm：离方案「起点→目标」那条直线超过这么远，就是跳去了别处，不说多飞 / 少飞（审查 2026-11-08）
-AT_TARGET = 0.05  # Gm：离目标这么近就是到了目标（比如挖完去卖矿），不说
+AT_TARGET = 0.05  # Gm：离目标这么近就是到了目标（比如挖完去卖矿），不说；安全窗口一直延到目标跟前的路线
+# （去 CRU-L2 的第 8、9 带）按窗口出口离目标多远算，窗口里照样说（审查 2026-11-08）
 
 
 # ---------------------------------------------------------------- 依赖与辅助
@@ -1253,7 +1254,7 @@ def halo_check(g, clip=None, sess=None):
             and halo.route_gap(ends[0], ends[1], g) <= ROUTE_NEAR
         ):
             over = halo.overshoot(p, g, {p.get("to"): ends[1]})
-            if over and over["left"] < AT_TARGET:
+            if over and over["left"] < min(AT_TARGET, p.get("late", AT_TARGET)):
                 over = None
         if over:
             w["left"], w["over"] = over["left"], over["over"]
