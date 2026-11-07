@@ -205,6 +205,10 @@ def _system_info():
     return "\n".join(lines) + "\n"
 
 
+# 按天的日志文件：运行记录（core/run_records）、窗口运行日志和调试日志（core/day_logs）
+_DAY_LOGS = ("runrec_*.log", "runlog_*.log", "debug_*.log")
+
+
 def export_logs():
     """「导出日志」：运行日志 + 设置 + 一页系统说明打成一个压缩包，放到桌面，并在文件夹里选中它"""
     from ...core import paths
@@ -217,8 +221,9 @@ def export_logs():
         log_files = []
         if paths.LOGS.exists():
             log_files = sorted(
-                set(paths.LOGS.glob("*.txt*")) | set(paths.LOGS.glob("runrec_*.log"))
-            )  # 含轮换 .txt.old 与运行记录
+                set(paths.LOGS.glob("*.txt*"))
+                | {p for pat in _DAY_LOGS for p in paths.LOGS.glob(pat)}
+            )  # 含轮换 .txt.old、运行记录、窗口运行日志、调试日志
         for p in log_files:
             z.write(p, f"logs/{p.name}")
             files += 1

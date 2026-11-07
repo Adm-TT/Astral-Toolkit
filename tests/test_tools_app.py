@@ -239,6 +239,12 @@ def test_export_logs(monkeypatch, tmp_path):
     (user / "logs" / "runrec_2099-01-01.log").write_text(
         "2099-01-01 00:00:00.000 [INFO] [SYSTEM] 本机服务已启动\n", encoding="utf-8"
     )
+    (user / "logs" / "runlog_2099-01-01.log").write_text(
+        "00:00:00 [INFO] [HOVER] F8 价格与数据同步完成\n", encoding="utf-8"
+    )
+    (user / "logs" / "debug_2099-01-01.log").write_text(
+        "00:00:00 [DEBUG] [识别] 识别路径开始\n", encoding="utf-8"
+    )
     (user / "settings.json").write_text("{}", encoding="utf-8")
     (user / "window").mkdir()
     (user / "window" / "Cookies").write_text("隐私", encoding="utf-8")
@@ -254,6 +260,8 @@ def test_export_logs(monkeypatch, tmp_path):
         "logs/app_log.txt",
         "logs/nav_log.txt",
         "logs/runrec_2099-01-01.log",
+        "logs/runlog_2099-01-01.log",
+        "logs/debug_2099-01-01.log",
         "settings.json",
         "系统信息.txt",
     } <= set(names)

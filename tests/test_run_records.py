@@ -177,3 +177,56 @@ def test_record_still_mirrors_when_logs_unwritable(monkeypatch, tmp_path):
     )
     run_records.record("MINING", "采矿助手已暂停", "游戏不在最前面")
     assert seen == ["采矿助手已暂停 | 游戏不在最前面"]
+
+
+def test_day_logs_write_cap_and_cleanup(monkeypatch, tmp_path):
+    """按天的日志文件（窗口运行日志 runlog、调试细节 debug，core/day_logs）：记一行带时分秒；不认识的种类、
+    写不进去都不抛；当天写到上限就停（最后一行说明）；过了保留天数的删掉，别的种类、没过期的不动"""
+    from astral_toolkit.core import day_logs
+
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    monkeypatch.setattr(paths, "LOGS", logs)
+    today = time.strftime("%Y-%m-%d")
+    old = time.strftime("%Y-%m-%d", time.localtime(time.time() - 10 * 86400))
+    (logs / f"debug_{old}.log").write_text("旧\n", encoding="utf-8")
+    (logs / f"runlog_{old}.log").write_text(
+        "旧\n", encoding="utf-8"
+    )  # 运行日志留 30 天
+    (logs / f"runrec_{old}.log").write_text(
+        "旧\n", encoding="utf-8"
+    )  # 别的种类不归这里管
+    day_logs.write("debug", "[DEBUG] [识别] 裁切 30-50%@title")
+    text = (logs / f"debug_{today}.log").read_text(encoding="utf-8")
+    assert "[DEBUG] [识别] 裁切 30-50%@title" in text and text[2] == ":"  # 前面是时分秒
+    assert not (logs / f"debug_{old}.log").exists()  # 调试日志只留最近 3 天
+    assert (logs / f"runlog_{old}.log").exists() and (
+        logs / f"runrec_{old}.log"
+    ).exists()
+    day_logs.write("没有这种", "x")  # 不认识的种类：不抛、不写
+    assert not list(logs.glob("没有这种_*"))
+    monkeypatch.setattr(day_logs, "KINDS", {**day_logs.KINDS, "debug": (3, 200)})
+    for i in range(20):
+        day_logs.write("debug", f"第 {i} 行 " + "字" * 20)
+    text = (logs / f"debug_{today}.log").read_text(encoding="utf-8")
+    assert text.rstrip().endswith("后面的不记了") and "第 19 行" not in text
+    assert text.count("后面的不记了") == 1
+    blocked = tmp_path / "不是目录.txt"
+    blocked.write_text("", encoding="utf-8")
+    monkeypatch.setattr(paths, "LOGS", blocked)
+    day_logs.write("runlog", "写不进去也不抛")
+
+
+def test_runtime_log_lines_also_kept_in_runlog_file(monkeypatch, tmp_path):
+    """窗口运行日志的每一行也记进 logs/runlog_日期.log：窗口那份只留最近 300 行、「清空」只清窗口，
+    文件里的关了 AT 也查得到（2026-11-08 老大定日志和窗口分开）"""
+    from astral_toolkit.app import bus
+
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    monkeypatch.setattr(paths, "LOGS", logs)
+    bus.runtime_log("F8 价格与数据同步完成: 塔兰导电石", tag="HOVER")
+    p = logs / f"runlog_{time.strftime('%Y-%m-%d')}.log"
+    assert "[INFO] [HOVER] F8 价格与数据同步完成: 塔兰导电石" in p.read_text(
+        encoding="utf-8"
+    )

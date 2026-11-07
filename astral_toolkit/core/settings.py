@@ -32,7 +32,7 @@ DEFAULTS = {
     "ocr_device": "cpu",  # 文字识别设备：cpu (处理器，默认) / gpu (显卡 DirectML：F8 每次约快 0.2 秒，但认过一次字 AT 就多占两三百 MB 内存；2026-11-08 老大定默认处理器)
     "always_use_gpu": False,  # 兼容旧配置项
     "ocr_v2": True,  # 识别默认改处理器那次的一次性迁移做过了：老版本存的设置文件里没有这一项（见 _load）
-    "debug_mode": False,  # 调试模式：开着时 F8/盘点把裁切阶段与停因打进运行日志、在 userdata/shots/debug/ 落识别区域调试图；导航读右上角的诊断（logs/di_log.txt、shots/di_fail、记号收起原因）也只在开着时写（NV-B5）。仅本机，不上传；默认关
+    "debug_mode": False,  # 调试模式：开着时 F8/盘点每一步的裁切、耗时、停因写进 logs/debug_日期.log（只进文件、不进窗口运行日志，2026-11-08 老大定）、在 userdata/shots/debug/ 落识别区域调试图；导航读右上角的诊断（logs/di_log.txt、shots/di_fail、记号收起原因）也只在开着时写（NV-B5）。仅本机，不上传；默认关
     "train_upload": True,  # 帮助改进识别：认字的错题（一行字的小截图 + 正确答案）发给作者训练（2026-10-27 负责人定）
     "feedback_upload": True,  # 问题反馈存好后自动发给作者（2026-10-27 负责人定，设置页能关）
     "nav_marker": True,  # 导航时在游戏画面上画目标记号（画面外贴边画箭头）和瞄准环（2026-10-27）
