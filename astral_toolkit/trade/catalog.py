@@ -96,6 +96,18 @@ class Catalog:
             ).fetchone()
             return Item(r["id"], r["name"], r["uuid"]) if r else None
 
+    def all_by_alias(self, alias: str) -> list[Item]:
+        """记成这个别名（完全一样）的所有物品（by_alias 只给一条）；UEX 的在前"""
+        if not alias or not alias.strip():
+            return []
+        with self.db.connection() as c:
+            rows = c.execute(
+                "SELECT i.* FROM items i JOIN aliases a ON a.item_id=i.id WHERE a.alias=? "
+                "ORDER BY (i.id LIKE 'scm:%'), i.name",
+                (alias.strip(),),
+            ).fetchall()
+            return [Item(r["id"], r["name"], r["uuid"]) for r in rows]
+
     def get(self, item_id: str) -> Item | None:
         with self.db.connection() as c:
             r = c.execute("SELECT * FROM items WHERE id=?", (item_id,)).fetchone()
