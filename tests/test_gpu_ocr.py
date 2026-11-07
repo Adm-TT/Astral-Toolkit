@@ -343,5 +343,27 @@ def test_old_settings_switch_ocr_to_cpu_once(monkeypatch, tmp_path):
     assert settings.load()["ocr_device"] == "gpu"
 
 
+def test_migration_save_failure_not_retried_every_load(monkeypatch, tmp_path):
+    """老格式设置文件一直写不进去（比如带了只读）：迁移只在内存里做，这个进程里不再每次读都重试写盘
+    （每次要卡约 0.25 秒，读设置的地方很多）；读到的照样是处理器（s1 第二轮复查）"""
+    import json
+
+    f = tmp_path / "settings.json"
+    old = {"agreed": True, "keys_v5": True, "ocr_device": "gpu", "always_use_gpu": True}
+    f.write_text(json.dumps(old), encoding="utf-8")
+    monkeypatch.setattr(settings, "FILE", f)
+    tries = []
+
+    def read_only(cfg):
+        tries.append(1)
+        raise PermissionError("设置文件只读")
+
+    monkeypatch.setattr(settings, "save", read_only)
+    assert settings.load()["ocr_device"] == "cpu"
+    assert settings.load()["ocr_device"] == "cpu"
+    assert len(tries) == 1
+    assert json.loads(f.read_text(encoding="utf-8")) == old  # 文件没动
+
+
 if __name__ == "__main__":
     unittest.main()

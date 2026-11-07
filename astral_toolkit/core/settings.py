@@ -1,5 +1,6 @@
 """用户设置（settings.json，放在程序外层，更新程序不会覆盖）"""
 
+import copy
 import json
 import time
 from pathlib import Path
@@ -58,6 +59,11 @@ def nav_fps(value):
     return max(lo, min(hi, v))
 
 
+# 每个设置文件这个进程最后一次读到的设置（暂时读不到时先用它）；迁移存盘失败过的设置文件（不再每次读都重试）
+_LAST_GOOD: dict[str, dict] = {}
+_SAVE_FAILED: set[str] = set()
+
+
 def load():
     with (
         _LOCK
@@ -66,18 +72,20 @@ def load():
 
 
 def _load():
+    key = str(FILE)
     try:
         data = json.loads(FILE.read_text(encoding="utf-8"))
     except FileNotFoundError:
         data = {}
-    except (
-        OSError
-    ):  # 被别的进程占着 / 杀毒软件在扫：这次用默认，文件别动，也别把默认值写回去
-        data = {}
+    except OSError:
+        # 被别的进程占着 / 杀毒软件在扫：文件别动，也别把默认值写回去。这个进程读到过就先用上次读到的，
+        # 别让窗口、悬浮窗、识别一下子退回默认值（窗口闪回深色、设置页显示默认值、按默认值查撞键；s1 第二轮复查）
         _unread.flag = True
-    except (
-        ValueError
-    ):  # 真的是坏 JSON：留个副本再回默认，别悄悄覆盖（2026-10-28 整体审查）
+        if key in _LAST_GOOD:
+            return copy.deepcopy(_LAST_GOOD[key])
+        data = {}
+    except ValueError:
+        # 真的是坏 JSON：留个副本再回默认，别悄悄覆盖（2026-10-28 整体审查）
         data = {}
         try:
             FILE.replace(FILE.with_suffix(".json.bad"))
@@ -104,11 +112,14 @@ def _load():
         cfg["always_use_gpu"] = False
         cfg["ocr_v2"] = True
         changed = True
-    if changed:
+    if changed and key not in _SAVE_FAILED:
         try:
             save(cfg)
         except Exception:
-            pass
+            # 一直写不进去（比如设置文件带了只读）：这个进程里不再每次读都重试——每次要卡约 0.25 秒，读设置的地方很多；
+            # 迁移只在内存里做，下次改设置存盘时连它一起存上（s1 第二轮复查）
+            _SAVE_FAILED.add(key)
+    _LAST_GOOD[key] = copy.deepcopy(cfg)
     return cfg
 
 

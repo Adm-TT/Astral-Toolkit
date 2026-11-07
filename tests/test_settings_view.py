@@ -68,3 +68,27 @@ def test_save_bumps_counter(monkeypatch, tmp_path):
     before = settings._SAVED[0]
     settings.save(dict(settings.DEFAULTS))
     assert settings._SAVED[0] == before + 1
+
+
+def test_unreadable_settings_keep_last_read(monkeypatch, tmp_path):
+    """这个进程读到过的设置文件后来暂时读不到（被杀毒、同步软件占着）：先用上次读到的，不退回默认值——
+    不然窗口会闪回深色、设置页显示默认值、按默认值查撞键（s1 第二轮复查）；这次照样不存盘、要报没存上"""
+    import json
+
+    f = tmp_path / "settings.json"
+    f.write_text(
+        json.dumps({"agreed": True, "keys_v5": True, "ocr_v2": True, "theme": "light"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(settings, "FILE", f)
+    assert settings.load()["theme"] == "light"
+    f.unlink()
+    f.mkdir()  # 同一个位置读不出来：和被别的程序占着一样
+    assert settings.load()["theme"] == "light"
+    try:
+        settings.update_checked(theme="dark")
+    except settings.NotSaved:
+        pass
+    else:
+        raise AssertionError("读不到时要报没存上")
+    assert f.is_dir()  # 没有拿默认值盖掉
