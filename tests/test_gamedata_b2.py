@@ -219,7 +219,123 @@ def test_from_code_lagrange(monkeypatch, tmp_path):
     assert (position.from_code("RR_P1_L1") or {})["n"] == "PYR1 L1"
     assert (
         position.from_code("RR_HUR_L1") is None
-    )  # 斯坦顿按 Stanton1_L1 找，最小数据里没有
+    )  # 斯坦顿按 Stanton1_L1、OOC_Stanton1_L1 找，最小数据里都没有
+
+
+def _ooc_points():
+    """星图现在的斯坦顿叫法（OOC_ 开头）：微科星和它的卫星卡利俄珀、HUR L1 拉格朗日点、弧星和它的 L4；
+    最后一个和微科星同编号、排在后面（认源里第一个，不认它）"""
+    sm = json.loads(json.dumps(_NAV_SOURCES["starmap.json"]))
+    sm["points"] += [
+        dict(
+            n="Microtech",
+            i="OOC_Stanton_4_Microtech",
+            sys="Stanton",
+            t="Planet",
+            x=40.0,
+            y=0.0,
+            z=0.0,
+        ),
+        dict(
+            n="Calliope",
+            i="OOC_Stanton_4a_Calliope",
+            sys="Stanton",
+            t="Planet",
+            x=41.0,
+            y=0.0,
+            z=0.0,
+        ),
+        dict(
+            n="HUR L1",
+            i="OOC_Stanton1_L1",
+            sys="Stanton",
+            t="Lagrange Point",
+            x=12.0,
+            y=0.0,
+            z=0.0,
+        ),
+        dict(
+            n="ArcCorp",
+            i="OOC_Stanton_3_ArcCorp",
+            sys="Stanton",
+            t="Planet",
+            x=30.0,
+            y=0.0,
+            z=0.0,
+        ),
+        dict(
+            n="ARC L4",
+            i="OOC_Stanton3_L4",
+            sys="Stanton",
+            t="Lagrange Point",
+            x=33.0,
+            y=3.0,
+            z=0.0,
+        ),
+        dict(
+            n="Microtech Dup",
+            i="OOC_Stanton_4_MicrotechDup",
+            sys="Stanton",
+            t="Planet",
+            x=99.0,
+            y=0.0,
+            z=0.0,
+        ),
+    ]
+    return {"starmap.json": sm}
+
+
+def test_from_code_stanton_ooc_names(monkeypatch, tmp_path):
+    """星图里斯坦顿改叫 OOC_Stanton_4_Microtech、OOC_Stanton1_L1 以后，日志里的旧代码照样对得上（2026-11-07 老大在
+    新巴贝奇发现物品查询不按远近排）：城市按星球 / 卫星的编号找（卫星不会认成星球），拉格朗日站按 OOC_ 加旧名找；
+    星图里没有的照旧 None；给出去的点是一份新的，调用方改了不碰缓存"""
+    from astral_toolkit.navigation import position
+
+    _setup(monkeypatch, tmp_path, **_ooc_points())
+    position._ooc_bodies.cache_clear()
+    p = position.from_code("Stanton4_NewBabbage")
+    assert p is not None and p["i"] == "OOC_Stanton_4_Microtech" and p["x"] == 40.0
+    p["x"] = -1.0
+    assert (position.from_code("Stanton4_NewBabbage") or {}).get("x") == 40.0
+    assert (position.from_code("Stanton4a_SomeOutpost") or {}).get(
+        "i"
+    ) == "OOC_Stanton_4a_Calliope"
+    assert (position.from_code("RR_HUR_L1") or {}).get("i") == "OOC_Stanton1_L1"
+    assert position.from_code("Stanton2_Orison") is None
+    assert position.from_code("RR_CRU_L1") is None
+    assert position._ooc_bodies.cache_info().currsize == 1
+    position.reset_names()  # 汉化包 / 数据更新后清地名缓存时，星图编号表一起清
+    assert position._ooc_bodies.cache_info().currsize == 0
+
+
+def test_from_log_and_shop_point_stanton_ooc_names(monkeypatch, tmp_path):
+    """在新巴贝奇开过库存（日志 Location[Stanton4_NewBabbage]）：现在的星图下照样知道你在微科星；
+    弧星 L4 站上的商店换算到 L4 那个点、不是星球中心；只写了星球的商店照旧是星球"""
+    from astral_toolkit.navigation import position
+
+    _setup(monkeypatch, tmp_path, **_ooc_points())
+    position._ooc_bodies.cache_clear()
+    log = tmp_path / "Game.log"
+    log.write_text(
+        "<2026-11-07T12:00:00.000Z> [Notice] <RequestLocationInventory> Player[X] "
+        "requested inventory for Location[Stanton4_NewBabbage] [Team]\n",
+        encoding="utf-8",
+    )
+    hit = position.from_log(log)
+    assert hit is not None and hit[2]["i"] == "OOC_Stanton_4_Microtech"
+    arc = position.shop_point(
+        [
+            "Stanton",
+            "ArcCorp",
+            "ArcCorp Lagrange Point 4",
+            "",
+            "ARC-L4 Faint Glen Station",
+            "",
+        ]
+    )
+    assert (arc or {}).get("i") == "OOC_Stanton3_L4"
+    city = position.shop_point(["Stanton", "ArcCorp", "", "", "", "Area18"])
+    assert (city or {}).get("i") == "OOC_Stanton_3_ArcCorp"
 
 
 # ---------------------------------------------------------------- Task 3：地名对照

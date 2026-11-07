@@ -62,11 +62,16 @@ def shop_point(fields):
         if base:
             iname = base["i"]
             pm = re.fullmatch(r"(?i)pyro(\d)", iname)
-            p = find_point(
-                internal=f"P{pm.group(1)}_L{m.group(1)}"
-                if pm
-                else f"{iname}_L{m.group(1)}"
-            )
+            # 斯坦顿的星球现在叫 OOC_Stanton_3_ArcCorp，它的拉格朗日点叫 OOC_Stanton3_L4：以前只按「星球内部名_L4」找，
+            # 斯坦顿的拉格朗日站商店算远近时被放到了星球中心（2026-11-07 跟着斯坦顿地点一起修）
+            sm = re.match(r"(?i)OOC_Stanton_(\d)_", iname)
+            if pm:
+                internal = f"P{pm.group(1)}_L{m.group(1)}"
+            elif sm:
+                internal = f"OOC_Stanton{sm.group(1)}_L{m.group(1)}"
+            else:
+                internal = f"{iname}_L{m.group(1)}"
+            p = find_point(internal=internal)
             if p:
                 return p
     for name in (planet, station, system and system + " Star"):
@@ -78,10 +83,14 @@ def shop_point(fields):
 
 
 def from_code(code):
-    """日志里的地点代码 → 星图点"""
+    """日志里的地点代码 → 星图点。
+    斯坦顿的星图内部名改过：星球 / 卫星现在叫 OOC_Stanton_4_Microtech、OOC_Stanton_1b_Aberdeen，拉格朗日点叫
+    OOC_Stanton1_L1；日志里还是旧代码（Stanton4_NewBabbage、RR_HUR_L1）。先按旧内部名找（老数据），找不到再按现在的
+    叫法找——以前只按旧名找，斯坦顿全对不上：物品查询不按远近排、盘点认不出地点（2026-11-07 老大在新巴贝奇发现）"""
     m = re.match(r"RR_(ARC|HUR|CRU|MIC)_L(\d)", code)
     if m:
-        return find_point(internal=f"{PLANET_CODE[m.group(1)]}_L{m.group(2)}")
+        old = f"{PLANET_CODE[m.group(1)]}_L{m.group(2)}"
+        return find_point(internal=old) or find_point(internal="OOC_" + old)
     m = re.match(r"RR_P(\d)_L(\d)", code)
     if m:
         return find_point(internal=f"P{m.group(1)}_L{m.group(2)}")
@@ -90,10 +99,33 @@ def from_code(code):
         return find_point(name=JUMP[m.group(1)])
     m = re.match(r"(Stanton\d[a-z]?|Pyro\d[a-z]?|Nyx\d?)", code, re.I)
     if m:
-        return find_point(internal=m.group(1))
+        return find_point(internal=m.group(1)) or _ooc_body(m.group(1))
     if code.startswith("Delamar") or "Levski" in code:
         return find_point(name="Delamar")
     return None
+
+
+def _ooc_body(old):
+    """旧的斯坦顿星球 / 卫星内部名（Stanton4、Stanton1b）→ 星图里现在叫 OOC_Stanton_4_Microtech 的那个点
+    （卫星的编号带字母，不会认成星球）；不是斯坦顿、星图里没有给 None。给出去的是一份新的，调用方改了不碰缓存"""
+    m = re.fullmatch(r"stanton(\d[a-z]?)", old, re.I)
+    if not m:
+        return None
+    p = _ooc_bodies(_data_version()).get(m.group(1).lower())
+    return dict(p) if p else None
+
+
+@lru_cache(maxsize=1)
+def _ooc_bodies(_version):
+    """星图里 OOC_Stanton_<编号>_<名字> 的点按编号（4、1b）排成表，按库版本缓存、只留当前版本；同编号取源里第一个"""
+    from ..gamedata import starmap as gd_starmap
+
+    out = {}
+    for p in gd_starmap.data_dict()["points"]:
+        m = re.match(r"OOC_Stanton_(\d[a-z]?)_", p.get("i") or "", re.I)
+        if m:
+            out.setdefault(m.group(1).lower(), p)
+    return out
 
 
 def _place_zh(key="", prefix=None):
@@ -266,6 +298,7 @@ def reset_names():
     _ini_cache.clear()
     _place_name.cache_clear()
     _station_table.cache_clear()
+    _ooc_bodies.cache_clear()
 
 
 def _ini_label(code):
