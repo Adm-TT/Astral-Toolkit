@@ -59,6 +59,18 @@ def test_craft_blueprint_dictionary():
     assert more["rows"] and more["rows"][0]["key"] != a["rows"][0]["key"]
     s2 = craft_browse(cat="vehiclegear/powerplant", sub="size2")
     assert s2["total"] and all("S2" in x["tags"].split(" · ") for x in s2["rows"])
+    # CR-D1：船零件的尺寸 / 等级 / 类别筛选（窗口走 app.api），筛出来的份数和下拉里写的一样
+    from astral_toolkit.app.api.crafting import craft_browse as api_browse
+
+    for cat, group, arg in (
+        ("vehiclegear/weapons", "sizes", "size"),
+        ("vehiclegear/powerplant", "grades", "grade"),
+        ("vehiclegear/powerplant", "clss", "cls"),
+    ):
+        got = api_browse(cat=cat)[group]
+        assert got, (cat, group)
+        for f in got:
+            assert api_browse(cat=cat, **{arg: f["key"]})["total"] == f["count"]
     # 点一份能看详情
     assert "text" in craft_detail(h["rows"][0]["key"])
 

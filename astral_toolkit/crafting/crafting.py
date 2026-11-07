@@ -37,29 +37,14 @@ def stats(bp, qualities):
 
 
 def header(bp):
-    """制造页的标题信息：中文名、英文名、类别、尺寸 / 等级 / 类别标签、厂商、制造时间"""
+    """制造页的标题信息：中文名、英文名、类别、尺寸 / 等级 / 类别标签（护甲再加轻 / 中 / 重）、厂商、制造时间"""
     from . import itemstats
 
     t = itemstats.tags(bp.get("u"))
-    size = t.get("size")
-    sz = bp.get("s") or ""
-    if size is None and sz.startswith("size") and sz[4:].isdigit():
-        size = int(sz[4:])
-    cls_zh = {
-        "Civilian": "民用",
-        "Military": "军用",
-        "Industrial": "工业",
-        "Stealth": "隐形",
-        "Competition": "竞速",
-    }
-    tags = []
-    if size is not None:
-        tags.append(f"S{size}")
-    if t.get("grade") and str(t["grade"]).upper() in "ABCD":
-        tags.append(f"{t['grade']} 级")
-    cls = t.get("cls")
-    if cls:
-        tags.append(cls_zh.get(cls, cls))
+    tags = _labels.spec_tags(t, bp.get("s") or "")
+    weight = _labels.weight_zh(t) if bp["t"] == "armour" else ""
+    if weight:
+        tags.append(weight)
     return {
         "zh": bp["z"] or "",
         "en": bp["n"],
@@ -212,10 +197,24 @@ def mat_summary(mineral, q=None):
 
 
 def browse(
-    cat="", sub="", part="", maker="", q="", unlocked=False, offset=0, limit=60, mat=""
+    cat="",
+    sub="",
+    part="",
+    maker="",
+    q="",
+    unlocked=False,
+    offset=0,
+    limit=60,
+    mat="",
+    size="",
+    grade="",
+    cls="",
 ):
-    """蓝图字典：按条件筛，按名字排（同一系列排在一起）。返回 {rows, total, cats, subs, parts, makers}
+    """蓝图字典：按条件筛，按名字排（同一系列排在一起）。返回 {rows, total, cats, subs, parts, makers}，
+    选了船零件类时再加 sizes / grades / clss（按物品属性，见 crafting.listing.browse）。
     mat：只看用到这种矿的蓝图（从扫描结果、矿物页点过来）"""
+    from . import itemstats
+
     return _listing.browse(
         blueprints,
         cat=cat,
@@ -227,6 +226,10 @@ def browse(
         offset=offset,
         limit=limit,
         mat=mat,
+        size=size,
+        grade=grade,
+        cls=cls,
+        spec=lambda bp: itemstats.tags(bp.get("u")),
     )
 
 

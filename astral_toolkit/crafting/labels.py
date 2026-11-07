@@ -192,3 +192,46 @@ def slot_zh(slot):
 def clean_title(t: str) -> str:
     """蓝图来源任务标题里的 ~mission(…) 换成「[地点]」（原 crafting._clean_title）"""
     return re.sub(r"~mission\([^)]*\)", "[地点]", t)
+
+
+# ---------------------------------------------------------------- 船零件的尺寸 / 等级 / 类别，护甲的轻 / 中 / 重（CR-D1）
+
+# 物品属性里的类别（cls）
+CLS_ZH = {
+    "Civilian": "民用",
+    "Military": "军用",
+    "Industrial": "工业",
+    "Stealth": "隐形",
+    "Competition": "竞速",
+}
+# 护甲的子类型（物品属性里的 sub）；游戏汉化包写「物品类型：重型护甲」
+WEIGHT_ZH = {"Light": "轻型", "LightArmor": "轻型", "Medium": "中型", "Heavy": "重型"}
+
+
+def spec_parts(t, sub=""):
+    """物品属性里的（尺寸, 等级, 类别）。t 是 itemstats.tags() 那样的字典，sub 是蓝图子类。
+    尺寸：属性里的值，没有时从子类「sizeN」推，都没有是 None；等级只认 A～D，别的当没有（""）；类别是英文（Military…）或 ""。"""
+    size = t.get("size")
+    if size is None and sub.startswith("size") and sub[4:].isdigit():
+        size = int(sub[4:])
+    grade = t.get("grade")
+    grade = str(grade) if grade and str(grade).upper() in "ABCD" else ""
+    return size, grade, t.get("cls") or ""
+
+
+def spec_tags(t, sub="", size=True):
+    """「S2」「A 级」「军用」这几枚标签（制造页标题、蓝图列表用）；size=False 不写尺寸（列表里子类已经写了 S2）"""
+    n, grade, cls = spec_parts(t, sub)
+    out = []
+    if size and n is not None:
+        out.append(f"S{n}")
+    if grade:
+        out.append(f"{grade} 级")
+    if cls:
+        out.append(CLS_ZH.get(cls, cls))
+    return out
+
+
+def weight_zh(t):
+    """护甲的「轻型」「中型」「重型」；t 是 itemstats.tags() 那样的字典，没有或是别的（Personal、UNDEFINED…）返回空串"""
+    return WEIGHT_ZH.get(t.get("sub") or "", "")
