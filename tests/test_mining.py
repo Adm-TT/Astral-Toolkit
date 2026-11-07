@@ -1490,15 +1490,18 @@ def test_craft_stats_and_detail_structure(monkeypatch, tmp_path):
             and abs(by["激光功率"]["now"] - 4930 * 1.362) < 0.01
         )
         h = C.header(bp)
+        # 采矿激光器游戏说明里只写尺寸：数据里的「A 级」是默认值，标题不写（CR-D1 复查 2026-11-08）
         assert (
-            h["tags"] == ["S2", "A 级"]
+            h["tags"] == ["S2"]
             and h["kind"] == "采矿激光器"
             and h["stats_version"] == "4.10.2-test"
         )
         d = t_goals.craft_detail("Helix II Mining Laser")
-        assert d["head"]["tags"] == ["S2", "A 级"] and [
-            s["slot"] for s in d["slots"]
-        ] == ["框架", "发射器", "汇流排"]
+        assert d["head"]["tags"] == ["S2"] and [s["slot"] for s in d["slots"]] == [
+            "框架",
+            "发射器",
+            "汇流排",
+        ]
         assert d["slots"][1]["mats"][0] == {
             "kind": "i",
             "en": "Sadaryx",

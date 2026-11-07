@@ -615,6 +615,7 @@ def test_itemstats_item_shapes(monkeypatch, tmp_path):
         "mfr": "ACOM",
         "type": "Cooler",
         "sub": "",
+        "cn": "cool",
     }
     assert itemstats.tags("uuid-a")["sub"] == "Heavy"
 

@@ -147,8 +147,8 @@ def base_value(uuid, prop_key):
 
 
 def tags(uuid):
-    """分类标签：尺寸 / 等级 / 类别 / 厂商 / 类型 / 子类型（护甲是 Light / Medium / Heavy）。
-    返回 {size, grade, cls, mfr, type, sub}，没有数据返回 {}"""
+    """分类标签：尺寸 / 等级 / 类别 / 厂商 / 类型 / 子类型（护甲是 Light / Medium / Heavy）/ 物品类名。
+    返回 {size, grade, cls, mfr, type, sub, cn}，没有数据返回 {}"""
     it = item(uuid)
     if not it:
         return {}
@@ -159,4 +159,5 @@ def tags(uuid):
         "mfr": it.get("mfr"),
         "type": it.get("type"),
         "sub": it.get("sub"),
+        "cn": it.get("cn"),
     }

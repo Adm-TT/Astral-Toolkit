@@ -196,7 +196,8 @@ def clean_title(t: str) -> str:
 
 # ---------------------------------------------------------------- 船零件的尺寸 / 等级 / 类别，护甲的轻 / 中 / 重（CR-D1）
 
-# 物品属性里的类别（cls）；游戏汉化包写「分类：民用」「分类：竞赛」
+# 物品属性里的类别（cls）；游戏汉化包的物品说明多数写「类别：民用」，冷却器写「分类：民用」；
+# Competition 说明里写「竞赛」（名字括号里多写「竞速」，汉化包自己不统一）
 CLS_ZH = {
     "Civilian": "民用",
     "Military": "军用",
@@ -208,7 +209,12 @@ CLS_ZH = {
 WEIGHT_ZH = {"Light": "轻型", "LightArmor": "轻型", "Medium": "中型", "Heavy": "重型"}
 # 背包的子类型大多是 Personal：按物品尺寸 1 / 2 / 3 写（游戏汉化包写「轻型背包 / 中型背包 / 重型背包」，审查 2026-11-08）
 BACKPACK_ZH = {1: "轻型", 2: "中型", 3: "重型"}
-# 船零件里游戏说明写「等级 / 分类」的只有这五类；舰船武器、采矿激光器这些，物品属性里的等级 A 是数据默认值（审查 2026-11-08）
+# 类名带 superheavy 的一套：BUL-H4 头盔、护甲物品属性的子类型写 Heavy，游戏写「物品类型：超重型护甲」；
+# 同一套的弹药携具（H4-PBF，类名 …superheavy_backpack…）游戏写「物品类型：弹药携具」，不写轻重（审查 2026-11-08）
+SUPERHEAVY = "superheavy"
+# 船零件里游戏说明写等级、类别的只有这五类；舰船武器、采矿激光器这些，物品属性里的等级 A 是数据默认值（审查 2026-11-08）。
+# 没做的：舰船专用件（Idris、Reclaimer、890 Jump、Polaris 的 S4 件）游戏说明写「等级：定制」或者不写等级，物品属性里是默认的 A，
+# 这里照样写「A 级」——要照说明写，得在数据构建时读汉化包说明、库里加一列，记在待做（2026-11-08）
 GRADED = frozenset({"cooler", "powerplant", "quantumdrive", "radar", "shield"})
 # 物品属性里尺寸都是默认的 1、游戏说明里也不写尺寸的船零件（采矿模组、矿石吊舱、燃料喷嘴、刮削模块）
 UNSIZED = frozenset({"miningmodule", "orepod", "refuelling", "salvage"})
@@ -247,9 +253,13 @@ def spec_tags(t, sub="", size=True, kind=None):
 
 
 def weight_zh(t, name=""):
-    """护甲的「轻型」「中型」「重型」；t 是 itemstats.tags() 那样的字典，name 是英文名。
-    背包的子类型是 Personal 时按尺寸写（弹药携具能配中型、重型护甲，不写）；别的没有或是 UNDEFINED… 返回空串"""
+    """护甲的「轻型」「中型」「重型」「超重型」；t 是 itemstats.tags() 那样的字典（cn 是物品类名），name 是英文名。
+    类名带 superheavy 的写超重型，其中的弹药携具不写；背包的子类型是 Personal 时按尺寸写；
+    没有类名的老数据，弹药携具按英文名（Ammo Carrier）认、不写；别的没有或是 UNDEFINED… 返回空串"""
+    bag = t.get("type") == "Char_Armor_Backpack"
+    if SUPERHEAVY in (t.get("cn") or "").lower():
+        return "" if bag else "超重型"
     w = WEIGHT_ZH.get(t.get("sub") or "", "")
-    if not w and t.get("type") == "Char_Armor_Backpack" and "Ammo Carrier" not in name:
+    if not w and bag and "Ammo Carrier" not in name:
         w = BACKPACK_ZH.get(t.get("size"), "")
     return w
