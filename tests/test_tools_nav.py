@@ -991,6 +991,8 @@ def test_nav_mode_switch(monkeypatch, tmp_path):
 def test_halo_routes_match_scminer():
     """小行星带导航：对照 SCMiner 的 Aaron Halo Flight Computer（ARC-L1 出发，第 5 带）
     SCMiner：CRU-L3 12.7 Gm/389 Mm、CRU-L4 14.3/345、Hurston 13.5/192、Crusader 33.2/177、CRU-L5 39.5/151"""
+    import math
+
     from astral_toolkit.navigation import halo
     from astral_toolkit.navigation import navigate as n
 
@@ -1036,7 +1038,23 @@ def test_halo_routes_match_scminer():
     assert "第3带" in t and "往外" in t and "230" in t
     assert "往里" in halo.where_text(halo.where((21.6e9, 0, 0)), 5)
     assert halo.where_text(halo.where((10e9, 0, 0)), 5).startswith("❌")
-    assert halo.qd_speed("Atlas (S1)") == 103 and halo.qd_speed("odyssey") == 74
+    # 量子速度用游戏数据（以前抄 SCMiner 的慢了两三倍）；老写法「Voyage (S2)」尺寸改过了，按名字认
+    assert halo.qd_speed("Atlas (S1)") == 259 and halo.qd_speed("odyssey") == 238
+    assert halo.qd_speed("Voyage (S2)") == 208 and halo.qd_speed("Goliath (S1)") == 219
+    assert "19.60–21.39 Gm" in halo.where_text(halo.where((10e9, 0, 0)), 5)
+    # 断开后核对：比方案的断开点多飞 / 少飞多少（老大实飞量滑多远）
+    p = rows["CRU-L4"]
+    B = pts["CRU-L4"]
+    A = pts["ARC-L1"]
+    L = math.dist(A, B)
+    stop = [(B[i] + (A[i] - B[i]) * (p["dropout"] - 0.17) / L) * 1e9 for i in range(3)]
+    o = halo.overshoot(p, stop, pts)
+    assert o and abs(o["over"] - 170) <= 1 and "多飞了 170 Mm" in o["text"]
+    stop = [(B[i] + (A[i] - B[i]) * (p["dropout"] + 0.05) / L) * 1e9 for i in range(3)]
+    assert "少飞了 50 Mm" in halo.overshoot(p, stop, pts)["text"]
+    assert (
+        halo.overshoot({"text": "方案", "band": 5}, stop, pts) is None
+    )  # 方案里没有目标
 
 
 def test_halo_services(monkeypatch, tmp_path):
@@ -1086,7 +1104,8 @@ def test_halo_services(monkeypatch, tmp_path):
         )
         assert any(p["key"] == "ARC-L1" for p in o["points"])
         r = t_nav.halo_routes(frm="ARC-L1", band=5, qd="Odyssey (S3)")
-        assert store["halo_qd"] == "Odyssey (S3)" and r["speed"] == 74 and r["rows"]
+        # 存着老写法「Odyssey (S3)」：尺寸改过了，按名字认出游戏数据的速度
+        assert store["halo_qd"] == "Odyssey (S3)" and r["speed"] == 238 and r["rows"]
         assert "error" in t_nav.halo_routes(
             frm="ARC-L1", band=0
         ) and "error" in t_nav.halo_routes(frm="没有", band=5)
@@ -1107,6 +1126,7 @@ def test_halo_services(monkeypatch, tmp_path):
             clip["t"] = "Coordinates: x:20000000000 y:0 z:0"
             _t.sleep(0.8)
             assert "第3带" in hud["小行星带"] and "往外" in hud["小行星带"]
+            assert "比方案的断开点" in hud["小行星带"]  # 核对时说出多飞 / 少飞多少
             # F9：拿到的还是这一份坐标（监听已经处理过）→ 不重复算，结果一样
             monkeypatch.setattr(
                 showloc,
@@ -1149,6 +1169,11 @@ def test_halo_services(monkeypatch, tmp_path):
         finally:
             t_nav.halo_unpin()
         assert "小行星带" not in hud and t_nav._HALO["plan"] is None
+        logged = (tmp_path / "nav_log.txt").read_text(encoding="utf-8").splitlines()
+        assert any(
+            "比方案的断开点" in x for x in logged
+        )  # 核对多出来的那一行记进导航日志
+        assert all(x[:4].isdigit() for x in logged)  # 而且不拆成两行：每行都以日期开头
         clip["t"] = "Coordinates: x:20100000000 y:0 z:0"
         _t.sleep(0.5)
         assert "小行星带" not in hud  # 取下后监听停了
@@ -1160,6 +1185,107 @@ def test_halo_services(monkeypatch, tmp_path):
             lambda *a, **k: type("T", (), {"start": lambda self: None})(),
         )  # 「仅用于手动定位」5 秒后清提示：别在补丁还原后建真悬浮窗
         assert "error" in t_nav.fix_here(app.nav_deps)  # 什么都没挂：只提示，不打字
+
+
+def test_halo_overshoot_only_after_leaving_start(monkeypatch, tmp_path):
+    """「多飞 / 少飞」只在离开方案起点（跳过了）以后说，起跳前不说；进量子时悬浮窗刷回只剩方案；
+    导航日志标出量子后第一次，跟上次一样的核对不再记（审查 2026-11-08）"""
+    import time as _t
+    from types import SimpleNamespace
+
+    from astral_toolkit.core import paths
+    from astral_toolkit.navigation import halo
+    from astral_toolkit.navigation import navigate as n
+    from astral_toolkit.tasks import navigation as t_nav
+
+    if not n.CACHE.exists():
+        pytest.skip("没有星图数据")
+    pts = halo.points()
+    if "ARC-L1" not in pts or "CRU-L4" not in pts:
+        pytest.skip("没有星图数据")
+    monkeypatch.setattr(paths, "log", lambda name: tmp_path / name)
+    hud = {}
+    monkeypatch.setattr(t_nav, "_hud_set", lambda k, v, *a: hud.__setitem__(k, v))
+    monkeypatch.setattr(
+        halo,
+        "points",
+        lambda: (_ for _ in ()).throw(AssertionError("核对时查了星图库")),
+    )
+    r = halo.route("ARC-L1", "CRU-L4", 5, pts=pts)
+    r["text"] = "方案"
+    A, B = pts["ARC-L1"], pts["CRU-L4"]
+    k = r["dropout"] / r["total"]  # 方案的断开点：离目标还剩 dropout
+    drop = [(B[i] - (B[i] - A[i]) * k) * 1e9 for i in range(3)]
+    k2 = (r["dropout"] - 0.05) / r["total"]  # 再往前 50 Mm
+    past = [(B[i] - (B[i] - A[i]) * k2) * 1e9 for i in range(3)]
+
+    def pin():
+        sess = t_nav._HALO["sess"] + 1
+        t_nav._HALO.update(
+            plan=r,
+            sess=sess,
+            last=None,
+            seen=None,
+            ends=(A, B),
+            qt=False,
+            first=True,
+            logged=None,
+        )
+        return sess
+
+    try:
+        sess = pin()
+        w = t_nav.halo_check([v * 1e9 for v in A], None, sess)  # 挂上方案、还在起点
+        assert "比方案的断开点" not in w["text"] and "over" not in w
+        assert "比方案的断开点" not in hud["小行星带"]
+        w = t_nav.halo_check(drop, None, sess)
+        assert abs(w["over"]) <= 1 and "比方案的断开点" in hud["小行星带"]
+        assert (
+            t_nav.halo_check(drop, None, sess)["over"] == w["over"]
+        )  # 一样的：日志不再记
+        w = t_nav.halo_check(past, None, sess)
+        assert w["over"] == 50 and "多飞了 50 Mm" in w["text"]
+        logged = [
+            x
+            for x in (tmp_path / "nav_log.txt").read_text(encoding="utf-8").splitlines()
+            if "小行星带核对" in x
+        ]
+        assert len(logged) == 3
+        assert ["（量子后第一次）" in x for x in logged] == [False, True, False]
+
+        # 量子途中：读到的坐标每秒几万公里 → 悬浮窗刷回只剩方案，起跳前那次核对不冻在上面
+        sess = pin()
+        x = [0.0]
+
+        def moving(deps):
+            x[0] += 1e9
+            return _t.time(), (A[0] * 1e9 + x[0], A[1] * 1e9, A[2] * 1e9), None
+
+        monkeypatch.setattr(t_nav, "_pos_current", moving)
+        monkeypatch.setattr(n, "read_clipboard", lambda: "")
+        deps = SimpleNamespace(
+            nav=SimpleNamespace(target=None, space_mode=False),
+            game_events=SimpleNamespace(arrived_at=0.0),
+        )
+        ev = __import__("threading").Event()
+        th = __import__("threading").Thread(
+            target=t_nav._halo_watch, args=(deps, sess, ev), daemon=True
+        )
+        th.start()
+        _t.sleep(1.2)
+        ev.set()
+        th.join(2)
+        assert t_nav._HALO["qt"] and hud["小行星带"] == "方案"
+    finally:
+        t_nav._HALO.update(
+            plan=None,
+            last=None,
+            seen=None,
+            ends=None,
+            qt=False,
+            first=True,
+            logged=None,
+        )
 
 
 def test_halo_where_edges():

@@ -88,11 +88,16 @@ _HALO = {
     "sess": 0,
     "seen": None,
     "last": None,
+    "ends": None,  # 方案起点、目标的坐标（Gm）：挂上时查好，每秒核对不再碰星图库
+    "qt": False,  # 挂上以后测到过在量子里（悬浮窗已刷回只剩方案）
+    "first": True,  # 下一次带「多飞 / 少飞」的核对是量子后第一次：导航日志里标出来
+    "logged": None,  # 导航日志上一次记的核对：一样的不再记
     "ev": threading.Event(),
     "lock": threading.Lock(),
 }
 
 QT_SPEED = 50_000  # 米/秒：比这快就是在量子跳跃（普通飞行最快一千多米每秒）
+LEFT_START = 0.1  # Gm：离方案起点这么远才算跳过了（普通飞行一千多米每秒，要飞一天多）
 
 
 # ---------------------------------------------------------------- 依赖与辅助
@@ -1076,8 +1081,13 @@ def halo_pin(deps: NavDeps, /, frm="", to="", band=5, qd=""):
     from ..navigation import navigate as n
 
     try:
+        pts = halo.points()
         r = halo.route(
-            frm, to, band, halo.qd_speed(qd or settings_key("halo_qd", "Atlas (S1)"))
+            frm,
+            to,
+            band,
+            halo.qd_speed(qd or settings_key("halo_qd", "Atlas (S1)")),
+            pts=pts,
         )
     except (TypeError, ValueError):
         r = None
@@ -1089,7 +1099,15 @@ def halo_pin(deps: NavDeps, /, frm="", to="", band=5, qd=""):
         _HALO["ev"].set()  # 旧方案的剪贴板监听停掉
         _HALO["sess"] += 1
         sess = _HALO["sess"]
-        _HALO.update(plan=r, last=None, ev=ev)
+        _HALO.update(
+            plan=r,
+            last=None,
+            ev=ev,
+            ends=(pts[frm], pts[to]),
+            qt=False,
+            first=True,
+            logged=None,
+        )
         try:
             _HALO["seen"] = n.read_clipboard()  # 挂上之前剪贴板里的旧坐标不算
         except Exception:
@@ -1106,7 +1124,7 @@ def halo_unpin():
     with _HALO["lock"]:
         _HALO["ev"].set()
         _HALO["sess"] += 1
-        _HALO.update(plan=None, last=None)
+        _HALO.update(plan=None, last=None, ends=None, qt=False, logged=None)
         _hud_clear("小行星带")
     return {"ok": True}
 
@@ -1136,6 +1154,8 @@ def _halo_watch(deps: NavDeps, sess, ev):
                     and math.dist(g_live, prev[1]) / (t - prev[0]) > QT_SPEED
                 )
                 prev = (t, g_live)
+                if fast:
+                    _halo_qt(sess)
                 if (
                     not fast and time.time() - live_at >= 1.0
                 ):  # 量子途中（每秒几万公里）不核对，等断开
@@ -1148,6 +1168,16 @@ def _halo_watch(deps: NavDeps, sess, ev):
         except Exception:
             pass
         ev.wait(0.3)
+
+
+def _halo_qt(sess):
+    """挂上方案以后第一次测到在量子里：悬浮窗刷回只剩方案那几行，起跳前那次核对别冻在上面（审查 2026-11-08）"""
+    with _HALO["lock"]:
+        p = _HALO["plan"]
+        if not p or sess != _HALO["sess"] or _HALO["qt"]:
+            return
+        _HALO["qt"] = True
+        _hud_set("小行星带", p["text"])
 
 
 def halo_check(g, clip=None, sess=None):
@@ -1165,12 +1195,27 @@ def halo_check(g, clip=None, sess=None):
             _HALO["seen"] = clip
         w = halo.where(g)
         w["text"] = halo.where_text(w, p["band"])
+        # 比方案的断开点多飞 / 少飞多少：老大实飞量断开后船滑多远（2026-11-08）。
+        # 离开起点（跳过了）才说：还没跳就说「少飞了」像是玩家错了（审查 2026-11-08）
+        start, target = _HALO["ends"] or (None, None)
+        over, first = None, False
+        if start and math.dist(start, [float(v) / 1e9 for v in g]) > LEFT_START:
+            over = halo.overshoot(p, g, {p.get("to"): target})
+        if over:
+            w["left"], w["over"] = over["left"], over["over"]
+            w["text"] += "\n" + over["text"]
+            first, _HALO["first"] = _HALO["first"], False
         _HALO["last"] = w
         _hud_set(
             "小行星带", p["text"] + "\n" + w["text"]
         )  # 退出距离、安全区间一直留着（审查 2026-10-27：自动核对不能把它盖掉）
         bus.publish("halo", w)
-    _wp_log(f"小行星带核对：{w['text']}")
+        # 每秒自动核对：跟上次一样就不再记（审查 2026-11-08）
+        log_it = w["text"] != _HALO["logged"]
+        _HALO["logged"] = w["text"]
+    if log_it:
+        mark = "（量子后第一次）" if first else ""
+        _wp_log(f"小行星带核对{mark}：{w['text']}".replace("\n", "｜"))
     return w
 
 
