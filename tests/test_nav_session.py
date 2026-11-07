@@ -831,3 +831,104 @@ def test_navigation_analysis_forwards_to_navigate(monkeypatch):
     assert an.city_near_m() == 123.0
     port = {k for k in vars(navmod.NavAnalysis) if not k.startswith("_")}
     assert port == set(names) | {"short", "city_near_m"}
+
+
+def test_setup_loads_nav_data_only_for_ground(monkeypatch):
+    """开导航（setup）：地面导航先经注入的分析读一次导航数据，太空 / 手动定位不读（R2 改坏检查补的，以前没人测）"""
+    from astral_toolkit.navigation import navigate as n
+
+    loads = []
+    monkeypatch.setattr(n, "load", lambda: loads.append(1) or {"data": 1})
+    worker = nav_helpers.worker(_FakePos(), _FakeCam(), threading.Lock())
+    ground = navmod.NavPayload({"n": "X"}, {"key": "x"}, False)
+    ctx = worker.setup(Session(1, threading.Event(), ground))
+    assert ctx.data == {"data": 1} and loads == [1]
+    space = navmod.NavPayload({"n": "X"}, {"key": "x"}, True)
+    ctx = worker.setup(Session(2, threading.Event(), space))
+    assert ctx.data is None and loads == [1]
+
+
+def test_ground_tick_no_steer_when_close_in_city(monkeypatch):
+    """城里离目标不到 CITY_NEAR_M 米不给转向，远一点照给（R2 改坏检查补的，以前没人测）"""
+    from astral_toolkit.navigation import navigate as n
+
+    for name, value in (
+        ("locate", lambda g, **k: {"x": g[0], "y": g[1], "z": g[2], "body": "B"}),
+        ("is_city", lambda t: True),
+        ("is_space", lambda t: False),
+        ("city_leg", lambda here, target, plan, inner: (target, [])),
+        ("near_text", lambda here, data: ""),
+        ("_short", lambda *a: "短"),
+        ("label", lambda t: "目标"),
+        ("read_clipboard", lambda: ""),
+        ("parse_clip", lambda clip: None),
+        ("target_global", lambda *a: (0.0, 0.0, 0.0)),
+        ("steer", lambda g, cam, tg: {"yaw": 1.0}),
+        ("steer_text", lambda st, walk=False: "转"),
+    ):
+        monkeypatch.setattr(n, name, value)
+    monkeypatch.setattr(n, "CITY_NEAR_M", 50.0)
+    dist = {"m": 10.0}
+    monkeypatch.setattr(
+        present_nav,
+        "ground_view_of",
+        lambda here, goal, data, steady=None, prev=None: {
+            "bearing": 10.0,
+            "arrived": False,
+            "city": True,
+            "direct_m": dist["m"],
+        },
+    )
+
+    class Loop:
+        def commit(self, session, *ops):
+            return True
+
+    now = time.time()
+    pos = _FakePos()
+    pos.latest = (now, (1.0, 2.0, 3.0), {"t": now, "camdir": (1.0, 2.0, 3.0)})
+    pos.current = pos.latest
+    worker = nav_helpers.worker(pos, _FakeCam(), threading.Lock())
+    worker.loop = Loop()
+    payload = navmod.NavPayload({"n": "X", "b": "B"}, {"key": "x"}, False)
+    session = Session(1, threading.Event(), payload)
+    ctx = navmod._NavCtx(1, payload)
+    ctx.data = {}
+    ctx.first = False
+    ctx.state["here"] = {}  # 不走「刚开始用 current」那条
+    worker._ground_tick(session, ctx, now)
+    assert "steer" not in ctx.state["here"], ctx.state["here"]
+    dist["m"] = 80.0
+    later = now + 1.0
+    pos.latest = (later, (4.0, 5.0, 6.0), {"t": later, "camdir": (1.0, 2.0, 3.0)})
+    pos.current = pos.latest
+    worker._ground_tick(session, ctx, later)
+    assert ctx.state["here"]["steer"] == {"yaw": 1.0, "text": "转"}
+
+
+def test_nav_target_label_goes_through_analysis(monkeypatch):
+    """外壳的目标名（导航页标题用）经注入的分析取；没有目标给空（R2 改坏检查补的，以前没人测）"""
+    from astral_toolkit.navigation import navigate as n
+
+    nav, _pos, _loop = _make_nav(monkeypatch)
+    assert nav.target_label() == ""
+    monkeypatch.setattr(n, "label", lambda target: "名字：" + target["n"])
+    nav.target = {"n": "X"}
+    assert nav.target_label() == "名字：X"
+
+
+def test_start_ops_emits_starting_activity(monkeypatch):
+    """开始导航那一刻（loop 锁里）先发一条「正在开始」的活动磁贴；payload 不对不发（R2 改坏检查补的，以前没人测）"""
+    monkeypatch.setattr(present_nav, "activity", lambda sid, p, v: ("活动", sid, p, v))
+    worker = nav_helpers.worker(_FakePos(), _FakeCam(), threading.Lock())
+    payload = navmod.NavPayload({"n": "X"}, {"key": "x"}, False)
+    view = {
+        "state": "starting",
+        "quality": "partial",
+        "here": None,
+        "status": None,
+        "stale_since": None,
+    }
+    ops = worker.start_ops(Session(3, threading.Event(), payload))
+    assert ops == [("ui", "ui.activity", ("活动", 3, payload, view))]
+    assert worker.start_ops(Session(4, threading.Event(), object())) == []
