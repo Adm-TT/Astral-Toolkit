@@ -12,7 +12,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable
 
 from .app.engines.count import _Count
-from .app.engines.hover import _Hover
+from .app.engines.hover import HotkeyCommands
+from .runtime.workers.hotkeys import HotkeyLinks, HotkeyWorker
 from .runtime.workers.mining import MiningAnalysis, MiningLinks, MiningViews, _Live
 from .runtime.workers.navigation import (
     _CamFilter,
@@ -53,7 +54,8 @@ class DesktopApp:
     nav: Any
     count: Any
     pos: Any
-    hover: Any
+    hotkeys: Any
+    hotkey_commands: Any
     game_events: Any
     logwatch: Any
     cam_filter: Any
@@ -357,6 +359,25 @@ def _mining_links(options: Mapping[str, Any]) -> MiningLinks:
     )
 
 
+def _hotkeys(commands: HotkeyCommands) -> HotkeyWorker:
+    """热键线程（目录迁移 R4 起在 runtime/workers/hotkeys，只管看键）：绑定、按下去做什么、出错清「忙」都接键盘入口
+    （HotkeyCommands），读键接 infrastructure/platform/keys；只有 Windows 起线程"""
+    import sys
+
+    from .infrastructure.platform import keys
+
+    return HotkeyWorker(
+        HotkeyLinks(
+            bindings=commands.bindings,
+            code=keys.code,
+            down=keys.down,
+            pressed=commands.pressed,
+            failed=commands.failed,
+        ),
+        enabled=sys.platform == "win32",
+    )
+
+
 def _hover_links() -> HoverLinks:
     """F8 要用的物品查询（IQ-B6）：物品卡片和窗口物品查询页同一份（tasks/catalog 用例 + app/presenters/catalog 排版）；
     掉落、玩家市场经 tasks/catalog（Trade 只在那里的市场会话里用，第一次用才造，和以前一样）；
@@ -479,9 +500,10 @@ def build(
         worker=options.get("count_worker"),
     )
     hover_links = _hover_links()
-    hover = _Hover(
+    hotkey_commands = HotkeyCommands(
         live=live, count=count, links=hover_links, feedback=feedback, nav=nav_deps
     )
+    hotkeys = _hotkeys(hotkey_commands)
     logwatch = _logwatch_service(status_now)
 
     app = DesktopApp(
@@ -492,7 +514,8 @@ def build(
         nav=nav,
         count=count,
         pos=pos,
-        hover=hover,
+        hotkeys=hotkeys,
+        hotkey_commands=hotkey_commands,
         game_events=game_events,
         logwatch=logwatch,
         cam_filter=cam_filter,
@@ -677,7 +700,8 @@ def _register(app: DesktopApp) -> None:
             return thread
 
         app.lifecycle.register(
-            _DirectService("hover", Phase.AMBIENT, app.hover, start=app.hover.start)
+            # 热键线程（目录迁移 R4 起在 runtime/workers/hotkeys）；服务名照旧叫 hover，退出记录里一直这么叫
+            _DirectService("hover", Phase.AMBIENT, app.hotkeys, start=app.hotkeys.start)
         )
         app.lifecycle.register(
             _DirectService("pos", Phase.AMBIENT, app.pos, start=app.pos.start)

@@ -1,35 +1,20 @@
-"""F8 物品识别 / 热键（_Hover）
+"""热键按下去做什么：键盘入口（HotkeyCommands；目录迁移 R4 把看键的线程拆去了 runtime/workers/hotkeys）
 
-用到的函数 / 变量直接到它们所在的模块取，运行时才取，避免互相 import：
-_T("mining").xxx = tasks/mining.py，_H().xxx = app/hud_state.py，self._live / self._count = 构造时注入的引擎，self._links = F8 物品查询接线（HoverLinks，F 段 B5），self._feedback = 问题反馈（bootstrap 接好状态源的 feedback_report，F 段 B5）；self._nav = 导航任务要的后台对象（NavDeps，F 段 B5）。
-用到：WIN, _hotkey_values, _live, _note_hud, count_toggle, feedback_report, fix_here, hover_once, item_key_pressed, live_start, live_stop, mark_here, ore_record, settings_key
+热键线程只管看键：约 1.8 秒从这里的 bindings() 重读一次绑定，看到刚按下一个键就调 pressed(热键名, 键名)，
+出错重来之前调 failed()（都由 bootstrap 接）。这里定每个热键做什么——F8 物品识别、记录路标、一键定位、问题反馈、
+采矿助手开关、盘点、原矿记录；要不要占着「忙」（要截屏的同一时间只跑一个）；F8 / 盘点键切出游戏时按只提示、不动作。
+动作本身在 tasks（F8 识别 tasks/hover，采矿 tasks/mining，导航 tasks/navigation，盘点 tasks/count），用到时才导入，避免互相 import。
+self._live / self._count = 构造时注入的引擎，self._links = F8 物品查询接线（HoverLinks，F 段 B5），
+self._feedback = 问题反馈（bootstrap 接好状态源的 feedback_report，F 段 B5），self._nav = 导航任务要的后台对象（NavDeps，F 段 B5）。
 """
 
-import importlib
-import sys
 import threading
 
 from .. import bus, task_runner
 from ..lifecycle_gate import is_closing
 
-WIN = sys.platform == "win32"
 
-# F1～F12 的虚拟键码（以前在 trade/console）
-VK = {f"F{i}": 0x6F + i for i in range(1, 13)}
-
-
-def _T(name):
-    """astral_toolkit.tasks 里的模块（运行时才取，避免互相 import）"""
-    return importlib.import_module(f"astral_toolkit.tasks.{name}")
-
-
-def _H():
-    from .. import hud_state
-
-    return hud_state
-
-
-class _Hover:
+class HotkeyCommands:
     GAME_ONLY = ("trade_capture_key", "count_key")  # 只在星际公民在最前面时才响应的热键
 
     def __init__(self, *, live, count, links, feedback, nav):
@@ -38,49 +23,68 @@ class _Hover:
         self._links = links
         self._feedback = feedback
         self._nav = nav
-        self.thread = None
         self.busy = False
-        self.label = {}  # 热键名 → 当前绑定的键（如 trade_capture_key → F8）
-        self.stop_ev = threading.Event()
+        self.label = {}  # 热键名 → 刚按的键（如 trade_capture_key → F8；玩家可能改了键位，提示里用）
 
-    def start(self):
-        if WIN and (self.thread is None or not self.thread.is_alive()):
-            self.stop_ev.clear()
-            self.thread = threading.Thread(
-                target=self._guard, daemon=True, name="hover-key"
-            )
-            self.thread.start()
-
-    def request_stop(self):
-        self.stop_ev.set()
-
-    def join(self, timeout=None):
-        thread = self.thread
-        if thread is None:
-            return True
-        if thread is threading.current_thread():
-            return not thread.is_alive()
-        thread.join(timeout)
-        return not thread.is_alive()
-
-    def _guard(self):
-        """热键线程出错就记一笔、等 1 秒重来，别让 F5/F6/F8 全失效（细查 2026-10-28）"""
-        while not self.stop_ev.is_set():
-            try:
-                self._run()
-            except Exception as e:
-                print(f"热键监听出错，1 秒后重来：{e!r}")
-                self.busy = False  # 别让 busy 卡死（二审 2026-10-28）
-                self.stop_ev.wait(1)
-
-    def _run(self):
-        import ctypes
+    def bindings(self):
+        """现在的热键绑定，按生效顺序：[(键名, 热键名)]，没绑的键名是空字符串（tasks/system 的热键表 + 设置）"""
         from ...core import settings
+        from ...tasks import system as system_tasks
 
+        return [
+            (key, name) for key, _, name in system_tasks._hotkey_values(settings.load())
+        ]
+
+    def failed(self):
+        """热键线程出错、1 秒后重来之前：别让「忙」卡死（二审 2026-10-28）"""
+        self.busy = False
+
+    def pressed(self, name, key):
+        """热键线程看到刚按下 key（绑在热键 name 上）：切出游戏时的 F8 / 盘点键只提示；占着「忙」的同一时间只跑一个"""
+        self.label[name] = key
+        if name in self.GAME_ONLY and self._game_front() is False:
+            # 切出游戏时按的 F8 / F6（比如在浏览器里 F6 是跳地址栏）：不截屏、不开关盘点（判断不了时照常）
+            bus.runtime_log(
+                f"不在游戏里，{key} {'识别' if name == 'trade_capture_key' else '盘点'}没响应：回到游戏再按"
+                + (
+                    "，或在窗口点「结束盘点」"
+                    if name == "count_key" and self._count.running()
+                    else ""
+                ),
+                tag="HOVER" if name == "trade_capture_key" else "COUNT",
+                level="INFO",
+            )
+            return
+        busy, act = self._acts()[name]
+        if not busy:
+            act()
+        elif not self.busy:
+            self.busy = True
+            if name == "trade_capture_key":
+                bus.runtime_log(
+                    f"捕获到 {key} 快捷键，触发悬停识别...",
+                    tag="HOVER",
+                    level="INFO",
+                )
+            act()
+        elif name == "trade_capture_key":
+            bus.runtime_log(
+                f"{key} 正在识别中，请稍候...",
+                tag="HOVER",
+                level="WARN",
+            )
+
+    def _game_front(self):
+        """游戏窗口在不在最前面（tasks/mining：True / False；判断不了是 None，照常响应）"""
+        from ...tasks import mining as mining_tasks
+
+        return mining_tasks._game_front()
+
+    def _acts(self):
         # 每个热键按下去做什么：(要不要占着「忙」, 动作)。占着忙的同一时间只跑一个（要截屏的）；
         # 记路标 / 一键定位 / 原矿记录只等玩家自己输 /showlocation（最多 60 秒，AT 不替玩家打字），不占着忙，免得这段时间 F8 用不了；
         # 同名任务只起一个（照 1.1.2 的 7c686a6）
-        acts = {
+        return {
             "trade_capture_key": (True, self._start_hover),
             "mark_key": (
                 False,
@@ -113,83 +117,39 @@ class _Hover:
                 lambda: task_runner.run_task_once("ore", self._ore, title="原矿记录"),
             ),
         }
-        prev = {}
-        while not self.stop_ev.is_set():
-            keys, seen, label = [], set(), {}
-            for key, _, name in _T("system")._hotkey_values(settings.load()):
-                if key and key in VK and key not in seen:  # 撞键时只有排在前面的生效
-                    seen.add(key)
-                    keys.append((name, VK[key]))
-                    label[name] = key
-            self.label = label  # 当前绑定的键名，提示里用（玩家可能改了键位）
-            for _ in range(60):
-                for name, vk in keys:
-                    down = bool(ctypes.windll.user32.GetAsyncKeyState(vk) & 0x8000)
-                    if (
-                        down
-                        and not prev.get(name)
-                        and name in self.GAME_ONLY
-                        and _T("mining")._game_front() is False
-                    ):
-                        # 切出游戏时按的 F8 / F6（比如在浏览器里 F6 是跳地址栏）：不截屏、不开关盘点（判断不了时照常）
-                        bus.runtime_log(
-                            f"不在游戏里，{label[name]} {'识别' if name == 'trade_capture_key' else '盘点'}没响应：回到游戏再按"
-                            + (
-                                "，或在窗口点「结束盘点」"
-                                if name == "count_key" and self._count.running()
-                                else ""
-                            ),
-                            tag="HOVER" if name == "trade_capture_key" else "COUNT",
-                            level="INFO",
-                        )
-                    elif down and not prev.get(name):
-                        busy, act = acts[name]
-                        if not busy:
-                            act()
-                        elif not self.busy:
-                            self.busy = True
-                            if name == "trade_capture_key":
-                                bus.runtime_log(
-                                    f"捕获到 {label[name]} 快捷键，触发悬停识别...",
-                                    tag="HOVER",
-                                    level="INFO",
-                                )
-                            act()
-                        elif name == "trade_capture_key":
-                            bus.runtime_log(
-                                f"{label[name]} 正在识别中，请稍候...",
-                                tag="HOVER",
-                                level="WARN",
-                            )
-                    prev[name] = down
-                if self.stop_ev.wait(0.03):
-                    return
 
     def _toggle_live(self):
         """采矿助手开关键：开着就关，关着就开；悬浮窗上按实际结果显示（正在停止时说清楚）"""
         try:
-            k = _T("navigation").settings_key("live_key", "F5")
+            from .. import hud_state
+            from ...tasks import mining as mining_tasks
+            from ...tasks import navigation as navigation_tasks
+
+            k = navigation_tasks.settings_key("live_key", "F5")
             if self._live.running():
-                _T("mining").live_stop(self._live)
-                _H()._note_hud("采矿助手", f"采矿助手已关闭｜按 {k} 开启")
+                mining_tasks.live_stop(self._live)
+                hud_state._note_hud("采矿助手", f"采矿助手已关闭｜按 {k} 开启")
             else:
                 if is_closing():
-                    _H()._note_hud("采矿助手", "正在退出")
+                    hud_state._note_hud("采矿助手", "正在退出")
                     return
-                res = _T("mining").live_start(self._live) or {}
+                res = mining_tasks.live_start(self._live) or {}
                 if res.get("error"):
                     # 正在停止 / 正在退出：别说「已开启」（3-2）
-                    _H()._note_hud("采矿助手", res["error"])
+                    hud_state._note_hud("采矿助手", res["error"])
                 else:
-                    _H()._note_hud("采矿助手", f"采矿助手已开启｜按 {k} 关闭")
+                    hud_state._note_hud("采矿助手", f"采矿助手已开启｜按 {k} 关闭")
         except Exception as e:
             bus.publish("log", {"task": "live", "line": f"采矿助手开关失败：{e}"})
 
     def _toggle_count(self):
+        from .. import hud_state
+        from ...tasks import count as count_tasks
+
         if not self._count.running() and is_closing():
-            _H()._note_hud("盘点", "正在退出")
+            hud_state._note_hud("盘点", "正在退出")
             return {"error": "正在退出"}
-        return _T("count").count_toggle()
+        return count_tasks.count_toggle()
 
     def _report(self):
         try:
@@ -198,23 +158,31 @@ class _Hover:
             self.busy = False
 
     def _mark(self):  # 不占着忙，结束时也不能清别人（F8、F10）的忙
+        from ...tasks import navigation as navigation_tasks
+
         if is_closing():
             return {"error": "正在退出"}
-        return _T("navigation").mark_here(self._nav)
+        return navigation_tasks.mark_here(self._nav)
 
     def _ore(self):
+        from ...tasks import navigation as navigation_tasks
+
         if is_closing():
             return {"error": "正在退出"}
-        return _T("navigation").ore_record(self._nav, here=True)
+        return navigation_tasks.ore_record(self._nav, here=True)
 
     def _fix(self):
+        from ...tasks import navigation as navigation_tasks
+
         if is_closing():
             return {"error": "正在退出"}
-        return _T("navigation").fix_here(self._nav)
+        return navigation_tasks.fix_here(self._nav)
 
     def _start_hover(self):
         """F8：和窗口里的「识别」接口共用同一个任务名，已经在识别就不再起第二个（两个同时跑会互相清掉 _last_hover）"""
-        _H().item_key_pressed()
+        from .. import hud_state
+
+        hud_state.item_key_pressed()
         if (
             task_runner.run_task_once("hover", self._recognize, title="识别物品")
             is None
@@ -241,6 +209,8 @@ class _Hover:
 
     def _recognize(self):
         try:
-            return _T("hover").hover_once(self._links)
+            from ...tasks import hover as hover_tasks
+
+            return hover_tasks.hover_once(self._links)
         finally:
             self.busy = False

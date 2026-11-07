@@ -55,7 +55,7 @@ class _FakeImage:
 
 def test_closing_gate_f5_f6(monkeypatch):
     from astral_toolkit.app import hud_state
-    from astral_toolkit.app.engines import hover
+    from astral_toolkit.app.engines.hover import HotkeyCommands
     from astral_toolkit.tasks import count as count_task
     from astral_toolkit.tasks import mining, navigation
     from tests.bootstrap_helpers import bind_for_test
@@ -105,7 +105,7 @@ def test_closing_gate_f5_f6(monkeypatch):
             count_task, "count_toggle", lambda: calls.append("count") or {"ok": True}
         )
 
-        h = hover._Hover(live=live, count=count, links=None, feedback=None, nav=None)
+        h = HotkeyCommands(live=live, count=count, links=None, feedback=None, nav=None)
         h._toggle_live()
         assert calls == []
         assert notes[-1] == ("采矿助手", "正在退出")
@@ -127,7 +127,7 @@ def test_closing_gate_f5_f6(monkeypatch):
 def test_closing_gate_navigation_and_writes(monkeypatch):
     from types import SimpleNamespace
 
-    from astral_toolkit.app.engines.hover import _Hover
+    from astral_toolkit.app.engines.hover import HotkeyCommands
     from astral_toolkit.tasks import navigation
 
     deps: Any = SimpleNamespace()
@@ -136,7 +136,7 @@ def test_closing_gate_navigation_and_writes(monkeypatch):
         assert navigation.nav_near(deps, "mine").get("error") == "正在退出"
         assert navigation.mark_here(deps).get("error") == "正在退出"
 
-        h = _Hover(
+        h = HotkeyCommands(
             live=SimpleNamespace(running=lambda: False),
             count=SimpleNamespace(running=lambda: False),
             links=None,
