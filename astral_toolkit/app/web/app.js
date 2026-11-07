@@ -450,7 +450,7 @@ try { applyTheme(localStorage.getItem("theme")); } catch (e) { /* 读不了就�
 function renderTop() {
   const s = state.status;
   if (!s) return;
-  applyTheme(s.settings?.theme);
+  if ((s.settings?.theme === "light") !== (document.documentElement.dataset.theme === "light")) applyTheme(s.settings?.theme);
   $("#hk").textContent = s.hover_key;
   const p = s.position;
   const sysZh = { Stanton: "斯坦顿", Pyro: "派罗", Nyx: "尼克斯" };
@@ -1872,7 +1872,7 @@ function openModal({ title, sub = "", body = "", foot = "", wide = false, onClos
     <div class="modal-head"><div><h2>${esc(title)}</h2>${sub ? `<p>${sub}</p>` : ""}</div><button type="button" class="btn small" data-close>关闭</button></div>
     <div class="modal-body">${body}</div>${foot ? `<div class="modal-foot">${foot}</div>` : ""}</div>`;
   document.body.appendChild(m);
-  const md = { el: m, q: (s) => m.querySelector(s) };
+  const md = { el: m, q: (s) => m.querySelector(s), dirty: false };
   md.close = () => {
     const i = MODALS.indexOf(md);
     if (i < 0) return;
@@ -1881,7 +1881,16 @@ function openModal({ title, sub = "", body = "", foot = "", wide = false, onClos
     if (onClose) onClose();
   };
   MODALS.push(md);
-  m.addEventListener("mousedown", (e) => { if (e.target === m) md.close(); });
+  // 填过内容的弹窗（打过字、改过选项、换过地点）点外面不关，只有「关闭」「取消」或 Esc 关，和小表单一样；
+  // 没填过的、只在搜索框（data-filter）里打过字的，点外面照旧关
+  const mark = (e) => { if (!e.target.closest?.("[data-filter]")) md.dirty = true; };
+  ["input", "change", "placechange"].forEach((n) => m.addEventListener(n, mark));
+  m.addEventListener("mousedown", (e) => {
+    if (e.target !== m) return;
+    if (!md.dirty) { md.close(); return; }
+    const card = m.querySelector(".modal-card");                 // 挡住了：卡片轻轻跳一下，提示点「关闭」或「取消」
+    card.classList.remove("nudge"); void card.offsetWidth; card.classList.add("nudge");
+  });
   m.querySelectorAll("[data-close]").forEach((b) => (b.onclick = md.close));
   return md;
 }
@@ -1895,7 +1904,7 @@ async function pickPlace(current = "") {
     const md = openModal({
       title: "选择存放地点", wide: true, onClose: () => resolve(result),
       sub: "游戏中可存放物品的空间站、城市、星门和休息站。飞船、前哨等不在列表中的地点，可在下方自定义",
-      body: `<input class="input" id="pp-q" placeholder="搜索地点：新巴贝奇 / Area18 / 弧 L1 / 派罗" autocomplete="off">
+      body: `<input class="input" id="pp-q" data-filter placeholder="搜索地点：新巴贝奇 / Area18 / 弧 L1 / 派罗" autocomplete="off">
         <div id="pp-list" class="pp-list"></div>
         <div class="row" style="align-items:flex-end;border-top:1px solid var(--line);padding-top:12px">
           <label class="field" style="flex:1">自定义地点（飞船、前哨等）<input class="input" id="pp-name" placeholder="例：MOLE 货舱"></label>
@@ -3065,10 +3074,11 @@ async function showDisclaimer() {
   box.innerHTML = `<div class="gate-card" role="dialog" aria-modal="true"><div class="legal" style="max-height:60vh">${await disclaimerHTML()}</div>
     <button class="btn" id="gate-close">关闭</button></div>`;
   document.body.appendChild(box);
-  const close = () => box.remove();
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  const close = () => { document.removeEventListener("keydown", onKey); box.remove(); };
   $("#gate-close").onclick = close;
   box.addEventListener("click", (e) => { if (e.target === box) close(); });
-  document.addEventListener("keydown", function esc(e) { if (e.key === "Escape") { close(); document.removeEventListener("keydown", esc); } });
+  document.addEventListener("keydown", onKey);
 }
 
 

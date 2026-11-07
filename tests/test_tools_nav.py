@@ -279,6 +279,7 @@ def test_status_keeps_displayinfo_place_when_reader_goes_stale():
             app.pos.reader.ok_at = 0  # 读取器已经不算「开着」
             app.pos.label = (time.time() - 20, "死局空间站")
             P.current = lambda *a, **k: {
+                "t": time.time() - 3600,
                 "label": "玛格达 附近",
                 "age": 1.0,
                 "sys": "Pyro",
@@ -286,6 +287,7 @@ def test_status_keeps_displayinfo_place_when_reader_goes_stale():
             P.from_log = lambda *a, **k: (time.time() - 3600, "死局空间站", {})
             assert t_sys.status(sources)["position"]["label"] == "死局空间站"
             P.current = lambda *a, **k: {
+                "t": time.time() - 2,
                 "label": "鼠巢空间站",
                 "age": 2.0,
                 "sys": "Pyro",
