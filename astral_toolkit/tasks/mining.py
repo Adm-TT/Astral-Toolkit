@@ -140,10 +140,10 @@ def scan_view(scan, bag, cut=False):
     result = _analysis.analyze(scan, bag, collect_inputs(scan), cut=cut)
     out = _present.to_view(result)
     from ..core import settings
-    from ..mining.data import focus_keys
+    from ..mining.data import focus_keys, focus_ores
 
     out["hud"], out["hud_rich"] = _present.to_hud(
-        result, focus=focus_keys(settings.load().get("mining_focus"))
+        result, focus=focus_ores(focus_keys(settings.load().get("mining_focus")))
     )
     return out
 
@@ -362,14 +362,17 @@ def _gear(ship=None):
 def mining_gear():
     from ..core import settings
     from ..core.i18n import mineral_zh
-    from ..mining.data import SIGNATURES, focus_keys
+    from ..mining.data import FOCUS_SIGNALS, SIGNATURES, focus_keys
 
     out = _gear()
     focus = focus_keys(settings.load().get("mining_focus"))
     out["focus"] = [
         {"key": key, "name": mineral_zh(key), "on": focus is None or key in focus}
         for key in SIGNATURES
-    ]
+    ] + [
+        {"key": key, "name": name, "on": focus is None or key in focus, "signal": True}
+        for key, name in FOCUS_SIGNALS.items()
+    ]  # 两类雷达信号排在矿后面，页面上另起一行（signal）
     return out
 
 
@@ -388,15 +391,17 @@ def _save_settings(**kw):
 
 
 def set_mining_focus(live: _LiveLike, /, keys=None) -> dict[str, Any]:
-    """关注列表只过滤悬浮窗；None 恢复全部，空列表不显示矿物。"""
-    from ..mining.data import SIGNATURES
+    """关注列表只过滤悬浮窗；None 恢复全部，空列表矿和信号都不显示。能选的是矿和两类雷达信号（地面信号、太空残骸）"""
+    from ..mining.data import FOCUS_SIGNALS, SIGNATURES, focus_keys
 
     if keys is not None:
         if not isinstance(keys, list) or any(
-            not isinstance(key, str) or key not in SIGNATURES for key in keys
+            not isinstance(key, str)
+            or (key not in SIGNATURES and key not in FOCUS_SIGNALS)
+            for key in keys
         ):
-            raise ValueError("关注的矿要从列表中选择")
-        keys = [key for key in SIGNATURES if key in keys]
+            raise ValueError("关注的矿和信号要从列表中选择")
+        keys = focus_keys(keys)
     err = _save_settings(mining_focus=keys)
     if err:
         return {"error": err}

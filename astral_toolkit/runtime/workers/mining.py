@@ -619,7 +619,7 @@ class _Live:
                             x.split("｜精炼后")[0].replace("信号 ", "")
                             for x in hud_lines[:4]
                         )
-                        or "未发现关注的矿",
+                        or "未发现关注的信号",
                     ),
                     _say(
                         f"雷达信号: {sorted(sigs)} 产区: {(area or {}).get('zh') or '未知'}",

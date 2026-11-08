@@ -12,9 +12,17 @@ def test_focus_changes_hud_only_and_keeps_unselected_window_rows():
     result = analyze(_scan(), ({}, None, None), _inputs())
     before = present.to_view(result)
     hud, rich = present.to_hud(result, focus=["Gold"])
-    assert "钨" not in hud
-    assert rich["comp"] == []
-    assert "未发现关注的矿" in hud
+    # 关注的矿一样都没有：悬浮窗只留标题这一行（老大 2026-11-08 批注验收单：只留标题）
+    assert hud == "未发现关注的矿"
+    assert rich == {
+        "title": "未发现关注的矿",
+        "stats": [],
+        "comp": [],
+        "advice": None,
+        "gain": [],
+        "minor": [],
+        "foot": "",
+    }
     assert present.to_view(result) == before
     assert len(before["lots"]) == 3
 
@@ -35,6 +43,96 @@ def test_empty_focus_hides_all_ores():
     result = analyze(_scan(), ({}, None, None), _inputs())
     hud, rich = present.to_hud(result, focus=[])
     assert rich["comp"] == [] and "钨" not in hud
+    assert hud == "未发现关注的矿" and rich["stats"] == [] and rich["advice"] is None
+
+
+def test_focus_signal_kinds_ground_and_salvage(monkeypatch):
+    """关注里能选地面信号、太空残骸（老大 2026-11-08 批注验收单）：地面来源归地面信号、可打捞残骸归太空残骸；
+    没选这一类就不显示；选了矿不会把它们带出来"""
+    from astral_toolkit.mining import signals
+
+    monkeypatch.setattr(signals, "my_signatures", lambda: {})
+    ground = [(8000, False, "8000", None)]  # ROC 车矿 ×2、可采集物 ×4
+    full = signals.describe_all(ground, "ground")
+    assert any("ROC 车矿" in x for x in full)
+    assert signals.describe_all(ground, "ground", focus=["ground"]) == full
+    assert signals.describe_all(ground, "ground", focus=["Copper", "salvage"]) == []
+    space = [(9000, False, "9000", None)]  # 可打捞残骸 ×3
+    got = signals.describe_all(space, "space", focus=["salvage"])
+    assert got and all("残骸" in x for x in got)
+    assert signals.describe_all(space, "space", focus=["ground", "Copper"]) == []
+    # 不知道在地面还是太空：两边都列，各归各的类
+    both = signals.describe_all([(6000, False, "6000", None)], None)
+    only_ground = signals.describe_all(
+        [(6000, False, "6000", None)], None, focus=["ground"]
+    )
+    only_salvage = signals.describe_all(
+        [(6000, False, "6000", None)], None, focus=["salvage"]
+    )
+    assert only_ground and all("地面：" in x for x in only_ground)
+    assert only_salvage and all("太空：" in x for x in only_salvage)
+    assert sorted(only_ground + only_salvage) == sorted(both)
+
+
+def test_focus_hides_own_named_and_unknown_signals(monkeypatch):
+    """自己起名的信号、认不出的「未知」不归类：开了关注（哪怕全选）也不上悬浮窗；不开关注照旧显示"""
+    from astral_toolkit.mining import signals
+    from astral_toolkit.mining.data import FOCUS_SIGNALS, SIGNATURES
+
+    every = [*SIGNATURES, *FOCUS_SIGNALS]
+    monkeypatch.setattr(signals, "my_signatures", lambda: {})
+    unknown = [(1234, False, "1234", None)]
+    assert any("未知" in x for x in signals.describe_all(unknown, "space"))
+    assert signals.describe_all(unknown, "space", focus=every) == []
+    monkeypatch.setattr(signals, "my_signatures", lambda: {"1234": "我起的名"})
+    assert any("我起的名" in x for x in signals.describe_all(unknown, "space"))
+    assert all(
+        "我起的名" not in x for x in signals.describe_all(unknown, "space", focus=every)
+    )
+
+
+def test_focus_signal_keys_save_and_show(monkeypatch, tmp_path):
+    """两类信号存进关注列表（矿在前、信号在后），页面上的选项带 signal；只选信号时石头的悬浮窗只留标题"""
+    from astral_toolkit.mining.data import FOCUS_SIGNALS, focus_keys, focus_ores
+
+    monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
+    monkeypatch.setattr(mining, "collect_inputs", lambda scan: _inputs())
+    live = mining_helpers.live()
+    out = mining.set_mining_focus(live, keys=["salvage", "Copper", "ground"])
+    assert settings.load()["mining_focus"] == ["Copper", "ground", "salvage"]
+    sig = [x for x in out["focus"] if x.get("signal")]
+    assert [(x["key"], x["name"], x["on"]) for x in sig] == [
+        (k, name, True) for k, name in FOCUS_SIGNALS.items()
+    ]
+    assert not any(x.get("signal") for x in out["focus"] if x["key"] == "Copper")
+    assert focus_keys(["ground", "Iron", "bogus"]) == ["Iron", "ground"]
+    assert focus_ores(["ground", "Iron"]) == ["Iron"] and focus_ores(None) is None
+    for bad in (["Ground"], ["salvage", 1]):
+        try:
+            mining.set_mining_focus(live, keys=bad)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("认不得的键必须拒绝")
+    mining.set_mining_focus(live, keys=["ground"])
+    assert mining_helpers.links().focus() == ["ground"]
+    view = mining.scan_view(_scan(), ({}, None, None))
+    assert view["hud"] == "未发现关注的矿" and view["hud_rich"]["comp"] == []
+    assert view["rock"] and view["plans"]  # 窗口照旧完整
+
+
+def test_focus_panel_draws_signal_row_and_note():
+    """采矿页的关注：两类信号另起一行，写明自己起名的、「未知」开了关注不上悬浮窗"""
+    from pathlib import Path
+
+    js = (Path(__file__).parents[1] / "astral_toolkit/app/web/app.js").read_text(
+        encoding="utf-8"
+    )
+    start = js.index("function miningFocusRender()")
+    body = js[start : js.index("\nfunction ", start)]
+    assert "items.filter((x) => !x.signal)" in body
+    assert "items.filter((x) => x.signal)" in body
+    assert "自己起名的信号和认不出的「未知」信号不上悬浮窗" in body
 
 
 def test_focus_goal_lines_pick_focused_ores_before_cutting_to_two():
@@ -42,7 +140,15 @@ def test_focus_goal_lines_pick_focused_ores_before_cutting_to_two():
     目标没查全不写（审查 2026-11-08）"""
     from dataclasses import replace
 
-    result = analyze(_scan(), ({}, None, None), _inputs())
+    # 石头里要有关注的铜：一样都没有时悬浮窗只留标题、不写目标行（老大 2026-11-08）
+    scan = _scan(
+        composition=[
+            ("Tungsten", 10.0, 662),
+            ("Copper", 50.0, 363),
+            ("Inert Materials", 40.0, None),
+        ]
+    )
+    result = analyze(scan, ({}, None, None), _inputs())
     goals = tuple(
         {"en": en, "zh": zh, "text": f"目标缺少 {zh}"}
         for en, zh in (("Gold", "金"), ("Tungsten", "钨"), ("Copper", "铜矿"))

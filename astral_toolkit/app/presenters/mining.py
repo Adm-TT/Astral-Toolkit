@@ -213,11 +213,19 @@ def to_hud(r: MiningResult, focus=None):
         if names is None
         else tuple(g for g in r.composition if not g.inert and g.zh in names)
     )
-    title = (
-        r.rock
-        if names is None
-        else "、".join(g.zh for g in composition) or "未发现关注的矿"
-    )
+    if names is not None and not composition:
+        # 关注的矿这块石头里一样都没有：只留标题这一行（老大 2026-11-08 批注验收单：只留标题）
+        title = "未发现关注的矿"
+        return title, {
+            "title": title,
+            "stats": [],
+            "comp": [],
+            "advice": None,
+            "gain": [],
+            "minor": [],
+            "foot": "",
+        }
+    title = r.rock if names is None else "、".join(g.zh for g in composition)
     if names is None:
         goal_lines = r.goal_lines
     elif r.goal_lines:

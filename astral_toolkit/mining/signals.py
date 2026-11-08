@@ -10,7 +10,7 @@ from typing import Literal, overload
 
 import numpy as np
 
-from .data import SIGNATURES, RARITY, MAX_CLUSTER
+from .data import SIGNATURES, RARITY, MAX_CLUSTER, FOCUS_GROUND, FOCUS_SALVAGE
 
 # 数字之间的形近误认（OCR 小字常见）：越小越像
 _DIGIT_CONFUSION = {
@@ -404,6 +404,13 @@ GROUND_SOURCES = (
 SALVAGE_MAX = 15
 SPACE_SOURCES = (("可打捞残骸", 3000, "", SALVAGE_MAX),)
 OTHER_SOURCES = tuple((n, b, mx) for n, b, _, mx in GROUND_SOURCES + SPACE_SOURCES)
+
+
+def _kind(src):
+    """这个来源归关注里的哪一类：地面的归「地面信号」，太空的（可打捞残骸）归「太空残骸」"""
+    return frozenset((FOCUS_GROUND if src in GROUND_SOURCES else FOCUS_SALVAGE,))
+
+
 MANY = 2  # 地面上比一簇还大的整千信号：最多按两簇叠加来估（再大就写「未知」）
 
 
@@ -558,7 +565,8 @@ def guesses(value, where=None, area=None):
 
 
 def _guess_details(value, where=None, area=None):
-    """候选的矿种集合只用于呈现过滤，不改变推断、排序或置信度。"""
+    """guesses 的结果，每个候选多带一个类别集合：矿名，或地面信号 / 太空残骸（data.FOCUS_SIGNALS）。
+    只用于悬浮窗按关注过滤，不改变推断、排序或置信度；自己起名的、「未知」是空集合（开了关注就不显示）"""
     out = _guesses(value, where, area)
     if not any(g[2] for g in out):
         mix = mixed(value, _local_table(area), details=True)
@@ -612,7 +620,7 @@ def _guesses(value, where=None, area=None):
                     f"{head}{name} ×{value // base}" + (f"（{what}）" if what else ""),
                     0,
                     True,
-                    frozenset(),
+                    _kind(src),
                 )
             )
     if out:
@@ -627,7 +635,7 @@ def _guesses(value, where=None, area=None):
                     f"地面小矿叠在一起（ROC 车矿 4,000 / 车矿或手采 3,000 一处），约 {lo_n}~{hi_n} 处",
                     0,
                     False,
-                    frozenset(),
+                    frozenset((FOCUS_GROUND,)),
                 )
             ]
     # 都对不上：按 SCMiner 的做法取最接近的飞船矿（可信度 = 1 − 差值 / 那个合法值，scminer.rocks 查 12200 →
@@ -657,7 +665,7 @@ def _guesses(value, where=None, area=None):
                     f"{area.get('zh') or '此处不刷船挖矿'}，多半是残骸或其他信号{extra}",
                     0,
                     False,
-                    frozenset(),
+                    frozenset((FOCUS_SALVAGE,)),
                 )
             ]
         return []
@@ -681,7 +689,7 @@ def _guesses(value, where=None, area=None):
             (
                 1 - abs(base * k - value) / (base * k),
                 f"{head}{name} ×{k}" + (f"（{what}）" if what else ""),
-                frozenset(),
+                _kind(src),
             )
         )
     # SCMiner 为准：飞船矿可信度够（≥90%）就排第一；地面矿/残骸要很接近（≥97%）才列，按可信度排
@@ -707,7 +715,8 @@ def _guesses(value, where=None, area=None):
 
 def describe_all(found, where=None, area=None, *, focus=None):
     """把找到的信号整理成几行中文说明，按矿的价值从高到低排；对不上信号表的给最可能的解释。
-    where：玩家在 "ground" / "space" / None（不知道）；area：所在产矿区（只报当地会刷的矿），None = 不过滤"""
+    where：玩家在 "ground" / "space" / None（不知道）；area：所在产矿区（只报当地会刷的矿），None = 不过滤；
+    focus：关注列表（矿的英文名，和 data.FOCUS_SIGNALS 的两类信号），只留类别集合整个在关注里的候选，None = 全部"""
     groups, seen = [], set()
     for value, fixed, raw, _ in found:
         if value in seen:

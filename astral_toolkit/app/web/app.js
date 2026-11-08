@@ -646,7 +646,7 @@ PAGES.live = () => {
       ${state.scans.map((x) => `<tr><td class="faint">${esc(x.at)}</td><td>${esc(x.rock)}</td><td class="n">${money(x.mass)}</td><td class="n">${x.resistance}%</td><td class="muted">${esc(x.plans[0]?.short || "")}</td></tr>`).join("")}</table></div>` : ""}
     <div class="two" style="align-items:start">
       <div><h2>配装</h2><div class="panel" id="gear">加载中…</div></div>
-      <div><h2>关注的矿</h2><div class="panel" id="mining-focus">加载中…</div></div>
+      <div><h2>关注的矿和信号</h2><div class="panel" id="mining-focus">加载中…</div></div>
     </div>
     <h2>手动计算</h2>
     <div class="panel"><div class="row">
@@ -686,9 +686,14 @@ async function gearInit() {
 function miningFocusRender() {
   const box = $("#mining-focus"), items = state.gear?.focus;
   if (!box || !items) return;
-  box.innerHTML = `<p class="muted" style="margin-top:0">只筛选游戏悬浮窗；窗口和记录保留全部。全部不选时不显示矿物。</p>
+  const chip = (x) => `<button type="button" class="chip${x.on ? " on" : ""}" data-focus="${esc(x.key)}" aria-pressed="${x.on}">${esc(x.name)}</button>`;
+  // 两类雷达信号（地面信号、太空残骸）另起一行；自己起名的、认不出的「未知」不归类，开了关注不上悬浮窗（老大 2026-11-08）
+  box.innerHTML = `<p class="muted" style="margin-top:0">只筛选游戏悬浮窗；窗口和记录保留全部。全部不选时悬浮窗不显示矿物和信号。</p>
     <div class="row" style="margin-bottom:10px;gap:8px"><button class="btn small" data-focus-all="1">全部</button><button class="btn small" data-focus-all="0">清空</button></div>
-    <div class="chips">${items.map((x) => `<button type="button" class="chip${x.on ? " on" : ""}" data-focus="${esc(x.key)}" aria-pressed="${x.on}">${esc(x.name)}</button>`).join("")}</div>`;
+    <div class="chips">${items.filter((x) => !x.signal).map(chip).join("")}</div>
+    <p class="muted" style="margin:12px 0 6px">雷达信号</p>
+    <div class="chips">${items.filter((x) => x.signal).map(chip).join("")}</div>
+    <p class="muted" style="margin:8px 0 0;font-size:12.5px">开了关注以后，自己起名的信号和认不出的「未知」信号不上悬浮窗。</p>`;
   const save = async (keys) => {
     box.querySelectorAll("button").forEach((b) => b.disabled = true);
     try { state.gear = await api("set_mining_focus", { keys }); toast("已保存"); }
