@@ -4,7 +4,7 @@
 同样的内容也会实时出现在助手窗口右侧。一闪而过的提示用 hud().note("…", 秒)：白色胶囊，同时只有一条。
 - 游戏要用「无边框窗口」模式才看得到悬浮窗（全屏模式下会被游戏盖住）
 - 文案窗鼠标穿透、永远不抢焦点：点到它操作直接给游戏
-- 宽约游戏客户区 40%（左右 30%–70%），高跟内容走；贴顶显示
+- 宽约游戏客户区 40%（左右 30%–70%）；高跟内容，最高不超过客户区高度 20%（超出可滚动）
 - 功能往悬浮窗写字时显示文案窗与左上角手柄；之后 10 秒内无写字、无手柄操作则自动隐藏（内容仍留着，下次再写会再显示）
 - 默认落在客户区顶边偏中（左约 30%）；拖动后自由定位并记住（overlay_pos.json）
 - 左上角独立小手柄窗：长按自由拖动；在手柄上滚轮滑动内容
@@ -80,8 +80,9 @@ PAD_X, PAD_T, PAD_B, GAP = 16, 12, 14, 8
 RADIUS = 8
 MARGIN = 2  # 留一点边，圆角和阴影不被切
 
-# 文案视口相对游戏客户区：宽仍用左右 30%–70%；高跟内容走（已贴顶，不再限 0%–20%）
+# 文案视口相对游戏客户区：宽 30%–70%；高跟内容，上限客户区高 20%
 BAND_X0, BAND_X1 = 0.30, 0.70
+BAND_H_MAX = 0.20
 GRIP_HOLD_MS = 300
 GRIP_BASE_PX = 28  # 手柄边长（再乘 hud 字号 scale）
 IDLE_HIDE_SECS = 10.0  # 显示后多久无操作则自动隐藏
@@ -92,10 +93,16 @@ def band_width(area_w: int) -> int:
     return max(1, int(round(area_w * (BAND_X1 - BAND_X0))))
 
 
+def band_max_height(area_h: int) -> int:
+    """客户区高度 → 文案视口最大像素高（20%）"""
+    return max(1, int(round(area_h * BAND_H_MAX)))
+
+
 def band_size(area_w: int, area_h: int | None = None) -> tuple[int, int]:
-    """兼容旧调用：只保证宽度；高度占位 1（真正高度由内容决定）。"""
-    del area_h  # 不再按客户区高度裁 0%–20%
-    return band_width(area_w), 1
+    """兼容旧调用：(宽, 最大高)；area_h 缺省时高占位 1。"""
+    w = band_width(area_w)
+    h = band_max_height(area_h) if area_h is not None else 1
+    return w, h
 
 
 def band_origin(area: dict) -> tuple[int, int]:
@@ -443,7 +450,7 @@ def paint(
     viewport_h=None,
     scroll_from_bottom=0.0,
 ):
-    """画出文案视口。宽由 viewport_w；高默认跟内容（viewport_h=None），指定则按 scroll 裁切。
+    """画出文案视口。宽由 viewport_w；高跟内容，viewport_h 为上限（超出则裁切可滚）。
     note 固定画在视口底部。返回 (图, 还在动画吗, 正文内容高)。"""
     from PIL import Image, ImageDraw, ImageFilter
 
@@ -482,8 +489,11 @@ def paint(
         else MARGIN
     )
     content_h = max(1, content_h)
-    # 未指定视口高 → 跟内容；指定了则裁进视口（手柄滚轮仍可用）
-    vh = int(viewport_h) if viewport_h is not None else content_h
+    # 高跟内容；有上限时封顶（内容少不撑满）
+    if viewport_h is None:
+        vh = content_h
+    else:
+        vh = min(content_h, max(1, int(viewport_h)))
     vh = max(1, vh)
     body = Image.new("RGBA", (vw, content_h), (0, 0, 0, 0))
     d = ImageDraw.Draw(body)
@@ -1339,25 +1349,37 @@ class Hud:
             self._mk_put(h1, None, 0, 0)
             self._mk_put(h2, None, 0, 0)
 
-    def _viewport_w(self) -> int:
-        """文案视口宽：游戏客户区约 40%（30%–70%）；找不到游戏则按屏宽估算"""
+    def _game_wh(self) -> tuple[int, int]:
+        """游戏客户区宽高；找不到则用主屏估算"""
         try:
             from ..core.capture import game_area
 
-            return band_width(game_area()["width"])
+            a = game_area()
+            return int(a["width"]), int(a["height"])
         except Exception:
             try:
                 import ctypes
 
-                sw = ctypes.windll.user32.GetSystemMetrics(0)
+                return (
+                    ctypes.windll.user32.GetSystemMetrics(0),
+                    ctypes.windll.user32.GetSystemMetrics(1),
+                )
             except Exception:
-                sw = 1920
-            return band_width(sw)
+                return 1920, 1080
+
+    def _viewport_w(self) -> int:
+        """文案视口宽：游戏客户区约 40%（30%–70%）"""
+        return band_width(self._game_wh()[0])
+
+    def _viewport_h_cap(self) -> int:
+        """文案视口高度上限：客户区高 20%"""
+        return band_max_height(self._game_wh()[1])
 
     def _render(self, changed=True):
         scale = self._scale()
         sections = dict(self.sections)
         vw = self._viewport_w()
+        h_cap = self._viewport_h_cap()
         card_inner = min(
             (BASE_W - 2 * PAD_X) * scale, max(40.0, vw - 2 * MARGIN - 2 * PAD_X * scale)
         )
@@ -1365,7 +1387,7 @@ class Hud:
             blocks = layout(sections, scale, dict(self.rich), content_width=card_inner)
             self._fresh = diff_fresh(self._blocks, blocks, time.time(), self._fresh)
             self._blocks = blocks
-        # 高度跟内容：不再限客户区 0%–20%
+        # 高跟内容，超过客户区 20% 则裁切，手柄滚轮可看更多
         img, busy, content_h = paint(
             sections,
             self.note_text,
@@ -1374,7 +1396,7 @@ class Hud:
             self._fresh,
             rich=dict(self.rich),
             viewport_w=vw,
-            viewport_h=None,
+            viewport_h=h_cap,
             scroll_from_bottom=self.scroll_from_bottom,
         )
         self._content_h = content_h

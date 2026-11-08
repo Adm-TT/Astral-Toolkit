@@ -1,10 +1,11 @@
 """悬浮窗客户区视口 / 滚动夹紧（2026-11-08）"""
 
 
-def test_band_width_and_origin():
-    from astral_toolkit.app.overlay import band_origin, band_width
+def test_band_width_height_and_origin():
+    from astral_toolkit.app.overlay import band_max_height, band_origin, band_width
 
     assert band_width(1920) == 768
+    assert band_max_height(1080) == 216
     # 默认落点：客户区左 30%、贴顶
     assert band_origin({"left": 100, "top": 40, "width": 1920, "height": 1080}) == (
         100 + 576,
@@ -34,20 +35,20 @@ def test_clamp_scroll_from_bottom():
     assert clamp_scroll_from_bottom(-10, 100, 200) == 0
 
 
-def test_paint_height_follows_content_unless_capped():
+def test_paint_height_follows_content_capped_at_max():
     from astral_toolkit.app.overlay import paint
 
     lines = "\n".join(f"行{i}" for i in range(40))
-    # 不限高：窗口高跟内容
+    # 上限很高：窗口高跟内容
     img, busy, content_h = paint(
         {"导航": "标题\n" + lines},
         scale=1.0,
         viewport_w=400,
-        viewport_h=None,
+        viewport_h=5000,
         scroll_from_bottom=0,
     )
     assert img.size == (400, content_h) and not busy and content_h > 120
-    # 指定视口高：裁切滚动
+    # 上限 120：内容再多也只占 120，可滚
     img2, _, ch2 = paint(
         {"导航": "标题\n" + lines},
         scale=1.0,
@@ -56,6 +57,15 @@ def test_paint_height_follows_content_unless_capped():
         scroll_from_bottom=9999,
     )
     assert img2.size == (400, 120) and ch2 > 120
+    # 内容很矮：不撑满上限
+    img3, _, ch3 = paint(
+        {"导航": "短"},
+        scale=1.0,
+        viewport_w=400,
+        viewport_h=400,
+        scroll_from_bottom=0,
+    )
+    assert img3.height == ch3 < 400
 
 
 def test_idle_hide_after_ops():
