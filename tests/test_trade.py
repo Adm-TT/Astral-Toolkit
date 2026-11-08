@@ -267,6 +267,7 @@ _ORE_NAMES = {
     "杰金矿石": "Jaclium (Ore)",
     "萨达瑞晶原矿": "Sadaryx (Raw)",
     "纯净科力晶": "Carinite (Pure)",
+    "萨达瑞晶": "Sadaryx",
 }
 
 
@@ -307,7 +308,12 @@ def test_raw_ore_is_not_the_refined_mineral(monkeypatch):
     assert names.raw_base("Hephaestanite (R)") == "Hephaestanite"
     # 原矿名错了字：不近似成精炼的（错两个字的「源护」以前会被当成认准了的精炼塔兰导电石）；精炼名错字照旧认
     assert names.canonical("塔兰导电石源护", "") is None
+    assert names.canonical("萨达瑞晶源护", "") is None  # 矿物表里没有的矿也管到
     assert names.canonical("塔兰导电右", "") == ("塔兰导电石", "Taranite")
+    assert names.canonical("塔兰导电石丨", "") == (
+        "塔兰导电石",
+        "Taranite",
+    )  # 读屏带进来的杂字照旧近似
     assert _is_mineral("塔兰导电石原矿", "Taranite (Raw)", fuzzy=False)
     assert _is_mineral("", "Iron (Ore)", fuzzy=False)
     assert _is_mineral("原冰", "Raw Ice", fuzzy=False)
@@ -967,6 +973,9 @@ def test_alias_ok_only_for_the_same_item(monkeypatch):
     assert ore_item(Item("cn", "铁（原矿）")) and not ore_item(
         Item("p", "Carinite (Pure)")
     )
+    assert ore_item(
+        Item("q", "Quantainium (Pure)")
+    )  # 只管单位：船挖矿名后面带别的括号照旧按 SCU
     mod = Item("mod", "Arclight Pistol (Modified)")
     assert not alias_ok(mod, "弧光手枪", "Arclight Pistol")  # 括号里的不能去掉
     assert not ore_item(mod)

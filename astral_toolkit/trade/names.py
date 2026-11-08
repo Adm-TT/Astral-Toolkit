@@ -172,13 +172,30 @@ def _mineral_near(zh):
 
 
 def _raw_garbled(z, k):
-    """认出的中文名 z 比矿名 k 多一两个字、矿名在头上或尾上（「塔兰导电石源护」「源欧拉特烃」）：多半是原矿名认错了字，
-    不近似成精炼的那个矿（原矿和精炼分开，2026-11-08；以前错两个字的原矿名会被当成认准了的精炼矿）"""
-    return (
-        len(z) - len(k) in (1, 2)
-        and (z.startswith(k) or z.endswith(k))
-        and _mineral(k, "") is not None
-    )
+    """认出的中文名 z 是名字 k 前后多一两个字、多出来的像「原」「矿」「石」（形近字照采矿那边的 CONFUSABLE 换回来），
+    而 k 有原矿名（「k原矿」「k矿石」「k矿」「原k」在汉化包里是原矿、或在矿物表的原矿名里）：「塔兰导电石源护」「萨达瑞晶源护」
+    「源欧拉特烃」多半是原矿名认错了字，不近似成精炼的那个（原矿和精炼分开，2026-11-08；以前错两个字的原矿名会被当成
+    认准了的精炼矿）。多出来的是别的字（读屏带进来的「丨」「口」这种杂字）照旧近似"""
+    if len(z) - len(k) not in (1, 2):
+        return False
+    if z.startswith(k):
+        extra = z[len(k) :]
+    elif z.endswith(k):
+        extra = z[: len(z) - len(k)]
+    else:
+        return False
+    try:
+        from ..core.i18n import CONFUSABLE, raw_names
+    except Exception:
+        return False
+    if not any(CONFUSABLE.get(c, c) in "原矿石" for c in extra):
+        return False
+    zh_map = _index()[0]
+    for r in (k + "原矿", k + "矿石", k + "矿", "原" + k):
+        hit = zh_map.get(r)
+        if r in raw_names() or (hit and raw_base(hit[1])):
+            return True
+    return False
 
 
 def _closest(keys, target, floor):
