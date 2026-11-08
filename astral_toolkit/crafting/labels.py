@@ -212,10 +212,10 @@ BACKPACK_ZH = {1: "轻型", 2: "中型", 3: "重型"}
 # 类名带 superheavy 的一套：BUL-H4 头盔、护甲物品属性的子类型写 Heavy，游戏写「物品类型：超重型护甲」；
 # 同一套的弹药携具（H4-PBF，类名 …superheavy_backpack…）游戏写「物品类型：弹药携具」，不写轻重（审查 2026-11-08）
 SUPERHEAVY = "superheavy"
-# 船零件里游戏说明写等级、类别的只有这五类；舰船武器、采矿激光器这些，物品属性里的等级 A 是数据默认值（审查 2026-11-08）。
-# 没做的：物品属性里的等级是原始数据的 Grade 字段，有 17 份和游戏说明对不上（Idris、Reclaimer、890 Jump、Polaris 的 S4 舰船专用件
-# 写「定制」或不写等级；Draug、Elsen、Pelerous 写 C / B / C），这里照样写「A 级」。要照说明写，在生成物品属性数据时
-# 等级照英文说明的 Grade 行取（和类别一样），定制的留空；这里不用改。记在待做（复查 2026-11-08）
+# 船零件里游戏说明写等级、类别的只有这五类；舰船武器、采矿激光器这些不写（审查 2026-11-08）。
+# 物品属性里的等级照英文说明的 Grade 行取（和类别一样），写「定制」（Bespoke）、N/A 或者没写的是空（2026-11-08 生成工具改的，
+# 老大定直接做好）：以前取原始数据的 Grade 字段，有 17 份和游戏说明对不上（Idris、Reclaimer、890 Jump、Polaris 的 S4 舰船
+# 专用件写「定制」或不写等级；Draug、Elsen、Pelerous 写 C / B / C），这里都写成了「A 级」；不写等级的类原始字段也都是 A
 GRADED = frozenset({"cooler", "powerplant", "quantumdrive", "radar", "shield"})
 # 物品属性里尺寸都是默认的 1、游戏说明里也不写尺寸的船零件（采矿模组、矿石吊舱、燃料喷嘴、刮削模块）
 UNSIZED = frozenset({"miningmodule", "orepod", "refuelling", "salvage"})
