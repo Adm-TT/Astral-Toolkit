@@ -5,10 +5,24 @@ def test_band_size_and_origin():
     from astral_toolkit.app.overlay import band_origin, band_size
 
     assert band_size(1920, 1080) == (768, 216)
+    # 默认落点：客户区左 30%、顶边 0%
     assert band_origin({"left": 100, "top": 40, "width": 1920, "height": 1080}) == (
         100 + 576,
         40,
     )
+
+
+def test_dock_top_xy_pins_top_and_dodges_di_left():
+    """贴顶：Y 永远是客户区 top；盖住右上读屏区时 X 左移"""
+    from astral_toolkit.app.overlay import dock_top_xy
+
+    area = {"left": 100, "top": 50, "width": 1920, "height": 1080}
+    # 不挡 DI：保持 hint，Y=50
+    assert dock_top_xy(area, 400, 200) == (200, 50)
+    # 挡 DI（左缘 66%）：往左让到 di_l - win_w
+    di_l = 100 + int(1920 * 0.66)
+    x, y = dock_top_xy(area, 768, di_l - 100)  # 右缘越过 di_l
+    assert y == 50 and x == di_l - 768
 
 
 def test_clamp_scroll_from_bottom():

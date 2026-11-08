@@ -6,6 +6,7 @@
 - 文案窗鼠标穿透、永远不抢焦点：点到它操作直接给游戏
 - 外框锁在游戏客户区中上带（宽 30%–70%、高顶部 0%–20%）；内容超出可滑动，默认钉底
 - 功能往悬浮窗写字时显示文案窗与左上角手柄；之后 10 秒内无写字、无手柄操作则自动隐藏（内容仍留着，下次再写会再显示）
+- 显示时竖直贴齐游戏客户区顶边（可左右拖；与右上角读屏区重叠时左移，不往下挤）
 - 左上角独立小手柄窗：长按拖动改位置（写入 overlay_pos.json）；在手柄上滚轮滑动内容
 - 导航菱形 / 瞄准环仍是另两扇独立窗口
 - 悬浮窗在自己的线程里运行，任何线程都可以调用 set()
@@ -100,6 +101,21 @@ def band_origin(area: dict) -> tuple[int, int]:
         int(area["left"] + area["width"] * BAND_X0),
         int(area["top"] + area["height"] * BAND_Y0),
     )
+
+
+def dock_top_xy(
+    area: dict, win_w: int, x_hint: int, *, di_left_frac: float = 0.66
+) -> tuple[int, int]:
+    """贴客户区顶边的屏幕坐标：Y=top；X 用 hint 夹在客户区内，盖住右上读屏区则左移。"""
+    left = int(area["left"])
+    top = int(area["top"])
+    gw = int(area["width"])
+    win_w = max(1, int(win_w))
+    x = max(left, min(int(x_hint), left + max(0, gw - win_w)))
+    di_l = left + int(gw * di_left_frac)
+    if x < di_l < x + win_w:
+        x = max(left, di_l - win_w)
+    return x, top
 
 
 def clamp_scroll_from_bottom(scroll: float, content_h: int, view_h: int) -> float:
@@ -1382,7 +1398,7 @@ class Hud:
         SHOWN = img is not None
         try:
             if img is not None:
-                self._avoid_di(img)
+                self._dock_to_game_top(img.width)
             _ulw(
                 HWND,
                 img if img is not None else Image.new("RGBA", (1, 1), (0, 0, 0, 0)),
@@ -1392,9 +1408,9 @@ class Hud:
         except Exception:
             pass
 
-    def _avoid_di(self, img):
-        """悬浮窗不能盖住游戏右上角的调试信息那块：AT 读屏时会把悬浮窗那块涂黑，盖上就读不到位置
-        （2026-10-28 用户反馈「读不到位置」，F10 截图里右上角整块是黑的）。盖到了就挪到它下面，和导航记号一样"""
+    def _dock_to_game_top(self, win_w: int):
+        """竖直贴齐游戏客户区顶边；左右用当前/记忆的 X，并夹在客户区内。
+        若与右上角读屏区（REGION）重叠则左移，不再往下挪（要顶在最上）。"""
         try:
             import ctypes
             from ..navigation.displayinfo import REGION
@@ -1403,25 +1419,24 @@ class Hud:
                 from ..core.capture import game_area
 
                 a = game_area()
-                left, top, w, h = a["left"], a["top"], a["width"], a["height"]
             except Exception:
-                left, top = 0, 0
-                w, h = (
-                    ctypes.windll.user32.GetSystemMetrics(0),
-                    ctypes.windll.user32.GetSystemMetrics(1),
-                )
-            x, y = self._rect()
-            nx, ny = avoid_box(x - left, y - top, img.width, img.height, w, h, REGION)
-            if (nx, ny) != (x - left, y - top):
-                ctypes.windll.user32.SetWindowPos(
-                    ctypes.c_void_p(HWND),
-                    None,
-                    int(left + nx),
-                    int(top + ny),
-                    0,
-                    0,
-                    SWP_NOSIZE | SWP_NOACTIVATE,
-                )
+                a = {
+                    "left": 0,
+                    "top": 0,
+                    "width": ctypes.windll.user32.GetSystemMetrics(0),
+                    "height": ctypes.windll.user32.GetSystemMetrics(1),
+                }
+            x_hint, _y = self._rect()
+            x, y = dock_top_xy(a, win_w, x_hint, di_left_frac=REGION[0])
+            ctypes.windll.user32.SetWindowPos(
+                ctypes.c_void_p(HWND),
+                None,
+                x,
+                y,
+                0,
+                0,
+                SWP_NOSIZE | SWP_NOACTIVATE,
+            )
         except Exception:
             pass
 
@@ -1484,18 +1499,21 @@ class Hud:
         return r.left, r.top
 
     def _load_pos(self):
+        """只记水平位置；竖直一律贴游戏顶（显示时还会再 dock）。"""
+        try:
+            from ..core.capture import game_area, game_size
+
+            a = game_area()
+            top = int(a["top"]) if game_size() is not None else int(a["top"])
+        except Exception:
+            a = None
+            top = 0
         try:
             p = json.loads(POS_FILE.read_text(encoding="utf-8"))
-            return int(p["x"]), int(p["y"])
+            return int(p["x"]), top
         except Exception:
-            try:
-                from ..core.capture import game_area, game_size
-
-                a = game_area()
-                if game_size() is not None:
-                    return band_origin(a)
-            except Exception:
-                pass
+            if a is not None:
+                return band_origin(a)
             try:
                 import ctypes
 
@@ -1503,16 +1521,15 @@ class Hud:
                 sh = ctypes.windll.user32.GetSystemMetrics(1)
             except Exception:
                 sw, sh = 1920, 1080
-            return band_origin(
-                {"left": 0, "top": 0, "width": sw, "height": sh}
-            )
+            return band_origin({"left": 0, "top": 0, "width": sw, "height": sh})
 
     def _save_pos(self):
+        """记住水平位置；竖直以游戏顶为准，不把拖偏的 Y 固化下来。"""
         try:
-            x, y = self._rect()
+            x, _y = self._rect()
             from ..core.paths import write_json
 
-            write_json(POS_FILE, {"x": x, "y": y})
+            write_json(POS_FILE, {"x": x})
         except Exception:
             pass
 
@@ -1659,6 +1676,13 @@ class Hud:
     def _grip_release(self, e):
         if self._grip_dragging:
             self._save_pos()
+            # 松手后竖直重新贴顶（只保留左右拖的结果）
+            try:
+                vw, _vh = self._viewport_px()
+                self._dock_to_game_top(vw)
+                self._grip_sync()
+            except Exception:
+                pass
             self._bump_op()
         self._grip_dragging = False
         self._grip_press_at = 0.0
