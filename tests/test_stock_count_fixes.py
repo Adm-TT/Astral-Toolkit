@@ -512,6 +512,53 @@ def test_lookalike_other_item_keeps_its_stock(monkeypatch, tmp_path):
     assert got == {"lmg": 1, "bat": 20}
 
 
+def test_only_variant_in_catalog_is_flagged_not_merged(monkeypatch, tmp_path):
+    """目录里只有电池、没有轻机枪，电池挂着轻机枪的中文名（F8 以前模糊配上时记的）：盘轻机枪 1，不把电池的 20 并进来，
+    电池进「未盘到」并注明；确认后电池不动，轻机枪记成本地物品，不再按中文名记到电池的 id 下（待做 125，老大 2026-11-08）"""
+    from astral_toolkit.trade.models import Item
+
+    t = _context(monkeypatch, tmp_path)
+    t.catalog.upsert([Item("bat", "Demeco LMG Battery (100 cap)")])
+    t.catalog.add_alias("bat", "德美科 轻机枪")
+    t.inventory.commit(
+        t.inventory.prepare([StockLine(StockKey("bat", "unknown", "A"), 20)], "add"),
+        allow_duplicate=True,
+    )
+    gun = {**_item("Demeco LMG", 1), "zh": "德美科 轻机枪"}
+    rv = count_task._count_review("A", {1: gun})
+    assert [(r["en"], r["book"], r["game"], r["keys"]) for r in rv["rows"]] == [
+        ("Demeco LMG", 0, 1, [])
+    ]
+    assert rv["rows"][0]["item_id"] is None
+    assert [(m["key"][0], m["same"]) for m in rv["missing"]] == [
+        ("bat", "德美科 轻机枪（Demeco LMG）")
+    ]
+    count = count_helpers.count()
+    count.review = rv
+    monkeypatch.setattr(bus, "publish", lambda *args: None)
+    with bind_for_test(count_task, count):
+        assert "error" not in count_task.count_apply()
+    got = {line.key.item_id: line.quantity for line in t.inventory.list_stock()}
+    assert got == {"bat": 20, "local:Demeco LMG": 1}
+
+
+def test_ore_market_name_still_merges_by_chinese_alias(monkeypatch, tmp_path):
+    """矿在市场上的名字带「(Raw)」（目录里没有不带后缀的那条）：中文别名带出来的这条算同一件，照旧并账（matching.alias_ok）"""
+    from astral_toolkit.trade.models import Item
+
+    t = _context(monkeypatch, tmp_path)
+    t.catalog.upsert([Item("raw", "Taranite (Raw)")])
+    t.catalog.add_alias("raw", "塔兰导电石")
+    key = StockKey("raw", "unknown", "A", "uSCU")
+    t.inventory.commit(
+        t.inventory.prepare([StockLine(key, 5_000_000)], "add"), allow_duplicate=True
+    )
+    ore = {**_item("Taranite", 2.0, unit="SCU"), "zh": "塔兰导电石"}
+    rv = count_task._count_review("A", {1: ore})
+    assert [r["keys"] for r in rv["rows"]] == [[["raw", "unknown", "A", "uSCU"]]]
+    assert rv["rows"][0]["item_id"] == "raw" and rv["missing"] == []
+
+
 def test_frontend_flags_same_label_missing_rows():
     """对账单「未盘到」那行：和盘到的挂着同一个中文名的，注明盘到的那件「中文（英文）」，玩家比英文名分得清
     （这一行自己的名字本来就带英文名，审查 2026-11-08）"""

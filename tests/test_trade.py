@@ -830,16 +830,78 @@ def test_canonical_name_fixes_ocr_misreads(monkeypatch):
 
 
 def test_label_uses_corrected_chinese_name(monkeypatch, tmp_path):
-    """库存里记着 F8 认错的中文名（冷冻舱（刻度））：显示时按汉化包纠正"""
+    """库存显示名：先用物品自己的英文名在汉化包里的中文名。记着的别名可能是 F8 认错的字（冷冻舱（刻度）），也可能是
+    模糊配上时记到这件上的别的东西的名字（CryoPod 挂着 CryoPod (Vanduul) 的「冷冻舱（剜度）」），都不用（待做 126，
+    老大 2026-11-08 定直接修）；汉化包里没有这件的，才把记着的别名按汉化包纠正了用"""
     _names(monkeypatch)
     from astral_toolkit.trade.console import Trade
 
     t = Trade(tmp_path / "db", providers=[])
-    t.catalog.upsert([Item("uex:1", "CryoPod"), Item("uex:2", "Taranite")])
+    t.catalog.upsert(
+        [
+            Item("uex:1", "CryoPod"),
+            Item("uex:2", "Taranite"),
+            Item("uex:3", "CryoPod Vanduul Edition"),
+        ]
+    )
     t.catalog.add_alias("uex:1", "冷冻舱（刻度）")
     t.catalog.add_alias("uex:2", "塔兰导电石Taranite")
-    assert t.label("uex:1") == "冷冻舱（剜度）（CryoPod）"
+    t.catalog.add_alias("uex:3", "冷冻舱（刻度）")
+    assert t.label("uex:1") == "冷冻舱（CryoPod）"
     assert t.label("uex:2") == "塔兰导电石（Taranite）"
+    assert t.label("uex:3") == "冷冻舱（剜度）（CryoPod Vanduul Edition）"
+
+
+_LMG_NAMES = {
+    "德美科 轻机枪": "Demeco LMG",
+    "德美科 轻机枪电池": "Demeco LMG Battery (100 cap)",
+    "弧光手枪": "Arclight Pistol",
+    "弧光手枪（改装）": "Arclight Pistol (Modified)",
+}
+
+
+def test_alias_ok_only_for_the_same_item(monkeypatch):
+    """F8 记中文别名、盘点按中文名并账，都只认同一件：英文名一样（不分大小写、空格），矿去掉市场名的「(Raw)」后缀后一样；
+    汉化包里有它的，它自己的中文名就是这个才算；汉化包里没有的，在认出的英文名后面多接一截的（变体）不算（待做 61、125）"""
+    from astral_toolkit.trade import names
+    from astral_toolkit.trade.matching import alias_ok
+
+    monkeypatch.setattr(names, "table", lambda: dict(_LMG_NAMES))
+    gun, bat = Item("lmg", "Demeco LMG"), Item("bat", "Demeco LMG Battery (100 cap)")
+    assert alias_ok(gun, "德美科 轻机枪", "Demeco LMG")
+    assert alias_ok(Item("x", "demeco  LMG"), "德美科 轻机枪", "Demeco LMG")
+    assert not alias_ok(bat, "德美科 轻机枪", "Demeco LMG")  # 前缀配上的电池
+    assert alias_ok(bat, "德美科 轻机枪电池", "")  # 汉化包里它自己的中文名就是这个
+    assert alias_ok(
+        Item("raw", "Taranite (Raw)"), "塔兰导电石", "Taranite"
+    )  # 矿的市场名
+    mod = Item("mod", "Arclight Pistol (Modified)")
+    assert not alias_ok(mod, "弧光手枪", "Arclight Pistol")  # 不是矿：括号里的不能去掉
+    assert not alias_ok(gun, "", "")
+    # 汉化包里没有的（市场上的叫法）：后面多接一截的是变体，不算；错一两个字母的照旧算
+    assert not alias_ok(Item("v", "Demeco LMG Mk2"), "德美科 轻机枪", "Demeco LMG")
+    assert not alias_ok(
+        Item("v", "Arclight Pistol Gold"), "弧光手枪", "Arclight Pistol"
+    )
+    assert alias_ok(Item("m", "MedPen"), "医疗笔", "MedPenn")
+
+
+def test_match_tooltip_skips_alias_recorded_on_a_variant(monkeypatch, tmp_path):
+    """以前 F8 模糊配上时把本体的中文名记到了变体上：查本机目录按中文别名找到变体不用，接着按名字找到本体（待做 61）"""
+    from astral_toolkit.trade import matching, names
+    from astral_toolkit.trade.console import Trade
+
+    monkeypatch.setattr(names, "table", lambda: dict(_LMG_NAMES))
+    t = Trade(tmp_path / "db", providers=[])
+    t.catalog.upsert(
+        [Item("bat", "Demeco LMG Battery (100 cap)"), Item("lmg", "Demeco LMG")]
+    )
+    t.catalog.add_alias("bat", "德美科 轻机枪")
+    item, _ = matching.match_tooltip(t, "德美科 轻机枪", "Demeco LMG", online=False)
+    assert item is not None and item.id == "lmg"
+    t.catalog.add_alias("bat", "德美科 轻机枪电池")  # 记对了的别名照用
+    item, _ = matching.match_tooltip(t, "德美科 轻机枪电池", "", online=False)
+    assert item is not None and item.id == "bat"
 
 
 def _tok(text, x, y, w=40, h=14):

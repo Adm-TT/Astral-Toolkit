@@ -1032,6 +1032,26 @@ def test_hover_more_late_seq_drops_everything(monkeypatch):
     }
 
 
+def test_hover_more_keeps_alias_off_lookalike_items(monkeypatch):
+    """F8 配上的物品算同一件才记中文名（trade.matching.alias_ok）：前缀配上的变体（轻机枪配成它的电池）不记，以后盘点、
+    库存页才不会被带偏；名字对上的照记（待做 61，老大 2026-11-08 定直接修）"""
+    info = _basic_info()
+    for item, want in (
+        (Item("uex:2", "Demeco LMG Battery (100 cap)"), []),
+        (Item("uex:1", "Demeco LMG"), [("uex:1", "德美科 轻机枪")]),
+    ):
+
+        def match_tooltip(t, zh, en, online=True, _i=item):
+            return _i, [_i]
+
+        env = _install(monkeypatch, None, info=info, match_tooltip=match_tooltip)
+        Hv._last_hover.update(at="12:00:00", seq=7, id=None, lines=["行一"])
+        Hv._hover_more(
+            env.links, 7, "12:00:00", "德美科 轻机枪", "Demeco LMG", info, 650, True
+        )
+        assert env.aliases == want, item
+
+
 def test_hover_lines_ship_and_counts(monkeypatch):
     """_hover_lines：买不到时写随船自带，多个兑换写「等 N 个」。"""
     info = _basic_info(
