@@ -24,6 +24,51 @@ def _similar(a, b):
     )
 
 
+_SUFFIX = _re.compile(r"\s*[（(][^（）()]*[)）]\s*$")
+
+
+def market_base(name):
+    """市场上的名字去掉末尾括号里那截：矿在市场上常叫「Taranite (Raw)」「铁（原矿）」。
+    console.ore_item 认「是不是矿」、alias_ok 认「是不是同一件」都先这样去掉"""
+    return _SUFFIX.sub("", name or "").strip()
+
+
+def _extends(name, en):
+    """name 是不是在 en 后面多接了一截：折叠后以 en 开头、多出来至少 3 个字（变体、配件、颜色款都这么起名：
+    Demeco LMG Battery (100 cap)、Arclight Pistol Gold）；只多一两个字母的当错字"""
+    a, b = _fold(name), _fold(en)
+    return bool(b) and a.startswith(b) and len(a) - len(b) >= 3
+
+
+def alias_ok(item, zh, en):
+    """目录里的这件物品和说明框认出的 (中文, 英文) 算不算同一件：F8 只在算同一件时把中文名记成它的别名，查本机目录时
+    按中文别名找到的也要算同一件才用；盘点按中文名带出来的条目也要算同一件才并账。依次看：
+    1. 英文名一样（_fold 后）→ 算；
+    2. 是矿的市场名：去掉「(Raw)」「（原矿）」这种后缀（market_base）后和认出的一样、又是矿名（names._mineral：船挖、
+       地面、手采的都算）→ 算。AT 认矿只认矿名，说明框里原矿、精炼的都认成同一种矿；名字折叠后 8 个字以上的矿
+       （Quantainium、Taranite、Laranite…）F8 靠名字前缀档配到市场上带 (Raw) 的那条，这里跟着认，F8、盘点、库存页
+       的说法才一致（审查 2026-11-08 第二轮）。名字短的（Gold、Iron、Copper…）F8 配不上 (Raw)、不记中文名，盘点也
+       找不到那条（记了待做）。console.ore_item 管的是「按 SCU 还是按个记」，用 inspector._is_mineral（只认船挖矿），
+       两边管的事不一样；
+    3. 它自己的英文名在汉化包里有中文名 → 汉化包说了算：就是这个中文名才算，别的中文名不算；
+    4. 汉化包里没有它（市场上的叫法和游戏里不一样）→ 在认出的英文名后面多接了一截的不算（_extends），别的照旧算
+       （错一两个字母、写法不同的同一件）。
+    以前模糊、前缀配上就记：前缀那档会把本体配成变体（Demeco LMG 配成 Demeco LMG Battery (100 cap)），中文名一记，
+    以后盘点会把变体的库存并进本体、库存页显示成本体的名字（待做 61、125、126，老大 2026-11-08 定直接修）"""
+    from .names import _mineral, zh_for
+
+    name = getattr(item, "name", "") or ""
+    if en and _fold(name) == _fold(en):
+        return True
+    base = market_base(name)
+    if en and base != name and _fold(base) == _fold(en) and _mineral("", base):
+        return True
+    own = zh_for(name)
+    if own is not None:
+        return bool(zh) and own == zh
+    return not _extends(name, en)
+
+
 def name_score(name, target):
     """折叠后的物品名 name 和要找的名字 target 有多像：一样 1.0；name 以 target 开头且 target 至少 8 个字 0.95；
     别的按 difflib 比。≥ 0.85 算配上（F8 配物品用；盘点不拿它并条目——前缀那档会把变体当成本体，审查 2026-11-08 第三轮）"""
@@ -42,7 +87,9 @@ def match_tooltip(t, zh, en, online=True):
     返回 (物品或 None, 候选列表)"""
     if zh and hasattr(t.catalog, "by_alias"):
         hit = t.catalog.by_alias(zh)
-        if hit:
+        if hit and alias_ok(
+            hit, zh, en
+        ):  # 以前模糊配上时记错的别名（记到了变体上）不用，接着按名字找
             return hit, [hit]
     want = []
     if zh:

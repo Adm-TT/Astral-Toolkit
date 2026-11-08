@@ -238,7 +238,7 @@ def test_goal_shortage_marked_everywhere(monkeypatch):
             "31.07% 情性物质 。",
         ]
     )
-    v = t_mining.scan_view(s, ({"Inert Materials": 0.3}, 0.3, 96.0))
+    v = t_mining.scan_view(s)
     assert [g["en"] for g in v["goal"]] == ["Tungsten"] and v["goal"][0]["ok"]
     assert "🎯 目标缺少 钨 0.5 SCU" in v["hud"]
     assert "aUEC" in v["hud"] and "净值" not in v["hud"]  # 用户：净值就是 aUEC，写价格

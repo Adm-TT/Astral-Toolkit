@@ -42,7 +42,7 @@ def _live_run(
     def analyse(_):
         s = frames[min(n["i"], len(frames) - 1)]
         n["i"] += 1
-        return (s or Scan(), ({}, None, None))
+        return s or Scan()
 
     hud = []
     from astral_toolkit.tasks import navigation as t_nav, system as t_sys
@@ -135,8 +135,8 @@ def test_app_scan_view_and_manual():
             "31.07% 情性物质 。",
         ]
     )
-    v = t_mining.scan_view(s, ({"Inert Materials": 0.3}, 0.3, 96.0))
-    assert v["rock"] and v["plans"] and v["refine"] and v["bag"]["cap"] == 96.0
+    v = t_mining.scan_view(s)
+    assert v["rock"] and v["plans"] and v["refine"] and "bag" not in v
     assert "kg" in v["hud"] and v["plans"][0]["heads"]
     mats = {m["en"]: m for m in v["craft_mats"]}  # 「可制造 N 份蓝图」按钮的数据
     if mats:
@@ -197,7 +197,7 @@ def test_live_scan_updates_when_read_gets_more_complete(monkeypatch, tmp_path):
 
     def analyse(_):
         calls.append(1)
-        return (seq[min(len(calls) - 1, len(seq) - 1)], ({}, None, None))
+        return seq[min(len(calls) - 1, len(seq) - 1)]
 
     monkeypatch.setattr(screen, "grab", lambda: img)
     monkeypatch.setattr(screen, "analyse", analyse)
@@ -341,7 +341,7 @@ def test_live_rebuilds_queue_and_expires_old_result(monkeypatch, tmp_path):
     assert (
         scans and not scans[0].get("stale") and scans[-1].get("stale")
     )  # 先出结果，后来同一条结果带「已过期」再发
-    assert ("clear", "扫描") in hud and ("clear", "矿袋") in hud
+    assert ("clear", "扫描") in hud and all("矿袋" not in x for x in hud)
     from astral_toolkit.app import bus
 
     q = bus.subscribe()  # 窗口刷新/重连：补发的也是过期的那条
@@ -415,12 +415,12 @@ def test_live_session_isolation(monkeypatch, tmp_path):
     def analyse(img):
         calls["n"] += 1
         if calls["n"] == 1:
-            return old_scan, ({}, None, None)  # A 先认出一帧
+            return old_scan  # A 先认出一帧
         if calls["n"] == 2:
             entered.set()
             gate.wait(30)  # A 第二帧卡在识别里；放行后两帧投票成立、真去提交（应被拒）
-            return old_scan, ({}, None, None)
-        return empty_scan, ({}, None, None)
+            return old_scan
+        return empty_scan
 
     monkeypatch.setattr(screen, "analyse", analyse)
     monkeypatch.setattr(signals, "find_signatures", lambda img: [])
@@ -465,9 +465,9 @@ def test_live_stop_during_compute_publishes_nothing(monkeypatch, tmp_path):
     real = t_mining.scan_view
     ev = threading.Event()
 
-    def slow_view(scan, bag):
+    def slow_view(scan):
         ev.set()  # 模拟：算到一半用户点了停止
-        return real(scan, bag)
+        return real(scan)
 
     monkeypatch.setattr(t_mining, "scan_view", slow_view)
     a = _rock(
@@ -666,11 +666,9 @@ def test_enqueue_rock_keeps_votes_on_one_bad_frame():
         screen.enqueue_rock(q, X) is False and len(q) == 3
     )  # 认错的一帧先记下，不进队列
     assert screen.enqueue_rock(q, A) is False and len(q) == 4  # 下一帧又是 A：照常累积
-    assert screen.vote([x[0] for x in q])[1]
+    assert screen.vote(list(q))[1]
     assert screen.enqueue_rock(q, B) is False and len(q) == 4  # 新石头第一帧：先观察
-    assert screen.enqueue_rock(q, B) is True and [x[0] for x in q] == [
-        B
-    ]  # 连续两帧一致：换石头
+    assert screen.enqueue_rock(q, B) is True and list(q) == [B]  # 连续两帧一致：换石头
     screen._reject.clear()
 
 
@@ -752,7 +750,7 @@ def test_scan_view_lots_by_quality(monkeypatch):
             "31.07% 情性物质 。",
         ]
     )
-    v = t_mining.scan_view(s, ({}, None, None))
+    v = t_mining.scan_view(s)
     lots = v["lots"]
     assert [(r["zh"], r["q"], r["rank"]) for r in lots] == [
         ("砬兰石", 510, ""),
@@ -806,7 +804,7 @@ def test_scan_view_when_panel_cut_off():
             ("Inert Materials", 77.64, None),
         ],
     )
-    v = t_mining.scan_view(c, ({}, None, None), cut=True)
+    v = t_mining.scan_view(c, cut=True)
     assert (
         v["cut"]
         and "FOV视野" in v["note"]
@@ -1017,9 +1015,7 @@ def test_live_key_hint_says_stopping_when_refused(monkeypatch):
         "setting_run_flag",
         lambda key: RunFlag(key, lambda k, v: flag_writes.append((k, v))),
     )
-    monkeypatch.setattr(
-        mining_screen, "analyse", lambda img: (Scan(), ({}, None, None))
-    )
+    monkeypatch.setattr(mining_screen, "analyse", lambda img: Scan())
     monkeypatch.setattr(signals, "find_signatures", lambda img: [])
     monkeypatch.setattr(nav_tasks, "settings_key", lambda *a, **k: "F5")
     notes = []

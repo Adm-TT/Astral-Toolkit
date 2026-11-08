@@ -512,6 +512,83 @@ def test_lookalike_other_item_keeps_its_stock(monkeypatch, tmp_path):
     assert got == {"lmg": 1, "bat": 20}
 
 
+def test_only_variant_in_catalog_is_flagged_not_merged(monkeypatch, tmp_path):
+    """目录里只有电池、没有轻机枪，电池挂着轻机枪的中文名（F8 以前模糊配上时记的）：盘轻机枪 1，不把电池的 20 并进来，
+    电池进「未盘到」并注明；确认后电池不动，轻机枪记成本地物品，不再按中文名记到电池的 id 下（待做 125，老大 2026-11-08）"""
+    from astral_toolkit.trade.models import Item
+
+    t = _context(monkeypatch, tmp_path)
+    t.catalog.upsert([Item("bat", "Demeco LMG Battery (100 cap)")])
+    t.catalog.add_alias("bat", "德美科 轻机枪")
+    t.inventory.commit(
+        t.inventory.prepare([StockLine(StockKey("bat", "unknown", "A"), 20)], "add"),
+        allow_duplicate=True,
+    )
+    gun = {**_item("Demeco LMG", 1), "zh": "德美科 轻机枪"}
+    rv = count_task._count_review("A", {1: gun})
+    assert [(r["en"], r["book"], r["game"], r["keys"]) for r in rv["rows"]] == [
+        ("Demeco LMG", 0, 1, [])
+    ]
+    assert rv["rows"][0]["item_id"] is None
+    assert [(m["key"][0], m["same"]) for m in rv["missing"]] == [
+        ("bat", "德美科 轻机枪（Demeco LMG）")
+    ]
+    count = count_helpers.count()
+    count.review = rv
+    monkeypatch.setattr(bus, "publish", lambda *args: None)
+    with bind_for_test(count_task, count):
+        assert "error" not in count_task.count_apply()
+    got = {line.key.item_id: line.quantity for line in t.inventory.list_stock()}
+    assert got == {"bat": 20, "local:Demeco LMG": 1}
+
+
+def test_ore_market_name_still_merges_by_chinese_alias(monkeypatch, tmp_path):
+    """矿在市场上的名字带「(Raw)」（目录里没有不带后缀的那条），挂着盘到的中文名（F8 配矿时记的）：算同一件，照旧并账，
+    和 F8 的说法一致（matching.alias_ok 第 2 条，审查 2026-11-08 第二轮）"""
+    from astral_toolkit.trade.models import Item
+
+    t = _context(monkeypatch, tmp_path)
+    t.catalog.upsert([Item("raw", "Taranite (Raw)")])
+    t.catalog.add_alias("raw", "塔兰导电石")
+    key = StockKey("raw", "unknown", "A", "uSCU")
+    t.inventory.commit(
+        t.inventory.prepare([StockLine(key, 5_000_000)], "add"), allow_duplicate=True
+    )
+    ore = {**_item("Taranite", 2, unit="SCU"), "zh": "塔兰导电石"}
+    rv = count_task._count_review("A", {1: ore})
+    assert [r["keys"] for r in rv["rows"]] == [[["raw", "unknown", "A", "uSCU"]]]
+    assert rv["rows"][0]["item_id"] == "raw" and rv["missing"] == []
+
+
+def test_other_english_names_only_vouch_for_same_named_entries(monkeypatch, tmp_path):
+    """英文名带出来的别的名字（旧英文别名挂在名字不同的本地副本上）只用来认「同名」：汉化包里没有的变体
+    「盘到的英文名 + 一截」挂着盘到的中文名、有库存，不并进来，进「未盘到」并注明（审查 2026-11-08 第一轮）"""
+    from astral_toolkit.trade.models import Item
+
+    t = _context(monkeypatch, tmp_path)
+    t.catalog.upsert([Item("local:Old Gun", "Old Gun"), Item("mk2", "Demeco LMG Mk2")])
+    t.catalog.add_alias("local:Old Gun", "Demeco LMG")  # 旧英文别名，挂在本地副本上
+    t.catalog.add_alias("mk2", "德美科 轻机枪")  # 以前前缀档记错的
+    t.inventory.commit(
+        t.inventory.prepare(
+            [
+                StockLine(StockKey("local:Old Gun", "unknown", "A"), 2),
+                StockLine(StockKey("mk2", "unknown", "A"), 7),
+            ],
+            "add",
+        ),
+        allow_duplicate=True,
+    )
+    gun = {**_item("Demeco LMG", 3), "zh": "德美科 轻机枪"}
+    rv = count_task._count_review("A", {1: gun})
+    assert [(r["book"], r["game"], r["keys"]) for r in rv["rows"]] == [
+        (2, 3, [["local:Old Gun", "unknown", "A", "unit"]])
+    ]
+    assert [(m["key"][0], m["same"]) for m in rv["missing"]] == [
+        ("mk2", "德美科 轻机枪（Demeco LMG）")
+    ]
+
+
 def test_frontend_flags_same_label_missing_rows():
     """对账单「未盘到」那行：和盘到的挂着同一个中文名的，注明盘到的那件「中文（英文）」，玩家比英文名分得清
     （这一行自己的名字本来就带英文名，审查 2026-11-08）"""

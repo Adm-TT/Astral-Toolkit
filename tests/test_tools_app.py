@@ -401,7 +401,7 @@ def test_feedback_report_bundle(monkeypatch, tmp_path):
     _v = False
     for _m in (t_hover, t_sys):
         monkeypatch.setattr(_m, "WIN", _v)
-    screen.LAST_RAW.update(t=1.0, scan=["扫描结果", "质量： 123"], bag=[])
+    screen.LAST_RAW.update(t=1.0, scan=["扫描结果", "质量： 123"])
     from astral_toolkit.runtime.results import MINING_SIGNALS, ResultStore
 
     results = ResultStore()

@@ -436,9 +436,7 @@ def _quiet_mining(monkeypatch):
     monkeypatch.setattr(mining_screen, "grab", fail_grab)
     # 识别换成「画面里什么都没有」：这里只测会话循环用的是注入的截屏 / 前台 / 时钟；
     # 真识别第一次要加载模型（几秒），单独跑这个文件时会拖过收尾预算
-    monkeypatch.setattr(
-        mining_screen, "analyse", lambda img: (Scan(), ({}, None, None))
-    )
+    monkeypatch.setattr(mining_screen, "analyse", lambda img: Scan())
     monkeypatch.setattr(mining_signals, "find_signatures", lambda img: [])
     # 会话循环开 / 停时会写设置里的 live_on：换成只记录、不落盘的 RunFlag，别动真设置
     flag_writes = []

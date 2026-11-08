@@ -21,7 +21,7 @@ def test_goal_lookup_error_keeps_craft_and_drops_hud_lines():
     gold = {"en": "Gold", "zh": "", "short": 1, "unit": "SCU", "minq": 1, "goals": []}
     scan = _scan(composition=[("Gold", 50.0, 500), ("Tungsten", 50.0, 500)])
     inputs = _inputs(goal_targets=(("Gold", gold),), goals_complete=False)
-    r = analyze(scan, ({}, None, None), inputs)
+    r = analyze(scan, inputs)
     assert r.craft == ("提示",) and len(r.goals) == 1 and r.goal_lines == ()
     hud, rich = P.to_hud(r)
     assert "缺 Gold" not in hud and "缺 Gold 1 份" not in rich["minor"]
@@ -37,12 +37,11 @@ def test_view_and_hud_layout():
         "minq": 600,
         "goals": ["蓝图"],
     }
-    bag = ({"Inert Materials": 0.3}, 0.3, 96.0)
     inputs = _inputs(
         goal_targets=(("Tungsten", goal),),
         recommend=lambda *a, **k: [_plan("sabir")],
     )
-    r = analyze(_scan(), bag, inputs)
+    r = analyze(_scan(), inputs)
     hud, rich = P.to_hud(r)
     assert hud.split("\n") == [
         "钨｜1,000 kg｜抗性 4%｜不稳定 17.32",
@@ -58,10 +57,7 @@ def test_view_and_hud_layout():
     v = P.to_view(r)
     assert v["lots_plan"] == "方式M，站S" and v["at"] == "12:00:00"
     assert v["sell"] == [{"name": "钨", "where": "城"}]
-    assert v["goal"][0]["ok"] and v["bag"]["items"] == [
-        {"name": "Inert Materials", "scu": 0.3}
-    ]
-    assert v["bag_text"] == "0.3/96 SCU\nInert Materials 0.3"
+    assert v["goal"][0]["ok"] and "bag" not in v and "bag_text" not in v
     assert [x["q"] for x in v["refine"][0]["lots"]] == [662, 363]
 
 
@@ -71,11 +67,11 @@ def test_cut_panel_only_plans():
         composition=[("Gold", 50.0, None), ("Inert Materials", 50.0, None)],
     )
     inputs = _inputs(recommend=lambda *a, **k: [_plan(breakable=False)])
-    r = analyze(scan, ({}, None, None), inputs, cut=True)
+    r = analyze(scan, inputs, cut=True)
     v = P.to_view(r)
     hud, rich = P.to_hud(r)
     assert v["cut"] and "FOV视野" in v["note"] and not v["refine"]
-    assert v["plans"][0]["throttle"] is None and v["bag"] is None
+    assert v["plans"][0]["throttle"] is None
     assert "面板被遮挡：仅计算破碎方案" in hud
     assert rich["advice"]["power"] == "满功率也无法破碎"
 
@@ -91,7 +87,6 @@ def test_view_rows_are_plain_and_texts_come_from_presenter():
     }
     r = analyze(
         _scan(),
-        ({}, None, None),
         _inputs(
             goal_targets=(("Tungsten", freeze(target)),),
             craft_mats=(("Tungsten", {"count": 1, "gates": [600]}),),
@@ -108,7 +103,7 @@ def test_view_rows_are_plain_and_texts_come_from_presenter():
 
 
 def test_plan_view_matches_to_view():
-    r = analyze(_scan(), ({}, None, None), _inputs())
+    r = analyze(_scan(), _inputs())
     assert P.to_view(r)["plans"][0] == P.plan_view(r.plans[0])
 
 

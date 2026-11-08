@@ -127,20 +127,6 @@ def _refine_view(o):
     }
 
 
-def _bag_view(bag):
-    if bag is None:
-        return None, ""
-    view = {
-        "used": bag.used,
-        "cap": bag.cap,
-        "items": [{"name": zh, "scu": v} for zh, v in bag.items],
-    }
-    text = f"{bag.used:g}/{bag.cap:g} SCU\n" + "，".join(
-        f"{zh} {v:g}" for zh, v in bag.items
-    )
-    return view, text
-
-
 def to_view(r: MiningResult) -> dict:
     """窗口 JSON（不含 hud、hud_rich，见 to_hud）"""
     lots = lot_rows(r.lots, r.lot_refined)
@@ -151,7 +137,6 @@ def to_view(r: MiningResult) -> dict:
             for x in lots
             if not x["inert"] and x["refined"]
         ]
-    bag, bag_text = _bag_view(r.bag)
     return {
         "rock": r.rock,
         "mass": r.mass,
@@ -176,8 +161,6 @@ def to_view(r: MiningResult) -> dict:
         if r.cut
         else "",
         "at": r.at,
-        "bag": bag,
-        "bag_text": bag_text,
     }
 
 
@@ -213,11 +196,19 @@ def to_hud(r: MiningResult, focus=None):
         if names is None
         else tuple(g for g in r.composition if not g.inert and g.zh in names)
     )
-    title = (
-        r.rock
-        if names is None
-        else "、".join(g.zh for g in composition) or "未发现关注的矿"
-    )
+    if names is not None and not composition:
+        # 关注的矿这块石头里一样都没有：只留标题这一行（老大 2026-11-08 批注验收单：只留标题）
+        title = "未发现关注的矿"
+        return title, {
+            "title": title,
+            "stats": [],
+            "comp": [],
+            "advice": None,
+            "gain": [],
+            "minor": [],
+            "foot": "",
+        }
+    title = r.rock if names is None else "、".join(g.zh for g in composition)
     if names is None:
         goal_lines = r.goal_lines
     elif r.goal_lines:

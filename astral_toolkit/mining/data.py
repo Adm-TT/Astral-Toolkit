@@ -41,11 +41,28 @@ SIGNATURES = {
 }
 
 
+# 关注里除了矿，还能选这两类雷达信号（老大 2026-11-08 批注验收单：也可以关注地面信号和太空残骸信号）。
+# 键用小写，和矿的英文名撞不上；信号的每个候选带一个类别集合（矿名，或下面这两个），见 signals._guess_details
+FOCUS_GROUND = (
+    "ground"  # 地面信号：ROC 车矿、车矿或手采、可采集物，和叠在一起的地面小矿
+)
+FOCUS_SALVAGE = "salvage"  # 太空残骸：可打捞残骸，和不刷船挖矿的地方「多半是残骸」
+FOCUS_SIGNALS = {
+    FOCUS_GROUND: "地面信号（车矿、手采、可采集物）",
+    FOCUS_SALVAGE: "太空残骸",
+}
+
+
 def focus_keys(value):
-    """读取关注矿物偏好：坏类型按全部；列表只留已知矿种，空选保持为空。"""
+    """读取关注偏好：坏类型按全部；列表只留已知的矿种和两类信号（矿在前、信号在后），空选保持为空。"""
     if not isinstance(value, list):
         return None
-    return [key for key in SIGNATURES if key in value]
+    return [key for key in (*SIGNATURES, *FOCUS_SIGNALS) if key in value]
+
+
+def focus_ores(focus):
+    """关注列表里的矿（扫描石头的悬浮窗只看矿）；None 照旧是全部"""
+    return None if focus is None else [key for key in focus if key in SIGNATURES]
 
 
 RARITY = {
@@ -266,17 +283,11 @@ GADGETS = {
 }
 
 # ---------------------------------------------------------------- 采矿船
-# heads: 几个矿头位；size: 矿头尺寸；bag: 矿袋容量 SCU；fixed: 矿头锁死（只能换模组）；crew_max: 最多几人同时开矿头
+# heads: 几个矿头位；size: 矿头尺寸；fixed: 矿头锁死（只能换模组）；crew_max: 最多几人同时开矿头
 SHIPS = {
-    "mole": dict(
-        name="鼹鼠 MOLE", size=2, heads=3, crew_max=3, bag=96
-    ),  # 矿袋 8×12 SCU
-    "prospector": dict(
-        name="勘探者 Prospector", size=1, heads=1, crew_max=1, bag=32
-    ),  # 4×8 SCU
-    "golem": dict(
-        name="魔像 Golem", size=1, heads=1, crew_max=1, bag=32, fixed="pitman"
-    ),  # 2×16 SCU
+    "mole": dict(name="鼹鼠 MOLE", size=2, heads=3, crew_max=3),
+    "prospector": dict(name="勘探者 Prospector", size=1, heads=1, crew_max=1),
+    "golem": dict(name="魔像 Golem", size=1, heads=1, crew_max=1, fixed="pitman"),
 }
 
 # 每条船的出厂配置（用户第一次用原矿扫描时选船，再在「我的配置」里改成自己实际装的，存在 userdata/settings.json）

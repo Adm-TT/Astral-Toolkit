@@ -94,7 +94,7 @@ def one(label, p):
         if e:
             r["err"]["扫描"] = e
         elif v:
-            scan, bag = v
+            scan = v
             if scan.mass is not None or scan.composition:
                 r["scan"] = {
                     "rock": scan.rock,
@@ -106,7 +106,7 @@ def one(label, p):
                     "comp": [(n, pct, q) for n, pct, q in scan.composition],
                 }
                 if scan.valid:
-                    v2, e2, _ = run(lambda: S.scan_view(scan, bag))
+                    v2, e2, _ = run(lambda: S.scan_view(scan))
                     if e2:
                         r["err"]["扫描结果页"] = e2
         v, e, dt = run(lambda: signals.find_signatures(img))

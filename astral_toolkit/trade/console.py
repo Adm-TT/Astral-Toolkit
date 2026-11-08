@@ -14,7 +14,7 @@ from .catalog import Catalog
 from .history import History
 from .inventory import Inventory
 from .market_service import MarketService
-from .matching import _fold, _similar
+from .matching import _fold, _similar, market_base
 from .names import has_chinese
 from .providers.scm import ScmProvider
 from .providers.uex import UexProvider
@@ -108,21 +108,24 @@ class Trade:
         item = self.catalog.get(item_id)
         if not item:
             return item_id
-        with self.db.connection() as c:
-            zh = [
-                r[0]
-                for r in c.execute(
-                    "SELECT alias FROM aliases WHERE item_id=?", (item_id,)
-                )
-                if has_chinese(r[0])
-            ]
-        name = None
-        for a in zh:
-            hit = canonical(a, "")
-            if hit and _similar(_fold(hit[1]), _fold(item.name)):
-                name = hit[0]
-                break
-        name = name or zh_for(item.name) or (zh[0] if zh else None)
+        # 先用它自己的英文名在汉化包里的中文名：F8 以前模糊配上时会把本体的中文名记到变体上，别名排前面的话电池会显示成
+        # 「德美科 轻机枪（Demeco LMG Battery (100 cap)）」（待做 126，老大 2026-11-08 定直接修）；汉化包里没有它，才看记下的别名
+        name = zh_for(item.name)
+        if not name:
+            with self.db.connection() as c:
+                zh = [
+                    r[0]
+                    for r in c.execute(
+                        "SELECT alias FROM aliases WHERE item_id=?", (item_id,)
+                    )
+                    if has_chinese(r[0])
+                ]
+            for a in zh:
+                hit = canonical(a, "")
+                if hit and _similar(_fold(hit[1]), _fold(item.name)):
+                    name = hit[0]
+                    break
+            name = name or (zh[0] if zh else None)
         return f"{name}（{item.name}）" if name else item.name
 
     # ---------------------------------------------------------------- 查价
@@ -150,9 +153,9 @@ def _quality(text):
 
 def ore_item(item):
     """交易库里的这个物品是不是矿（矿按 SCU 记、存成 uSCU，和库存页、F6 同一行；别的按个）。
-    和 F8 用同一个判断（inspector._is_mineral）；市场上的名字可能带「(Raw)」「（原矿）」这种后缀，先去掉"""
-    import re
+    和 F8 用同一个判断（inspector._is_mineral）；市场上的名字可能带「(Raw)」「（原矿）」这种后缀，先去掉（matching.market_base，
+    matching.alias_ok 认「是不是同一件」也用它）"""
     from .inspector import _is_mineral
 
-    n = re.sub(r"\s*[（(][^（）()]*[)）]\s*$", "", item.name or "").strip()
+    n = market_base(item.name or "")
     return _is_mineral(n if has_chinese(n) else "", n)

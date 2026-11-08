@@ -84,10 +84,16 @@ def _kl(k):
     return [k.item_id, k.quality, k.location, k.unit]
 
 
+def _id_order(iid):
+    """挑一件来记新库存时的先后：交易平台上的正式物品在前、本地物品在后，同类按编号"""
+    return (iid.startswith("local:"), iid)
+
+
 def _count_review(place, items):
     """本轮盘点 → 和账上对：rows（看到的，账上多少 → 游戏里多少）、missing（账上有、这轮没看到；same：和这轮盘到的
     哪件挂着同一个中文名，可能是同一件记在了另一条名下）"""
     from ..crafting import goals as G
+    from ..trade.matching import _fold, alias_ok
 
     t = trade()
     rev = (
@@ -118,9 +124,9 @@ def _count_review(place, items):
         alias = t.catalog.by_alias(en) if en and not named else None
         if alias and not alias.id.startswith("local:"):
             named.add(alias.id)
-        real_ids = {
-            iid for iid in ids if not iid.startswith("local:") and t.catalog.get(iid)
-        }
+        alias_ids = (
+            {i.id for i in t.catalog.all_by_alias(v["zh"])} if v["zh"] else set()
+        )
         if named:
             # 英文名明确对上正式物品：只拿它和英文名自己的本地副本（旧库存的另一种记法）去配账。同一个中文名带出来的
             # 别的条目一律不并：英文名像的也可能是另一件东西——F8 模糊配上时会把本体的中文名记到变体上（轻机枪和它的
@@ -135,12 +141,28 @@ def _count_review(place, items):
                     and item.name.casefold() == en.casefold()
                 }
             )
-            alias_ids = (
-                {i.id for i in t.catalog.all_by_alias(v["zh"])} if v["zh"] else set()
+        else:
+            # 英文名没对上正式物品：英文名带出来的（英文别名、本地副本）照并；中文名带出来的（中文别名、名字就是这个
+            # 中文的）要 matching.alias_ok 认是同一件，或者和英文名带出来的哪件同名（旧英文别名只挂在本地副本上、
+            # 本地副本和正式物品同名），才并。以前按中文别名直接并：目录里只有电池、电池挂着轻机枪的中文名（F8 以前
+            # 模糊配上时记的）时，盘轻机枪 1 会把电池的 20 并进来，确认后电池剩 1（待做 125，老大 2026-11-08）
+            by_en = set(G.resolve_all(t, en, "")) if en else set()
+            same_names = {_fold(it.name) for iid in by_en if (it := t.catalog.get(iid))}
+            kept = frozenset(
+                by_en
+                | {
+                    iid
+                    for iid in (set(ids) | alias_ids) - by_en
+                    if (it := t.catalog.get(iid))
+                    and (alias_ok(it, v["zh"], en) or _fold(it.name) in same_names)
+                }
             )
-            for iid in (set(ids) | alias_ids) - kept:
-                same_zh.setdefault(iid, f"{v['zh']}（{en}）" if v["zh"] else en)
-            ids = kept
+        for iid in (set(ids) | alias_ids) - kept:
+            same_zh.setdefault(iid, f"{v['zh']}（{en}）" if v["zh"] else en)
+        ids = kept
+        real_ids = {
+            iid for iid in ids if not iid.startswith("local:") and t.catalog.get(iid)
+        }
         lines = [
             line
             for line in book
@@ -177,7 +199,11 @@ def _count_review(place, items):
                 lines,
             )
         else:
-            merged[k] = (v, lines)
+            # 账上没有、要新入库时记到哪件下面：认定的那几件里 resolve_all 排最前的（能查价的在前）；
+            # 一件都没认定就留空，确认时照英文名建本地物品，不再按中文名去找（待做 125）
+            order = [i for i in G.resolve_all(t, en, v["zh"]) if i in ids]
+            pick = order[0] if order else min(ids, key=_id_order, default=None)
+            merged[k] = ({**v, "item_id": pick}, lines)
     for (_, qkey, ukey, _identity), (v, lines) in merged.items():
         have = sum(l.quantity for l in lines)  # noqa: E741
         game = int(round(v["qty"] * 1_000_000)) if ukey == G.USCU else int(v["qty"])
@@ -196,6 +222,7 @@ def _count_review(place, items):
                 "delta": show(game - have) if game != have else 0,
                 "keys": [_kl(l.key) for l in lines],  # noqa: E741
                 "raw_game": game,
+                "item_id": v.get("item_id"),
             }
         )  # noqa: E741
     missing = []
@@ -289,14 +316,17 @@ def count_apply(zero=None):
                 continue
             keys = [StockKey(*k) for k in r["keys"]]
             if not keys:  # 账上没有：入库
+                # 记到对账时认定的那件下面；没认定的照英文名找或建本地物品，不按中文名去找（中文别名可能记错在
+                # 变体上，新库存会记到变体的 id 下，待做 125）
                 key, n = G.stock_line(
                     t,
                     r["en"],
-                    r["zh"],
+                    "" if r["en"] else r["zh"],
                     r["game"],
                     r["unit"],
                     r["quality"],
                     _place_for(rv["place"]),
+                    item_id=r.get("item_id"),
                 )
                 put(key, n)
                 if r.get("craft"):

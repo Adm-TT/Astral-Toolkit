@@ -150,7 +150,6 @@ def feedback_report(sources: StatusSources, /, kind="auto", note="", img=None):
         "note": note or "",
         "screen": [img.width, img.height] if img else None,
         "ocr_scan_lines": screen.LAST_RAW.get("scan"),
-        "ocr_bag_lines": screen.LAST_RAW.get("bag"),
         "ocr_age_s": round(time.time() - screen.LAST_RAW.get("t", 0))
         if screen.LAST_RAW.get("t")
         else None,

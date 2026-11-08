@@ -1,4 +1,4 @@
-"""把 OCR 识别出的文字行解析成扫描数据 / 矿袋数据
+"""把 OCR 识别出的文字行解析成扫描数据（矿袋那份 2026-11-08 删了：老大定以后换新的识别方案再加）
 
 HUD 字很小，OCR 常见毛病：标签字认不出、"%" 被认成 "96" / "16"、个别数字认错。
 所以解析不完全依赖标签：
@@ -393,51 +393,3 @@ def _one_edit(a, b):
     if len(a) < len(b):
         a, b = b, a
     return any(a[:i] + a[i + 1 :] == b for i in range(len(a)))
-
-
-MOLE_CAPACITY = 96.0
-
-
-def parse_bag(lines, capacity=MOLE_CAPACITY):
-    """矿袋：返回 ({英文矿名: SCU}, 已用, 容量)。
-    数量固定两位小数；"SCU" 常被认成 "5CU"，"96" 常被认成 "%"，容量认不出时用 MOLE 的 96"""
-    bag, used, cap = {}, None, None
-    for line in lines:
-        t = line.replace(" ", "").upper()
-        # 按原始空格分隔取数，避免把旁边的杂字粘成一个大数
-        if (
-            "/" not in line
-            and "货舱" in t
-            and len(two := re.findall(r"(?<![\d.,])\d{1,3}[.,]\d{2}(?![\d])", line))
-            >= 2
-        ):
-            line = f"{two[0]} / {two[1]}"  # 勘探者的 "6.49 / 60.00 SCU" 斜杠常认不出来
-        if "/" in line and (
-            m := re.search(
-                r"(?<![\d.,])(\d{1,3}[.,]\d{2})\s*/\s*(\d{1,3}(?:[.,]\d+)?)?", line
-            )
-        ):
-            used = _num(m.group(1))
-            cap = (
-                _num(m.group(2))
-                if m.group(2) and _num(m.group(2)) >= used
-                else capacity
-            )
-            if abs(cap - capacity) <= max(
-                2, capacity * 0.07
-            ):  # "96" 常被认成 95/98：贴近船的容量就按船的容量
-                cap = capacity
-            continue
-        if m := re.match(r"(.*?)(\d+[.,]\d{2})[S5]?C?U?$", t):
-            name_txt = re.sub(r"[^\u4e00-\u9fff]", "", m.group(1))
-            if not name_txt:
-                continue
-            if "惰" in name_txt or "性物" in name_txt or "情性" in name_txt:
-                name = "Inert Materials"
-            else:
-                name = mineral_en(name_txt)
-            if name:
-                bag[name] = bag.get(name, 0) + _num(m.group(2))
-    if used is not None:  # 单项不可能超过已用量，超过的是误读，丢掉
-        bag = {k: v for k, v in bag.items() if v <= used + 0.01}
-    return bag, used, cap
