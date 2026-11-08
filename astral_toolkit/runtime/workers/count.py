@@ -4,7 +4,7 @@
 读光标、认物品、记格子、出新格 HUD、收尾时算对账。
 
 目录迁移 R5（2026-11-07）：外面的东西都由 bootstrap 接进来，本模块不再经 _T / _H 动态去 tasks、app 取——
-一轮要用的分析（analysis：光标在截图上的哪儿、认鼠标指着的物品、收尾时和账上对；tasks/count_analysis 原样转给
+一轮要用的分析（analysis：光标在截图上的哪儿、认鼠标指着的物品、鼠标所在格的框、收尾时和账上对；tasks/count_analysis 原样转给
 trade/inspector、tasks/count）、悬浮窗文字（views：app/presenters/count）、外面的东西（CountLinks：读光标、抓图、
 游戏在不在前台、热键名、调试图目录、开始时在哪个地点、悬浮窗短提示、正在退出时不让开始）。
 """
@@ -15,7 +15,7 @@ import sys
 import threading
 import traceback
 from dataclasses import dataclass, field
-from typing import Any, Callable, Protocol
+from typing import Any, Callable, NamedTuple, Protocol
 
 from ..results import ResultStore
 from ..session import SessionLoop, StopInfo, Tick
@@ -32,6 +32,18 @@ class CountAnalysis(Protocol):
 
     def read_item(self, img: Any, cursor: Any) -> Any:
         """鼠标指着的物品：{zh, en, quality, qty, unit, sure, craft}；认不出是 None"""
+        ...
+
+    def cell_box(self, img: Any, cursor: Any) -> Any:
+        """鼠标所在物品格的框 (左, 上, 右, 下)；找不到是 None"""
+        ...
+
+    def same_cell(self, a: Any, b: Any) -> bool:
+        """两个格子框是不是同一格"""
+        ...
+
+    def in_cell(self, box: Any, point: Any) -> bool:
+        """这一点在不在这个格子框里"""
         ...
 
     def review(self, place: Any, items: Any) -> Any:
@@ -81,18 +93,29 @@ def _key(r):  # 制造出来的同名东西，各槽品质不一样就分开记
     )
 
 
+class _Cell(NamedTuple):
+    """算过的一格：物品、数量、格子框（找不到是 None）、认到时光标在截图上的位置"""
+
+    key: Any
+    qty: Any
+    box: Any
+    x: int
+    y: int
+
+
 @dataclass
 class _CountCtx:
     """一次盘点的全部可变状态：线程重启也换一份新的"""
 
     items: dict = field(default_factory=dict)
-    # 已经算过的格：(物品, 数量, 截图上的 x, y)
+    # 已经算过的格（_Cell）
     cells: list = field(default_factory=list)
     prev_pos: tuple[int, int] | None = None
     still_since: float = 0.0
     done_pos: tuple[int, int] | None = None
     tries: int = 0
     logged: str | None = None
+    box_logged: str | None = None  # 找格子框出错，同一种只记一次（和认物品出错分开记）
 
 
 class _CountWorker:
@@ -177,19 +200,31 @@ class _CountWorker:
         # 同一格重复认到也算「看到」，要在去重之前刷新 60 秒计时
         seen = {"item": now}
         # 同一种东西（名字、品质、数量都一样）挪进另一格才算新的一格（老大 11-09）：
-        # 仓库格子间距约是截图高度的十分之一（2560×1440 下约 149×141 像素），
-        # 离已经算过的同样东西横竖都不到 0.45 格，就当是同一格又认了一次。
-        # 以前按屏宽 6.5%、屏高 11% 分组，组比格子大，挨着的两格常落进同一组、只算一次。
-        # 已知限制（审查 2026-11-09）：光看距离分不全——同一格里从左边沿挪到右边沿再停一次会多算一格，
-        # 相邻两格分别停在贴着的边沿会少算一格；鼠标停在格子中间附近时是对的。根治要把光标吸到格子上（记在待做）。
+        # 先在截图上找出鼠标所在那一格的框，和算过的同样东西的框重叠超过一半就是同一格又认了一次。
+        # 只有一边找到框（悬浮窗涂黑了那块、鼠标停在缝上）：看另一边的停点在不在这个框里；
+        # 两边都没框才退回看距离：横竖都不到 0.045 屏高（约 0.45 格）算同一格——光看距离分不全
+        # （同一格里挪得远会多算），所以只当最后的后备。方案：计划\盘点重设计_找格子框_1109.md
         near = img.size[1] * 0.045
-        cell = (_key(r), r["qty"], cursor[0], cursor[1])
-        if any(
-            c[:2] == cell[:2]
-            and abs(c[2] - cell[2]) <= near
-            and abs(c[3] - cell[3]) <= near
-            for c in ctx.cells
-        ):
+        cell = _Cell(
+            _key(r),
+            r["qty"],
+            self._box(session, ctx, img, cursor),
+            cursor[0],
+            cursor[1],
+        )
+
+        def same(c):
+            if (c.key, c.qty) != (cell.key, cell.qty):
+                return False
+            if c.box and cell.box:
+                return self._an.same_cell(c.box, cell.box)
+            if c.box or cell.box:
+                return self._an.in_cell(
+                    c.box or cell.box, (cell.x, cell.y) if c.box else (c.x, c.y)
+                )
+            return abs(c.x - cell.x) <= near and abs(c.y - cell.y) <= near
+
+        if any(same(c) for c in ctx.cells):
             return Tick(0.0, seen)
 
         ctx.cells.append(cell)
@@ -213,6 +248,18 @@ class _CountWorker:
             ("log", self._views.item_line(r), "COUNT", "INFO"),
         )
         return Tick(0.0, seen)
+
+    def _box(self, session: Any, ctx: _CountCtx, img: Any, cursor: Any) -> Any:
+        """鼠标所在格的框；找框出错当找不到（退回别的判断，盘点不能停），同一种错日志里只记一次"""
+        try:
+            return self._an.cell_box(img, cursor)
+        except Exception as e:
+            if repr(e) != ctx.box_logged:
+                ctx.box_logged = repr(e)
+                self.loop.commit(
+                    session, ("log", f"盘点找格子框出错：{e!r}", "COUNT", "ERROR")
+                )
+            return None
 
     def on_pause(self, session: Any, ctx: _CountCtx) -> list[tuple[Any, ...]]:
         return []

@@ -719,12 +719,17 @@ def test_mining_analysis_stays_in_its_layer():
         assert _mining_analysis_violations(ok) == [], ok
 
 
-# 盘点分析（目录迁移 R5）照采矿那条的写法：本项目模块只许 trade/inspector、tasks/count 和它们里面的名字
-_COUNT_ANALYSIS_ONLY = ("astral_toolkit.trade.inspector", "astral_toolkit.tasks.count")
+# 盘点分析（目录迁移 R5）照采矿那条的写法：本项目模块只许 trade/inspector、tasks/count 和它们里面的名字；
+# 11-09 加 trade/cell_grid（找鼠标所在格的框，盘点判断同一格用）
+_COUNT_ANALYSIS_ONLY = (
+    "astral_toolkit.trade.inspector",
+    "astral_toolkit.tasks.count",
+    "astral_toolkit.trade.cell_grid",
+)
 
 
 def test_count_analysis_and_presenter_stay_in_their_layers():
-    """目录迁移 R5 拆出来的两块：盘点分析（tasks/count_analysis）只往下转给 trade/inspector、tasks/count（界面、runtime、
+    """目录迁移 R5 拆出来的两块：盘点分析（tasks/count_analysis）只往下转给 trade/inspector、tasks/count、trade/cell_grid（界面、runtime、
     装配、别的 tasks、trade 别的模块都不许，拿整个包再走属性也不许），文件顶上只 import typing（调用时才取）；
     盘点的悬浮窗文字（app/presenters/count）只排版：不导入本项目任何模块（数量写法由 bootstrap 传进来），不用字符串导入"""
     path = _ROOT / "tasks" / "count_analysis.py"
