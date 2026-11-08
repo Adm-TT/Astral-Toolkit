@@ -309,6 +309,7 @@ def test_raw_ore_is_not_the_refined_mineral(monkeypatch):
     # 原矿名错了字：不近似成精炼的（错两个字的「源护」以前会被当成认准了的精炼塔兰导电石）；精炼名错字照旧认
     assert names.canonical("塔兰导电石源护", "") is None
     assert names.canonical("萨达瑞晶源护", "") is None  # 矿物表里没有的矿也管到
+    assert names.canonical("塔兰导电石旷", "") is None
     assert names.canonical("塔兰导电右", "") == ("塔兰导电石", "Taranite")
     assert names.canonical("塔兰导电石丨", "") == (
         "塔兰导电石",
