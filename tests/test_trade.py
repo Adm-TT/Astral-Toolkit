@@ -861,10 +861,12 @@ _LMG_NAMES = {
 
 
 def test_alias_ok_only_for_the_same_item(monkeypatch):
-    """F8 记中文别名、盘点按中文名并账，都只认同一件：英文名一样（不分大小写、空格）；汉化包里有它的，它自己的中文名
-    就是这个才算；汉化包里没有的，在认出的英文名后面多接一截的（变体、原矿）不算，只差一两个字母的算（待做 61、125）"""
+    """F8 记中文别名、盘点按中文名并账，都只认同一件：英文名一样（不分大小写、空格）；矿的市场名去掉「(Raw)」后缀后一样；
+    汉化包里有它的，它自己的中文名就是这个才算；汉化包里没有的，在认出的英文名后面多接一截的（变体）不算，只差一两个
+    字母的算（待做 61、125）"""
     from astral_toolkit.trade import names
-    from astral_toolkit.trade.matching import alias_ok
+    from astral_toolkit.trade.console import ore_item
+    from astral_toolkit.trade.matching import alias_ok, market_base
 
     monkeypatch.setattr(names, "table", lambda: dict(_LMG_NAMES))
     gun, bat = Item("lmg", "Demeco LMG"), Item("bat", "Demeco LMG Battery (100 cap)")
@@ -872,8 +874,13 @@ def test_alias_ok_only_for_the_same_item(monkeypatch):
     assert alias_ok(Item("x", "demeco  LMG"), "德美科 轻机枪", "Demeco LMG")
     assert not alias_ok(bat, "德美科 轻机枪", "Demeco LMG")  # 前缀配上的电池
     assert alias_ok(bat, "德美科 轻机枪电池", "")  # 汉化包里它自己的中文名就是这个
-    # 原矿的市场名：和精炼的是不是同一件拿不准，不替玩家认（盘点时注明）
-    assert not alias_ok(Item("raw", "Taranite (Raw)"), "塔兰导电石", "Taranite")
+    # 矿的市场名：AT 认矿只认矿名，F8 一直配到带 (Raw) 的那条，这里跟着认（审查 2026-11-08 第二轮）
+    raw = Item("raw", "Taranite (Raw)")
+    assert alias_ok(raw, "塔兰导电石", "Taranite") and ore_item(raw)
+    assert (
+        market_base("Taranite (Raw)") == "Taranite"
+        and market_base("铁（原矿）") == "铁"
+    )
     mod = Item("mod", "Arclight Pistol (Modified)")
     assert not alias_ok(mod, "弧光手枪", "Arclight Pistol")  # 不是矿：括号里的不能去掉
     assert not alias_ok(gun, "", "")

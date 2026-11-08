@@ -542,9 +542,9 @@ def test_only_variant_in_catalog_is_flagged_not_merged(monkeypatch, tmp_path):
     assert got == {"bat": 20, "local:Demeco LMG": 1}
 
 
-def test_raw_ore_market_name_is_flagged_not_merged(monkeypatch, tmp_path):
-    """矿在市场上的名字带「(Raw)」、挂着盘到的中文名：原矿和精炼的是不是同一件拿不准，不替玩家并，「未盘到」里注明，
-    玩家看了英文名自己定（审查 2026-11-08 第一轮：两支认法要一样，不并）"""
+def test_ore_market_name_still_merges_by_chinese_alias(monkeypatch, tmp_path):
+    """矿在市场上的名字带「(Raw)」（目录里没有不带后缀的那条），挂着盘到的中文名（F8 配矿时记的）：算同一件，照旧并账，
+    和 F8 的说法一致（matching.alias_ok 第 2 条，审查 2026-11-08 第二轮）"""
     from astral_toolkit.trade.models import Item
 
     t = _context(monkeypatch, tmp_path)
@@ -556,10 +556,8 @@ def test_raw_ore_market_name_is_flagged_not_merged(monkeypatch, tmp_path):
     )
     ore = {**_item("Taranite", 2, unit="SCU"), "zh": "塔兰导电石"}
     rv = count_task._count_review("A", {1: ore})
-    assert [r["keys"] for r in rv["rows"]] == [[]]
-    assert [(m["key"][0], m["same"]) for m in rv["missing"]] == [
-        ("raw", "塔兰导电石（Taranite）")
-    ]
+    assert [r["keys"] for r in rv["rows"]] == [[["raw", "unknown", "A", "uSCU"]]]
+    assert rv["rows"][0]["item_id"] == "raw" and rv["missing"] == []
 
 
 def test_other_english_names_only_vouch_for_same_named_entries(monkeypatch, tmp_path):
