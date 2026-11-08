@@ -86,7 +86,7 @@ class _CountCtx:
     """一次盘点的全部可变状态：线程重启也换一份新的"""
 
     items: dict = field(default_factory=dict)
-    cells: set = field(default_factory=set)
+    cells: list = field(default_factory=list)  # 已经算过的格：(物品, 数量, 截图上的 x, y)
     prev_pos: tuple[int, int] | None = None
     still_since: float = 0.0
     done_pos: tuple[int, int] | None = None
@@ -175,17 +175,21 @@ class _CountWorker:
         ctx.done_pos, ctx.tries = pos, 0
         # 同一格重复认到也算「看到」，要在去重之前刷新 60 秒计时
         seen = {"item": now}
-        W, H = img.size
-        cell = (
-            _key(r),
-            r["qty"],
-            round(cursor[0] / (W * 0.065)),
-            round(cursor[1] / (H * 0.11)),
-        )
-        if cell in ctx.cells:
+        # 同一种东西（名字、品质、数量都一样）挪进另一格才算新的一格（老大 11-09）：
+        # 仓库格子间距约是截图高度的十分之一（2560×1440 下约 149×141 像素），
+        # 离已经算过的同样东西横竖都不到 0.45 格，就当是同一格又认了一次。
+        # 以前按屏宽 6.5%、屏高 11% 分组，组比格子大，挨着的两格常落进同一组、只算一次。
+        near = img.size[1] * 0.045
+        cell = (_key(r), r["qty"], cursor[0], cursor[1])
+        if any(
+            c[:2] == cell[:2]
+            and abs(c[2] - cell[2]) <= near
+            and abs(c[3] - cell[3]) <= near
+            for c in ctx.cells
+        ):
             return Tick(0.0, seen)
 
-        ctx.cells.add(cell)
+        ctx.cells.append(cell)
         v = ctx.items.setdefault(
             _key(r),
             {

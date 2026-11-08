@@ -791,8 +791,8 @@ def test_worker_uses_analysis_views_and_links():
     assert "Q750" in present_count.item_line(
         {**_item(), "quality": 750}, lambda q, u: ""
     )
-    # 格号按截图上的位置算：650 / (1000 × 0.065)、1100 / (1000 × 0.11)
-    assert [cell[2:] for cell in ctx.cells] == [(10, 10)]
+    # 记下认到时光标在截图上的位置，同样东西离它不到 0.45 格算同一格
+    assert [cell[2:] for cell in ctx.cells] == [(650, 1100)]
     ops = worker.finish(session, None, StopInfo("idle"))
     assert ("note", "盘点", "盘点结束｜未识别到物品｜按 F9 重新开始", 8) in ops
     worker.teardown(session, ctx)
