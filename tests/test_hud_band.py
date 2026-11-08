@@ -40,3 +40,18 @@ def test_paint_viewport_pins_bottom():
         scroll_from_bottom=9999,
     )
     assert img2.size == (400, 120)
+
+
+def test_has_text_gates_hud():
+    """空闲无文案：不该显示手柄；有分区或短提示才算有文案"""
+    from astral_toolkit.app.overlay import Hud
+
+    h = Hud.__new__(Hud)
+    h.sections = {}
+    h.note_text = ""
+    assert h._has_text() is False
+    h.note_text = "一下就没"
+    assert h._has_text() is True
+    h.note_text = ""
+    h.sections = {"导航": "去 ARC-L1"}
+    assert h._has_text() is True

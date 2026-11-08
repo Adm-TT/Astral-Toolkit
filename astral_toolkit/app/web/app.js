@@ -2759,7 +2759,7 @@ PAGES.settings = () => {
     <div class="panel"><div class="set" style="border:0;padding:0"><div>主题</div>${segH("ui-theme", [["dark", "深色"], ["light", "浅色"]], c.theme === "light" ? "light" : "dark", "主题")}</div></div>
     <h2>游戏悬浮窗</h2>
     <div class="panel"><div class="set" style="border:0;padding:0"><div>位置与滚动
-      <p>悬浮窗落在游戏画面中上带，默认鼠标穿透。左上角小图标：长按拖动可改位置（会记住）；在图标上滚轮可查看超出视口的内容。</p></div></div>
+      <p>只有采矿、导航、盘点等功能在往悬浮窗写字时才显示。落在游戏画面中上带，默认鼠标穿透。左上角小图标：长按拖动可改位置（会记住）；在图标上滚轮可查看超出视口的内容。</p></div></div>
       <div class="set"><div>大小</div>${segH("ov-scale", [["0.5", "50%"], ["0.75", "75%"], ["1", "100%"]], String(Math.min(1, +(c.hud_scale ?? 1))), "悬浮窗大小")}</div>
       <div class="set"><div>底板</div>${segH("ov-plate", [["0.6", "浅"], ["0.72", "标准"], ["0.85", "深"]], String(+(c.hud_plate ?? 0.72)), "底板")}</div>
       <div class="set"><div>配色</div>${segH("ov-theme", [["默认", "默认"], ["蓝金", "蓝金"], ["浅色", "浅色"]], c.hud_theme || "默认", "悬浮窗配色")}</div></div>

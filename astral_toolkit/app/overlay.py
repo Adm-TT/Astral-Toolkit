@@ -5,6 +5,7 @@
 - 游戏要用「无边框窗口」模式才看得到悬浮窗（全屏模式下会被游戏盖住）
 - 文案窗鼠标穿透、永远不抢焦点：点到它操作直接给游戏
 - 外框锁在游戏客户区中上带（宽 30%–70%、高顶部 0%–20%）；内容超出可滑动，默认钉底
+- 有分区文案或短提示时才显示文案窗与左上角手柄；空闲时两者都隐藏（1×1 全透明）
 - 左上角独立小手柄窗：长按拖动改位置（写入 overlay_pos.json）；在手柄上滚轮滑动内容
 - 导航菱形 / 瞄准环仍是另两扇独立窗口
 - 悬浮窗在自己的线程里运行，任何线程都可以调用 set()
@@ -1329,7 +1330,7 @@ class Hud:
         )
         if not busy:
             self._fresh = {}
-        empty = not (sections or self.note_text)
+        empty = not self._has_text()
         self._push(None if empty else img)
         self._grip_sync()
         return busy
@@ -1475,6 +1476,10 @@ class Hud:
         except Exception:
             pass
 
+    def _has_text(self) -> bool:
+        """有分区文案或短提示时才需要显示悬浮窗 / 手柄"""
+        return bool(self.sections or self.note_text)
+
     def _grip_px(self):
         return max(20, int(round(GRIP_BASE_PX * self._scale())))
 
@@ -1502,7 +1507,7 @@ class Hud:
         return img
 
     def _grip_window(self):
-        """左上角手柄：不穿透，可长按拖主窗、滚轮滑正文"""
+        """左上角手柄：不穿透，可长按拖主窗、滚轮滑正文。无文案时保持隐藏。"""
         if self._grip is not None:
             return self._grip
         import ctypes
@@ -1513,8 +1518,7 @@ class Hud:
         w = self.tk.Toplevel(self.root)
         w.overrideredirect(True)
         w.attributes("-topmost", True)
-        sz = self._grip_px()
-        w.geometry(f"{sz}x{sz}+0+0")
+        w.geometry("1x1+0+0")
         w.update()
         h = u32.GetAncestor(w.winfo_id(), 2)
         ex = (
@@ -1535,6 +1539,7 @@ class Hud:
         return self._grip
 
     def _grip_sync(self):
+        """有文案才画手柄；空闲时 1×1 全透明，不挡屏幕。"""
         if not self._grip or not HWND:
             return
         try:
@@ -1542,24 +1547,26 @@ class Hud:
             from PIL import Image
 
             _, h = self._grip
+            if not self._has_text():
+                ctypes.windll.user32.SetWindowPos(
+                    ctypes.c_void_p(h),
+                    None,
+                    0,
+                    0,
+                    1,
+                    1,
+                    SWP_NOACTIVATE,
+                )
+                _ulw(h, Image.new("RGBA", (1, 1), (0, 0, 0, 0)))
+                return
             sz = self._grip_px()
             x, y = self._rect()
-            ctypes.windll.user32.SetWindowPos(
-                ctypes.c_void_p(h),
-                ctypes.c_void_p(-1),
-                int(x),
-                int(y),
-                0,
-                0,
-                SWP_NOSIZE | SWP_NOACTIVATE,
-            )
             img = self._grip_image(sz)
             if img.size != (sz, sz):
                 img = img.resize((sz, sz), Image.Resampling.LANCZOS)
-            # 手柄 HWND 用 UpdateLayeredWindow；尺寸变化时先 SetWindowPos 改大小
             ctypes.windll.user32.SetWindowPos(
                 ctypes.c_void_p(h),
-                None,
+                ctypes.c_void_p(-1),
                 int(x),
                 int(y),
                 int(sz),
@@ -1571,12 +1578,16 @@ class Hud:
             pass
 
     def _grip_press(self, e):
+        if not self._has_text():
+            return
         self._grip_press_at = time.time()
         self._grip_dragging = False
         x, y = self._rect()
         self._off = (e.x_root - x, e.y_root - y)
 
     def _grip_drag(self, e):
+        if not self._has_text():
+            return
         if not self._grip_dragging:
             if (time.time() - self._grip_press_at) * 1000 < GRIP_HOLD_MS:
                 return
@@ -1606,6 +1617,8 @@ class Hud:
         self._grip_press_at = 0.0
 
     def _grip_wheel(self, e):
+        if not self._has_text():
+            return
         # Windows：delta 为正向上滚 → 看更早内容（增大距底偏移）
         step = max(24, self._view_h // 8)
         delta = step if getattr(e, "delta", 0) > 0 else -step
