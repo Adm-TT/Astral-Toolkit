@@ -264,6 +264,9 @@ _ORE_NAMES = {
     "铁原矿": "Iron (Ore)",
     "金矿石": "Gold (Ore)",
     "原冰": "Raw Ice",
+    "杰金矿石": "Jaclium (Ore)",
+    "萨达瑞晶原矿": "Sadaryx (Raw)",
+    "纯净科力晶": "Carinite (Pure)",
 }
 
 
@@ -290,7 +293,21 @@ def test_raw_ore_is_not_the_refined_mineral(monkeypatch):
     assert names.raw_ore("铁原矿") == ("铁原矿", "Iron (Ore)")
     assert names.raw_ore("Gold (Ore)") == ("金矿石", "Gold (Ore)")
     assert names.raw_ore("原冰") == ("原冰", "Raw Ice")
+    assert names.raw_ore("萨达瑞晶原矿") == (
+        "萨达瑞晶原矿",
+        "Sadaryx (Raw)",
+    )  # 矿物表里没有的原矿也算
     assert names.raw_ore("塔兰导电石") is None and names.raw_ore("Taranite") is None
+    # 只认原矿的写法：纯净科力晶「Carinite (Pure)」、「(Modified)」不是原矿，「Raw 」后面得是矿名
+    assert names.raw_ore("纯净科力晶") is None
+    assert (
+        names.raw_base("Carinite (Pure)") is None and names.raw_base("Raw Meat") is None
+    )
+    assert names.raw_base("Arclight Pistol (Modified)") is None
+    assert names.raw_base("Hephaestanite (R)") == "Hephaestanite"
+    # 原矿名错了字：不近似成精炼的（错两个字的「源护」以前会被当成认准了的精炼塔兰导电石）；精炼名错字照旧认
+    assert names.canonical("塔兰导电石源护", "") is None
+    assert names.canonical("塔兰导电右", "") == ("塔兰导电石", "Taranite")
     assert _is_mineral("塔兰导电石原矿", "Taranite (Raw)", fuzzy=False)
     assert _is_mineral("", "Iron (Ore)", fuzzy=False)
     assert _is_mineral("原冰", "Raw Ice", fuzzy=False)
@@ -299,6 +316,7 @@ def test_raw_ore_is_not_the_refined_mineral(monkeypatch):
     )
     assert names.canonical("铁原矿", "") is None
     assert names.canonical("塔兰导电石原矿", "") is None
+    assert names.canonical("塔兰导电石原旷", "") is None
 
 
 def test_chinese_to_english():
@@ -934,7 +952,7 @@ def test_alias_ok_only_for_the_same_item(monkeypatch):
     原矿和精炼是两样东西：市场上的「Taranite (Raw)」不算认出的「Taranite」（老大 2026-11-08 定分开）"""
     from astral_toolkit.trade import names
     from astral_toolkit.trade.console import ore_item
-    from astral_toolkit.trade.matching import alias_ok, market_base
+    from astral_toolkit.trade.matching import alias_ok
 
     monkeypatch.setattr(names, "table", lambda: dict(_LMG_NAMES))
     gun, bat = Item("lmg", "Demeco LMG"), Item("bat", "Demeco LMG Battery (100 cap)")
@@ -946,12 +964,12 @@ def test_alias_ok_only_for_the_same_item(monkeypatch):
     raw = Item("raw", "Taranite (Raw)")
     assert not alias_ok(raw, "塔兰导电石", "Taranite") and ore_item(raw)
     assert alias_ok(raw, "", "Taranite (Raw)")
-    assert (
-        market_base("Taranite (Raw)") == "Taranite"
-        and market_base("铁（原矿）") == "铁"
+    assert ore_item(Item("cn", "铁（原矿）")) and not ore_item(
+        Item("p", "Carinite (Pure)")
     )
     mod = Item("mod", "Arclight Pistol (Modified)")
-    assert not alias_ok(mod, "弧光手枪", "Arclight Pistol")  # 不是矿：括号里的不能去掉
+    assert not alias_ok(mod, "弧光手枪", "Arclight Pistol")  # 括号里的不能去掉
+    assert not ore_item(mod)
     assert not alias_ok(gun, "", "")
     # 汉化包里没有的（市场上的叫法）：后面多接一截的是变体，不算；错一两个字母的照旧算
     assert not alias_ok(Item("v", "Demeco LMG Mk2"), "德美科 轻机枪", "Demeco LMG")

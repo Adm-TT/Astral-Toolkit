@@ -59,9 +59,15 @@ except Exception:
 
 # ---------------------------------------------------------------- 目标：库存联动维科洛兑换 / 制造 / 交易
 def _gkey(name):
-    """目标材料和矿 / 物品对名字用：忽略大小写、空格和「(Ore)」「(Raw)」「原矿」这类后缀"""
+    """目标材料和矿 / 物品对名字用：忽略大小写、空格和「(Ore)」「(Raw)」「原矿」这类后缀，开头的「Raw 」（原冰 Raw Ice）也去掉
+    （挖的是原矿、精炼了才用：采矿、F8 上的「目标还缺」提示按矿名对，原矿和精炼分开认以后照旧，2026-11-08）"""
+    from ..trade.names import raw_base
+
     n = re.sub(
-        r"\s*[\(（](ore|raw|原矿|矿石)[\)）]\s*$", "", (name or "").strip(), flags=re.I
+        r"\s*[\(（](ore|raw|原矿|矿石)[\)）]\s*$",
+        "",
+        raw_base(name) or (name or "").strip(),
+        flags=re.I,
     )
     n = re.sub(r"(原矿|矿石)$", "", n)
     return re.sub(r"\s+", "", n.lower())

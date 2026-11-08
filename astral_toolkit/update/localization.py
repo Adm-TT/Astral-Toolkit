@@ -135,7 +135,8 @@ ALIASES = {}  # zh2en_items 顺带记下来：{汉化包里的英文写法: wiki
 
 
 def zh2en_items(ini, wiki_cls=None):
-    """物品名：「中文\\nEnglish」或「中文English」→ {中文: English}（交易查价、截图对照用）。
+    """物品名：「中文\\nEnglish」或「中文English」→ {中文: English}（交易查价、截图对照用）；原矿 / 矿石只有中文的（塔兰导电石原矿、
+    金矿石、原冰），英文按键名拼成游戏里的叫法（_RAW_KEYS，2026-11-08 原矿和精炼分开）。
     wiki_cls（{类名: wiki 英文名}，None = 自动取）：键名 item_Name_<类名> 能对上 wiki 时以 wiki 正名为准——汉化包里有 37 条英文写错或过时
     （「CF-227 Bulldog Repeater」游戏现在叫 Badger、「Monolith Arms」→ Monolith Armor Arms），商店 / 掉落数据都挂在正名下（1.6.49）；
     汉化包的写法记进 ALIASES"""

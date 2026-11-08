@@ -383,6 +383,8 @@ def test_raw_ore_named_add_and_suggest(monkeypatch, tmp_path):
             "铁原矿": "Iron (Ore)",
             "塔兰导电石": "Taranite",
             "塔兰导电石原矿": "Taranite (Raw)",
+            "杰金矿石": "Jaclium (Ore)",
+            "萨达瑞晶原矿": "Sadaryx (Raw)",
         },
     )
     assert t_stock.stock_suggest(q="塔兰导电石原矿")[0] == {
@@ -399,8 +401,26 @@ def test_raw_ore_named_add_and_suggest(monkeypatch, tmp_path):
         location="A",
     )
     assert r["added"] == "铁原矿 2 SCU"
+    # 单位和 F8、盘点一样：船挖的按 SCU，杰金矿石、手采宝石的原矿按个（维科洛要的也是个）
+    assert t_stock.stock_suggest(q="杰金矿石")[0] == {
+        "zh": "杰金矿石",
+        "en": "Jaclium (Ore)",
+        "kind": "物品",
+        "unit": "个",
+    }
+    for name in ("杰金矿石", "萨达瑞晶原矿"):
+        r = t_stock.stock_add_named(
+            name=name,
+            qty="3",  # pyright: ignore[reportArgumentType]
+            unit="",
+            quality="",
+            location="A",
+        )
+        assert r["added"] == f"{name} 3 个"
     assert {line.key.item_id for line in t.inventory.list_stock()} == {
-        "local:Iron (Ore)"
+        "local:Iron (Ore)",
+        "local:Jaclium (Ore)",
+        "local:Sadaryx (Raw)",
     }
 
 

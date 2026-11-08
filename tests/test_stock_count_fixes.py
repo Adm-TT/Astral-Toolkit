@@ -391,6 +391,10 @@ const api = () => new Promise(resolve => {release = () => resolve({});});
 
 def test_real_catalog_english_name_wins_over_shared_label(monkeypatch, tmp_path):
     """英文名明确对上正式物品时按英文名认：汉化名撞到别的物品，不把它的库存配过去，也不整笔拒绝（审查 2026-11-08）"""
+    from astral_toolkit.trade import names
+
+    # eye 在汉化包里有自己的中文名（不靠本机数据）
+    monkeypatch.setattr(names, "table", lambda: {"约曼迪之眼": "Yormandi Eye"})
     t = _context(monkeypatch, tmp_path, [("eye", "unknown", "A", 5)])
     t.catalog.add_alias("eye", "shared-label")
     items = {

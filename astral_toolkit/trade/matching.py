@@ -24,16 +24,6 @@ def _similar(a, b):
     )
 
 
-_SUFFIX = _re.compile(r"\s*[（(][^（）()]*[)）]\s*$")
-
-
-def market_base(name):
-    """市场上的名字去掉末尾括号里那截：矿在市场上常叫「Taranite (Raw)」「铁（原矿）」。
-    认「是不是矿」（按 SCU 记）先这样去掉（console.ore_item、names.raw_base）；认「是不是同一件」
-    不去：原矿和精炼是两样东西（老大 2026-11-08 定分开）"""
-    return _SUFFIX.sub("", name or "").strip()
-
-
 def _extends(name, en):
     """name 是不是在 en 后面多接了一截：折叠后以 en 开头、多出来至少 3 个字（变体、配件、颜色款都这么起名：
     Demeco LMG Battery (100 cap)、Arclight Pistol Gold）；只多一两个字母的当错字"""

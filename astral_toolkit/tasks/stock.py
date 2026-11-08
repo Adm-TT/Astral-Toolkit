@@ -23,10 +23,10 @@ def _invalidate_short():
     goals._SHORT["t"] = 0.0
 
 
-def _is_mineral(zh, en):
+def _is_mineral(zh, en, fuzzy=True):
     from ..trade.inspector import _is_mineral as im
 
-    return im(zh, en)
+    return im(zh, en, fuzzy=fuzzy)
 
 
 # ---------------------------------------------------------------- 基础常量与转换函数
@@ -500,13 +500,13 @@ def stock_add_named(
             return {"error": "需填写物品或矿物名称"}
         from ..trade.names import raw_ore
 
-        raw = raw_ore(
-            name
-        )  # 原矿 / 矿石：按原矿记，不并成精炼的那个矿（老大 2026-11-08 定分开）
+        # 原矿 / 矿石：按原矿记，不并成精炼的那个矿（老大 2026-11-08 定分开）。单位和 F8、盘点同一个判断：
+        # 船挖的按 SCU，杰金矿石、手采宝石的原矿这种按个（维科洛要的也是个）
+        raw = raw_ore(name)
         ores = [] if raw else mineral_search(q=name)
         if raw:
             zh, en = raw
-            u = unit or "SCU"
+            u = unit or ("SCU" if _is_mineral(zh, en, fuzzy=False) else "个")
         elif ores and (len(name) >= 2 or ores[0]["zh"] == name):
             en, zh, u = ores[0]["en"], ores[0]["zh"], unit or "SCU"
         else:
@@ -580,13 +580,16 @@ def stock_suggest(q=""):
                 }
             )
 
+    def ore_kind(zh, en):  # 原矿按 SCU（矿物）还是按个（物品）：和 F8、盘点同一个判断
+        return "矿物" if _is_mineral(zh, en, fuzzy=False) else "物品"
+
     raw = raw_ore(q)
     if raw:  # 输入的是原矿名：原矿排最前（不然排第一的是精炼的那个矿，点了就记成精炼的；2026-11-08 原矿精炼分开）
-        add(raw[0], raw[1], "矿物")
+        add(raw[0], raw[1], ore_kind(*raw))
     for o in mineral_search(q=q)[:4]:
         add(o["zh"], o["en"], "矿物")
     for zh, en in suggest(q, 12):
-        add(zh, en, "矿物" if raw_ore(en) else "物品")
+        add(zh, en, ore_kind(zh, en) if raw_ore(en) else "物品")
     try:
         t = trade()
         for i in t.catalog.search(q)[:6]:  # 以前入过库、查过价的（本地物品也在这里）

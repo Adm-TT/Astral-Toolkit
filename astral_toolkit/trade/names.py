@@ -171,6 +171,16 @@ def _mineral_near(zh):
     return mineral_zh(en), en
 
 
+def _raw_garbled(z, k):
+    """认出的中文名 z 比矿名 k 多一两个字、矿名在头上或尾上（「塔兰导电石源护」「源欧拉特烃」）：多半是原矿名认错了字，
+    不近似成精炼的那个矿（原矿和精炼分开，2026-11-08；以前错两个字的原矿名会被当成认准了的精炼矿）"""
+    return (
+        len(z) - len(k) in (1, 2)
+        and (z.startswith(k) or z.endswith(k))
+        and _mineral(k, "") is not None
+    )
+
+
 def _closest(keys, target, floor):
     """keys 里和 target 最像的（相似度 ≥ floor，而且明显比第二名像）；没有返回 None"""
     import difflib
@@ -224,7 +234,7 @@ def canonical(zh="", en=""):
             return hit
     if zh and len(_norm_zh(zh)) >= 3:
         k = _closest(zh_map, _norm_zh(zh), 0.75)
-        if k:
+        if k and not _raw_garbled(_norm_zh(zh), k):
             return zh_map[k]
     return None
 
@@ -252,16 +262,22 @@ def canonical_exact(zh="", en=""):
     return None
 
 
-def raw_base(en):
-    """原矿 / 矿石的英文名去掉原矿那截、剩下的是矿名：Taranite (Raw)、Gold (Ore) → Taranite、Gold，Raw Ice → Ice；
-    不是返回 None"""
-    from .matching import market_base
+# 原矿 / 矿石名的写法：末尾「(Raw)」「(Ore)」「(R)」（市场上的中文名也有「（原矿）」「（矿石）」），或开头「Raw 」（原冰 Raw Ice）
+_RAW_SUFFIX = re.compile(r"\s*[（(]\s*(?:raw|ore|r|原矿|矿石)\s*[)）]\s*$", re.I)
 
+
+def raw_base(en):
+    """原矿 / 矿石的英文名去掉原矿那截、剩下的矿名：Taranite (Raw)、Gold (Ore)、Sadaryx (Raw) → Taranite、Gold、Sadaryx，
+    Raw Ice → Ice；不是原矿返回 None。只认原矿的写法：别的括号（纯净科力晶「Carinite (Pure)」、「(Modified)」）不算；
+    开头的「Raw 」要后面是矿名才算"""
     en = (en or "").strip()
-    base = market_base(en)
-    if base == en and en.lower().startswith("raw "):
+    base = _RAW_SUFFIX.sub("", en).strip()
+    if base != en:
+        return base or None
+    if en.lower().startswith("raw "):
         base = en[4:].strip()
-    return base if base != en and _mineral("", base) else None
+        return base if _mineral("", base) else None
+    return None
 
 
 def raw_ore(name):

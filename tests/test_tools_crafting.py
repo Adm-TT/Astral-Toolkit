@@ -220,6 +220,12 @@ def test_goal_shortage_marked_everywhere(monkeypatch):
     assert t_goals._gkey("Gold (Ore)") == t_goals._gkey("gold") and t_goals._gkey(
         "钨矿石"
     ) == t_goals._gkey("钨")
+    # 原矿的英文名带后缀或「Raw 」开头：「目标还缺」照旧按矿名对上，掉落那栏照旧给开采点（原矿和精炼分开认以后，2026-11-08）
+    from astral_toolkit.tasks.catalog_queries.loot import ship_mineral
+
+    assert t_goals._gkey("Raw Ouratite") == t_goals._gkey("Ouratite")
+    assert ship_mineral("Raw Ouratite") == "Ouratite"
+    assert ship_mineral("Taranite (Raw)") == "Taranite"
     assert (
         t_goals._goal_for("钨矿石")["en"] == "Tungsten"
         and t_goals._goal_for("Iron") is None
