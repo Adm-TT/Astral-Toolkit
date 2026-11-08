@@ -88,6 +88,7 @@ MODULES = [
     "tests.test_stage0",
     "tests.test_stage3",
     "tests.test_stage4",
+    "tests.test_hud_band",
     "tests.test_gpu_ocr",
     "tests.test_hover",
     "tests.test_inspector",

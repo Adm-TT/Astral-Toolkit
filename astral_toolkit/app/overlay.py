@@ -3,8 +3,10 @@
 各功能往自己的分区写字：hud().set("扫描", "第一行是标题\\n下面是内容")，悬浮窗把各分区叠起来显示，
 同样的内容也会实时出现在助手窗口右侧。一闪而过的提示用 hud().note("…", 秒)：白色胶囊，同时只有一条。
 - 游戏要用「无边框窗口」模式才看得到悬浮窗（全屏模式下会被游戏盖住）
-- 鼠标穿透、永远不抢焦点：鼠标飘过去或点到它，操作都直接给游戏
-- 要换位置：AT「设置与更新」里打开「移动悬浮窗」，拖好再关上（位置会记住）
+- 文案窗鼠标穿透、永远不抢焦点：点到它操作直接给游戏
+- 外框锁在游戏客户区中上带（宽 30%–70%、高顶部 0%–20%）；内容超出可滑动，默认钉底
+- 左上角独立小手柄窗：长按拖动改位置（写入 overlay_pos.json）；在手柄上滚轮滑动内容
+- 导航菱形 / 瞄准环仍是另两扇独立窗口
 - 悬浮窗在自己的线程里运行，任何线程都可以调用 set()
 
 1.6.61 起照 DESIGN.md 第 8 节自己画：先用 PIL 画成一张带透明度的图，再整张贴到窗口上（UpdateLayeredWindow）。
@@ -57,7 +59,7 @@ ORDER = [
 ]  # 分区显示顺序，没列出的排最后
 
 # ---- 尺寸（1080p 下的像素，按屏幕高度等比放大；玩家还能在设置里缩小到 hud_scale 倍：0.5 / 0.75 / 1）
-BASE_W = 400  # 悬浮窗宽
+BASE_W = 400  # 单列卡片参考宽（横排时单卡不超过此宽×scale）
 BODY_PX = 18  # 正文：XAG 101，PC 1080p 至少 18px
 TITLE_PX = 21
 LABEL_PX = 12
@@ -75,6 +77,33 @@ HI_C = (142, 197, 255, 255)  # 高品质那份（蓝，DESIGN.md 的「好」）
 PAD_X, PAD_T, PAD_B, GAP = 16, 12, 14, 8
 RADIUS = 8
 MARGIN = 2  # 留一点边，圆角和阴影不被切
+
+# 文案视口相对游戏客户区（2026-11-08）
+BAND_X0, BAND_X1 = 0.30, 0.70
+BAND_Y0, BAND_Y1 = 0.0, 0.20
+GRIP_HOLD_MS = 300
+GRIP_BASE_PX = 28  # 手柄边长（再乘 hud 字号 scale）
+
+
+def band_size(area_w: int, area_h: int) -> tuple[int, int]:
+    """客户区 → 文案视口像素宽高"""
+    w = max(1, int(round(area_w * (BAND_X1 - BAND_X0))))
+    h = max(1, int(round(area_h * (BAND_Y1 - BAND_Y0))))
+    return w, h
+
+
+def band_origin(area: dict) -> tuple[int, int]:
+    """客户区字典 → 视口左上角屏幕坐标"""
+    return (
+        int(area["left"] + area["width"] * BAND_X0),
+        int(area["top"] + area["height"] * BAND_Y0),
+    )
+
+
+def clamp_scroll_from_bottom(scroll: float, content_h: int, view_h: int) -> float:
+    """距底部的滚动偏移：0 = 钉底；上限 = 内容比视口多出的高度"""
+    max_up = max(0, int(content_h) - int(view_h))
+    return max(0.0, min(float(scroll), float(max_up)))
 
 # ---- 颜色（DESIGN.md 第 1、8 节）：只有底板半透明，字不透明
 PLATE = (0, 0, 0)
@@ -316,10 +345,15 @@ def _rich_lines(rich, scale, width):
     return lines
 
 
-def layout(sections, scale, rich=None):
+def layout(sections, scale, rich=None, content_width=None):
     """分区 → 要画的块：[{key, label, lines: [(种类, 文字, 右边文字)]}]。
-    种类：t 标题、s 关键读数（几格）、b 正文、k 左名右值、m 次要（灰）、g 组间留白"""
-    width = (BASE_W - 2 * PAD_X) * scale
+    种类：t 标题、s 关键读数（几格）、b 正文、k 左名右值、m 次要（灰）、g 组间留白。
+    content_width：单卡正文可用宽（不含左右 padding）；默认按 BASE_W。"""
+    width = (
+        content_width
+        if content_width is not None
+        else (BASE_W - 2 * PAD_X) * scale
+    )
     rich = rich or {}
     blocks = []
     for k in sorted(
@@ -356,35 +390,9 @@ def layout(sections, scale, rich=None):
     return blocks
 
 
-def paint(
-    sections,
-    note="",
-    movable=False,
-    scale=1.0,
-    plate=PLATE_ALPHA,
-    fresh=None,
-    now=None,
-    rich=None,
-):
-    """画出整个悬浮窗。fresh = {(分区, 行号): 开始淡入的时间}，正在淡入的行画成半模糊。返回 (图, 还在动画吗)"""
-    from PIL import Image, ImageDraw, ImageFilter
-
+def _line_heights(scale):
     s = scale
-    W = int(round(BASE_W * s)) + 2 * MARGIN
-    blocks = layout(sections, s, rich)
-    note = clean(note)
-    if movable and not blocks and not note:
-        blocks = [
-            {
-                "key": "_move",
-                "label": "MOVE · 移动",
-                "lines": [
-                    ("t", "拖动此处调整位置", ""),
-                    ("b", "调整完成后在 AT 中关闭「移动悬浮窗」", ""),
-                ],
-            }
-        ]
-    lh = {
+    return {
         "t": TITLE_PX * s * 1.3,
         "b": BODY_PX * s * 1.5,
         "k": BODY_PX * s * 1.5,
@@ -400,11 +408,31 @@ def paint(
         "G": (STAT_L * 1.55 + GAIN_PX * 1.2) * s + 4 * s,
         "f": FOOT_PX * s * 1.5,
     }
-    # 先算高度
-    h = MARGIN
-    note_lines = wrap(note, NOTE_PX * s, (BASE_W - 40) * s) if note else []
-    if note:
-        h += int(len(note_lines) * NOTE_PX * s * 1.45 + 20 * s) + int(GAP * s)
+
+
+def paint(
+    sections,
+    note="",
+    scale=1.0,
+    plate=PLATE_ALPHA,
+    fresh=None,
+    now=None,
+    rich=None,
+    viewport_w=None,
+    viewport_h=None,
+    scroll_from_bottom=0.0,
+):
+    """画出文案视口。viewport 固定；正文可更高，按 scroll_from_bottom 裁进视口（0=钉底）。
+    note 固定画在视口底部。返回 (图, 还在动画吗, 正文内容高)。"""
+    from PIL import Image, ImageDraw, ImageFilter
+
+    s = scale
+    vw = int(viewport_w or (BASE_W * s + 2 * MARGIN))
+    vh = int(viewport_h or max(1, int(vw * 0.5)))
+    card_inner = min((BASE_W - 2 * PAD_X) * s, max(40.0, vw - 2 * MARGIN - 2 * PAD_X * s))
+    blocks = layout(sections, s, rich, content_width=card_inner)
+    note = clean(note)
+    lh = _line_heights(s)
     heights = []
     for b in blocks:
         bh = (
@@ -414,39 +442,44 @@ def paint(
             + PAD_B * s
         )
         heights.append(int(bh))
-        h += int(bh) + int(GAP * s)
-    h = max(1, int(h + MARGIN - (GAP * s if (blocks or note) else 0)))
-    img = Image.new("RGBA", (W, h), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
+    card_w = int(card_inner + 2 * PAD_X * s)
+    # 横排：卡片从左到右，一行放不下换行
+    places = []  # (b, bh, x, y)
+    x = MARGIN
+    y = MARGIN
+    row_h = 0
+    for b, bh in zip(blocks, heights):
+        if x > MARGIN and x + card_w > vw - MARGIN:
+            x = MARGIN
+            y += row_h + int(GAP * s)
+            row_h = 0
+        places.append((b, bh, x, y))
+        x += card_w + int(GAP * s)
+        row_h = max(row_h, bh)
+    content_h = (
+        int(y + row_h + MARGIN)
+        if places
+        else MARGIN
+    )
+    content_h = max(1, content_h)
+    body = Image.new("RGBA", (vw, content_h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(body)
     now = time.time() if now is None else now
     fresh = fresh or {}
     busy = False
-    y = MARGIN
-    x0, x1 = MARGIN, W - MARGIN - 1
-    if note:  # 一闪而过的提示：白色胶囊，贴右
-        nw = max(text_width(l, NOTE_PX * s) for l in note_lines) + 40 * s  # noqa: E741
-        nh = len(note_lines) * NOTE_PX * s * 1.45 + 20 * s
-        nx = x1 - nw
-        d.rounded_rectangle(
-            (nx, y, x1, y + nh), radius=min(nh / 2, 32 * s), fill=NOTE_BG
-        )
-        by = y + 10 * s + NOTE_PX * s * 1.08
-        for l in note_lines:  # noqa: E741
-            draw_text(d, nx + 20 * s, by, l, NOTE_PX * s, NOTE_C)
-            by += NOTE_PX * s * 1.45
-        y += int(nh) + int(GAP * s)
     plate_a = int(255 * plate_alpha(plate))
-    for b, bh in zip(blocks, heights):
+    for b, bh, x0, y0 in places:
+        x1 = x0 + card_w - 1
         d.rounded_rectangle(
-            (x0, y, x1, y + bh),
+            (x0, y0, x1, y0 + bh),
             radius=RADIUS * s,
             fill=PLATE + (plate_a,),
             outline=EDGE,
             width=max(1, int(s)),
         )
-        ly = y + PAD_T * s + LABEL_PX * s * 1.05
+        ly = y0 + PAD_T * s + LABEL_PX * s * 1.05
         draw_text(d, x0 + PAD_X * s, ly, b["label"], LABEL_PX * s, LABEL_C)
-        cy = y + PAD_T * s + LABEL_PX * s * 1.6
+        cy = y0 + PAD_T * s + LABEL_PX * s * 1.6
         for i, (t, left, right) in enumerate(b["lines"]):
             px = (TITLE_PX if t == "t" else BODY_PX) * s
             base = cy + px * (1.08 if t == "t" else 1.12)
@@ -454,16 +487,16 @@ def paint(
             p = 1.0 if started is None else (now - started) * 1000 / FADE_MS
             target = d
             layer = None
-            if 0 <= p < 1:  # 淡入中：先画到单独一层，模糊 + 降透明度再贴上
+            if 0 <= p < 1:
                 busy = True
-                layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
+                layer = Image.new("RGBA", body.size, (0, 0, 0, 0))
                 target = ImageDraw.Draw(layer)
             elif p < 0:
                 busy = True
                 cy += lh[t]
                 continue
             L, R = x0 + PAD_X * s, x1 - PAD_X * s
-            if t in ("s", "G"):  # 几格：小标签在上、大数字在下，格子之间竖线
+            if t in ("s", "G"):
                 cells = left
                 cw = (R - L) / max(1, len(cells))
                 vpx = STAT_PX if t == "s" else GAIN_PX
@@ -483,7 +516,7 @@ def paint(
                     vx = draw_text(target, cx, vy, val, vpx * s, TITLE_C, bold=True)
                     if unit:
                         draw_text(target, vx + 4 * s, vy, unit, vpx * s * 0.68, BODY_C)
-            elif t == "d":  # 分隔线
+            elif t == "d":
                 target.line(
                     (L, cy + lh[t] / 2, R, cy + lh[t] / 2),
                     fill=LINE_C,
@@ -499,7 +532,7 @@ def paint(
                     TITLE_C,
                     bold=True,
                 )
-                if right:  # 右边写比例的口径（占整块矿石）
+                if right:
                     draw_text(
                         target,
                         R - text_width(right, STAT_L * s),
@@ -523,9 +556,7 @@ def paint(
                     fill=LINE_C,
                     width=max(1, int(s)),
                 )
-            elif (
-                t == "c"
-            ):  # 一种矿：名字 …… 占整块矿石；只有一种品质的合成一行；惰性物质不写品质
+            elif t == "c":
                 c = left
                 base_c = cy + ROW_PX * s * 1.1
                 x = draw_text(
@@ -558,7 +589,7 @@ def paint(
                     TITLE_C,
                     bold=True,
                 )
-            elif t == "q":  # 各品质：树线 + 品质 925 …… 30%
+            elif t == "q":
                 q = left
                 lx = L + 6 * s
                 mid = cy + lh[t] * 0.48
@@ -583,7 +614,7 @@ def paint(
                     SUB_PX * s,
                     BODY_C,
                 )
-            elif t == "a":  # 开采建议：矿头组合 | 建议功率
+            elif t == "a":
                 adv = left
                 ba = cy + 21 * s * 1.05
                 pw = text_width(adv.get("power", ""), 19 * s)
@@ -643,10 +674,32 @@ def paint(
                     )
                 al = part.getchannel("A").point(lambda v, k=p: int(v * k))
                 part.putalpha(al)
-                img.alpha_composite(part, (box[0], box[1]))
+                body.alpha_composite(part, (box[0], box[1]))
             cy += lh[t]
-        y += bh + int(GAP * s)
-    return img, busy
+
+    scroll = clamp_scroll_from_bottom(scroll_from_bottom, content_h, vh)
+    # 钉底：src_y 使内容下端对齐视口下端，再往上滚 scroll
+    src_y = max(0, content_h - vh - int(scroll))
+    img = Image.new("RGBA", (vw, vh), (0, 0, 0, 0))
+    crop = body.crop((0, src_y, vw, min(content_h, src_y + vh)))
+    img.alpha_composite(crop, (0, 0))
+    if note:
+        note_lines = wrap(note, NOTE_PX * s, max(40.0, vw - 40 * s))
+        nw = max(text_width(l, NOTE_PX * s) for l in note_lines) + 40 * s  # noqa: E741
+        nh = len(note_lines) * NOTE_PX * s * 1.45 + 20 * s
+        nd = ImageDraw.Draw(img)
+        nx = vw - MARGIN - nw
+        ny = vh - MARGIN - nh
+        nd.rounded_rectangle(
+            (nx, ny, vw - MARGIN - 1, ny + nh),
+            radius=min(nh / 2, 32 * s),
+            fill=NOTE_BG,
+        )
+        by = ny + 10 * s + NOTE_PX * s * 1.08
+        for l in note_lines:  # noqa: E741
+            draw_text(nd, nx + 20 * s, by, l, NOTE_PX * s, NOTE_C)
+            by += NOTE_PX * s * 1.45
+    return img, busy, content_h
 
 
 def diff_fresh(old_blocks, new_blocks, start, fresh):
@@ -925,7 +978,6 @@ def _ulw(hwnd, img):
 class Hud:
     def __init__(self):
         self.ok = False
-        self.movable = False
         self.sections = {}
         self.rich = {}
         self.note_text = ""
@@ -935,6 +987,13 @@ class Hud:
         self._blocks, self._fresh = [], {}
         self._cfg, self._cfg_at = (1.0, PLATE_ALPHA), 0.0
         self._fps = 5  # 导航帧数：记号显示着时悬浮窗按它加快（跟设置走，两秒读一次；设置页改了收到 restyle 马上重读）
+        self.scroll_from_bottom = 0.0  # 距内容底部的偏移；0 = 钉底
+        self._content_h = 1
+        self._view_h = 1
+        self._grip = None  # (tk_win, hwnd)
+        self._grip_press_at = 0.0
+        self._grip_dragging = False
+        self._off = (0, 0)
         if ENABLED and sys.platform == "win32":
             threading.Thread(target=self._thread, daemon=True, name="overlay").start()
             self._ready.wait(5)
@@ -1014,9 +1073,10 @@ class Hud:
     def sleep(self, seconds):
         time.sleep(seconds)
 
-    def set_movable(self, on):
+    def scroll_by(self, delta: float):
+        """正文相对视口滚动（正数往上看更早内容）。任何线程可调；手柄滚轮走队列。"""
         if self.ok:
-            self._q.put("move_on" if on else "move_off")
+            self._q.put(("scroll", float(delta)))
 
     # ---------------------------------------------------------------- 悬浮窗线程
     def _thread(self):
@@ -1039,22 +1099,20 @@ class Hud:
             self.root.configure(bg="black")
             x, y = self._load_pos()
             self.root.geometry(f"1x1+{x}+{y}")
-            self.root.bind(
-                "<ButtonPress-1>", self._press
-            )  # 只有「移动悬浮窗」打开时才收得到鼠标
-            self.root.bind("<B1-Motion>", self._drag)
-            self.root.bind("<ButtonRelease-1>", lambda e: self._save_pos())
             self.root.update()
             self._remember_hwnd()
-            self.movable = False
             self._apply_style()
             from PIL import Image
 
             if not HWND or not _ulw(HWND, Image.new("RGBA", (1, 1), (0, 0, 0, 0))):
                 raise RuntimeError("UpdateLayeredWindow")
             self.ok = True
-            try:  # 导航记号的两个小窗口启动时就建好：Tk 第一次显示新窗口可能激活它，
-                self._mk_window()  # 以前第一次出记号时（正在游戏里）才建，可能抢一次焦点（审查 2026-10-31）
+            try:
+                self._mk_window()
+            except Exception:
+                pass
+            try:
+                self._grip_window()
             except Exception:
                 pass
         except Exception:
@@ -1105,20 +1163,18 @@ class Hud:
                 elif cmd == "hide":
                     self._push(None)
                 elif cmd == "marker":
-                    # 一圈里来几个记号只画最新的一次（帧数高了一圈会来好几个）
                     mk = True
-                elif (
-                    cmd == "restyle"
-                ):  # 设置页换了配色 / 底板 / 大小：马上按新设置重画（二审 2026-10-27）
+                elif cmd == "restyle":
                     self._cfg_at = 0.0
                     dirty = True
-                    if getattr(
-                        self, "_mk", None
-                    ):  # 正在显示导航记号才重画（没有就别建窗口）
+                    if getattr(self, "_mk", None):
                         mk = True
-                elif cmd in ("move_on", "move_off"):
-                    self.movable = cmd == "move_on"
-                    self._apply_style()
+                elif isinstance(cmd, tuple) and cmd and cmd[0] == "scroll":
+                    self.scroll_from_bottom = clamp_scroll_from_bottom(
+                        self.scroll_from_bottom + cmd[1],
+                        self._content_h,
+                        self._view_h,
+                    )
                     dirty = True
         except queue.Empty:
             pass
@@ -1128,7 +1184,7 @@ class Hud:
         try:
             if dirty or self._fresh:
                 busy = self._render(changed=dirty)
-        except Exception as e:  # 某一帧画错了：记一次日志、跳过这帧，悬浮窗照常继续刷新
+        except Exception as e:
             self._fresh = {}
             sig = f"{type(e).__name__}: {e}"
             if sig != getattr(self, "_last_err", None):
@@ -1225,26 +1281,57 @@ class Hud:
             self._mk_put(h1, None, 0, 0)
             self._mk_put(h2, None, 0, 0)
 
+    def _viewport_px(self):
+        """当前文案视口宽高（游戏客户区中上带；找不到游戏则按屏高估算）"""
+        try:
+            from ..core.capture import game_area, game_size
+
+            a = game_area()
+            if game_size() is not None:
+                return band_size(a["width"], a["height"])
+            return band_size(a["width"], a["height"])
+        except Exception:
+            try:
+                import ctypes
+
+                sw = ctypes.windll.user32.GetSystemMetrics(0)
+                sh = ctypes.windll.user32.GetSystemMetrics(1)
+            except Exception:
+                sw, sh = 1920, 1080
+            return band_size(sw, sh)
+
     def _render(self, changed=True):
         scale = self._scale()
         sections = dict(self.sections)
+        vw, vh = self._viewport_px()
+        self._view_h = vh
+        card_inner = min(
+            (BASE_W - 2 * PAD_X) * scale, max(40.0, vw - 2 * MARGIN - 2 * PAD_X * scale)
+        )
         if changed:
-            blocks = layout(sections, scale, dict(self.rich))
+            blocks = layout(sections, scale, dict(self.rich), content_width=card_inner)
             self._fresh = diff_fresh(self._blocks, blocks, time.time(), self._fresh)
             self._blocks = blocks
-        img, busy = paint(
+        img, busy, content_h = paint(
             sections,
             self.note_text,
-            self.movable,
             scale,
             self._settings()[1],
             self._fresh,
             rich=dict(self.rich),
+            viewport_w=vw,
+            viewport_h=vh,
+            scroll_from_bottom=self.scroll_from_bottom,
+        )
+        self._content_h = content_h
+        self.scroll_from_bottom = clamp_scroll_from_bottom(
+            self.scroll_from_bottom, content_h, vh
         )
         if not busy:
             self._fresh = {}
-        empty = not (sections or self.note_text or self.movable)
+        empty = not (sections or self.note_text)
         self._push(None if empty else img)
+        self._grip_sync()
         return busy
 
     def _push(self, img):
@@ -1253,7 +1340,7 @@ class Hud:
 
         SHOWN = img is not None
         try:
-            if img is not None and not self.movable:
+            if img is not None:
                 self._avoid_di(img)
             _ulw(
                 HWND,
@@ -1316,7 +1403,7 @@ class Hud:
             pass
 
     def _apply_style(self):
-        """鼠标穿透 + 永不激活 + 不在任务栏/Alt+Tab 里出现；「移动悬浮窗」打开时去掉穿透，才拖得动"""
+        """文案窗：鼠标穿透 + 永不激活 + 不在任务栏/Alt+Tab；拖动只走左上角手柄窗"""
         try:
             import ctypes
 
@@ -1331,8 +1418,8 @@ class Hud:
                 | WS_EX_TOOLWINDOW
                 | WS_EX_NOACTIVATE
                 | WS_EX_TOPMOST
+                | WS_EX_TRANSPARENT
             )
-            ex = ex & ~WS_EX_TRANSPARENT if self.movable else ex | WS_EX_TRANSPARENT
             put(HWND, GWL_EXSTYLE, ex)
             u32.SetWindowPos(
                 HWND,
@@ -1361,14 +1448,23 @@ class Hud:
             return int(p["x"]), int(p["y"])
         except Exception:
             try:
+                from ..core.capture import game_area, game_size
+
+                a = game_area()
+                if game_size() is not None:
+                    return band_origin(a)
+            except Exception:
+                pass
+            try:
                 import ctypes
 
                 sw = ctypes.windll.user32.GetSystemMetrics(0)
                 sh = ctypes.windll.user32.GetSystemMetrics(1)
             except Exception:
-                sw, sh = self.root.winfo_screenwidth(), 1080
-            s = max(0.75, sh / 1080)
-            return int(sw - BASE_W * s - 48 * s), int(32 * s)
+                sw, sh = 1920, 1080
+            return band_origin(
+                {"left": 0, "top": 0, "width": sw, "height": sh}
+            )
 
     def _save_pos(self):
         try:
@@ -1379,25 +1475,145 @@ class Hud:
         except Exception:
             pass
 
-    def _press(self, e):
-        x, y = self._rect()
-        self._off = (e.x_root - x, e.y_root - y)
+    def _grip_px(self):
+        return max(20, int(round(GRIP_BASE_PX * self._scale())))
 
-    def _drag(self, e):
+    def _grip_image(self, size):
+        """六点握把图标"""
+        from PIL import Image, ImageDraw
+
+        img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        d = ImageDraw.Draw(img)
+        pad = max(2, size // 10)
+        d.rounded_rectangle(
+            (0, 0, size - 1, size - 1),
+            radius=max(3, size // 6),
+            fill=PLATE + (int(255 * plate_alpha(self._settings()[1])),),
+            outline=EDGE,
+            width=1,
+        )
+        r = max(1, size // 14)
+        gap = (size - 2 * pad) / 4
+        for i in range(3):
+            for j in range(2):
+                cx = pad + gap + i * gap
+                cy = pad + gap * (0.8 + j * 1.4)
+                d.ellipse((cx - r, cy - r, cx + r, cy + r), fill=LABEL_C)
+        return img
+
+    def _grip_window(self):
+        """左上角手柄：不穿透，可长按拖主窗、滚轮滑正文"""
+        if self._grip is not None:
+            return self._grip
+        import ctypes
+
+        u32 = ctypes.windll.user32
+        get = getattr(u32, "GetWindowLongPtrW", u32.GetWindowLongW)
+        put = getattr(u32, "SetWindowLongPtrW", u32.SetWindowLongW)
+        w = self.tk.Toplevel(self.root)
+        w.overrideredirect(True)
+        w.attributes("-topmost", True)
+        sz = self._grip_px()
+        w.geometry(f"{sz}x{sz}+0+0")
+        w.update()
+        h = u32.GetAncestor(w.winfo_id(), 2)
+        ex = (
+            get(h, GWL_EXSTYLE)
+            | WS_EX_LAYERED
+            | WS_EX_TOOLWINDOW
+            | WS_EX_NOACTIVATE
+            | WS_EX_TOPMOST
+        )
+        ex = ex & ~WS_EX_TRANSPARENT
+        put(h, GWL_EXSTYLE, ex)
+        w.bind("<ButtonPress-1>", self._grip_press)
+        w.bind("<B1-Motion>", self._grip_drag)
+        w.bind("<ButtonRelease-1>", self._grip_release)
+        w.bind("<MouseWheel>", self._grip_wheel)
+        self._grip = (w, h)
+        self._grip_sync()
+        return self._grip
+
+    def _grip_sync(self):
+        if not self._grip or not HWND:
+            return
         try:
             import ctypes
+            from PIL import Image
 
+            _, h = self._grip
+            sz = self._grip_px()
+            x, y = self._rect()
             ctypes.windll.user32.SetWindowPos(
-                ctypes.c_void_p(HWND),
-                None,
-                e.x_root - self._off[0],
-                e.y_root - self._off[1],
+                ctypes.c_void_p(h),
+                ctypes.c_void_p(-1),
+                int(x),
+                int(y),
                 0,
                 0,
                 SWP_NOSIZE | SWP_NOACTIVATE,
             )
+            img = self._grip_image(sz)
+            if img.size != (sz, sz):
+                img = img.resize((sz, sz), Image.Resampling.LANCZOS)
+            # 手柄 HWND 用 UpdateLayeredWindow；尺寸变化时先 SetWindowPos 改大小
+            ctypes.windll.user32.SetWindowPos(
+                ctypes.c_void_p(h),
+                None,
+                int(x),
+                int(y),
+                int(sz),
+                int(sz),
+                SWP_NOACTIVATE,
+            )
+            _ulw(h, img)
         except Exception:
             pass
+
+    def _grip_press(self, e):
+        self._grip_press_at = time.time()
+        self._grip_dragging = False
+        x, y = self._rect()
+        self._off = (e.x_root - x, e.y_root - y)
+
+    def _grip_drag(self, e):
+        if not self._grip_dragging:
+            if (time.time() - self._grip_press_at) * 1000 < GRIP_HOLD_MS:
+                return
+            self._grip_dragging = True
+        try:
+            import ctypes
+
+            nx = e.x_root - self._off[0]
+            ny = e.y_root - self._off[1]
+            ctypes.windll.user32.SetWindowPos(
+                ctypes.c_void_p(HWND),
+                None,
+                int(nx),
+                int(ny),
+                0,
+                0,
+                SWP_NOSIZE | SWP_NOACTIVATE,
+            )
+            self._grip_sync()
+        except Exception:
+            pass
+
+    def _grip_release(self, e):
+        if self._grip_dragging:
+            self._save_pos()
+        self._grip_dragging = False
+        self._grip_press_at = 0.0
+
+    def _grip_wheel(self, e):
+        # Windows：delta 为正向上滚 → 看更早内容（增大距底偏移）
+        step = max(24, self._view_h // 8)
+        delta = step if getattr(e, "delta", 0) > 0 else -step
+        self.scroll_from_bottom = clamp_scroll_from_bottom(
+            self.scroll_from_bottom + delta, self._content_h, self._view_h
+        )
+        if self.ok:
+            self._q.put("render")
 
     def _remember_hwnd(self):
         """记下悬浮窗的窗口句柄：AT 自己截图读屏时把悬浮窗那块涂黑（capture.mask_overlay），就不会读到悬浮窗上的字。

@@ -27,7 +27,6 @@ from .feedback import (
 from .settings import (
     _hotkey_values,
     hotkey_conflicts,
-    overlay_move,
     quit,
     set_settings,
     show,
@@ -56,7 +55,6 @@ __all__ = [
     "feedback_list",
     "feedback_export",
     "feedback_clear",
-    "overlay_move",
     "set_settings",
     "update_data",
     "about_info",
