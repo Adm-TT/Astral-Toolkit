@@ -22,10 +22,13 @@ def read_item(img: Any, cursor: Any) -> Any:
 
 
 def cell_box(img: Any, cursor: Any) -> Any:
-    """鼠标所在物品格的框 (左, 上, 右, 下)；找不到是 None（trade/cell_grid.cell_box）"""
-    from ..trade import cell_grid
+    """鼠标所在物品格的框 (左, 上, 右, 下)；找不到是 None（trade/cell_grid.cell_box）。
+    调试模式下每次记一行进 debug 日志（光标、框），实机出错时能对上是哪一格"""
+    from ..trade import cell_grid, inspector
 
-    return cell_grid.cell_box(img, cursor)
+    box = cell_grid.cell_box(img, cursor)
+    inspector._dbg(f"盘点格子框：光标 {tuple(cursor)} 框 {box}")
+    return box
 
 
 def same_cell(a: Any, b: Any) -> bool:
@@ -33,6 +36,13 @@ def same_cell(a: Any, b: Any) -> bool:
     from ..trade import cell_grid
 
     return cell_grid.overlap(a, b) > 0.5
+
+
+def in_gap(img: Any, cursor: Any) -> bool:
+    """鼠标是不是停在两格之间的缝上（trade/cell_grid.in_gap）"""
+    from ..trade import cell_grid
+
+    return cell_grid.in_gap(img, cursor)
 
 
 def in_cell(box: Any, point: Any) -> bool:

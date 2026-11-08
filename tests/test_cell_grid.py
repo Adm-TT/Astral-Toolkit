@@ -51,10 +51,70 @@ def test_tall_lines_inside_the_icon_are_not_cell_edges():
     assert _near(cell_grid.cell_box(img, (x + w - 15, 400)), want)
 
 
-def test_inside_with_margin():
-    box = (100, 100, 200, 200)
-    assert cell_grid.inside(box, (150, 150)) and cell_grid.inside(box, (202, 98))
-    assert not cell_grid.inside(box, (210, 150))
+def test_faint_edge_on_one_side_still_gives_the_cell():
+    """面板半透明，背后场景亮的地方格子边很淡、只剩一截（老大 11-09 样本第一排第一格左边只连着 77 像素）：
+    由贯穿整格的右边定上下，淡的左边在这一格高度里有约半格就认；鼠标停在淡掉那一截旁边也一样"""
+    img = _inventory()
+    d = ImageDraw.Draw(img)
+    x, w = COLS[0]
+    fade = (16, 16, 16)  # 盖住格子边、和两边只差 6 个灰度：看不出边
+    d.rectangle((x - 6, 352 - 3, x + 6, 352 + 60), fill=fade)
+    assert _near(cell_grid.cell_box(img, (x + 60, 360)), (x, 352, x + w, 352 + H))
+    # 两边都只剩一小截就不认
+    for ex in (x, x + w):
+        d.rectangle((ex - 6, 352 - 3, ex + 6, 352 + 90), fill=fade)
+    assert cell_grid.cell_box(img, (x + 60, 420)) is None
+
+
+def test_panel_frame_next_to_a_faint_edge_is_not_taken():
+    """老大 11-09 样本第四排第一格：格子左边淡了一截，旁边 10 像素外的面板边框断开处正好约一格高、
+    但上下和格子错开。要挑左右两条边上下对得齐的那个框，不能拿面板边框拼出一个跨两排的框"""
+    img = _inventory()
+    d = ImageDraw.Draw(img)
+    x, w = COLS[0]
+    top = ROWS[3]
+    d.line(
+        (x - 11, top - 37, x - 11, top + 96), fill=(90, 90, 90), width=2
+    )  # 面板边框断开的一截
+    d.rectangle(
+        (x - 6, top - 3, x + 6, top + 30), fill=(16, 16, 16)
+    )  # 格子左边上面淡掉
+    assert _near(cell_grid.cell_box(img, (x + 70, top + 60)), (x, top, x + w, top + H))
+
+
+def test_in_gap_only_between_two_cells():
+    img = _inventory()
+    (xa, wa), (xb, _) = COLS[0], COLS[1]
+    assert cell_grid.in_gap(img, ((xa + wa + xb) // 2, 400))  # 第一、二列之间的竖缝
+    assert cell_grid.in_gap(
+        img, (1950, (ROWS[0] + H + ROWS[1]) // 2)
+    )  # 第一、二排之间的横缝
+    assert cell_grid.in_gap(
+        img, (xa + wa + 2, 400)
+    )  # 竖缝里贴着左格（审查 11-09：只挪一条缝宽探不到对面）
+    assert cell_grid.in_gap(img, (xa + wa + 4, ROWS[0] + H + 4))  # 两条缝交叉的角上
+    assert not cell_grid.in_gap(img, (1950, 400))  # 格子中间
+    assert not cell_grid.in_gap(img, (1700, 400))  # 仓库外面
+
+
+def test_icon_line_before_the_real_edge_does_not_shrink_the_box():
+    """最外一列：图标里有一条比半格还高的竖线、离格子右边约一格宽，不能拿它当左边把框缩窄（审查 11-09）"""
+    img = _inventory()
+    d = ImageDraw.Draw(img)
+    x, w = COLS[0]
+    top = ROWS[1]
+    d.line((x + 20, top + 30, x + 20, top + 100), fill=(90, 90, 90), width=2)
+    assert _near(cell_grid.cell_box(img, (x + 70, top + 60)), (x, top, x + w, top + H))
+
+
+def test_inside_margin_is_less_than_half_the_narrowest_gap():
+    """框四边只放宽约 2%（贴着边停还算这一格）；缝中间那一点不能同时算进左右两格（审查 11-09：
+    放宽到半条缝时，缝里停的一次会把左右两格都当成「同一格」，同样的东西两格只记一格）"""
+    a = (1880, 345, 2016, 467)  # 第一排第一格
+    b = (2023, 345, 2164, 467)  # 隔着 7 像素的缝，下一格
+    assert cell_grid.inside(a, (1950, 400)) and cell_grid.inside(a, (2018, 350))
+    assert not (cell_grid.inside(a, (2019, 350)) and cell_grid.inside(b, (2019, 350)))
+    assert not cell_grid.inside(a, (2021, 350)) and not cell_grid.inside(a, (1950, 472))
 
 
 def test_same_cell_from_far_apart_spots_overlaps_and_neighbours_do_not():

@@ -46,6 +46,10 @@ class CountAnalysis(Protocol):
         """这一点在不在这个格子框里"""
         ...
 
+    def in_gap(self, img: Any, cursor: Any) -> bool:
+        """鼠标是不是停在两格之间的缝上"""
+        ...
+
     def review(self, place: Any, items: Any) -> Any:
         """这轮看到的和账上对：{rows, missing, ...}"""
         ...
@@ -201,14 +205,18 @@ class _CountWorker:
         seen = {"item": now}
         # 同一种东西（名字、品质、数量都一样）挪进另一格才算新的一格（老大 11-09）：
         # 先在截图上找出鼠标所在那一格的框，和算过的同样东西的框重叠超过一半就是同一格又认了一次。
-        # 只有一边找到框（悬浮窗涂黑了那块、鼠标停在缝上）：看另一边的停点在不在这个框里；
+        # 停在两格之间的缝上的那次直接不算（下面）。只有一边找到框（悬浮窗涂黑了那块）：看另一边的停点在不在这个框里；
         # 两边都没框才退回看距离：横竖都不到 0.045 屏高（约 0.45 格）算同一格——光看距离分不全
         # （同一格里挪得远会多算），所以只当最后的后备。方案：计划\盘点重设计_找格子框_1109.md
         near = img.size[1] * 0.045
+        box = self._box(session, ctx, img, cursor)
+        if box is None and self._gap(img, cursor):
+            # 停在两格之间的缝上：分不清认出来的是哪一格，这次不算，等鼠标停进格子里（老大 11-09 实测重复算一格）
+            return Tick(0.0, seen)
         cell = _Cell(
             _key(r),
             r["qty"],
-            self._box(session, ctx, img, cursor),
+            box,
             cursor[0],
             cursor[1],
         )
@@ -260,6 +268,13 @@ class _CountWorker:
                     session, ("log", f"盘点找格子框出错：{e!r}", "COUNT", "ERROR")
                 )
             return None
+
+    def _gap(self, img: Any, cursor: Any) -> bool:
+        """停在缝上吗；判断出错当不是（照常算，错误 _box 已经记过一次）"""
+        try:
+            return bool(self._an.in_gap(img, cursor))
+        except Exception:
+            return False
 
     def on_pause(self, session: Any, ctx: _CountCtx) -> list[tuple[Any, ...]]:
         return []

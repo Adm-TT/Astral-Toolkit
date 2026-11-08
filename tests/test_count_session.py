@@ -767,6 +767,7 @@ def test_worker_uses_analysis_views_and_links():
         cell_box=lambda img, cursor: None,
         same_cell=lambda a, b: False,
         in_cell=lambda box, point: False,
+        in_gap=lambda img, cursor: False,
         review=lambda place, items: None,
     )
     views = count_mod.CountViews(
@@ -818,6 +819,7 @@ def test_worker_counts_neighbour_cells_once_each():
         cell_box=lambda img, cursor: None,  # 找不到框：退回看距离
         same_cell=lambda a, b: False,
         in_cell=lambda box, point: False,
+        in_gap=lambda img, cursor: False,
         review=lambda place, items: None,
     )
     views = count_mod.CountViews(
@@ -862,6 +864,7 @@ def test_worker_judges_same_cell_by_its_box():
         cell_box=lambda img, cursor: box[0],
         same_cell=count_analysis.same_cell,
         in_cell=count_analysis.in_cell,
+        in_gap=lambda img, cursor: False,
         review=lambda place, items: None,
     )
     views = count_mod.CountViews(
@@ -902,6 +905,37 @@ def test_worker_judges_same_cell_by_its_box():
     worker.teardown(session, ctx)
 
 
+def test_worker_skips_a_stop_in_the_gap_between_cells():
+    """停在两格之间的缝上：分不清认出来的是哪一格，这次不算；停进格子里照常算（老大 11-09 实测重复算一格）"""
+    pos = [(100, 100)]
+    gap = [True]
+    links, _ = _fake_links(cursor_pos=lambda: pos[0])
+    analysis: Any = SimpleNamespace(
+        cursor_on_image=lambda img: pos[0],
+        read_item=lambda img, cursor: _item(),
+        cell_box=lambda img, cursor: None,
+        same_cell=lambda a, b: False,
+        in_cell=lambda box, point: False,
+        in_gap=lambda img, cursor: gap[0],
+        review=lambda place, items: None,
+    )
+    views = count_mod.CountViews(
+        hud_text=lambda place, items: "", item_line=lambda r: ""
+    )
+    worker = count_mod._CountWorker(analysis, views, links)
+    worker.loop = _CommitRecorder()
+    session = SimpleNamespace(payload="测试站")
+    ctx = worker.setup(session)
+    worker.tick(session, ctx, 0.0)
+    seen = worker.tick(session, ctx, 0.4)
+    assert ctx.cells == [] and seen.observed == {"item": 0.4}  # 不算，但算「看到了」
+    gap[0], pos[0] = False, (300, 100)
+    worker.tick(session, ctx, 1.0)
+    worker.tick(session, ctx, 1.4)
+    assert len(ctx.cells) == 1
+    worker.teardown(session, ctx)
+
+
 def test_worker_keeps_counting_when_finding_the_box_fails():
     """找框出错：当找不到框退回看距离，盘点照常；同一种错日志里只记一次"""
     pos = [(100, 100)]
@@ -916,6 +950,7 @@ def test_worker_keeps_counting_when_finding_the_box_fails():
         cell_box=boom,
         same_cell=lambda a, b: False,
         in_cell=lambda box, point: False,
+        in_gap=lambda img, cursor: False,
         review=lambda place, items: None,
     )
     views = count_mod.CountViews(
