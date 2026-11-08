@@ -5,7 +5,7 @@
 - 游戏要用「无边框窗口」模式才看得到悬浮窗（全屏模式下会被游戏盖住）
 - 文案窗鼠标穿透、永远不抢焦点：点到它操作直接给游戏
 - 宽约游戏客户区 40%（左右 30%–70%）；高跟内容，最高不超过客户区高度 20%（超出可滚动）
-- 功能往悬浮窗写字时显示文案窗与左上角手柄；之后 30 秒内无写字、无手柄操作则自动隐藏（内容仍留着，下次再写会再显示）
+- 功能往悬浮窗写字时显示文案窗与左上角手柄；有文案就保持显示，全部清空才隐藏（不再空闲自动隐藏）
 - 默认落在客户区顶边偏中（左约 30%）；拖动后自由定位并记住（overlay_pos.json）
 - 左上角独立小手柄窗：长按自由拖动；在手柄上滚轮滑动内容
 - 导航菱形 / 瞄准环仍是另两扇独立窗口
@@ -85,7 +85,6 @@ BAND_X0, BAND_X1 = 0.30, 0.70
 BAND_H_MAX = 0.20
 GRIP_HOLD_MS = 300
 GRIP_BASE_PX = 28  # 手柄边长（再乘 hud 字号 scale）
-IDLE_HIDE_SECS = 30.0  # 显示后多久无操作则自动隐藏
 
 
 def band_width(area_w: int) -> int:
@@ -132,6 +131,7 @@ def clamp_scroll_from_bottom(scroll: float, content_h: int, view_h: int) -> floa
     """距底部的滚动偏移：0 = 钉底；上限 = 内容比视口多出的高度"""
     max_up = max(0, int(content_h) - int(view_h))
     return max(0.0, min(float(scroll), float(max_up)))
+
 
 # ---- 颜色（DESIGN.md 第 1、8 节）：只有底板半透明，字不透明
 PLATE = (0, 0, 0)
@@ -377,11 +377,7 @@ def layout(sections, scale, rich=None, content_width=None):
     """分区 → 要画的块：[{key, label, lines: [(种类, 文字, 右边文字)]}]。
     种类：t 标题、s 关键读数（几格）、b 正文、k 左名右值、m 次要（灰）、g 组间留白。
     content_width：单卡正文可用宽（不含左右 padding）；默认按 BASE_W。"""
-    width = (
-        content_width
-        if content_width is not None
-        else (BASE_W - 2 * PAD_X) * scale
-    )
+    width = content_width if content_width is not None else (BASE_W - 2 * PAD_X) * scale
     rich = rich or {}
     blocks = []
     for k in sorted(
@@ -456,7 +452,9 @@ def paint(
 
     s = scale
     vw = int(viewport_w or (BASE_W * s + 2 * MARGIN))
-    card_inner = min((BASE_W - 2 * PAD_X) * s, max(40.0, vw - 2 * MARGIN - 2 * PAD_X * s))
+    card_inner = min(
+        (BASE_W - 2 * PAD_X) * s, max(40.0, vw - 2 * MARGIN - 2 * PAD_X * s)
+    )
     blocks = layout(sections, s, rich, content_width=card_inner)
     note = clean(note)
     lh = _line_heights(s)
@@ -483,11 +481,7 @@ def paint(
         places.append((b, bh, x, y))
         x += card_w + int(GAP * s)
         row_h = max(row_h, bh)
-    content_h = (
-        int(y + row_h + MARGIN)
-        if places
-        else MARGIN
-    )
+    content_h = int(y + row_h + MARGIN) if places else MARGIN
     content_h = max(1, content_h)
     # 高跟内容；有上限时封顶（内容少不撑满）
     if viewport_h is None:
@@ -1028,7 +1022,6 @@ class Hud:
         self._grip_dragging = False
         self._off = (0, 0)
         self._visible = False  # 屏幕上是否正在显示文案窗/手柄
-        self._last_op_at = 0.0  # 最近一次写字或手柄操作
         if ENABLED and sys.platform == "win32":
             threading.Thread(target=self._thread, daemon=True, name="overlay").start()
             self._ready.wait(5)
@@ -1036,7 +1029,7 @@ class Hud:
     # ---------------------------------------------------------------- 对外接口（任何线程）
     def set(self, section, text, rich=None, *, activity=True):
         """更新一个分区；text 为空就删掉这个分区。rich：有层次的内容（采矿助手），悬浮窗按它排，窗口右侧还用 text。
-        activity=False：只改字、不刷新空闲计时、不把已隐藏的再弹出来（F6 盘点轮询用）。"""
+        activity 保留兼容（F6 曾用来区分轮询）；现已无空闲隐藏，有文案即显示。"""
         text = text or ""
         if self.sections.get(section, "") == text and self.rich.get(section) == rich:
             return
@@ -1093,7 +1086,6 @@ class Hud:
                     bus.publish("hud", {"section": "提示", "text": ""})
                 except Exception:
                     pass
-                # 提示到期不算「操作」：若已空闲隐藏就别因为清 note 再弹出来
                 self._on_content_change(activity=False)
                 if self.ok:
                     self._q.put("render")
@@ -1107,21 +1099,12 @@ class Hud:
             self._q.put("hide")
 
     def _on_content_change(self, *, activity: bool):
-        """activity=True：写字/开功能 → 显示并刷新空闲计时；全部清空 → 立刻隐藏。
-        activity=False：仅同步「空了就藏」（如 note 到期），不主动重新显示。"""
-        if not self._has_text():
-            self._visible = False
-            return
-        if activity:
-            self._visible = True
-            self._last_op_at = time.time()
+        """有文案就显示，全部清空就隐藏。activity 保留调用方兼容，不再区分空闲计时。"""
+        self._visible = self._has_text()
 
     def _bump_op(self):
-        """手柄拖动 / 滚轮：算作用户操作，延长显示"""
-        if not self._has_text():
-            return
-        self._visible = True
-        self._last_op_at = time.time()
+        """手柄拖动 / 滚轮：有文案则保持显示"""
+        self._visible = self._has_text()
 
     def restyle(self):
         if self.ok:
@@ -1238,15 +1221,6 @@ class Hud:
                     dirty = True
         except queue.Empty:
             pass
-        # 显示中且超时无操作 → 自动隐藏（分区文字仍保留，下次写字再出）
-        if (
-            self._visible
-            and self._has_text()
-            and self._last_op_at
-            and time.time() - self._last_op_at >= IDLE_HIDE_SECS
-        ):
-            self._visible = False
-            dirty = True
         if mk:
             self._marker_render()
         busy = False
@@ -1407,7 +1381,7 @@ class Hud:
         )
         if not busy:
             self._fresh = {}
-        # 无文案，或已空闲隐藏：屏幕上不画（分区数据可仍在）
+        # 无文案或已主动隐藏：屏幕上不画
         if not self._visible or not self._has_text():
             self._push(None)
             self._grip_sync()
@@ -1525,7 +1499,7 @@ class Hud:
         return bool(self.sections or self.note_text)
 
     def _drawn(self) -> bool:
-        """此刻是否该画在屏幕上：有文案且处于显示期（未空闲隐藏）"""
+        """此刻是否该画在屏幕上：有文案且未主动隐藏"""
         return self._visible and self._has_text()
 
     def _grip_px(self):
@@ -1587,7 +1561,7 @@ class Hud:
         return self._grip
 
     def _grip_sync(self):
-        """有文案才画手柄；空闲时 1×1 全透明，不挡屏幕。"""
+        """有文案才画手柄；无文案时 1×1 全透明，不挡屏幕。"""
         if not self._grip or not HWND:
             return
         try:

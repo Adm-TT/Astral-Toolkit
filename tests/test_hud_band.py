@@ -68,10 +68,9 @@ def test_paint_height_follows_content_capped_at_max():
     assert img3.height == ch3 < 400
 
 
-def test_idle_hide_after_ops():
-    """有文案时显示；模拟空闲超时后隐藏；再写字又显示；note 到期不把已隐藏的再弹出来"""
-    import time
-    from astral_toolkit.app.overlay import IDLE_HIDE_SECS, Hud
+def test_visible_while_has_text():
+    """有文案就显示，全部清空才隐藏；不再空闲超时自动藏"""
+    from astral_toolkit.app.overlay import Hud
 
     h = Hud.__new__(Hud)
     h.ok = False
@@ -79,7 +78,6 @@ def test_idle_hide_after_ops():
     h.rich = {}
     h.note_text = ""
     h._visible = False
-    h._last_op_at = 0.0
     h._on_content_change(activity=True)
     assert h._drawn() is False
 
@@ -87,22 +85,8 @@ def test_idle_hide_after_ops():
     h._on_content_change(activity=True)
     assert h._drawn() is True and h._has_text() is True
 
-    h._last_op_at = time.time() - IDLE_HIDE_SECS - 0.1
-    if (
-        h._visible
-        and h._has_text()
-        and h._last_op_at
-        and time.time() - h._last_op_at >= IDLE_HIDE_SECS
-    ):
-        h._visible = False
-    assert h._drawn() is False
-    assert h._has_text() is True  # 文案还在，只是不画
-
-    h.note_text = ""
-    h._on_content_change(activity=False)  # 提示到期：保持隐藏
-    assert h._drawn() is False
-
-    h._on_content_change(activity=True)  # 功能再次写字
+    # 即使很久没操作，有文案仍显示（空闲隐藏已取消）
+    h._on_content_change(activity=False)
     assert h._drawn() is True
 
     h.sections = {}
@@ -110,10 +94,9 @@ def test_idle_hide_after_ops():
     assert h._drawn() is False
 
 
-def test_set_quiet_does_not_bump_idle():
-    """F6 轮询：activity=False 改字不刷新空闲计时、不重新显示"""
-    import time
-    from astral_toolkit.app.overlay import IDLE_HIDE_SECS, Hud
+def test_set_quiet_still_updates_text():
+    """F6 轮询 activity=False：改字照旧；有文案时保持显示"""
+    from astral_toolkit.app.overlay import Hud
 
     h = Hud.__new__(Hud)
     h.ok = False
@@ -121,19 +104,14 @@ def test_set_quiet_does_not_bump_idle():
     h.rich = {}
     h.note_text = ""
     h._visible = False
-    h._last_op_at = 0.0
     h._q = None
 
-    h.set("盘点", "盘点｜站")  # 开始：显示并记时
+    h.set("盘点", "盘点｜站")
     assert h._drawn() is True
-    started = h._last_op_at
 
-    time.sleep(0.02)
     h.set("盘点", "盘点｜站\n铁矿 ×1", activity=False)
     assert h.sections["盘点"].endswith("铁矿 ×1")
-    assert h._last_op_at == started  # 轮询不刷新计时
+    assert h._drawn() is True
 
-    h._last_op_at = time.time() - IDLE_HIDE_SECS - 0.1
-    h._visible = False
     h.set("盘点", "盘点｜站\n铁矿 ×2", activity=False)
-    assert h._drawn() is False  # 已隐藏不因轮询再弹
+    assert h._drawn() is True
