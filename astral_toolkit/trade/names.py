@@ -188,7 +188,7 @@ def _raw_garbled(z, k):
         from ..core.i18n import CONFUSABLE, raw_names
     except Exception:
         return False
-    if not any(CONFUSABLE.get(c, c) in "原矿石" for c in extra):
+    if not any((CONFUSABLE.get(c) or c) in "原矿石" for c in extra):
         return False
     zh_map = _index()[0]
     for r in (k + "原矿", k + "矿石", k + "矿", "原" + k):
