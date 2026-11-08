@@ -51,7 +51,7 @@ class _Hud:
 
 
 def _fake_view(rock="铜"):
-    return {"rock": rock, "hud": f"HUD {rock}", "bag_text": "", "at": "12:00:00"}
+    return {"rock": rock, "hud": f"HUD {rock}", "at": "12:00:00"}
 
 
 def _world(monkeypatch, tmp_path, analyse=None):
@@ -66,9 +66,7 @@ def _world(monkeypatch, tmp_path, analyse=None):
     monkeypatch.setattr(paths, "log", lambda name: tmp_path / name)
     monkeypatch.setattr(paths, "shots", lambda name: tmp_path)
     monkeypatch.setattr(screen, "grab", grab)
-    monkeypatch.setattr(
-        screen, "analyse", analyse or (lambda img: (_rock(), ({}, None, None)))
-    )
+    monkeypatch.setattr(screen, "analyse", analyse or (lambda img: _rock()))
     monkeypatch.setattr(screen, "INTERVAL", 0)
     monkeypatch.setattr(screen, "LAST_RAW", {})  # 别的测试留下的识别结果不算数
     monkeypatch.setattr(screen, "LAST_PANEL", {})
@@ -299,7 +297,7 @@ def test_stale_republish_does_not_touch_store(monkeypatch, tmp_path):
 
     def analyse(img):
         frames["n"] += 1
-        return (_rock() if frames["n"] <= 3 else Scan(), ({}, None, None))
+        return _rock() if frames["n"] <= 3 else Scan()
 
     _world(monkeypatch, tmp_path, analyse)
     real_grab = screen.grab
@@ -517,7 +515,7 @@ def test_commit_without_hud_is_fine(monkeypatch, tmp_path):
         monkeypatch.setattr(hud_state, "_hud", lambda: None)
         session = _session(live)
         assert live.loop.commit(
-            session, live_mod._set("扫描", "x"), live_mod._del("矿袋")
+            session, live_mod._set("扫描", "x"), live_mod._del("信号")
         )
     finally:
         _finish(live, q, gate)
@@ -644,7 +642,7 @@ def _cut_rock():
 
 def test_cut_result_is_partial_and_old_epoch_rejected(monkeypatch, tmp_path):
     """面板被挡走真循环：存的是 partial；算到一半改配装，这份作废，循环不退出，下一帧出新结果"""
-    hud, _ = _world(monkeypatch, tmp_path, lambda img: (_cut_rock(), ({}, None, None)))
+    hud, _ = _world(monkeypatch, tmp_path, lambda img: _cut_rock())
     monkeypatch.setattr(screen, "LAST_PANEL", {"cut": True})
     live = mining_helpers.live()
     calls = []
@@ -674,7 +672,7 @@ def test_cut_result_is_partial_and_old_epoch_rejected(monkeypatch, tmp_path):
 def _signal_world(monkeypatch, tmp_path, lines):
     from astral_toolkit.tasks import goals as t_goals
 
-    hud, _ = _world(monkeypatch, tmp_path, lambda img: (Scan(), ({}, None, None)))
+    hud, _ = _world(monkeypatch, tmp_path, lambda img: Scan())
     monkeypatch.setattr(signals, "find_signatures", lambda img: [(4285, 1)])
     monkeypatch.setattr(signals, "describe_all", lines)
     monkeypatch.setattr(signals, "match_signature", lambda v: True)
@@ -793,7 +791,7 @@ def _wait_note(hud, word, timeout=5):
 def test_stop_note_uses_the_hotkey_from_stop_time(monkeypatch, tmp_path):
     """运行中改热键：自动关闭 / 出错用尽的提示里是新键（收尾那刻现读，不是开启时的快照）"""
     clock = {"t": 1000.0}
-    hud, _ = _world(monkeypatch, tmp_path, lambda img: (Scan(), ({}, None, None)))
+    hud, _ = _world(monkeypatch, tmp_path, lambda img: Scan())
     monkeypatch.setattr(time, "time", lambda: clock["t"])
     live = mining_helpers.live(clock=lambda: clock["t"])
     keys = {"v": "F5"}
@@ -811,7 +809,7 @@ def test_stop_note_uses_the_hotkey_from_stop_time(monkeypatch, tmp_path):
 
 def test_error_note_uses_the_hotkey_from_stop_time(monkeypatch, tmp_path):
     clock = {"t": 1000.0}
-    hud, _ = _world(monkeypatch, tmp_path, lambda img: (Scan(), ({}, None, None)))
+    hud, _ = _world(monkeypatch, tmp_path, lambda img: Scan())
     monkeypatch.setattr(time, "time", lambda: clock["t"])
     live = mining_helpers.live(clock=lambda: clock["t"])
     live.retries = 1
@@ -984,11 +982,11 @@ def _fake_an(**over):
         interval=lambda: 0,
         vote_frames=lambda: 5,
         search=lambda: (0.5, 0.1, 0.9, 0.6),
-        analyse=lambda img: (Scan(), ({}, None, None)),
+        analyse=lambda img: Scan(),
         last_raw=lambda: {},
         last_panel=lambda: {},
         panel_seen=lambda scan, raw: False,
-        enqueue_rock=lambda q, scan, bag=None: False,
+        enqueue_rock=lambda q, scan: False,
         miss_reason=lambda img: None,
         vote=lambda scans: (scans[-1], True),
         vote_partial=lambda scans: (scans[-1], True),
@@ -999,7 +997,7 @@ def _fake_an(**over):
         mark_goal_lines=lambda lines: lines,
         rocks_stamp=lambda: 1,
         mine_file_stamp=lambda: 1,
-        scan_view=lambda *a, **k: {"hud": "HUD", "bag_text": "", "rock": "铜"},
+        scan_view=lambda *a, **k: {"hud": "HUD", "rock": "铜"},
     )
     base.update(over)
     return SimpleNamespace(**base)
@@ -1099,44 +1097,42 @@ def test_mining_full_and_cut_scans_ask_analysis_differently(tmp_path, monkeypatc
     views, votes = [], []
     an = _fake_an(
         vote_frames=lambda: 3,  # 不用真值 5：写死成 5 也测得出
-        enqueue_rock=lambda q, scan, bag=None: q.append((scan, bag)) or False,
+        enqueue_rock=lambda q, scan: q.append(scan) or False,
         vote=lambda scans: votes.append("全") or (scans[-1], True),
         vote_partial=lambda scans: votes.append("挡") or (scans[-1], True),
-        scan_view=lambda *a, **k: (
-            views.append((a, k)) or {"hud": "HUD", "bag_text": "", "rock": "铜"}
-        ),
+        scan_view=lambda *a, **k: views.append((a, k)) or {"hud": "HUD", "rock": "铜"},
     )
     live, sent = _quiet_live(tmp_path, monkeypatch, an)
     session = Session(1, threading.Event())
     ctx = live.setup(session)
     img = Image.new("RGB", (8, 8))
     try:
-        rock, bag = _rock(), ({}, "袋")
-        live._tick_scan(session, ctx, rock, bag, img, 1.0, 1)
+        rock = _rock()
+        live._tick_scan(session, ctx, rock, img, 1.0, 1)
         assert views == [] and votes == []  # 一帧不投票
         ctx.done_here = 2
-        live._tick_scan(session, ctx, rock, bag, img, 1.1, 1)
-        assert views == [((rock, bag), {})] and votes == ["全"]
+        live._tick_scan(session, ctx, rock, img, 1.1, 1)
+        assert views == [((rock,), {})] and votes == ["全"]
         assert (
             ctx.settled is False
         )  # 结果出了，这块石头还没认够一轮（分析给的投票帧数是 3）
         ctx.done_here = 3
-        live._tick_scan(session, ctx, rock, bag, img, 1.2, 1)
-        assert views == [((rock, bag), {})] and votes == [
+        live._tick_scan(session, ctx, rock, img, 1.2, 1)
+        assert views == [((rock,), {})] and votes == [
             "全",
             "全",
         ]  # 一样的结果不重发
         assert ctx.settled is True
         views.clear()
         part = _rock(9000.0)
-        ctx.part.extend([(part, None), (part, None)])
+        ctx.part.extend([part, part])
         ctx.done_here = 2
-        live._tick_part(session, ctx, bag, 2.0, 1)
-        assert views == [((part, bag), {"cut": True})] and votes == ["全", "全", "挡"]
+        live._tick_part(session, ctx, 2.0, 1)
+        assert views == [((part,), {"cut": True})] and votes == ["全", "全", "挡"]
         assert ctx.settled is False  # 还没认够一轮
         ctx.done_here = 3
-        live._tick_part(session, ctx, bag, 2.1, 1)
-        assert views == [((part, bag), {"cut": True})]  # 一样的结果不重发
+        live._tick_part(session, ctx, 2.1, 1)
+        assert views == [((part,), {"cut": True})]  # 一样的结果不重发
         assert votes == ["全", "全", "挡", "挡"]
         assert ctx.settled is True
     finally:
@@ -1151,7 +1147,7 @@ def test_mining_tick_compares_the_panel_region_from_analysis(tmp_path, monkeypat
     from astral_toolkit.runtime.session import Session
 
     calls = []
-    an = _fake_an(analyse=lambda img: calls.append(1) or (Scan(), ({}, None, None)))
+    an = _fake_an(analyse=lambda img: calls.append(1) or Scan())
     a = Image.new("RGB", (320, 180), (100, 100, 100))
     b = a.copy()
     # 32×18 的一小块亮一点，在假分析给的面板范围（search）里：整屏平均差 0.4、面板那块平均差 2.0

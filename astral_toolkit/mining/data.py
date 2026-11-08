@@ -283,17 +283,11 @@ GADGETS = {
 }
 
 # ---------------------------------------------------------------- 采矿船
-# heads: 几个矿头位；size: 矿头尺寸；bag: 矿袋容量 SCU；fixed: 矿头锁死（只能换模组）；crew_max: 最多几人同时开矿头
+# heads: 几个矿头位；size: 矿头尺寸；fixed: 矿头锁死（只能换模组）；crew_max: 最多几人同时开矿头
 SHIPS = {
-    "mole": dict(
-        name="鼹鼠 MOLE", size=2, heads=3, crew_max=3, bag=96
-    ),  # 矿袋 8×12 SCU
-    "prospector": dict(
-        name="勘探者 Prospector", size=1, heads=1, crew_max=1, bag=32
-    ),  # 4×8 SCU
-    "golem": dict(
-        name="魔像 Golem", size=1, heads=1, crew_max=1, bag=32, fixed="pitman"
-    ),  # 2×16 SCU
+    "mole": dict(name="鼹鼠 MOLE", size=2, heads=3, crew_max=3),
+    "prospector": dict(name="勘探者 Prospector", size=1, heads=1, crew_max=1),
+    "golem": dict(name="魔像 Golem", size=1, heads=1, crew_max=1, fixed="pitman"),
 }
 
 # 每条船的出厂配置（用户第一次用原矿扫描时选船，再在「我的配置」里改成自己实际装的，存在 userdata/settings.json）

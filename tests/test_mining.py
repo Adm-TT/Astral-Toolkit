@@ -225,26 +225,9 @@ def test_parse_scan_from_screenshot():
     assert round(scu["Quantainium"], 2) == 13.83 and round(scu["Beryl"], 2) == 2.26
 
 
-def test_parse_bag():
-    from astral_toolkit.mining.parse import rows, parse_bag
-
-    lines = rows(
-        _items(
-            [
-                ("货舱", 40, 10),
-                ("0.30 / 96.00 SCU", 500, 12),
-                ("惰性物质", 40, 120),
-                ("0.30 SCU", 500, 121),
-            ]
-        )
-    )
-    bag, used, cap = parse_bag(lines)
-    assert (used, cap) == (0.30, 96.0) and bag == {"Inert Materials": 0.30}
-
-
 def test_real_ocr_output_from_user_pc():
     # 用户电脑上 RapidOCR 对 2K 截图的真实识别结果（含形近字误认）
-    from astral_toolkit.mining.parse import parse_scan, parse_bag
+    from astral_toolkit.mining.parse import parse_scan
 
     scan = parse_scan(
         [
@@ -273,16 +256,11 @@ def test_real_ocr_output_from_user_pc():
         ("Beryl", 7.95),
         ("Inert Materials", 43.42),
     ]
-    assert parse_bag(["就能 0.30/%.00 SCU", "一", "情性物费 口 0.305CU", "247"]) == (
-        {"Inert Materials": 0.3},
-        0.3,
-        96.0,
-    )
 
 
 def test_real_ocr_turret_view():
     # 用户电脑上炮塔位截图的真实识别结果
-    from astral_toolkit.mining.parse import parse_scan, parse_bag
+    from astral_toolkit.mining.parse import parse_scan
 
     s = parse_scan(
         [
@@ -315,11 +293,6 @@ def test_real_ocr_turret_view():
         ("Tungsten", 49.41),
         ("Inert Materials", 31.07),
     ]
-    assert parse_bag(["胱酸0301950 0.30/96.00SCU J", "怕性物费 口 0 1.305CU"]) == (
-        {},
-        0.3,
-        96.0,
-    )
 
 
 def test_refining_matches_scminer_simulator():
@@ -652,15 +625,14 @@ def test_real_screenshot_scan():
     from PIL import Image
     from astral_toolkit.mining import screen
 
-    scan, bag = screen.analyse(Image.open(img).convert("RGB"))
+    scan = screen.analyse(Image.open(img).convert("RGB"))
     assert scan.composition and scan.mass and abs(scan.mass - 43066) / 43066 < 0.02
 
 
 def test_ship_loadouts(tmp_path, monkeypatch):
-    """勘探者 / 魔像 / MOLE 配装：默认值、自定义保存、非法配装被纠正、矿袋容量跟着船走"""
+    """勘探者 / 魔像 / MOLE 配装：默认值、自定义保存、非法配装被纠正"""
     from astral_toolkit.core import settings
     from astral_toolkit.mining import laser
-    from astral_toolkit.mining.data import SHIPS
 
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
     # 还没选船：没选过（窗口会先问），临时按出厂 MOLE 算
@@ -696,7 +668,6 @@ def test_ship_loadouts(tmp_path, monkeypatch):
         "golem", {"heads": [["helix_i", ["rieger_c3"] * 3]], "crew": 3}
     )
     assert lo == {"heads": [["pitman", ["rieger_c3", "rieger_c3"]]], "crew": 1}
-    assert SHIPS["prospector"]["bag"] == 32 and SHIPS["mole"]["bag"] == 96
 
 
 def test_module_resistance_counts():
@@ -752,9 +723,10 @@ def test_scan_panel_prospector_white_text():
         pytest.skip("没装 OCR")
     from PIL import Image
     from astral_toolkit.mining import screen
-    from astral_toolkit.mining.parse import parse_scan, parse_bag
+    import re
+    from astral_toolkit.mining.parse import parse_scan
 
-    scan_lines, bag_lines = screen.find_panels(
+    scan_lines = screen.find_panels(
         Image.open(paths.SAMPLES / "scan_prospector.jpg").convert("RGB")
     )
     s = parse_scan(scan_lines)
@@ -765,7 +737,10 @@ def test_scan_panel_prospector_white_text():
         9.42,
     ), s
     assert [p for _, p, _ in s.composition] == [8.37, 7.73, 40.71, 43.16] and s.valid, s
-    assert parse_bag(bag_lines, 32)[1:] == (6.49, 60.0)
+    # 下面的货舱（6.49 / 60.00 SCU）照样从扫描面板里分出去，它的字不混进来（矿袋功能 2026-11-08 删了，不再读）
+    assert not any(
+        "货舱" in x or re.search(r"\d[.,]\d{2}\s*/\s*\d", x) for x in scan_lines
+    ), scan_lines
 
 
 def test_signal_values_outside_table_give_best_guess():
@@ -844,7 +819,7 @@ def test_scan_panel_prospector_png():
     from PIL import Image
     from astral_toolkit.mining import screen
 
-    s, bag = screen.analyse(
+    s = screen.analyse(
         Image.open(paths.SAMPLES / "scan_prospector2.png").convert("RGB")
     )
     assert s.rock == "Copper" and (
@@ -879,7 +854,7 @@ def test_snow_ground_panels_and_signals():
     from PIL import Image
 
     for f, mass in (("g1523_08.png", 7714), ("g1523_09.png", None)):
-        scan, _ = screen.analyse(Image.open(d / f).convert("RGB"))
+        scan = screen.analyse(Image.open(d / f).convert("RGB"))
         assert scan.rock == "Laranite" and scan.valid, (f, scan)
         assert scan.total_scu and len(scan.composition) == 4
         if mass:
@@ -1021,7 +996,7 @@ def test_fog_half_panel_read():
 
     img = Image.open(d / "calliope_161036.png").convert("RGB")
     for im in (img, fog_panel(img, (1560, 560, 2100, 775))):
-        scan, _ = screen.analyse(im)
+        scan = screen.analyse(im)
         assert (scan.mass, scan.resistance, scan.instability, scan.total_scu) == (
             12431,
             0,

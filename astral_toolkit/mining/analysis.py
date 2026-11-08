@@ -88,13 +88,6 @@ class PlanFacts:
 
 
 @dataclass(frozen=True)
-class BagFacts:
-    used: float
-    cap: Any
-    items: tuple  # ((矿中文名, SCU), …)
-
-
-@dataclass(frozen=True)
 class HighLot:
     """同一种矿有几种品质时，品质最高的那份"""
 
@@ -146,7 +139,6 @@ class MiningResult:
         tuple  # 悬浮窗要写的目标行；目标查询中途出错时为空（goals 里可能已有前几条）
     )
     plans: tuple  # (PlanFacts, …)
-    bag: BagFacts | None
 
 
 def minerals_of(scan):
@@ -333,7 +325,7 @@ def plan_facts(p, gadget_label):
     )
 
 
-def analyze(scan, bag, inputs: MiningInputs, cut=False) -> MiningResult:
+def analyze(scan, inputs: MiningInputs, cut=False) -> MiningResult:
     """一块石头的计算结果。cut=True：面板被屏幕右边挡住，品质和总 SCU 读不到，只有破碎方案和成分占比。
     inputs 只对应取它的那块 scan，不能拿去算别的石头"""
     mineral_zh = inputs.mineral_zh
@@ -373,12 +365,6 @@ def analyze(scan, bag, inputs: MiningInputs, cut=False) -> MiningResult:
     plans = inputs.recommend(
         scan.mass, scan.resistance, scan.instability, loadout=inputs.loadout
     )
-    contents, used, cap = bag
-    bag_facts = None
-    if used is not None:
-        bag_facts = BagFacts(
-            used, cap, tuple((mineral_zh(k), v) for k, v in contents.items())
-        )
     return MiningResult(
         rock=rock,
         mass=scan.mass,
@@ -401,5 +387,4 @@ def analyze(scan, bag, inputs: MiningInputs, cut=False) -> MiningResult:
         goals=goals,
         goal_lines=goal_lines,
         plans=tuple(plan_facts(p, inputs.gadget_label) for p in plans),
-        bag=bag_facts,
     )

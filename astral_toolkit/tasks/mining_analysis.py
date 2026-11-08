@@ -43,7 +43,7 @@ def search() -> Any:
 
 
 def analyse(*args: Any, **kwargs: Any) -> Any:
-    """一帧画面：(扫描面板读数, 矿袋)"""
+    """一帧画面的扫描面板读数"""
     return _screen().analyse(*args, **kwargs)
 
 

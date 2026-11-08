@@ -135,9 +135,9 @@ def collect_inputs(scan):
     )
 
 
-def scan_view(scan, bag, cut=False):
+def scan_view(scan, cut=False):
     """一块石头的读屏结果（窗口用）。cut=True：面板被屏幕右边挡住，品质和总 SCU 读不到，只有破碎方案和成分占比"""
-    result = _analysis.analyze(scan, bag, collect_inputs(scan), cut=cut)
+    result = _analysis.analyze(scan, collect_inputs(scan), cut=cut)
     out = _present.to_view(result)
     from ..core import settings
     from ..mining.data import focus_keys, focus_ores

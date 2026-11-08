@@ -1,7 +1,8 @@
 """运行结构 RT-B1（采矿呈现）拆分前后的行为基线：固定输入跑 scan_view，完整返回值存 JSON；拆分后再跑一次逐字比对
 
 用法（在项目根目录）：.venv\\Scripts\\python.exe -X utf8 tools\\runtime_baseline_mining.py --out <输出.json>
-  输入：tests/samples 里能读出扫描面板的截图 + 几组写死的扫描 × cut 两种 × 目标清单（空 / 有一条）× 矿袋（有 / 没读到）。
+  输入：tests/samples 里能读出扫描面板的截图 + 几组写死的扫描 × cut 两种 × 目标清单（空 / 有一条）。
+  （矿袋 2026-11-08 删了：以前还乘「矿袋有 / 没读到」两种，键里带「|矿袋|」「|没读到矿袋|」，和旧基线比时去掉这一段）
   全程断网、时间写死；配装和目标在进程内换掉（settings.load / goals.goal_short）。
   在 worktree 里跑：主仓库目录跑时 settings.load 可能迁移写回开发目录的 userdata/settings.json，paths 导入时也会建 userdata 目录。
   JSON 不排序键：字段顺序变了也算差异。不合法的扫描只记异常类型。旧 scan_view 只在基线提交上有：比对时把本工具拷过去出 before。
@@ -20,8 +21,6 @@ from typing import Any
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-BAG = ({"Inert Materials": 0.3}, 0.3, 96.0)
-NO_BAG = ({}, None, None)
 SHIP = "mole"
 LOADOUT = {
     "heads": [
@@ -139,7 +138,7 @@ def _sample_scans():
             continue
         try:
             with Image.open(p) as img:
-                scan = screen.analyse(img.convert("RGB"))[0]
+                scan = screen.analyse(img.convert("RGB"))
         except Exception:
             continue
         if scan and scan.mass is not None and scan.resistance is not None:
@@ -166,10 +165,10 @@ def _goal_map(scan):
     return {goals._gkey(en): t}
 
 
-def _view(scan, bag, cut):
+def _view(scan, cut):
     from astral_toolkit.tasks import mining
 
-    return mining.scan_view(scan, bag, cut=cut)
+    return mining.scan_view(scan, cut=cut)
 
 
 def _branch_cases(out, Scan, goals):
@@ -190,10 +189,10 @@ def _branch_cases(out, Scan, goals):
     try:
         for k, (sys_, _) in saved.items():
             data.REFINERIES[k] = (sys_, {})
-        out["分支:精炼站加成为空"] = _view(copper, BAG, False)
+        out["分支:精炼站加成为空"] = _view(copper, False)
         for k, (sys_, _) in saved.items():
             data.REFINERIES[k] = (sys_, {"Copper": -100})
-        out["分支:某份精炼后为 0"] = _view(copper, BAG, False)
+        out["分支:某份精炼后为 0"] = _view(copper, False)
     finally:
         data.REFINERIES.update(saved)
     out["分支:卖价无收购"] = _view(
@@ -205,7 +204,6 @@ def _branch_cases(out, Scan, goals):
             total_scu=10.0,
             composition=[("NotAnOre", 100.0, 500)],
         ),
-        BAG,
         False,
     )
     out["分支:高品质但总 SCU 读不到"] = _view(
@@ -217,13 +215,12 @@ def _branch_cases(out, Scan, goals):
             total_scu=None,
             composition=[("Gold", 30.0, 800), ("Gold", 30.0, 600), ("Gold", 40.0, 300)],
         ),
-        BAG,
         True,
     )
     real = laser.recommend
     laser.recommend = lambda *a, **k: []
     try:
-        out["分支:没有方案"] = _view(copper, BAG, False)
+        out["分支:没有方案"] = _view(copper, False)
     finally:
         laser.recommend = real
     t = {
@@ -236,7 +233,7 @@ def _branch_cases(out, Scan, goals):
         "item": None,
     }
     goals.goal_short = lambda force=False: {goals._gkey("Gold"): t}
-    out["分支:目标 minq≤1 且自带中文名"] = _view(copper, BAG, False)
+    out["分支:目标 minq≤1 且自带中文名"] = _view(copper, False)
     goals.goal_short = no_goal
 
 
@@ -284,7 +281,7 @@ def _timing_cases(out, Scan):
     )
 
     def show(inputs):
-        v = present.to_view(analysis.analyze(scan, BAG, inputs))
+        v = present.to_view(analysis.analyze(scan, inputs))
         return {"refine": v["refine"], "sell": v["sell"], "plans": v["plans"]}
 
     inputs = mining.collect_inputs(scan)
@@ -323,11 +320,10 @@ def collect():
     out: dict[str, Any] = {"scan 清单": {k: repr(s) for k, s in scans.items()}}
     for name, scan in scans.items():
         for cut in (False, True):
-            for bag_name, bag in (("矿袋", BAG), ("没读到矿袋", NO_BAG)):
-                for goal_name, m in (("无目标", {}), ("有目标", _goal_map(scan))):
-                    goals.goal_short = lambda force=False, _m=m: _m
-                    key = f"{name}|cut={cut}|{bag_name}|{goal_name}"
-                    out[key] = _view(scan, bag, cut)
+            for goal_name, m in (("无目标", {}), ("有目标", _goal_map(scan))):
+                goals.goal_short = lambda force=False, _m=m: _m
+                key = f"{name}|cut={cut}|{goal_name}"
+                out[key] = _view(scan, cut)
 
     # 目标查询出错：制造提示留着，目标和悬浮窗里的目标行都没有（scan_view 里那段 try 的语义）
     def boom(force=False):
@@ -335,7 +331,7 @@ def collect():
 
     goals.goal_short = boom
     first = next(iter(_fixed_scans().values()))
-    out["目标查询出错"] = _view(first, BAG, False)
+    out["目标查询出错"] = _view(first, False)
 
     _branch_cases(out, Scan, goals)
     _manual_cases(out)
@@ -350,7 +346,7 @@ def collect():
         ("没不稳定性", {"mass": 1, "resistance": 1, "instability": None}),
     ):
         try:
-            _view(Scan(rock="Gold", **kw), BAG, False)
+            _view(Scan(rock="Gold", **kw), False)
             out[f"不合法:{label}"] = "没有异常"
         except Exception as e:
             out[f"不合法:{label}"] = type(e).__name__

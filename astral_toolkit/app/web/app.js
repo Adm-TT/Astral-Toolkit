@@ -313,9 +313,9 @@ function connect() {
 }
 
 // ================================================================ 顶栏 / 实时栏
-const HUD_ORDER = ["辅助", "信号", "扫描", "矿袋", "导航", "小行星带", "物品", "交易", "路标", "反馈"];
+const HUD_ORDER = ["辅助", "信号", "扫描", "导航", "小行星带", "物品", "交易", "路标", "反馈"];
 const HUD_LABEL = { 扫描: "采矿助手", 导航: "导航" };            // 悬浮窗分区显示名（内部还叫扫描 / 导航）
-const HUD_COLOR = { 辅助: "#8b98a9", 信号: "#6cb8ff", 扫描: "#55d394", 矿袋: "#b59aff", 导航: "#f2b84b", 小行星带: "#f2b84b", 物品: "#ff9e6e", 交易: "#ff9e6e" };
+const HUD_COLOR = { 辅助: "#8b98a9", 信号: "#6cb8ff", 扫描: "#55d394", 导航: "#f2b84b", 小行星带: "#f2b84b", 物品: "#ff9e6e", 交易: "#ff9e6e" };
 
 function renderHud() {
   const keys = Object.keys(state.hud).sort((a, b) => (HUD_ORDER.indexOf(a) + 99) % 99 - (HUD_ORDER.indexOf(b) + 99) % 99);
@@ -638,8 +638,6 @@ PAGES.live = () => {
           ${sc.craft.length || sc.craft_mats?.length ? `<h3 style="margin-top:14px">制造</h3>${(sc.craft_mats || []).map((m) => craftMatBtn(m)).join("")}${sc.craft.map((c) => `<div class="muted">${esc(c)}</div>`).join("")}` : ""}
         </div>
       </div>
-      ${sc.bag ? `<div class="panel" style="margin-top:14px"><h3>矿袋 ${sc.bag.used}/${sc.bag.cap} SCU</h3><div class="meter"><i style="width:${Math.min(100, sc.bag.used / sc.bag.cap * 100)}%;background:var(--violet)"></i></div>
-        <p class="muted" style="margin:8px 0 0">${sc.bag.items.map((x) => `${esc(x.name)} ${x.scu}`).join("，") || "空"}</p></div>` : ""}
     ` : `<div class="panel"><p class="muted" style="margin:0">${s.live ? (s.live_paused ? "切回游戏后扫描石头" : "扫描中…在游戏中扫描石头") : "暂无扫描结果。点击「开始扫描」后在游戏中扫描石头"}</p></div>`}
     ${state.signals ? `<h2>雷达信号 <span class="faint" style="font-weight:400;font-size:13px">${esc(state.signals.at)}${state.signals.area ? `｜${esc(state.signals.area)}` : ""}</span>${state.signals.stale ? ` <span class="tag noqt">已过期：${esc(state.signals.stale)} 之后未检测到信号</span>` : ""} <span style="float:right">${fbBtn("signal")}</span></h2><div class="panel">${state.signals.lines.map((l) => `<div>${esc(l)}</div>`).join("")}${(state.signals.unknown || []).map((v) => `<div class="row" style="margin-top:8px;gap:8px;align-items:center"><span class="muted">${money(v)}</span><input class="input sig-name" data-v="${v}" size="16" placeholder="起个名字"><button class="btn small" data-sig="${v}">记下</button></div>`).join("")}</div>` : ""}
     ${state.scans.length > 1 ? `<h2>本次扫描记录</h2><div class="panel"><table class="t"><tr><th>时间</th><th>矿物</th><th class="n">质量</th><th class="n">抗性</th><th>方案</th></tr>

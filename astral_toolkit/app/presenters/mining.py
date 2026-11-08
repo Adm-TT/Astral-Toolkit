@@ -127,20 +127,6 @@ def _refine_view(o):
     }
 
 
-def _bag_view(bag):
-    if bag is None:
-        return None, ""
-    view = {
-        "used": bag.used,
-        "cap": bag.cap,
-        "items": [{"name": zh, "scu": v} for zh, v in bag.items],
-    }
-    text = f"{bag.used:g}/{bag.cap:g} SCU\n" + "，".join(
-        f"{zh} {v:g}" for zh, v in bag.items
-    )
-    return view, text
-
-
 def to_view(r: MiningResult) -> dict:
     """窗口 JSON（不含 hud、hud_rich，见 to_hud）"""
     lots = lot_rows(r.lots, r.lot_refined)
@@ -151,7 +137,6 @@ def to_view(r: MiningResult) -> dict:
             for x in lots
             if not x["inert"] and x["refined"]
         ]
-    bag, bag_text = _bag_view(r.bag)
     return {
         "rock": r.rock,
         "mass": r.mass,
@@ -176,8 +161,6 @@ def to_view(r: MiningResult) -> dict:
         if r.cut
         else "",
         "at": r.at,
-        "bag": bag,
-        "bag_text": bag_text,
     }
 
 

@@ -9,7 +9,7 @@ from tests import mining_helpers
 
 
 def test_focus_changes_hud_only_and_keeps_unselected_window_rows():
-    result = analyze(_scan(), ({}, None, None), _inputs())
+    result = analyze(_scan(), _inputs())
     before = present.to_view(result)
     hud, rich = present.to_hud(result, focus=["Gold"])
     # 关注的矿一样都没有：悬浮窗只留标题这一行（老大 2026-11-08 批注验收单：只留标题）
@@ -28,7 +28,7 @@ def test_focus_changes_hud_only_and_keeps_unselected_window_rows():
 
 
 def test_focus_keeps_original_percent_and_default_hud():
-    result = analyze(_scan(), ({}, None, None), _inputs())
+    result = analyze(_scan(), _inputs())
     original = present.to_hud(result)
     assert present.to_hud(result, focus=None) == original
     hud, rich = present.to_hud(result, focus=["Tungsten"])
@@ -40,7 +40,7 @@ def test_focus_keeps_original_percent_and_default_hud():
 
 
 def test_empty_focus_hides_all_ores():
-    result = analyze(_scan(), ({}, None, None), _inputs())
+    result = analyze(_scan(), _inputs())
     hud, rich = present.to_hud(result, focus=[])
     assert rich["comp"] == [] and "钨" not in hud
     assert hud == "未发现关注的矿" and rich["stats"] == [] and rich["advice"] is None
@@ -116,7 +116,7 @@ def test_focus_signal_keys_save_and_show(monkeypatch, tmp_path):
             raise AssertionError("认不得的键必须拒绝")
     mining.set_mining_focus(live, keys=["ground"])
     assert mining_helpers.links().focus() == ["ground"]
-    view = mining.scan_view(_scan(), ({}, None, None))
+    view = mining.scan_view(_scan())
     assert view["hud"] == "未发现关注的矿" and view["hud_rich"]["comp"] == []
     assert view["rock"] and view["plans"]  # 窗口照旧完整
 
@@ -148,7 +148,7 @@ def test_focus_goal_lines_pick_focused_ores_before_cutting_to_two():
             ("Inert Materials", 40.0, None),
         ]
     )
-    result = analyze(scan, ({}, None, None), _inputs())
+    result = analyze(scan, _inputs())
     goals = tuple(
         {"en": en, "zh": zh, "text": f"目标缺少 {zh}"}
         for en, zh in (("Gold", "金"), ("Tungsten", "钨"), ("Copper", "铜矿"))
@@ -302,7 +302,7 @@ def test_session_stops_with_timeout_changed_during_scan(monkeypatch, tmp_path):
 
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
     clock = {"t": 1000.0}
-    hud, _ = _world(monkeypatch, tmp_path, lambda img: (Scan(), ({}, None, None)))
+    hud, _ = _world(monkeypatch, tmp_path, lambda img: Scan())
     live = mining_helpers.live(clock=lambda: clock["t"])
     q = _subscribe()
     try:
@@ -318,7 +318,7 @@ def test_session_stops_with_timeout_changed_during_scan(monkeypatch, tmp_path):
 def test_focus_hides_other_ore_names_in_refinery_bonus():
     from dataclasses import replace
 
-    result = analyze(_scan(), ({}, None, None), _inputs())
+    result = analyze(_scan(), _inputs())
     result = replace(result, refine=(replace(result.refine[0], bonus="金 +3%"),))
     hud, rich = present.to_hud(result, focus=["Tungsten"])
     assert "金" not in hud and all("金" not in x for x in rich["minor"])
@@ -333,8 +333,8 @@ def test_bad_persisted_focus_falls_back_to_all_and_recovers_from_gear(
     monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
     monkeypatch.setattr(mining, "collect_inputs", lambda scan: _inputs())
     monkeypatch.setattr(signals, "my_signatures", lambda: {})
-    scan, bag = _scan(), ({}, None, None)
-    expected_hud = present.to_hud(analyze(scan, bag, _inputs()))
+    scan = _scan()
+    expected_hud = present.to_hud(analyze(scan, _inputs()))
     found = [(4240, False, "4240", None), (4270, False, "4270", None)]
     expected_signals = signals.describe_all(found, "space")
     live = mining_helpers.live()
@@ -346,7 +346,7 @@ def test_bad_persisted_focus_falls_back_to_all_and_recovers_from_gear(
         )
         gear = mining.mining_gear()
         assert gear["focus"] and all(x["on"] for x in gear["focus"])
-        view = mining.scan_view(scan, bag)
+        view = mining.scan_view(scan)
         assert (view["hud"], view["hud_rich"]) == expected_hud
         focus = mining_helpers.links().focus()
         assert focus is None
@@ -376,7 +376,7 @@ def test_persisted_focus_drops_unknown_and_invalid_members_for_both_huds(
     gear = mining.mining_gear()
     assert [x["key"] for x in gear["focus"] if x["on"]] == ["Tungsten"]
     assert mining_helpers.links().focus() == ["Tungsten"]
-    view = mining.scan_view(_scan(), ({}, None, None))
+    view = mining.scan_view(_scan())
     assert [x["name"] for x in view["hud_rich"]["comp"]] == ["钨"]
     found = [(3870, False, "3870", None), (4240, False, "4240", None)]
     assert signals.describe_all(
@@ -385,4 +385,4 @@ def test_persisted_focus_drops_unknown_and_invalid_members_for_both_huds(
     settings.update(mining_focus=["missing", 42, {}])
     assert mining_helpers.links().focus() == []
     assert not any(x["on"] for x in mining.mining_gear()["focus"])
-    assert mining.scan_view(_scan(), ({}, None, None))["hud_rich"]["comp"] == []
+    assert mining.scan_view(_scan())["hud_rich"]["comp"] == []
