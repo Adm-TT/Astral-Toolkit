@@ -93,7 +93,7 @@ def _count_review(place, items):
     """本轮盘点 → 和账上对：rows（看到的，账上多少 → 游戏里多少）、missing（账上有、这轮没看到；same：和这轮盘到的
     哪件挂着同一个中文名，可能是同一件记在了另一条名下）"""
     from ..crafting import goals as G
-    from ..trade.matching import alias_ok
+    from ..trade.matching import _fold, alias_ok
 
     t = trade()
     rev = (
@@ -143,18 +143,18 @@ def _count_review(place, items):
             )
         else:
             # 英文名没对上正式物品：英文名带出来的（英文别名、本地副本）照并；中文名带出来的（中文别名、名字就是这个
-            # 中文的）要 matching.alias_ok 认是同一件才并——和盘到的英文名、或者和英文名带出来的哪件的名字是同一件。
-            # 以前按中文别名直接并：目录里只有电池、电池挂着轻机枪的中文名（F8 以前模糊配上时记的）时，盘轻机枪 1
-            # 会把电池的 20 并进来，确认后电池剩 1（待做 125，老大 2026-11-08）
+            # 中文的）要 matching.alias_ok 认是同一件，或者和英文名带出来的哪件同名（旧英文别名只挂在本地副本上、
+            # 本地副本和正式物品同名），才并。以前按中文别名直接并：目录里只有电池、电池挂着轻机枪的中文名（F8 以前
+            # 模糊配上时记的）时，盘轻机枪 1 会把电池的 20 并进来，确认后电池剩 1（待做 125，老大 2026-11-08）
             by_en = set(G.resolve_all(t, en, "")) if en else set()
-            names_en = {en} | {it.name for iid in by_en if (it := t.catalog.get(iid))}
+            same_names = {_fold(it.name) for iid in by_en if (it := t.catalog.get(iid))}
             kept = frozenset(
                 by_en
                 | {
                     iid
                     for iid in (set(ids) | alias_ids) - by_en
                     if (it := t.catalog.get(iid))
-                    and any(alias_ok(it, v["zh"], n) for n in names_en)
+                    and (alias_ok(it, v["zh"], en) or _fold(it.name) in same_names)
                 }
             )
         for iid in (set(ids) | alias_ids) - kept:

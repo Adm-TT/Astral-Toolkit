@@ -72,6 +72,17 @@ def test_focus_signal_kinds_ground_and_salvage(monkeypatch):
     assert only_ground and all("地面：" in x for x in only_ground)
     assert only_salvage and all("太空：" in x for x in only_salvage)
     assert sorted(only_ground + only_salvage) == sorted(both)
+    # 地面上比一簇大得多的整千：几处地面小矿叠在一起，归地面信号
+    piled = [(80000, False, "80000", None)]
+    got = signals.describe_all(piled, "ground", focus=["ground"])
+    assert got and all("叠在一起" in x for x in got)
+    assert signals.describe_all(piled, "ground", focus=["salvage", "Iron"]) == []
+    # 不刷船挖矿的空旷太空：「多半是残骸」归太空残骸
+    empty = {"zh": "空旷太空", "rocks": {}}
+    lone = [(7000, False, "7000", None)]
+    got = signals.describe_all(lone, "space", empty, focus=["salvage"])
+    assert got and all("多半是残骸" in x for x in got)
+    assert signals.describe_all(lone, "space", empty, focus=["ground", "Iron"]) == []
 
 
 def test_focus_hides_own_named_and_unknown_signals(monkeypatch):

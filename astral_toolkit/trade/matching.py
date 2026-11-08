@@ -24,31 +24,32 @@ def _similar(a, b):
     )
 
 
-_SUFFIX = _re.compile(r"\s*[（(][^（）()]*[)）]\s*$")
+def _extends(name, en):
+    """name 是不是在 en 后面多接了一截：折叠后以 en 开头、多出来至少 3 个字（变体、配件、颜色款、原矿都这么起名：
+    Demeco LMG Battery (100 cap)、Arclight Pistol Gold、Taranite (Raw)）；只多一两个字母的当错字"""
+    a, b = _fold(name), _fold(en)
+    return bool(b) and a.startswith(b) and len(a) - len(b) >= 3
 
 
 def alias_ok(item, zh, en):
     """目录里的这件物品和说明框认出的 (中文, 英文) 算不算同一件：F8 只在算同一件时把中文名记成它的别名，查本机目录时
     按中文别名找到的也要算同一件才用；盘点按中文名带出来的条目也要算同一件才并账。依次看：
     1. 英文名一样（_fold 后）→ 算；
-    2. 是矿，市场上的名字带「(Raw)」「（原矿）」这种后缀，去掉后一样（和 console.ore_item 同一条规则）→ 算；
-    3. 它自己的英文名在汉化包里有中文名 → 汉化包说了算：就是这个中文名才算，别的中文名不算；
-    4. 汉化包里没有它（市场上的叫法和游戏里不一样）→ 在认出的英文名后面多接了一截的不算（变体、配件、颜色款都这么起名），
-       别的照旧算（错一两个字母、写法不同）。
+    2. 它自己的英文名在汉化包里有中文名 → 汉化包说了算：就是这个中文名才算，别的中文名不算；
+    3. 汉化包里没有它（市场上的叫法和游戏里不一样）→ 在认出的英文名后面多接了一截的不算（_extends），别的照旧算
+       （错一两个字母、写法不同的同一件）。
     以前模糊、前缀配上就记：前缀那档会把本体配成变体（Demeco LMG 配成 Demeco LMG Battery (100 cap)），中文名一记，
-    以后盘点会把变体的库存并进本体、库存页显示成本体的名字（待做 61、125、126，老大 2026-11-08 定直接修）"""
-    from .names import _mineral, zh_for
+    以后盘点会把变体的库存并进本体、库存页显示成本体的名字（待做 61、125、126，老大 2026-11-08 定直接修）。
+    矿的市场名带「(Raw)」的也按第 3 条不算：原矿和精炼的是不是同一件拿不准，不替玩家并，盘点时注明让玩家自己定"""
+    from .names import zh_for
 
     name = getattr(item, "name", "") or ""
     if en and _fold(name) == _fold(en):
         return True
-    base = _SUFFIX.sub("", name).strip()
-    if en and base != name and _fold(base) == _fold(en) and _mineral("", base):
-        return True
     own = zh_for(name)
     if own is not None:
         return bool(zh) and own == zh
-    return not (en and _fold(name).startswith(_fold(en)))
+    return not _extends(name, en)
 
 
 def name_score(name, target):

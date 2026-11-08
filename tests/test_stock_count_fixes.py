@@ -542,8 +542,9 @@ def test_only_variant_in_catalog_is_flagged_not_merged(monkeypatch, tmp_path):
     assert got == {"bat": 20, "local:Demeco LMG": 1}
 
 
-def test_ore_market_name_still_merges_by_chinese_alias(monkeypatch, tmp_path):
-    """矿在市场上的名字带「(Raw)」（目录里没有不带后缀的那条）：中文别名带出来的这条算同一件，照旧并账（matching.alias_ok）"""
+def test_raw_ore_market_name_is_flagged_not_merged(monkeypatch, tmp_path):
+    """矿在市场上的名字带「(Raw)」、挂着盘到的中文名：原矿和精炼的是不是同一件拿不准，不替玩家并，「未盘到」里注明，
+    玩家看了英文名自己定（审查 2026-11-08 第一轮：两支认法要一样，不并）"""
     from astral_toolkit.trade.models import Item
 
     t = _context(monkeypatch, tmp_path)
@@ -555,8 +556,39 @@ def test_ore_market_name_still_merges_by_chinese_alias(monkeypatch, tmp_path):
     )
     ore = {**_item("Taranite", 2, unit="SCU"), "zh": "塔兰导电石"}
     rv = count_task._count_review("A", {1: ore})
-    assert [r["keys"] for r in rv["rows"]] == [[["raw", "unknown", "A", "uSCU"]]]
-    assert rv["rows"][0]["item_id"] == "raw" and rv["missing"] == []
+    assert [r["keys"] for r in rv["rows"]] == [[]]
+    assert [(m["key"][0], m["same"]) for m in rv["missing"]] == [
+        ("raw", "塔兰导电石（Taranite）")
+    ]
+
+
+def test_other_english_names_only_vouch_for_same_named_entries(monkeypatch, tmp_path):
+    """英文名带出来的别的名字（旧英文别名挂在名字不同的本地副本上）只用来认「同名」：汉化包里没有的变体
+    「盘到的英文名 + 一截」挂着盘到的中文名、有库存，不并进来，进「未盘到」并注明（审查 2026-11-08 第一轮）"""
+    from astral_toolkit.trade.models import Item
+
+    t = _context(monkeypatch, tmp_path)
+    t.catalog.upsert([Item("local:Old Gun", "Old Gun"), Item("mk2", "Demeco LMG Mk2")])
+    t.catalog.add_alias("local:Old Gun", "Demeco LMG")  # 旧英文别名，挂在本地副本上
+    t.catalog.add_alias("mk2", "德美科 轻机枪")  # 以前前缀档记错的
+    t.inventory.commit(
+        t.inventory.prepare(
+            [
+                StockLine(StockKey("local:Old Gun", "unknown", "A"), 2),
+                StockLine(StockKey("mk2", "unknown", "A"), 7),
+            ],
+            "add",
+        ),
+        allow_duplicate=True,
+    )
+    gun = {**_item("Demeco LMG", 3), "zh": "德美科 轻机枪"}
+    rv = count_task._count_review("A", {1: gun})
+    assert [(r["book"], r["game"], r["keys"]) for r in rv["rows"]] == [
+        (2, 3, [["local:Old Gun", "unknown", "A", "unit"]])
+    ]
+    assert [(m["key"][0], m["same"]) for m in rv["missing"]] == [
+        ("mk2", "德美科 轻机枪（Demeco LMG）")
+    ]
 
 
 def test_frontend_flags_same_label_missing_rows():
