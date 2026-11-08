@@ -72,7 +72,7 @@ def _size(p):
 
 def _version_file():
     """AT.exe 的文件说明写成 AstralToolkit：任务管理器里显示的就是它（老大 2026-11-09 定）"""
-    from astral_toolkit.version import VERSION
+    from astral_toolkit.core.version import VERSION
 
     nums = [int(x) for x in VERSION.split("-")[0].split(".")[:3]]
     v = tuple(nums + [0] * (4 - len(nums)))

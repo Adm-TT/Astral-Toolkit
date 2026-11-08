@@ -86,7 +86,8 @@ class _CountCtx:
     """一次盘点的全部可变状态：线程重启也换一份新的"""
 
     items: dict = field(default_factory=dict)
-    cells: list = field(default_factory=list)  # 已经算过的格：(物品, 数量, 截图上的 x, y)
+    # 已经算过的格：(物品, 数量, 截图上的 x, y)
+    cells: list = field(default_factory=list)
     prev_pos: tuple[int, int] | None = None
     still_since: float = 0.0
     done_pos: tuple[int, int] | None = None
@@ -179,6 +180,8 @@ class _CountWorker:
         # 仓库格子间距约是截图高度的十分之一（2560×1440 下约 149×141 像素），
         # 离已经算过的同样东西横竖都不到 0.45 格，就当是同一格又认了一次。
         # 以前按屏宽 6.5%、屏高 11% 分组，组比格子大，挨着的两格常落进同一组、只算一次。
+        # 已知限制（审查 2026-11-09）：光看距离分不全——同一格里从左边沿挪到右边沿再停一次会多算一格，
+        # 相邻两格分别停在贴着的边沿会少算一格；鼠标停在格子中间附近时是对的。根治要把光标吸到格子上（记在待做）。
         near = img.size[1] * 0.045
         cell = (_key(r), r["qty"], cursor[0], cursor[1])
         if any(

@@ -799,6 +799,44 @@ def test_worker_uses_analysis_views_and_links():
     assert rec == ["bind", "unbind"]
 
 
+def test_worker_counts_neighbour_cells_once_each():
+    """同一种东西挨着放：挪进旁边一格算新的一格；同一格里挪一点再认一次不重复算（老大 2026-11-09 报的漏算）"""
+    pos = [(100, 100)]
+    cur = [(650, 700)]
+    # 16:9 截图（1778×1000）：旧算法每组约 116 像素宽，比格距（约 100）大，525 和 625 会落进同一组只算一格
+    links, _ = _fake_links(
+        cursor_pos=lambda: pos[0], grab=lambda: SimpleNamespace(size=(1778, 1000))
+    )
+    analysis: Any = SimpleNamespace(
+        cursor_on_image=lambda img: cur[0],
+        read_item=lambda img, cursor: _item(),
+        review=lambda place, items: None,
+    )
+    views = count_mod.CountViews(
+        hud_text=lambda place, items: "", item_line=lambda r: ""
+    )
+    worker = count_mod._CountWorker(analysis, views, links)
+    worker.loop = _CommitRecorder()
+    session = SimpleNamespace(payload="测试站")
+    ctx = worker.setup(session)
+    clock = [0.0]
+
+    def rest_at(screen, on_image):
+        pos[0], cur[0] = screen, on_image
+        worker.tick(session, ctx, clock[0])
+        clock[0] += 0.4
+        worker.tick(session, ctx, clock[0])
+        clock[0] += 0.1
+
+    # 截图高 1000：格距约 100，同一格挪 20 不算新格，挪到旁边一格（100）算新格
+    rest_at((100, 100), (525, 700))
+    rest_at((130, 100), (545, 700))
+    rest_at((300, 100), (625, 700))
+    assert len(ctx.cells) == 2
+    assert next(iter(ctx.items.values()))["cells"] == 2
+    worker.teardown(session, ctx)
+
+
 def test_start_refused_while_closing_or_not_windows():
     """正在退出时不让开始（回接进来的那句、不碰会话）；不是 Windows（enabled 关着）只回「没在跑」；
     都不拦就按接进来的地点开始"""
