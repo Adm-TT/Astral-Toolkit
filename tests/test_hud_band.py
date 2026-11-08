@@ -85,6 +85,19 @@ def test_dismiss_clears_all_and_hides():
     assert h._note_seq == 4 and h._drawn() is False
 
 
+def test_chrome_matches_card_width():
+    """顶栏与单列文案卡片同宽（不铺满视口）"""
+    from astral_toolkit.app.overlay import BASE_W, MARGIN, PAD_X, chrome_geom
+
+    s, vw = 1.0, 768
+    card_inner = min(
+        (BASE_W - 2 * PAD_X) * s, max(40.0, vw - 2 * MARGIN - 2 * PAD_X * s)
+    )
+    card_w = int(card_inner + 2 * PAD_X * s)
+    x, w, _ = chrome_geom(s, vw, card_w)
+    assert x == MARGIN and w == card_w < vw
+
+
 def test_visible_while_has_text():
     """有文案就显示，全部清空才隐藏；不再空闲超时自动藏"""
     from astral_toolkit.app.overlay import Hud

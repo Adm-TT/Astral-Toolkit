@@ -91,6 +91,14 @@ def chrome_height(scale: float = 1.0) -> int:
     return max(20, int(round(GRIP_BASE_PX * scale)))
 
 
+def chrome_geom(scale: float, viewport_w: int, card_w: int) -> tuple[int, int, int]:
+    """顶栏左缘、宽、高：与单列文案卡片同宽、同左缘（MARGIN）。"""
+    ch = chrome_height(scale)
+    vw = max(1, int(viewport_w))
+    cw = max(1, int(card_w))
+    return MARGIN, max(ch * 2, min(cw, max(1, vw - 2 * MARGIN))), ch
+
+
 def band_width(area_w: int) -> int:
     """客户区宽度 → 文案视口像素宽（约 40%）"""
     return max(1, int(round(area_w * (BAND_X1 - BAND_X0))))
@@ -730,41 +738,43 @@ def paint(
         for l in note_lines:  # noqa: E741
             draw_text(nd, nx + 20 * s, by, l, NOTE_PX * s, NOTE_C)
             by += NOTE_PX * s * 1.45
-    ch = chrome_height(s)
+    chrome_x, chrome_w, ch = chrome_geom(s, vw, card_w)
     img = Image.new("RGBA", (vw, vh + ch), (0, 0, 0, 0))
-    _paint_chrome(img, vw, ch, s, plate_a)
+    _paint_chrome(img, chrome_x, chrome_w, ch, s, plate_a)
     img.alpha_composite(body_view, (0, ch))
     return img, busy, content_h
 
 
-def _paint_chrome(img, vw: int, ch: int, s: float, plate_a: int) -> None:
-    """顶栏：左手柄六点、右关闭 ×，底板与正文同色。"""
+def _paint_chrome(img, x: int, width: int, ch: int, s: float, plate_a: int) -> None:
+    """顶栏：与文案卡片同宽；左手柄六点、右关闭 ×。"""
     from PIL import ImageDraw
 
     d = ImageDraw.Draw(img)
+    x0 = int(x)
+    x1 = int(x + width - 1)
     d.rounded_rectangle(
-        (0, 0, vw - 1, ch - 1),
+        (x0, 0, x1, ch - 1),
         radius=max(3, int(RADIUS * s * 0.75)),
         fill=PLATE + (plate_a,),
         outline=EDGE,
         width=max(1, int(s)),
     )
-    # 左手柄：六点
+    # 左手柄：六点（相对顶栏左缘）
     pad = max(2, ch // 10)
     r = max(1, ch // 14)
     gap = (ch - 2 * pad) / 4
     for i in range(3):
         for j in range(2):
-            cx = pad + gap + i * gap
+            cx = x0 + pad + gap + i * gap
             cy = pad + gap * (0.8 + j * 1.4)
             d.ellipse((cx - r, cy - r, cx + r, cy + r), fill=LABEL_C)
     # 右关闭：×
     m = max(5, ch // 4)
-    x0, y0 = vw - ch + m, m
-    x1, y1 = vw - 1 - m, ch - 1 - m
+    ax0, ay0 = x1 - ch + 1 + m, m
+    ax1, ay1 = x1 - m, ch - 1 - m
     w = max(1, int(round(s)))
-    d.line((x0, y0, x1, y1), fill=LABEL_C, width=w)
-    d.line((x0, y1, x1, y0), fill=LABEL_C, width=w)
+    d.line((ax0, ay0, ax1, ay1), fill=LABEL_C, width=w)
+    d.line((ax0, ay1, ax1, ay0), fill=LABEL_C, width=w)
 
 
 def diff_fresh(old_blocks, new_blocks, start, fresh):
@@ -1056,7 +1066,8 @@ class Hud:
         self._content_h = 1
         self._view_h = 1
         self._chrome_h = chrome_height(1.0)
-        self._panel_w = 1
+        self._chrome_x = MARGIN
+        self._chrome_w = 1
         self._press_kind = None  # "grip" | "close" | None
         self._grip_press_at = 0.0
         self._grip_dragging = False
@@ -1441,8 +1452,8 @@ class Hud:
             scroll_from_bottom=self.scroll_from_bottom,
         )
         self._content_h = content_h
-        self._chrome_h = chrome_height(scale)
-        self._panel_w = img.width
+        card_w = int(card_inner + 2 * PAD_X * scale)
+        self._chrome_x, self._chrome_w, self._chrome_h = chrome_geom(scale, vw, card_w)
         self._view_h = max(1, img.height - self._chrome_h)
         self.scroll_from_bottom = clamp_scroll_from_bottom(
             self.scroll_from_bottom, content_h, self._view_h
@@ -1578,14 +1589,15 @@ class Hud:
         except Exception:
             return None
         ch = max(1, int(self._chrome_h))
-        pw = max(1, int(self._panel_w))
+        cx = int(self._chrome_x)
+        cw = max(1, int(self._chrome_w))
         x = int(getattr(e, "x_root", 0)) - int(wx)
         y = int(getattr(e, "y_root", 0)) - int(wy)
-        if y < 0 or y >= ch or x < 0 or x >= pw:
+        if y < 0 or y >= ch or x < cx or x >= cx + cw:
             return None
-        if x < ch:
+        if x < cx + ch:
             return "grip"
-        if x >= pw - ch:
+        if x >= cx + cw - ch:
             return "close"
         return None
 
