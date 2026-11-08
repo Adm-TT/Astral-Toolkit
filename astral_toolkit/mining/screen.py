@@ -481,6 +481,8 @@ def find_panels(img):
     只是不读里面的内容（矿袋功能 2026-11-08 删了，老大：要新的识别方案）"""
     import re
     import statistics
+    from typing import Any
+
     from .parse import rows
 
     LAST_PANEL.clear()
@@ -489,7 +491,7 @@ def find_panels(img):
         return []
     h = statistics.median(it[2] for it in items) or 10
 
-    def describe(g):
+    def describe(g) -> dict[str, Any]:
         text = " ".join(rows(g))
         box = (
             min(i[3][0] for i in g),

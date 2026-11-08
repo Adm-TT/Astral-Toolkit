@@ -553,7 +553,7 @@ def test_ore_market_name_still_merges_by_chinese_alias(monkeypatch, tmp_path):
     t.inventory.commit(
         t.inventory.prepare([StockLine(key, 5_000_000)], "add"), allow_duplicate=True
     )
-    ore = {**_item("Taranite", 2.0, unit="SCU"), "zh": "塔兰导电石"}
+    ore = {**_item("Taranite", 2, unit="SCU"), "zh": "塔兰导电石"}
     rv = count_task._count_review("A", {1: ore})
     assert [r["keys"] for r in rv["rows"]] == [[["raw", "unknown", "A", "uSCU"]]]
     assert rv["rows"][0]["item_id"] == "raw" and rv["missing"] == []
