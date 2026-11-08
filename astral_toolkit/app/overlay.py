@@ -4,10 +4,10 @@
 同样的内容也会实时出现在助手窗口右侧。一闪而过的提示用 hud().note("…", 秒)：白色胶囊，同时只有一条。
 - 游戏要用「无边框窗口」模式才看得到悬浮窗（全屏模式下会被游戏盖住）
 - 文案窗鼠标穿透、永远不抢焦点：点到它操作直接给游戏
-- 外框锁在游戏客户区中上带（宽 30%–70%、高顶部 0%–20%）；内容超出可滑动，默认钉底
+- 宽约游戏客户区 40%（左右 30%–70%），高跟内容走；贴顶显示
 - 功能往悬浮窗写字时显示文案窗与左上角手柄；之后 10 秒内无写字、无手柄操作则自动隐藏（内容仍留着，下次再写会再显示）
-- 显示时竖直贴齐游戏客户区顶边（可左右拖；与右上角读屏区重叠时左移，不往下挤）
-- 左上角独立小手柄窗：长按拖动改位置（写入 overlay_pos.json）；在手柄上滚轮滑动内容
+- 默认落在客户区顶边偏中（左约 30%）；拖动后自由定位并记住（overlay_pos.json）
+- 左上角独立小手柄窗：长按自由拖动；在手柄上滚轮滑动内容
 - 导航菱形 / 瞄准环仍是另两扇独立窗口
 - 悬浮窗在自己的线程里运行，任何线程都可以调用 set()
 
@@ -80,26 +80,29 @@ PAD_X, PAD_T, PAD_B, GAP = 16, 12, 14, 8
 RADIUS = 8
 MARGIN = 2  # 留一点边，圆角和阴影不被切
 
-# 文案视口相对游戏客户区（2026-11-08）
+# 文案视口相对游戏客户区：宽仍用左右 30%–70%；高跟内容走（已贴顶，不再限 0%–20%）
 BAND_X0, BAND_X1 = 0.30, 0.70
-BAND_Y0, BAND_Y1 = 0.0, 0.20
 GRIP_HOLD_MS = 300
 GRIP_BASE_PX = 28  # 手柄边长（再乘 hud 字号 scale）
 IDLE_HIDE_SECS = 10.0  # 显示后多久无操作则自动隐藏
 
 
-def band_size(area_w: int, area_h: int) -> tuple[int, int]:
-    """客户区 → 文案视口像素宽高"""
-    w = max(1, int(round(area_w * (BAND_X1 - BAND_X0))))
-    h = max(1, int(round(area_h * (BAND_Y1 - BAND_Y0))))
-    return w, h
+def band_width(area_w: int) -> int:
+    """客户区宽度 → 文案视口像素宽（约 40%）"""
+    return max(1, int(round(area_w * (BAND_X1 - BAND_X0))))
+
+
+def band_size(area_w: int, area_h: int | None = None) -> tuple[int, int]:
+    """兼容旧调用：只保证宽度；高度占位 1（真正高度由内容决定）。"""
+    del area_h  # 不再按客户区高度裁 0%–20%
+    return band_width(area_w), 1
 
 
 def band_origin(area: dict) -> tuple[int, int]:
-    """客户区字典 → 视口左上角屏幕坐标"""
+    """客户区字典 → 默认左上角屏幕坐标（左 30%、贴顶）"""
     return (
         int(area["left"] + area["width"] * BAND_X0),
-        int(area["top"] + area["height"] * BAND_Y0),
+        int(area["top"]),
     )
 
 
@@ -440,13 +443,12 @@ def paint(
     viewport_h=None,
     scroll_from_bottom=0.0,
 ):
-    """画出文案视口。viewport 固定；正文可更高，按 scroll_from_bottom 裁进视口（0=钉底）。
+    """画出文案视口。宽由 viewport_w；高默认跟内容（viewport_h=None），指定则按 scroll 裁切。
     note 固定画在视口底部。返回 (图, 还在动画吗, 正文内容高)。"""
     from PIL import Image, ImageDraw, ImageFilter
 
     s = scale
     vw = int(viewport_w or (BASE_W * s + 2 * MARGIN))
-    vh = int(viewport_h or max(1, int(vw * 0.5)))
     card_inner = min((BASE_W - 2 * PAD_X) * s, max(40.0, vw - 2 * MARGIN - 2 * PAD_X * s))
     blocks = layout(sections, s, rich, content_width=card_inner)
     note = clean(note)
@@ -480,6 +482,9 @@ def paint(
         else MARGIN
     )
     content_h = max(1, content_h)
+    # 未指定视口高 → 跟内容；指定了则裁进视口（手柄滚轮仍可用）
+    vh = int(viewport_h) if viewport_h is not None else content_h
+    vh = max(1, vh)
     body = Image.new("RGBA", (vw, content_h), (0, 0, 0, 0))
     d = ImageDraw.Draw(body)
     now = time.time() if now is None else now
@@ -1334,30 +1339,25 @@ class Hud:
             self._mk_put(h1, None, 0, 0)
             self._mk_put(h2, None, 0, 0)
 
-    def _viewport_px(self):
-        """当前文案视口宽高（游戏客户区中上带；找不到游戏则按屏高估算）"""
+    def _viewport_w(self) -> int:
+        """文案视口宽：游戏客户区约 40%（30%–70%）；找不到游戏则按屏宽估算"""
         try:
-            from ..core.capture import game_area, game_size
+            from ..core.capture import game_area
 
-            a = game_area()
-            if game_size() is not None:
-                return band_size(a["width"], a["height"])
-            return band_size(a["width"], a["height"])
+            return band_width(game_area()["width"])
         except Exception:
             try:
                 import ctypes
 
                 sw = ctypes.windll.user32.GetSystemMetrics(0)
-                sh = ctypes.windll.user32.GetSystemMetrics(1)
             except Exception:
-                sw, sh = 1920, 1080
-            return band_size(sw, sh)
+                sw = 1920
+            return band_width(sw)
 
     def _render(self, changed=True):
         scale = self._scale()
         sections = dict(self.sections)
-        vw, vh = self._viewport_px()
-        self._view_h = vh
+        vw = self._viewport_w()
         card_inner = min(
             (BASE_W - 2 * PAD_X) * scale, max(40.0, vw - 2 * MARGIN - 2 * PAD_X * scale)
         )
@@ -1365,6 +1365,7 @@ class Hud:
             blocks = layout(sections, scale, dict(self.rich), content_width=card_inner)
             self._fresh = diff_fresh(self._blocks, blocks, time.time(), self._fresh)
             self._blocks = blocks
+        # 高度跟内容：不再限客户区 0%–20%
         img, busy, content_h = paint(
             sections,
             self.note_text,
@@ -1373,12 +1374,13 @@ class Hud:
             self._fresh,
             rich=dict(self.rich),
             viewport_w=vw,
-            viewport_h=vh,
+            viewport_h=None,
             scroll_from_bottom=self.scroll_from_bottom,
         )
         self._content_h = content_h
+        self._view_h = img.height
         self.scroll_from_bottom = clamp_scroll_from_bottom(
-            self.scroll_from_bottom, content_h, vh
+            self.scroll_from_bottom, content_h, self._view_h
         )
         if not busy:
             self._fresh = {}
@@ -1397,46 +1399,12 @@ class Hud:
 
         SHOWN = img is not None
         try:
-            if img is not None:
-                self._dock_to_game_top(img.width)
             _ulw(
                 HWND,
                 img if img is not None else Image.new("RGBA", (1, 1), (0, 0, 0, 0)),
             )
             if img is not None:
                 self._topmost()
-        except Exception:
-            pass
-
-    def _dock_to_game_top(self, win_w: int):
-        """竖直贴齐游戏客户区顶边；左右用当前/记忆的 X，并夹在客户区内。
-        若与右上角读屏区（REGION）重叠则左移，不再往下挪（要顶在最上）。"""
-        try:
-            import ctypes
-            from ..navigation.displayinfo import REGION
-
-            try:
-                from ..core.capture import game_area
-
-                a = game_area()
-            except Exception:
-                a = {
-                    "left": 0,
-                    "top": 0,
-                    "width": ctypes.windll.user32.GetSystemMetrics(0),
-                    "height": ctypes.windll.user32.GetSystemMetrics(1),
-                }
-            x_hint, _y = self._rect()
-            x, y = dock_top_xy(a, win_w, x_hint, di_left_frac=REGION[0])
-            ctypes.windll.user32.SetWindowPos(
-                ctypes.c_void_p(HWND),
-                None,
-                x,
-                y,
-                0,
-                0,
-                SWP_NOSIZE | SWP_NOACTIVATE,
-            )
         except Exception:
             pass
 
@@ -1499,21 +1467,17 @@ class Hud:
         return r.left, r.top
 
     def _load_pos(self):
-        """只记水平位置；竖直一律贴游戏顶（显示时还会再 dock）。"""
-        try:
-            from ..core.capture import game_area, game_size
-
-            a = game_area()
-            top = int(a["top"]) if game_size() is not None else int(a["top"])
-        except Exception:
-            a = None
-            top = 0
+        """有记忆用记忆；否则默认贴游戏客户区顶边偏中（band_origin）。"""
         try:
             p = json.loads(POS_FILE.read_text(encoding="utf-8"))
-            return int(p["x"]), top
+            return int(p["x"]), int(p["y"])
         except Exception:
-            if a is not None:
-                return band_origin(a)
+            try:
+                from ..core.capture import game_area
+
+                return band_origin(game_area())
+            except Exception:
+                pass
             try:
                 import ctypes
 
@@ -1524,12 +1488,12 @@ class Hud:
             return band_origin({"left": 0, "top": 0, "width": sw, "height": sh})
 
     def _save_pos(self):
-        """记住水平位置；竖直以游戏顶为准，不把拖偏的 Y 固化下来。"""
+        """自由拖动后记住屏幕坐标。"""
         try:
-            x, _y = self._rect()
+            x, y = self._rect()
             from ..core.paths import write_json
 
-            write_json(POS_FILE, {"x": x})
+            write_json(POS_FILE, {"x": x, "y": y})
         except Exception:
             pass
 
@@ -1676,13 +1640,6 @@ class Hud:
     def _grip_release(self, e):
         if self._grip_dragging:
             self._save_pos()
-            # 松手后竖直重新贴顶（只保留左右拖的结果）
-            try:
-                vw, _vh = self._viewport_px()
-                self._dock_to_game_top(vw)
-                self._grip_sync()
-            except Exception:
-                pass
             self._bump_op()
         self._grip_dragging = False
         self._grip_press_at = 0.0
