@@ -843,14 +843,17 @@ def _tooltip_body_tokens(img, cursor, where):
 
 
 def _is_mineral(zh, en, fuzzy=True):
-    """矿（按 SCU 算量、品质看说明框那一行）：英文名在采矿信号表里，或中文名是船挖矿名。
+    """矿（按 SCU 算量、品质看说明框那一行）：英文名（原矿的去掉原矿那截，names.raw_base）在采矿信号表里，或中文名是
+    船挖矿名（原矿名也算）。原矿也是矿：「塔兰导电石原矿」Taranite (Raw) 照样按 SCU（原矿和精炼分开认以后，2026-11-08）。
     fuzzy=False：名字已经在汉化包里精确对上了（inspect_item 的 canon），矿名也只认精确的、不模糊兜底——
     「刚毅」（发电机）被配成「刚玉」、「冰块」（冷却器）配成「冰」都是模糊配的（2026-11-06 老大验收 F8）"""
     try:
         from ..mining.data import SIGNATURES
         from ..core.i18n import mineral_en
+        from .names import raw_base
 
-        return (en or "").strip().lower() in {k.lower() for k in SIGNATURES} or bool(
+        name = raw_base(en) or (en or "").strip()
+        return name.lower() in {k.lower() for k in SIGNATURES} or bool(
             zh and mineral_en(zh, fuzzy=fuzzy)
         )
     except Exception:

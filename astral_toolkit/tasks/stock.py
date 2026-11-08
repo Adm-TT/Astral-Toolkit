@@ -498,8 +498,16 @@ def stock_add_named(
     else:
         if not name:
             return {"error": "需填写物品或矿物名称"}
-        ores = mineral_search(q=name)
-        if ores and (len(name) >= 2 or ores[0]["zh"] == name):
+        from ..trade.names import raw_ore
+
+        raw = raw_ore(
+            name
+        )  # 原矿 / 矿石：按原矿记，不并成精炼的那个矿（老大 2026-11-08 定分开）
+        ores = [] if raw else mineral_search(q=name)
+        if raw:
+            zh, en = raw
+            u = unit or "SCU"
+        elif ores and (len(name) >= 2 or ores[0]["zh"] == name):
             en, zh, u = ores[0]["en"], ores[0]["zh"], unit or "SCU"
         else:
             from ..trade.names import canonical
@@ -552,7 +560,7 @@ def stock_suggest(q=""):
     """手动入库的名字联想：矿物、交易库里的物品、汉化包里的物品名，中文 / 英文 / 名字的一部分 / 错一两个字都行。
     返回 [{zh, en, kind: 矿物 / 物品, unit}]，最多 12 个"""
     from ..contracts.textkeys import fold_en as _fold_en
-    from ..trade.names import suggest
+    from ..trade.names import raw_ore, suggest
 
     q = (q or "").strip()
     if not q:
@@ -572,10 +580,13 @@ def stock_suggest(q=""):
                 }
             )
 
+    raw = raw_ore(q)
+    if raw:  # 输入的是原矿名：原矿排最前（不然排第一的是精炼的那个矿，点了就记成精炼的；2026-11-08 原矿精炼分开）
+        add(raw[0], raw[1], "矿物")
     for o in mineral_search(q=q)[:4]:
         add(o["zh"], o["en"], "矿物")
     for zh, en in suggest(q, 12):
-        add(zh, en, "物品")
+        add(zh, en, "矿物" if raw_ore(en) else "物品")
     try:
         t = trade()
         for i in t.catalog.search(q)[:6]:  # 以前入过库、查过价的（本地物品也在这里）

@@ -115,7 +115,9 @@ def split_bilingual(text):
 def _mineral(zh, en):
     """矿物用矿物表（汉化包里同一个中文名常被别的东西占用，比如「铁」）。只认精确的：
     全部矿物（船挖、地面车、手挖、杰金 / 烁迪银这类新矿）的中文名、矿石名、英文名。
-    以前只查船挖矿物表、而且「最像的就算」：杰金矿石 → 愈金、烁迪银矿石 → 萨维里金属（2026-10-24 用户截图）"""
+    以前只查船挖矿物表、而且「最像的就算」：杰金矿石 → 愈金、烁迪银矿石 → 萨维里金属（2026-10-24 用户截图）。
+    原矿 / 矿石名（「铁原矿」「金矿石」）不在这里认：它和精炼的是两样东西（老大 2026-11-08 定分开），交给汉化包对照表
+    （「铁原矿」Iron (Ore)）；以前这里认成「铁」Iron，F8 查的是精炼铁的价、盘点记成精炼铁"""
     try:
         from ..mining.data import SIGNATURES
         from ..core.i18n import _tables, mineral_en, mineral_zh
@@ -125,6 +127,8 @@ def _mineral(zh, en):
     by_en.update({k.lower(): k for k in _tables(False)[1]})
     m = by_en.get((en or "").strip().lower())
     if not m and zh and not en:
+        if _raw_name(zh):
+            return None
         m = (
             mineral_en(zh, fuzzy=False, ship_only=False)
             if len(_norm_zh(zh)) <= 6
@@ -133,24 +137,38 @@ def _mineral(zh, en):
     return (mineral_zh(m), m) if m else None
 
 
-def _mineral_near(zh):
-    """矿名认错一个字（烁迪银 → 炼迪银）：字数一样、只差一个字、至少 4 个字，才算是那个矿；差得多就不猜"""
+def _raw_name(zh):
+    """是不是矿物表里的原矿 / 矿石名（core/i18n.raw_names：「塔兰导电石原矿」「铁原矿」「稀钛铁矿」）"""
     try:
-        from ..core.i18n import _tables, mineral_zh
+        from ..core.i18n import raw_names
+    except Exception:
+        return False
+    return _norm_zh(zh) in raw_names()
+
+
+def _mineral_near(zh):
+    """矿名认错一个字（烁迪银 → 炼迪银）：字数一样、只差一个字、至少 4 个字，才算是那个矿；差得多就不猜。
+    差一个字的是原矿名（塔兰导电石原旷 → 塔兰导电石原矿）就用汉化包里的原矿名，汉化包里没有就不认（原矿和精炼分开，
+    老大 2026-11-08 定）；原矿名、精炼名都只差一个字也不猜"""
+    try:
+        from ..core.i18n import _tables, mineral_zh, raw_names
     except Exception:
         return None
     z = _norm_zh(zh)
     if len(z) < 4:
         return None
     hits = {
-        en
+        k: en
         for k, en in _tables(False)[0].items()
         if len(k) == len(z) and sum(a != b for a, b in zip(k, z)) == 1
     }
-    if len(hits) == 1:
-        en = hits.pop()
-        return mineral_zh(en), en
-    return None
+    if len(set(hits.values())) != 1:
+        return None
+    raw = [k for k in hits if k in raw_names()]
+    if raw:
+        return _index()[0].get(_norm_zh(raw[0])) if len(raw) == len(hits) else None
+    en = next(iter(hits.values()))
+    return mineral_zh(en), en
 
 
 def _closest(keys, target, floor):
@@ -177,7 +195,8 @@ def _closest(keys, target, floor):
 def canonical(zh="", en=""):
     """OCR 认出的名字 → 汉化包里的标准 (中文名, 英文名)；对不上返回 None。
     顺序：拆开中英连写 → 矿物（精确）→ 英文名精确 → 中文名精确 → 英文名 l 当 i 精确 → 英文名近似 → 矿名错一个字
-    → 中文名近似（错一两个字、丢一个字）"""
+    → 中文名近似（错一两个字、丢一个字）。原矿 / 矿石名（塔兰导电石原矿、铁原矿）只认汉化包里精确的那条，不认成精炼的矿
+    （老大 2026-11-08 定原矿、精炼分开）"""
     zh, en = (zh or "").strip(), (en or "").strip()
     if zh and not en:
         zh, en = split_bilingual(zh)
@@ -197,6 +216,8 @@ def canonical(zh="", en=""):
         k = _closest(en_map, _fold_en(en), 0.9)
         if k:
             return en_map[k]
+    if zh and not en and _raw_name(zh):
+        return None  # 原矿名汉化包里还没有（没按新规则重建）：不认准，也不近似成精炼的那个矿（2026-11-08 原矿精炼分开）
     if zh and not en:
         hit = _mineral_near(zh)
         if hit:
@@ -229,6 +250,26 @@ def canonical_exact(zh="", en=""):
     if en and _fold_en(en) in en_map:
         return en_map[_fold_en(en)]
     return None
+
+
+def raw_base(en):
+    """原矿 / 矿石的英文名去掉原矿那截、剩下的是矿名：Taranite (Raw)、Gold (Ore) → Taranite、Gold，Raw Ice → Ice；
+    不是返回 None"""
+    from .matching import market_base
+
+    en = (en or "").strip()
+    base = market_base(en)
+    if base == en and en.lower().startswith("raw "):
+        base = en[4:].strip()
+    return base if base != en and _mineral("", base) else None
+
+
+def raw_ore(name):
+    """原矿 / 矿石的名字（中文或英文：「塔兰导电石原矿」「Taranite (Raw)」「金矿石」「原冰」）→ 汉化包里的 (中文名, 英文名)；
+    不是原矿返回 None。原矿和精炼是两样东西（老大 2026-11-08 定分开）：库存页手动入库、名字联想按原矿记、按 SCU 算"""
+    name = (name or "").strip()
+    hit = canonical_exact(name, "") if has_chinese(name) else canonical_exact("", name)
+    return hit if hit and raw_base(hit[1]) else None
 
 
 def zh_for(en):

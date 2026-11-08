@@ -534,7 +534,8 @@ def test_wikelo_uses_full_name_not_loosened_distinct(monkeypatch):
         assert wikelo.uses("Polaris Bit Extra", "Polaris 点数 扩展") == []
 
 
-def test_wikelo_uses_full_name_recognises_ore_suffix_distinct(monkeypatch):
+def test_wikelo_uses_full_name_does_not_match_the_ore(monkeypatch):
+    """全名只认一样的：精炼的「萨德宁」不对维科洛要的「萨德宁矿石」（原矿和精炼分开，老大 2026-11-08 定）；原矿名一样就对上"""
     row = {
         "id": "sald",
         "type": "收集",
@@ -554,8 +555,9 @@ def test_wikelo_uses_full_name_recognises_ore_suffix_distinct(monkeypatch):
             return None
 
         monkeypatch.setattr(names, "canonical_exact", exact)
-        assert wikelo.uses("Saldynium", "萨德宁") == [(row, 7, "个")]
-        assert wikelo.uses("", "萨德宁") == [(row, 7, "个")]
+        assert wikelo.uses("Saldynium", "萨德宁") == []
+        assert wikelo.uses("", "萨德宁") == []
+        assert wikelo.uses("Saldynium (Ore)", "萨德宁矿石") == [(row, 7, "个")]
 
 
 def test_wikelo_uses_keeps_order_and_units(monkeypatch):

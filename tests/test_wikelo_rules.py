@@ -102,7 +102,9 @@ def test_uses_equal_hit_does_not_load_or_check_full_name():
     assert calls == []
 
 
-def test_full_name_only_matches_ore_suffix():
+def test_full_name_does_not_loosen():
+    """全名只认一样的：不放宽成包含（极地 ≠ Polaris），矿石 / 原矿后缀也不放宽——精炼的杰金交不了要杰金矿石的兑换
+    （老大 2026-11-08 定原矿、精炼分开）；全名不用再翻全部兑换"""
     calls = []
 
     def load():
@@ -114,11 +116,8 @@ def test_full_name_only_matches_ore_suffix():
         return True
 
     assert wikelo_rules.uses("Polar", "极地", [], load, is_full) == []
-    assert calls == ["is_full", "load"]
-
-    calls.clear()
-    assert wikelo_rules.uses("Jaclium", "杰金", [], load, is_full) == [(_ORE, 20, "个")]
-    assert calls == ["is_full", "load"]
+    assert wikelo_rules.uses("Jaclium", "杰金", [], load, is_full) == []
+    assert calls == ["is_full", "is_full"]
 
 
 def test_truncated_name_is_loosened_when_not_full():

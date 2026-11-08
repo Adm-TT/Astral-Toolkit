@@ -359,6 +359,51 @@ def test_stock_suggest_and_named_add(monkeypatch, tmp_path):
     )
 
 
+def test_raw_ore_named_add_and_suggest(monkeypatch, tmp_path):
+    """库存页手动入库输入原矿名：记成原矿（铁原矿 Iron (Ore)）、按 SCU，不并成精炼的铁；联想里原矿排最前、算矿物
+    （原矿和精炼分开，老大 2026-11-08 定）"""
+    from astral_toolkit.tasks import (
+        count as t_count,
+        goals as t_goals,
+        stock as t_stock,
+        trade as t_trade,
+    )
+    from astral_toolkit.trade import names
+
+    _setup(monkeypatch, tmp_path)
+    t = Trade(tmp_path / "db", providers=[])
+    _v = lambda: t  # noqa: E731
+    for _m in (t_count, t_goals, t_stock, t_trade):
+        monkeypatch.setattr(_m, "trade", _v)
+    monkeypatch.setattr(
+        names,
+        "table",
+        lambda: {
+            "铁": "Ferric",
+            "铁原矿": "Iron (Ore)",
+            "塔兰导电石": "Taranite",
+            "塔兰导电石原矿": "Taranite (Raw)",
+        },
+    )
+    assert t_stock.stock_suggest(q="塔兰导电石原矿")[0] == {
+        "zh": "塔兰导电石原矿",
+        "en": "Taranite (Raw)",
+        "kind": "矿物",
+        "unit": "SCU",
+    }
+    r = t_stock.stock_add_named(
+        name="铁原矿",
+        qty="2",  # pyright: ignore[reportArgumentType]
+        unit="",
+        quality="",
+        location="A",
+    )
+    assert r["added"] == "铁原矿 2 SCU"
+    assert {line.key.item_id for line in t.inventory.list_stock()} == {
+        "local:Iron (Ore)"
+    }
+
+
 def test_stock_places_list_and_match():
     """库存地点列表（1.6.39）：游戏里能存东西的地方，中文名和「星系 / 星球 / 站点」路径；以前手打的位置能对上的自动认"""
     import pytest
