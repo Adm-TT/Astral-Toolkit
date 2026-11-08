@@ -1277,7 +1277,7 @@ async function navHaloView() {
   if (!still()) return;
   const h = state.halo || (state.halo = { frm: "ARC-L1", band: 5, to: null });
   box.innerHTML = `<div class="panel">
-      <p class="muted" style="margin:0 0 12px">Aaron Halo 是环绕斯坦顿恒星的一圈小行星带（距恒星 19.60–21.39 Gm），里面有 10 条石头密的子带。选择出发点和目标带后，AT 计算量子跳跃的目标，以及剩余距离为多少时按 U 退出，即可停在该带内。环带边界、量子速度用游戏数据；子带位置、密度和算法来自 SCMiner。</p>
+      <p class="muted" style="margin:0 0 12px">Aaron Halo 是环绕斯坦顿恒星的一圈小行星带（距恒星 19.60–21.39 Gm），里面有 10 条石头密的子带。选择出发点和目标带后，AT 计算量子跳跃的目标，以及剩余距离为多少时按鼠标左键退出，即可停在该带内。环带边界、量子速度用游戏数据；子带位置、密度和算法来自 SCMiner。</p>
       <div class="row" style="gap:10px;flex-wrap:wrap">
         <label>出发点 <select class="input" id="hfrm">${o.points.map((p) => `<option value="${esc(p.key)}" ${p.key === h.frm ? "selected" : ""}>${esc(p.label)}</option>`).join("")}</select></label>
       </div>
@@ -1329,7 +1329,7 @@ function drawHaloRoutes() {
     <ol style="margin:0 0 8px 18px;padding:0;line-height:1.8">
       <li>在 ${esc(x.from_zh)} 选择 ${esc(x.to_zh)}，充能后量子跳跃</li>
       <li>注意 HUD 上 ${esc(x.to_zh)} 的剩余距离</li>
-      <li>显示 <b>${gmText(x.dropout)}</b> 左右按 <kbd>U</kbd>（或关闭量子驱动器）退出</li>
+      <li>显示 <b>${gmText(x.dropout)}</b> 左右按 <kbd>鼠标左键</kbd> 退出（别按 U：U 是整船断电，船要晚一秒多才停）</li>
       <li>断开后 AT 读右上角位置，自动核对是否位于第${x.band}带内（读不到时在聊天框输入 /showlocation）</li>
     </ol>
     <p class="muted" style="font-size:13px">提示：宁早勿晚，提前退出后再补跳一小段</p>

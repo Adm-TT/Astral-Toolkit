@@ -1026,7 +1026,11 @@ def test_halo_routes_match_scminer():
     assert "microTech" in pts and halo.route("ARC-L1", "ARC-L1", 5, 103, pts) is None
     t = halo.plan_text(rows["CRU-L4"])
     assert (
-        "14.3 Gm" in t and "按 U" in t and "14.5–14.1 Gm" in t and "秒" not in t
+        "14.3 Gm" in t
+        and "按鼠标左键" in t
+        and "按 U" not in t
+        and "14.5–14.1 Gm" in t
+        and "秒" not in t
     )  # 挖矿用：0.1 Gm、不讲反应秒数
     try:
         halo.band(11)
@@ -1383,7 +1387,7 @@ def test_halo_overshoot_after_each_jump(monkeypatch, tmp_path):
         s1 = [start[0] + 1e9, start[1], start[2]]
         s2 = [start[0] + 2e9, start[1], start[2]]
         hop = [drop[0] + 1e9, drop[1], drop[2]]
-        slid = at(r["dropout"] - 0.03)  # 按 U 以后又往前滑了 30 Mm
+        slid = at(r["dropout"] - 0.03)  # 断开以后又往前滑了 30 Mm
         # 正常一趟 + 补跳：两次起跳各刷一次；从起点跳的那趟停下后标一行，补跳停下后照样说、不标
         got = watch([start, s1, s2] + [drop] * 18 + [hop] + [past] * 18)
         assert got[0] == 2 and len(got[1]) == 1 and len(got[2]) == 2, got
@@ -1394,11 +1398,11 @@ def test_halo_overshoot_after_each_jump(monkeypatch, tmp_path):
         )
         got = watch([start, s1, s1, s2, s3, s4, s4] + [drop] * 18)
         assert got[0] == 1 and len(got[2]) == 1 and got[1] == got[2], got
-        # 按 U 那一刻卡住，之后又滑了 30 Mm 才停：标的是停下那行（多飞 30 Mm），不是卡住那一下
+        # 按断开那一刻卡住，之后又滑了 30 Mm 才停：标的是停下那行（多飞 30 Mm），不是卡住那一下
         # （卡住那一下游戏日志恰好说「到了」：也只是让核对提前，还是等停下）
         got = watch([start, s1, drop, drop, drop] + [slid] * 18, arrive=4)
         assert got[0] == 1 and len(got[1]) == 1 and "多飞了 30 Mm" in got[1][0], got
-        # 按 U 那一刻卡了 2 秒（掉进带里加载石头）再滑 30 Mm：照样标在停下那行
+        # 按断开那一刻卡了 2 秒（掉进带里加载石头）再滑 30 Mm：照样标在停下那行
         got = watch([start, s1] + [drop] * 9 + [slid] * 18)
         assert got[0] == 1 and len(got[1]) == 1 and "多飞了 30 Mm" in got[1][0], got
     finally:

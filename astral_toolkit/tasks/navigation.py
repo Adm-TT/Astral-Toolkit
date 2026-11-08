@@ -1181,7 +1181,7 @@ def _halo_watch(deps: NavDeps, sess, ev):
                     in_qt, slow_since = True, None
                 elif in_qt:
                     # 一跳里慢下来：连续 STOP_S 秒都慢才算断开停下，中间又快起来还是这一跳（游戏卡一下、
-                    # 按 U 那一刻卡住，都会连着读到一样的坐标）；停下了马上核对
+                    # 按断开那一刻卡住，都会连着读到一样的坐标）；停下了马上核对
                     slow_since = t if slow_since is None else slow_since
                     if t - slow_since >= STOP_S:
                         in_qt, slow_since, live_at = False, None, 0.0
