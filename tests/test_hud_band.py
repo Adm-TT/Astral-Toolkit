@@ -108,3 +108,32 @@ def test_idle_hide_after_ops():
     h.sections = {}
     h._on_content_change(activity=True)
     assert h._drawn() is False
+
+
+def test_set_quiet_does_not_bump_idle():
+    """F6 轮询：activity=False 改字不刷新空闲计时、不重新显示"""
+    import time
+    from astral_toolkit.app.overlay import IDLE_HIDE_SECS, Hud
+
+    h = Hud.__new__(Hud)
+    h.ok = False
+    h.sections = {}
+    h.rich = {}
+    h.note_text = ""
+    h._visible = False
+    h._last_op_at = 0.0
+    h._q = None
+
+    h.set("盘点", "盘点｜站")  # 开始：显示并记时
+    assert h._drawn() is True
+    started = h._last_op_at
+
+    time.sleep(0.02)
+    h.set("盘点", "盘点｜站\n铁矿 ×1", activity=False)
+    assert h.sections["盘点"].endswith("铁矿 ×1")
+    assert h._last_op_at == started  # 轮询不刷新计时
+
+    h._last_op_at = time.time() - IDLE_HIDE_SECS - 0.1
+    h._visible = False
+    h.set("盘点", "盘点｜站\n铁矿 ×2", activity=False)
+    assert h._drawn() is False  # 已隐藏不因轮询再弹

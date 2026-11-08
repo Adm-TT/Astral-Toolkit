@@ -11,8 +11,8 @@ class _Hud:
     def __init__(self):
         self.calls = []
 
-    def set(self, section, text, rich=None):
-        self.calls.append(("set", section, text, rich))
+    def set(self, section, text, rich=None, *, activity=True):
+        self.calls.append(("set", section, text, rich, activity))
 
     def clear(self, section):
         self.calls.append(("clear", section))
@@ -35,12 +35,14 @@ def test_bus_output_dispatches_lock_in_ops(monkeypatch):
     out.apply(("bus", "live", {"running": True}))
     out.apply(("hud.set", "扫描", "读数"))
     out.apply(("hud.set", "信号", "4,285", {"title": "x"}))
+    out.apply(("hud.set", "盘点", "盘点｜站\n矿 ×1", False))
     out.apply(("hud.clear", "信号", "扫描"))
     out.apply(("note", "采矿助手", "已关闭"))
     assert pub == [("live", {"running": True})]
     assert hud.calls == [
-        ("set", "扫描", "读数", None),
-        ("set", "信号", "4,285", {"title": "x"}),
+        ("set", "扫描", "读数", None, True),
+        ("set", "信号", "4,285", {"title": "x"}, True),
+        ("set", "盘点", "盘点｜站\n矿 ×1", None, False),
         ("clear", "信号"),
         ("clear", "扫描"),
     ]

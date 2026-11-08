@@ -198,9 +198,15 @@ class _CountWorker:
         )
         v["qty"] = round(v["qty"] + r["qty"], 6)
         v["cells"] += 1
+        # activity=False：轮询改字不刷新悬浮窗 10 秒空闲计时，也不把已隐藏的再弹出来
         self.loop.commit(
             session,
-            ("hud.set", "盘点", self._views.hud_text(session.payload, ctx.items)),
+            (
+                "hud.set",
+                "盘点",
+                self._views.hud_text(session.payload, ctx.items),
+                False,
+            ),
         )
         return Tick(0.0, seen)
 

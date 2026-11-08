@@ -770,7 +770,7 @@ def test_worker_uses_analysis_views_and_links():
     worker.tick(session, ctx, 0.4)
     assert reads == [(650, 1100)]
     assert [op for op in loop.ops if op[0] == "hud.set"] == [
-        ("hud.set", "盘点", "测试站:1")
+        ("hud.set", "盘点", "测试站:1", False)
     ]
     # 格号按截图上的位置算：650 / (1000 × 0.065)、1100 / (1000 × 0.11)
     assert [cell[2:] for cell in ctx.cells] == [(10, 10)]

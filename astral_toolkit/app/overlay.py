@@ -1034,8 +1034,9 @@ class Hud:
             self._ready.wait(5)
 
     # ---------------------------------------------------------------- 对外接口（任何线程）
-    def set(self, section, text, rich=None):
-        """更新一个分区；text 为空就删掉这个分区。rich：有层次的内容（采矿助手），悬浮窗按它排，窗口右侧还用 text"""
+    def set(self, section, text, rich=None, *, activity=True):
+        """更新一个分区；text 为空就删掉这个分区。rich：有层次的内容（采矿助手），悬浮窗按它排，窗口右侧还用 text。
+        activity=False：只改字、不刷新空闲计时、不把已隐藏的再弹出来（F6 盘点轮询用）。"""
         text = text or ""
         if self.sections.get(section, "") == text and self.rich.get(section) == rich:
             return
@@ -1054,7 +1055,7 @@ class Hud:
             bus.publish("hud", {"section": section, "text": text})
         except Exception:
             pass
-        self._on_content_change(activity=True)
+        self._on_content_change(activity=activity)
         if self.ok:
             self._q.put("render")
 
