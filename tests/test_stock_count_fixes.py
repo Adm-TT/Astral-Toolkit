@@ -391,6 +391,10 @@ const api = () => new Promise(resolve => {release = () => resolve({});});
 
 def test_real_catalog_english_name_wins_over_shared_label(monkeypatch, tmp_path):
     """英文名明确对上正式物品时按英文名认：汉化名撞到别的物品，不把它的库存配过去，也不整笔拒绝（审查 2026-11-08）"""
+    from astral_toolkit.trade import names
+
+    # eye 在汉化包里有自己的中文名（不靠本机数据）
+    monkeypatch.setattr(names, "table", lambda: {"约曼迪之眼": "Yormandi Eye"})
     t = _context(monkeypatch, tmp_path, [("eye", "unknown", "A", 5)])
     t.catalog.add_alias("eye", "shared-label")
     items = {
@@ -398,7 +402,8 @@ def test_real_catalog_english_name_wins_over_shared_label(monkeypatch, tmp_path)
         2: {**_item("Vanduul Plating", 4), "zh": "shared-label"},
     }
     assert goals.resolve_all(t, "Yormandi Eye", "shared-label") == ["eye"]
-    assert set(goals.resolve_all(t, "Vanduul Plating", "shared-label")) == {"eye", "vp"}
+    # 中文别名带出来的 eye 不是同一件（它在汉化包里有自己的中文名）：目标、入库都不算它（2026-11-08 不信记错的中文名）
+    assert goals.resolve_all(t, "Vanduul Plating", "shared-label") == ["vp"]
     rv = count_task._count_review("A", items)
     assert [(r["en"], r["book"], r["game"]) for r in rv["rows"]] == [
         ("Yormandi Eye", 5, 2),
@@ -542,9 +547,9 @@ def test_only_variant_in_catalog_is_flagged_not_merged(monkeypatch, tmp_path):
     assert got == {"bat": 20, "local:Demeco LMG": 1}
 
 
-def test_ore_market_name_still_merges_by_chinese_alias(monkeypatch, tmp_path):
-    """矿在市场上的名字带「(Raw)」（目录里没有不带后缀的那条），挂着盘到的中文名（F8 配矿时记的）：算同一件，照旧并账，
-    和 F8 的说法一致（matching.alias_ok 第 2 条，审查 2026-11-08 第二轮）"""
+def test_raw_ore_is_not_merged_into_refined(monkeypatch, tmp_path):
+    """原矿和精炼是两样东西（老大 2026-11-08 定分开）：目录里只有原矿「Taranite (Raw)」、挂着精炼的中文名（以前 F8 配矿时
+    记的），盘到精炼的塔兰导电石不并进原矿那行，原矿那行进「未盘到」并注明；盘到原矿的照旧并原矿那行"""
     from astral_toolkit.trade.models import Item
 
     t = _context(monkeypatch, tmp_path)
@@ -554,10 +559,42 @@ def test_ore_market_name_still_merges_by_chinese_alias(monkeypatch, tmp_path):
     t.inventory.commit(
         t.inventory.prepare([StockLine(key, 5_000_000)], "add"), allow_duplicate=True
     )
-    ore = {**_item("Taranite", 2, unit="SCU"), "zh": "塔兰导电石"}
+    refined = {**_item("Taranite", 2, unit="SCU"), "zh": "塔兰导电石"}
+    rv = count_task._count_review("A", {1: refined})
+    assert [(r["en"], r["keys"]) for r in rv["rows"]] == [("Taranite", [])]
+    assert rv["rows"][0]["item_id"] is None
+    assert [(m["key"][0], m["same"]) for m in rv["missing"]] == [
+        ("raw", "塔兰导电石（Taranite）")
+    ]
+    ore = {**_item("Taranite (Raw)", 3, unit="SCU"), "zh": "塔兰导电石原矿"}
     rv = count_task._count_review("A", {1: ore})
     assert [r["keys"] for r in rv["rows"]] == [[["raw", "unknown", "A", "uSCU"]]]
     assert rv["rows"][0]["item_id"] == "raw" and rv["missing"] == []
+
+
+def test_goals_do_not_trust_a_chinese_alias_on_another_item(monkeypatch, tmp_path):
+    """目标页「已有」、完成目标扣料、按名字入库：中文别名记在别的东西上（以前 F8 前缀档配上时把轻机枪的中文名记到了电池上、
+    原矿的记到了精炼上），不算这个材料的；记对了的、名字就是这个中文名的照算（老大 2026-11-08 定直接修）"""
+    from astral_toolkit.trade.models import Item
+
+    t = _context(monkeypatch, tmp_path)
+    t.catalog.upsert(
+        [
+            Item("bat", "Demeco LMG Battery (100 cap)"),
+            Item("ref", "Taranite"),
+            Item("local:塔兰导电石原矿", "塔兰导电石原矿"),
+        ]
+    )
+    t.catalog.add_alias("bat", "德美科 轻机枪")
+    t.catalog.add_alias("ref", "塔兰导电石原矿")
+    assert goals.resolve_all(t, "Demeco LMG", "德美科 轻机枪") == []
+    assert goals.resolve_all(t, "Taranite (Raw)", "塔兰导电石原矿") == [
+        "local:塔兰导电石原矿"
+    ]
+    assert goals.resolve_all(t, "Demeco LMG Battery (100 cap)", "德美科 轻机枪") == [
+        "bat"
+    ]
+    assert goals.ensure_item(t, "Demeco LMG", "德美科 轻机枪") == "local:Demeco LMG"
 
 
 def test_other_english_names_only_vouch_for_same_named_entries(monkeypatch, tmp_path):

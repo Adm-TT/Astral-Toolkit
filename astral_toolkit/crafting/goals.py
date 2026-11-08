@@ -253,24 +253,39 @@ def local_id(en):
 
 
 def resolve_all(trade, en, zh=""):
-    """材料名 → 库存里可能记着它的所有物品 id（市场上的正式物品 + 本地物品），第一个是能查价的"""
+    """材料名 → 库存里可能记着它的所有物品 id（市场上的正式物品 + 本地物品），第一个是能查价的。
+    英文名带出来的（英文别名、名字就是它的、本地副本）都算；按中文别名找到的要 matching.alias_ok 认是同一件，或者和英文名
+    带出来的哪件同名，才算——中文别名可能是 F8 以前模糊配上时记错的（本体的中文名记到了变体上、原矿的记到了精炼上），
+    信了会把别的东西的库存算成「已有」、完成目标时扣错（老大 2026-11-08 定直接修；和盘点 tasks/count 同一条规则）。
+    名字就是这个中文名的物品照算"""
+    from ..trade.matching import _fold, alias_ok
+
     ids = []
-    for name in (en, zh):
-        if not name:
-            continue
-        item = trade.catalog.by_alias(name)
+    if en:
+        item = trade.catalog.by_alias(en)
         if item:
             ids.append(item.id)
+        ids += _same_name(trade, en)
+    if zh:
+        same = {_fold(it.name) for iid in ids if (it := trade.catalog.get(iid))}
         ids += [
             i.id
-            for i in trade.catalog.search(name)
-            if i.name.casefold() == name.casefold()
+            for i in trade.catalog.all_by_alias(zh)
+            if alias_ok(i, zh, en) or _fold(i.name) in same
         ]
+        ids += _same_name(trade, zh)
     if trade.catalog.get(local_id(en)):
         ids.append(local_id(en))
     ids = list(dict.fromkeys(ids))
     ids.sort(key=lambda i: i.startswith("local:"))
     return ids
+
+
+def _same_name(trade, name):
+    """名字一字不差（不分大小写）就是 name 的物品 id"""
+    return [
+        i.id for i in trade.catalog.search(name) if i.name.casefold() == name.casefold()
+    ]
 
 
 def resolve(trade, en, zh=""):

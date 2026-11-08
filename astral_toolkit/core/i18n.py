@@ -41,6 +41,18 @@ def _tables(ship_only: bool):
     return zh2en, en2zh
 
 
+@lru_cache
+def raw_names() -> frozenset[str]:
+    """矿物表里的原矿 / 矿石名（「塔兰导电石原矿」「铁原矿」「稀钛铁矿」）。采矿面板照旧把它们认成那种矿（mineral_en）；
+    交易、库存里原矿和精炼是两样东西（老大 2026-11-08 定分开），trade/names 认物品名时不把它们当成精炼的矿"""
+    data = json.loads(GLOSSARY.read_text(encoding="utf-8"))
+    return frozenset(
+        m["zh_raw"]
+        for m in data["minerals"]
+        if m["zh_raw"] and m["zh_raw"] not in (m["zh"], m["zh_refined"])
+    )
+
+
 def mineral_en(
     zh: str, fuzzy: bool = True, ship_only: bool = True, prefer: str | None = None
 ):

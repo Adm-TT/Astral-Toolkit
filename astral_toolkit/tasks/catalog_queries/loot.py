@@ -178,9 +178,11 @@ def ship_mineral(name_en="", name_zh=""):
     try:
         from ...mining.data import SIGNATURES
         from ...core.i18n import mineral_en
+        from ...trade.names import raw_base
     except Exception:
         return None
-    base = re.sub(r"\s*\(.*?\)", "", name_en or "").strip().lower()
+    # 原矿名先去掉原矿那截：Taranite (Raw)、Raw Ouratite（原欧拉特烃）照样给开采点（原矿和精炼分开认以后，2026-11-08）
+    base = re.sub(r"\s*\(.*?\)", "", raw_base(name_en) or name_en or "").strip().lower()
     names = {k.lower(): k for k in SIGNATURES}
     names["pressurized ice"] = "Pressurized Ice"
     if base in names:

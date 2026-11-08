@@ -233,6 +233,99 @@ def test_short_names_not_in_name_table():
     )
 
 
+def test_raw_ore_names_get_their_own_english():
+    """原矿 / 矿石汉化包里只有中文（「塔兰导电石原矿」「金矿石」）：英文按键名拼成游戏里的叫法，不和精炼的 Taranite、Gold
+    混成一个（老大 2026-11-08 定原矿、精炼分开）；值里自带英文的照旧用汉化包的，描述（_des）不算"""
+    from astral_toolkit.update import localization as L
+
+    ini = {
+        "items_commodities_taranite": "塔兰导电石Taranite",
+        "items_commodities_taranite_raw": "塔兰导电石原矿",
+        "items_commodities_gold_ore": "金矿石",
+        "items_commodities_iron_ore": "铁原矿",
+        "items_commodities_jaclium_ore_des": "一种天然存在的稀有金属",
+        "items_commodities_quartz_raw": "Quartz (Raw)\\n石英原矿",
+        "items_commodities_raw_ice": "原冰",
+    }
+    assert L.zh2en_items(ini, wiki_cls={}) == {
+        "塔兰导电石": "Taranite",
+        "塔兰导电石原矿": "Taranite (Raw)",
+        "金矿石": "Gold (Ore)",
+        "铁原矿": "Iron (Ore)",
+        "石英原矿": "Quartz (Raw)",
+        "原冰": "Raw Ice",
+    }
+
+
+_ORE_NAMES = {
+    "塔兰导电石": "Taranite",
+    "塔兰导电石原矿": "Taranite (Raw)",
+    "铁": "Ferric",
+    "铁原矿": "Iron (Ore)",
+    "金矿石": "Gold (Ore)",
+    "原冰": "Raw Ice",
+    "杰金矿石": "Jaclium (Ore)",
+    "萨达瑞晶原矿": "Sadaryx (Raw)",
+    "纯净科力晶": "Carinite (Pure)",
+    "萨达瑞晶": "Sadaryx",
+}
+
+
+def test_raw_ore_is_not_the_refined_mineral(monkeypatch):
+    """原矿是原矿、精炼是精炼（老大 2026-11-08 定）：「塔兰导电石原矿」认成 Taranite (Raw)、「铁原矿」认成 Iron (Ore)，
+    不再认成精炼的 Taranite、Iron；原矿名错一个字也认成原矿；原矿照样按 SCU 算。汉化包里还没有原矿名（没按新规则重建）
+    就不认准，不猜成精炼的"""
+    from astral_toolkit.trade import names
+    from astral_toolkit.trade.inspector import _is_mineral
+
+    monkeypatch.setattr(names, "table", lambda: dict(_ORE_NAMES))
+    assert names.canonical("塔兰导电石原矿", "") == ("塔兰导电石原矿", "Taranite (Raw)")
+    assert names.canonical("塔兰导电石", "") == ("塔兰导电石", "Taranite")
+    assert names.canonical("铁原矿", "") == ("铁原矿", "Iron (Ore)")
+    assert names.canonical("铁", "") == (
+        "铁",
+        "Iron",
+    )  # 精炼的照旧按矿物表（汉化包里「铁」被别的东西占了）
+    assert names.canonical("塔兰导电石原旷", "") == ("塔兰导电石原矿", "Taranite (Raw)")
+    assert names.canonical_exact("金矿石", "") == ("金矿石", "Gold (Ore)")
+    assert names.canonical("", "Taranite (Raw)") == ("塔兰导电石原矿", "Taranite (Raw)")
+    assert names.zh_for("Taranite (Raw)") == "塔兰导电石原矿"
+    assert names.zh_for("Taranite") == "塔兰导电石"
+    assert names.raw_ore("铁原矿") == ("铁原矿", "Iron (Ore)")
+    assert names.raw_ore("Gold (Ore)") == ("金矿石", "Gold (Ore)")
+    assert names.raw_ore("原冰") == ("原冰", "Raw Ice")
+    assert names.raw_ore("萨达瑞晶原矿") == (
+        "萨达瑞晶原矿",
+        "Sadaryx (Raw)",
+    )  # 矿物表里没有的原矿也算
+    assert names.raw_ore("塔兰导电石") is None and names.raw_ore("Taranite") is None
+    # 只认原矿的写法：纯净科力晶「Carinite (Pure)」、「(Modified)」不是原矿，「Raw 」后面得是矿名
+    assert names.raw_ore("纯净科力晶") is None
+    assert (
+        names.raw_base("Carinite (Pure)") is None and names.raw_base("Raw Meat") is None
+    )
+    assert names.raw_base("Arclight Pistol (Modified)") is None
+    assert names.raw_base("Hephaestanite (R)") == "Hephaestanite"
+    # 原矿名错了字：不近似成精炼的（错两个字的「源护」以前会被当成认准了的精炼塔兰导电石）；精炼名错字照旧认
+    assert names.canonical("塔兰导电石源护", "") is None
+    assert names.canonical("萨达瑞晶源护", "") is None  # 矿物表里没有的矿也管到
+    assert names.canonical("塔兰导电石旷", "") is None
+    assert names.canonical("塔兰导电右", "") == ("塔兰导电石", "Taranite")
+    assert names.canonical("塔兰导电石丨", "") == (
+        "塔兰导电石",
+        "Taranite",
+    )  # 读屏带进来的杂字照旧近似
+    assert _is_mineral("塔兰导电石原矿", "Taranite (Raw)", fuzzy=False)
+    assert _is_mineral("", "Iron (Ore)", fuzzy=False)
+    assert _is_mineral("原冰", "Raw Ice", fuzzy=False)
+    monkeypatch.setattr(
+        names, "table", lambda: {"塔兰导电石": "Taranite", "铁": "Ferric"}
+    )
+    assert names.canonical("铁原矿", "") is None
+    assert names.canonical("塔兰导电石原矿", "") is None
+    assert names.canonical("塔兰导电石原旷", "") is None
+
+
 def test_chinese_to_english():
     assert to_english("科力晶") == ["Carinite"]
     assert to_english("科力晶（单个矿块）") == ["Carinite"]
@@ -861,12 +954,12 @@ _LMG_NAMES = {
 
 
 def test_alias_ok_only_for_the_same_item(monkeypatch):
-    """F8 记中文别名、盘点按中文名并账，都只认同一件：英文名一样（不分大小写、空格）；矿的市场名去掉「(Raw)」后缀后一样；
-    汉化包里有它的，它自己的中文名就是这个才算；汉化包里没有的，在认出的英文名后面多接一截的（变体）不算，只差一两个
-    字母的算（待做 61、125）"""
+    """F8 记中文别名、盘点按中文名并账，都只认同一件：英文名一样（不分大小写、空格）；汉化包里有它的，它自己的中文名
+    就是这个才算；汉化包里没有的，在认出的英文名后面多接一截的（变体）不算，只差一两个字母的算（待做 61、125）。
+    原矿和精炼是两样东西：市场上的「Taranite (Raw)」不算认出的「Taranite」（老大 2026-11-08 定分开）"""
     from astral_toolkit.trade import names
     from astral_toolkit.trade.console import ore_item
-    from astral_toolkit.trade.matching import alias_ok, market_base
+    from astral_toolkit.trade.matching import alias_ok
 
     monkeypatch.setattr(names, "table", lambda: dict(_LMG_NAMES))
     gun, bat = Item("lmg", "Demeco LMG"), Item("bat", "Demeco LMG Battery (100 cap)")
@@ -874,15 +967,19 @@ def test_alias_ok_only_for_the_same_item(monkeypatch):
     assert alias_ok(Item("x", "demeco  LMG"), "德美科 轻机枪", "Demeco LMG")
     assert not alias_ok(bat, "德美科 轻机枪", "Demeco LMG")  # 前缀配上的电池
     assert alias_ok(bat, "德美科 轻机枪电池", "")  # 汉化包里它自己的中文名就是这个
-    # 矿的市场名：AT 认矿只认矿名，F8 一直配到带 (Raw) 的那条，这里跟着认（审查 2026-11-08 第二轮）
+    # 原矿：还是矿（按 SCU 记），但和精炼的不是同一件（这张对照表里没有原矿名：靠「后面多接一截」拦）
     raw = Item("raw", "Taranite (Raw)")
-    assert alias_ok(raw, "塔兰导电石", "Taranite") and ore_item(raw)
-    assert (
-        market_base("Taranite (Raw)") == "Taranite"
-        and market_base("铁（原矿）") == "铁"
+    assert not alias_ok(raw, "塔兰导电石", "Taranite") and ore_item(raw)
+    assert alias_ok(raw, "", "Taranite (Raw)")
+    assert ore_item(Item("cn", "铁（原矿）")) and not ore_item(
+        Item("p", "Carinite (Pure)")
     )
+    assert ore_item(
+        Item("q", "Quantainium (Pure)")
+    )  # 只管单位：船挖矿名后面带别的括号照旧按 SCU
     mod = Item("mod", "Arclight Pistol (Modified)")
-    assert not alias_ok(mod, "弧光手枪", "Arclight Pistol")  # 不是矿：括号里的不能去掉
+    assert not alias_ok(mod, "弧光手枪", "Arclight Pistol")  # 括号里的不能去掉
+    assert not ore_item(mod)
     assert not alias_ok(gun, "", "")
     # 汉化包里没有的（市场上的叫法）：后面多接一截的是变体，不算；错一两个字母的照旧算
     assert not alias_ok(Item("v", "Demeco LMG Mk2"), "德美科 轻机枪", "Demeco LMG")
@@ -911,6 +1008,43 @@ def test_match_tooltip_skips_alias_recorded_on_a_variant(monkeypatch, tmp_path):
     t.catalog.add_alias("bat", "德美科 轻机枪电池")  # 记对了的别名照用
     item, _ = matching.match_tooltip(t, "德美科 轻机枪电池", "", online=False)
     assert item is not None and item.id == "bat"
+
+
+def test_match_tooltip_sure_name_skips_variant(monkeypatch, tmp_path):
+    """F8 名字认准了（汉化包里精确对得上）：本机目录里只有电池，不按前缀档配上电池，接着去网上找轻机枪本体；网上也只有
+    电池就不配、列候选让玩家挑。名字没认准的（OCR 截断）照旧按前缀档配（老大 2026-11-08 定直接修）"""
+    from astral_toolkit.trade import matching, names
+    from astral_toolkit.trade.console import Trade
+
+    monkeypatch.setattr(names, "table", lambda: dict(_LMG_NAMES))
+    remote = []
+
+    class P:
+        source = "uex"
+
+        def lookup(self, q):
+            return list(remote) if "Demeco" in q else []
+
+        def fetch(self, *a):
+            return ProviderResult("uex", "empty")
+
+    t = Trade(tmp_path / "db", providers=[P()])
+    t.catalog.upsert([Item("bat", "Demeco LMG Battery (100 cap)")])
+    item, cands = matching.match_tooltip(t, "德美科 轻机枪", "Demeco LMG", online=False)
+    assert item is None and [c.id for c in cands] == ["bat"]
+    remote[:] = [
+        Item("uex:lmg", "Demeco LMG"),
+        Item("uex:bat", "Demeco LMG Battery (100 cap)"),
+    ]
+    item, _ = matching.match_tooltip(t, "德美科 轻机枪", "Demeco LMG")
+    assert item is not None and item.id == "uex:lmg"
+    remote[:] = [Item("uex:bat", "Demeco LMG Battery (100 cap)")]
+    item, cands = matching.match_tooltip(
+        Trade(tmp_path / "db2", providers=[P()]), "德美科 轻机枪", "Demeco LMG"
+    )
+    assert item is None and "uex:bat" in [c.id for c in cands]
+    item, _ = matching.match_tooltip(t, "德美科轻机", "Demeco LMG Batt", online=False)
+    assert item is not None and item.id == "bat"  # 没认准：照旧按前缀档配
 
 
 def _tok(text, x, y, w=40, h=14):
