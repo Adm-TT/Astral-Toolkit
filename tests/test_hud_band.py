@@ -36,10 +36,11 @@ def test_clamp_scroll_from_bottom():
 
 
 def test_paint_height_follows_content_capped_at_max():
-    from astral_toolkit.app.overlay import paint
+    from astral_toolkit.app.overlay import chrome_height, paint
 
+    bar = chrome_height(1.0)
     lines = "\n".join(f"行{i}" for i in range(40))
-    # 上限很高：窗口高跟内容
+    # 上限很高：正文高跟内容，整图再加顶栏
     img, busy, content_h = paint(
         {"导航": "标题\n" + lines},
         scale=1.0,
@@ -47,8 +48,8 @@ def test_paint_height_follows_content_capped_at_max():
         viewport_h=5000,
         scroll_from_bottom=0,
     )
-    assert img.size == (400, content_h) and not busy and content_h > 120
-    # 上限 120：内容再多也只占 120，可滚
+    assert img.size == (400, content_h + bar) and not busy and content_h > 120
+    # 上限 120：正文再多也只占 120，可滚；整图 + 顶栏
     img2, _, ch2 = paint(
         {"导航": "标题\n" + lines},
         scale=1.0,
@@ -56,7 +57,7 @@ def test_paint_height_follows_content_capped_at_max():
         viewport_h=120,
         scroll_from_bottom=9999,
     )
-    assert img2.size == (400, 120) and ch2 > 120
+    assert img2.size == (400, 120 + bar) and ch2 > 120
     # 内容很矮：不撑满上限
     img3, _, ch3 = paint(
         {"导航": "短"},
@@ -65,7 +66,23 @@ def test_paint_height_follows_content_capped_at_max():
         viewport_h=400,
         scroll_from_bottom=0,
     )
-    assert img3.height == ch3 < 400
+    assert img3.height == ch3 + bar and ch3 < 400
+
+
+def test_dismiss_clears_all_and_hides():
+    """点 X：分区与短提示清空，并藏起"""
+    from astral_toolkit.app.overlay import Hud
+
+    h = Hud.__new__(Hud)
+    h.ok = False
+    h.sections = {"物品": "JS-500", "导航": "去 ARC-L1"}
+    h.rich = {"物品": {"x": 1}}
+    h.note_text = "提示一下"
+    h._note_seq = 3
+    h._visible = True
+    h.dismiss()
+    assert h.sections == {} and h.rich == {} and h.note_text == ""
+    assert h._note_seq == 4 and h._drawn() is False
 
 
 def test_visible_while_has_text():

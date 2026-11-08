@@ -3,12 +3,11 @@
 各功能往自己的分区写字：hud().set("扫描", "第一行是标题\\n下面是内容")，悬浮窗把各分区叠起来显示，
 同样的内容也会实时出现在助手窗口右侧。一闪而过的提示用 hud().note("…", 秒)：白色胶囊，同时只有一条。
 - 游戏要用「无边框窗口」模式才看得到悬浮窗（全屏模式下会被游戏盖住）
-- 文案窗鼠标穿透、永远不抢焦点：点到它操作直接给游戏
-- 宽约游戏客户区 40%（左右 30%–70%）；高跟内容，最高不超过客户区高度 20%（超出可滚动）
-- 功能往悬浮窗写字时显示文案窗与左上角手柄；有文案就保持显示，全部清空才隐藏（不再空闲自动隐藏）
+- 文案窗可点、永不抢焦点：盖住的那块点不到游戏；顶栏左手柄长按拖动、右 X 清空并藏起，滚轮滑正文
+- 宽约游戏客户区 40%（左右 30%–70%）；高跟内容，最高不超过客户区高度 20%（超出可滚动；顶栏另占一行）
+- 功能往悬浮窗写字时显示文案窗；有文案就保持显示，全部清空或点 X 才隐藏（不再空闲自动隐藏）
 - 默认落在客户区顶边偏中（左约 30%）；拖动后自由定位并记住（overlay_pos.json）
-- 左上角独立小手柄窗：长按自由拖动；在手柄上滚轮滑动内容
-- 导航菱形 / 瞄准环仍是另两扇独立窗口
+- 导航菱形 / 瞄准环仍是另两扇独立窗口（鼠标穿透）
 - 悬浮窗在自己的线程里运行，任何线程都可以调用 set()
 
 1.6.61 起照 DESIGN.md 第 8 节自己画：先用 PIL 画成一张带透明度的图，再整张贴到窗口上（UpdateLayeredWindow）。
@@ -84,7 +83,12 @@ MARGIN = 2  # 留一点边，圆角和阴影不被切
 BAND_X0, BAND_X1 = 0.30, 0.70
 BAND_H_MAX = 0.20
 GRIP_HOLD_MS = 300
-GRIP_BASE_PX = 28  # 手柄边长（再乘 hud 字号 scale）
+GRIP_BASE_PX = 28  # 顶栏高度 / 手柄与关闭热区边长（再乘 hud 字号 scale）
+
+
+def chrome_height(scale: float = 1.0) -> int:
+    """文案窗顶栏像素高（左手柄、右关闭）"""
+    return max(20, int(round(GRIP_BASE_PX * scale)))
 
 
 def band_width(area_w: int) -> int:
@@ -446,8 +450,8 @@ def paint(
     viewport_h=None,
     scroll_from_bottom=0.0,
 ):
-    """画出文案视口。宽由 viewport_w；高跟内容，viewport_h 为上限（超出则裁切可滚）。
-    note 固定画在视口底部。返回 (图, 还在动画吗, 正文内容高)。"""
+    """画出文案视口。宽由 viewport_w；正文高跟内容，viewport_h 为正文上限（超出则裁切可滚）；
+    顶部另加顶栏（手柄 + 关闭）。note 固定画在正文视口底部。返回 (图, 还在动画吗, 正文内容高)。"""
     from PIL import Image, ImageDraw, ImageFilter
 
     s = scale
@@ -707,14 +711,14 @@ def paint(
     scroll = clamp_scroll_from_bottom(scroll_from_bottom, content_h, vh)
     # 钉底：src_y 使内容下端对齐视口下端，再往上滚 scroll
     src_y = max(0, content_h - vh - int(scroll))
-    img = Image.new("RGBA", (vw, vh), (0, 0, 0, 0))
+    body_view = Image.new("RGBA", (vw, vh), (0, 0, 0, 0))
     crop = body.crop((0, src_y, vw, min(content_h, src_y + vh)))
-    img.alpha_composite(crop, (0, 0))
+    body_view.alpha_composite(crop, (0, 0))
     if note:
         note_lines = wrap(note, NOTE_PX * s, max(40.0, vw - 40 * s))
         nw = max(text_width(l, NOTE_PX * s) for l in note_lines) + 40 * s  # noqa: E741
         nh = len(note_lines) * NOTE_PX * s * 1.45 + 20 * s
-        nd = ImageDraw.Draw(img)
+        nd = ImageDraw.Draw(body_view)
         nx = vw - MARGIN - nw
         ny = vh - MARGIN - nh
         nd.rounded_rectangle(
@@ -726,7 +730,41 @@ def paint(
         for l in note_lines:  # noqa: E741
             draw_text(nd, nx + 20 * s, by, l, NOTE_PX * s, NOTE_C)
             by += NOTE_PX * s * 1.45
+    ch = chrome_height(s)
+    img = Image.new("RGBA", (vw, vh + ch), (0, 0, 0, 0))
+    _paint_chrome(img, vw, ch, s, plate_a)
+    img.alpha_composite(body_view, (0, ch))
     return img, busy, content_h
+
+
+def _paint_chrome(img, vw: int, ch: int, s: float, plate_a: int) -> None:
+    """顶栏：左手柄六点、右关闭 ×，底板与正文同色。"""
+    from PIL import ImageDraw
+
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle(
+        (0, 0, vw - 1, ch - 1),
+        radius=max(3, int(RADIUS * s * 0.75)),
+        fill=PLATE + (plate_a,),
+        outline=EDGE,
+        width=max(1, int(s)),
+    )
+    # 左手柄：六点
+    pad = max(2, ch // 10)
+    r = max(1, ch // 14)
+    gap = (ch - 2 * pad) / 4
+    for i in range(3):
+        for j in range(2):
+            cx = pad + gap + i * gap
+            cy = pad + gap * (0.8 + j * 1.4)
+            d.ellipse((cx - r, cy - r, cx + r, cy + r), fill=LABEL_C)
+    # 右关闭：×
+    m = max(5, ch // 4)
+    x0, y0 = vw - ch + m, m
+    x1, y1 = vw - 1 - m, ch - 1 - m
+    w = max(1, int(round(s)))
+    d.line((x0, y0, x1, y1), fill=LABEL_C, width=w)
+    d.line((x0, y1, x1, y0), fill=LABEL_C, width=w)
 
 
 def diff_fresh(old_blocks, new_blocks, start, fresh):
@@ -1017,11 +1055,13 @@ class Hud:
         self.scroll_from_bottom = 0.0  # 距内容底部的偏移；0 = 钉底
         self._content_h = 1
         self._view_h = 1
-        self._grip = None  # (tk_win, hwnd)
+        self._chrome_h = chrome_height(1.0)
+        self._panel_w = 1
+        self._press_kind = None  # "grip" | "close" | None
         self._grip_press_at = 0.0
         self._grip_dragging = False
         self._off = (0, 0)
-        self._visible = False  # 屏幕上是否正在显示文案窗/手柄
+        self._visible = False  # 屏幕上是否正在显示文案窗
         if ENABLED and sys.platform == "win32":
             threading.Thread(target=self._thread, daemon=True, name="overlay").start()
             self._ready.wait(5)
@@ -1098,12 +1138,37 @@ class Hud:
         if self.ok:
             self._q.put("hide")
 
+    def dismiss(self):
+        """清空所有分区与短提示并藏起。任何线程可调（顶栏 X 走这条）。"""
+        if self.ok:
+            self._q.put("dismiss")
+            return
+        self._dismiss_now()
+
+    def _dismiss_now(self):
+        keys = list(self.sections)
+        self.sections.clear()
+        self.rich.clear()
+        self.note_text = ""
+        self._note_seq += 1
+        try:
+            from ..app import bus
+
+            for sec in keys:
+                bus.publish("hud", {"section": sec, "text": ""})
+            bus.publish("hud", {"section": "提示", "text": ""})
+        except Exception:
+            pass
+        self._visible = False
+        if self.ok:
+            self._push(None)
+
     def _on_content_change(self, *, activity: bool):
         """有文案就显示，全部清空就隐藏。activity 保留调用方兼容，不再区分空闲计时。"""
         self._visible = self._has_text()
 
     def _bump_op(self):
-        """手柄拖动 / 滚轮：有文案则保持显示"""
+        """顶栏拖动 / 滚轮：有文案则保持显示"""
         self._visible = self._has_text()
 
     def restyle(self):
@@ -1114,7 +1179,7 @@ class Hud:
         time.sleep(seconds)
 
     def scroll_by(self, delta: float):
-        """正文相对视口滚动（正数往上看更早内容）。任何线程可调；手柄滚轮走队列。"""
+        """正文相对视口滚动（正数往上看更早内容）。任何线程可调；顶栏滚轮走队列。"""
         if self.ok:
             self._q.put(("scroll", float(delta)))
 
@@ -1146,13 +1211,13 @@ class Hud:
 
             if not HWND or not _ulw(HWND, Image.new("RGBA", (1, 1), (0, 0, 0, 0))):
                 raise RuntimeError("UpdateLayeredWindow")
+            self.root.bind("<ButtonPress-1>", self._panel_press)
+            self.root.bind("<B1-Motion>", self._panel_drag)
+            self.root.bind("<ButtonRelease-1>", self._panel_release)
+            self.root.bind("<MouseWheel>", self._panel_wheel)
             self.ok = True
             try:
                 self._mk_window()
-            except Exception:
-                pass
-            try:
-                self._grip_window()
             except Exception:
                 pass
         except Exception:
@@ -1203,7 +1268,8 @@ class Hud:
                 elif cmd == "hide":
                     self._visible = False
                     self._push(None)
-                    self._grip_sync()
+                elif cmd == "dismiss":
+                    self._dismiss_now()
                 elif cmd == "marker":
                     mk = True
                 elif cmd == "restyle":
@@ -1362,7 +1428,7 @@ class Hud:
             blocks = layout(sections, scale, dict(self.rich), content_width=card_inner)
             self._fresh = diff_fresh(self._blocks, blocks, time.time(), self._fresh)
             self._blocks = blocks
-        # 高跟内容，超过客户区 20% 则裁切，手柄滚轮可看更多
+        # 高跟内容，超过客户区 20% 则裁切，顶栏滚轮可看更多
         img, busy, content_h = paint(
             sections,
             self.note_text,
@@ -1375,7 +1441,9 @@ class Hud:
             scroll_from_bottom=self.scroll_from_bottom,
         )
         self._content_h = content_h
-        self._view_h = img.height
+        self._chrome_h = chrome_height(scale)
+        self._panel_w = img.width
+        self._view_h = max(1, img.height - self._chrome_h)
         self.scroll_from_bottom = clamp_scroll_from_bottom(
             self.scroll_from_bottom, content_h, self._view_h
         )
@@ -1384,10 +1452,8 @@ class Hud:
         # 无文案或已主动隐藏：屏幕上不画
         if not self._visible or not self._has_text():
             self._push(None)
-            self._grip_sync()
             return False
         self._push(img)
-        self._grip_sync()
         return busy
 
     def _push(self, img):
@@ -1424,7 +1490,7 @@ class Hud:
             pass
 
     def _apply_style(self):
-        """文案窗：鼠标穿透 + 永不激活 + 不在任务栏/Alt+Tab；拖动只走左上角手柄窗"""
+        """文案窗：可点（盖住的区域不穿透）+ 永不激活 + 不在任务栏/Alt+Tab；顶栏拖动与关闭"""
         try:
             import ctypes
 
@@ -1439,8 +1505,8 @@ class Hud:
                 | WS_EX_TOOLWINDOW
                 | WS_EX_NOACTIVATE
                 | WS_EX_TOPMOST
-                | WS_EX_TRANSPARENT
             )
+            ex = ex & ~WS_EX_TRANSPARENT
             put(HWND, GWL_EXSTYLE, ex)
             u32.SetWindowPos(
                 HWND,
@@ -1502,114 +1568,41 @@ class Hud:
         """此刻是否该画在屏幕上：有文案且未主动隐藏"""
         return self._visible and self._has_text()
 
-    def _grip_px(self):
-        return max(20, int(round(GRIP_BASE_PX * self._scale())))
-
-    def _grip_image(self, size):
-        """六点握把图标"""
-        from PIL import Image, ImageDraw
-
-        img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-        d = ImageDraw.Draw(img)
-        pad = max(2, size // 10)
-        d.rounded_rectangle(
-            (0, 0, size - 1, size - 1),
-            radius=max(3, size // 6),
-            fill=PLATE + (int(255 * plate_alpha(self._settings()[1])),),
-            outline=EDGE,
-            width=1,
-        )
-        r = max(1, size // 14)
-        gap = (size - 2 * pad) / 4
-        for i in range(3):
-            for j in range(2):
-                cx = pad + gap + i * gap
-                cy = pad + gap * (0.8 + j * 1.4)
-                d.ellipse((cx - r, cy - r, cx + r, cy + r), fill=LABEL_C)
-        return img
-
-    def _grip_window(self):
-        """左上角手柄：不穿透，可长按拖主窗、滚轮滑正文。无文案时保持隐藏。"""
-        if self._grip is not None:
-            return self._grip
-        import ctypes
-
-        u32 = ctypes.windll.user32
-        get = getattr(u32, "GetWindowLongPtrW", u32.GetWindowLongW)
-        put = getattr(u32, "SetWindowLongPtrW", u32.SetWindowLongW)
-        w = self.tk.Toplevel(self.root)
-        w.overrideredirect(True)
-        w.attributes("-topmost", True)
-        w.geometry("1x1+0+0")
-        w.update()
-        h = u32.GetAncestor(w.winfo_id(), 2)
-        ex = (
-            get(h, GWL_EXSTYLE)
-            | WS_EX_LAYERED
-            | WS_EX_TOOLWINDOW
-            | WS_EX_NOACTIVATE
-            | WS_EX_TOPMOST
-        )
-        ex = ex & ~WS_EX_TRANSPARENT
-        put(h, GWL_EXSTYLE, ex)
-        w.bind("<ButtonPress-1>", self._grip_press)
-        w.bind("<B1-Motion>", self._grip_drag)
-        w.bind("<ButtonRelease-1>", self._grip_release)
-        w.bind("<MouseWheel>", self._grip_wheel)
-        self._grip = (w, h)
-        self._grip_sync()
-        return self._grip
-
-    def _grip_sync(self):
-        """有文案才画手柄；无文案时 1×1 全透明，不挡屏幕。"""
-        if not self._grip or not HWND:
-            return
-        try:
-            import ctypes
-            from PIL import Image
-
-            _, h = self._grip
-            if not self._drawn():
-                ctypes.windll.user32.SetWindowPos(
-                    ctypes.c_void_p(h),
-                    None,
-                    0,
-                    0,
-                    1,
-                    1,
-                    SWP_NOACTIVATE,
-                )
-                _ulw(h, Image.new("RGBA", (1, 1), (0, 0, 0, 0)))
-                return
-            sz = self._grip_px()
-            x, y = self._rect()
-            img = self._grip_image(sz)
-            if img.size != (sz, sz):
-                img = img.resize((sz, sz), Image.Resampling.LANCZOS)
-            ctypes.windll.user32.SetWindowPos(
-                ctypes.c_void_p(h),
-                ctypes.c_void_p(-1),
-                int(x),
-                int(y),
-                int(sz),
-                int(sz),
-                SWP_NOACTIVATE,
-            )
-            _ulw(h, img)
-        except Exception:
-            pass
-
-    def _grip_press(self, e):
+    def _chrome_hit(self, e) -> str | None:
+        """相对文案窗屏幕矩形：顶栏左=手柄，顶栏右=关闭；否则 None。
+        不用 e.x/e.y：Tk geometry 仍是 1×1，分层窗实际大小只在 UpdateLayeredWindow 里。"""
         if not self._drawn():
+            return None
+        try:
+            wx, wy = self._rect()
+        except Exception:
+            return None
+        ch = max(1, int(self._chrome_h))
+        pw = max(1, int(self._panel_w))
+        x = int(getattr(e, "x_root", 0)) - int(wx)
+        y = int(getattr(e, "y_root", 0)) - int(wy)
+        if y < 0 or y >= ch or x < 0 or x >= pw:
+            return None
+        if x < ch:
+            return "grip"
+        if x >= pw - ch:
+            return "close"
+        return None
+
+    def _panel_press(self, e):
+        kind = self._chrome_hit(e)
+        self._press_kind = kind
+        if kind is None:
             return
         self._bump_op()
         self._grip_press_at = time.time()
         self._grip_dragging = False
-        x, y = self._rect()
-        self._off = (e.x_root - x, e.y_root - y)
+        if kind == "grip":
+            x, y = self._rect()
+            self._off = (e.x_root - x, e.y_root - y)
 
-    def _grip_drag(self, e):
-        if not self._drawn():
+    def _panel_drag(self, e):
+        if self._press_kind != "grip" or not self._drawn():
             return
         if not self._grip_dragging:
             if (time.time() - self._grip_press_at) * 1000 < GRIP_HOLD_MS:
@@ -1630,18 +1623,21 @@ class Hud:
                 0,
                 SWP_NOSIZE | SWP_NOACTIVATE,
             )
-            self._grip_sync()
         except Exception:
             pass
 
-    def _grip_release(self, e):
-        if self._grip_dragging:
+    def _panel_release(self, e):
+        if self._press_kind == "close" and not self._grip_dragging:
+            if self._chrome_hit(e) == "close":
+                self._dismiss_now()
+        elif self._grip_dragging:
             self._save_pos()
             self._bump_op()
         self._grip_dragging = False
         self._grip_press_at = 0.0
+        self._press_kind = None
 
-    def _grip_wheel(self, e):
+    def _panel_wheel(self, e):
         if not self._drawn():
             return
         self._bump_op()
