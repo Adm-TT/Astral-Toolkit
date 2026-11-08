@@ -5,7 +5,7 @@
 - 游戏要用「无边框窗口」模式才看得到悬浮窗（全屏模式下会被游戏盖住）
 - 文案窗鼠标穿透、永远不抢焦点：点到它操作直接给游戏
 - 外框锁在游戏客户区中上带（宽 30%–70%、高顶部 0%–20%）；内容超出可滑动，默认钉底
-- 有分区文案或短提示时才显示文案窗与左上角手柄；空闲时两者都隐藏（1×1 全透明）
+- 功能往悬浮窗写字时显示文案窗与左上角手柄；之后 10 秒内无写字、无手柄操作则自动隐藏（内容仍留着，下次再写会再显示）
 - 左上角独立小手柄窗：长按拖动改位置（写入 overlay_pos.json）；在手柄上滚轮滑动内容
 - 导航菱形 / 瞄准环仍是另两扇独立窗口
 - 悬浮窗在自己的线程里运行，任何线程都可以调用 set()
@@ -84,6 +84,7 @@ BAND_X0, BAND_X1 = 0.30, 0.70
 BAND_Y0, BAND_Y1 = 0.0, 0.20
 GRIP_HOLD_MS = 300
 GRIP_BASE_PX = 28  # 手柄边长（再乘 hud 字号 scale）
+IDLE_HIDE_SECS = 10.0  # 显示后多久无操作则自动隐藏
 
 
 def band_size(area_w: int, area_h: int) -> tuple[int, int]:
@@ -995,6 +996,8 @@ class Hud:
         self._grip_press_at = 0.0
         self._grip_dragging = False
         self._off = (0, 0)
+        self._visible = False  # 屏幕上是否正在显示文案窗/手柄
+        self._last_op_at = 0.0  # 最近一次写字或手柄操作
         if ENABLED and sys.platform == "win32":
             threading.Thread(target=self._thread, daemon=True, name="overlay").start()
             self._ready.wait(5)
@@ -1020,6 +1023,7 @@ class Hud:
             bus.publish("hud", {"section": section, "text": text})
         except Exception:
             pass
+        self._on_content_change(activity=True)
         if self.ok:
             self._q.put("render")
 
@@ -1044,6 +1048,7 @@ class Hud:
             bus.publish("hud", {"section": "提示", "text": self.note_text})
         except Exception:
             pass
+        self._on_content_change(activity=True)
         if self.ok:
             self._q.put("render")
 
@@ -1056,6 +1061,8 @@ class Hud:
                     bus.publish("hud", {"section": "提示", "text": ""})
                 except Exception:
                     pass
+                # 提示到期不算「操作」：若已空闲隐藏就别因为清 note 再弹出来
+                self._on_content_change(activity=False)
                 if self.ok:
                     self._q.put("render")
 
@@ -1066,6 +1073,23 @@ class Hud:
     def hide(self):
         if self.ok:
             self._q.put("hide")
+
+    def _on_content_change(self, *, activity: bool):
+        """activity=True：写字/开功能 → 显示并刷新空闲计时；全部清空 → 立刻隐藏。
+        activity=False：仅同步「空了就藏」（如 note 到期），不主动重新显示。"""
+        if not self._has_text():
+            self._visible = False
+            return
+        if activity:
+            self._visible = True
+            self._last_op_at = time.time()
+
+    def _bump_op(self):
+        """手柄拖动 / 滚轮：算作用户操作，延长显示"""
+        if not self._has_text():
+            return
+        self._visible = True
+        self._last_op_at = time.time()
 
     def restyle(self):
         if self.ok:
@@ -1162,7 +1186,9 @@ class Hud:
                 if cmd == "render":
                     dirty = True
                 elif cmd == "hide":
+                    self._visible = False
                     self._push(None)
+                    self._grip_sync()
                 elif cmd == "marker":
                     mk = True
                 elif cmd == "restyle":
@@ -1171,6 +1197,7 @@ class Hud:
                     if getattr(self, "_mk", None):
                         mk = True
                 elif isinstance(cmd, tuple) and cmd and cmd[0] == "scroll":
+                    self._bump_op()
                     self.scroll_from_bottom = clamp_scroll_from_bottom(
                         self.scroll_from_bottom + cmd[1],
                         self._content_h,
@@ -1179,6 +1206,15 @@ class Hud:
                     dirty = True
         except queue.Empty:
             pass
+        # 显示中且超时无操作 → 自动隐藏（分区文字仍保留，下次写字再出）
+        if (
+            self._visible
+            and self._has_text()
+            and self._last_op_at
+            and time.time() - self._last_op_at >= IDLE_HIDE_SECS
+        ):
+            self._visible = False
+            dirty = True
         if mk:
             self._marker_render()
         busy = False
@@ -1330,8 +1366,12 @@ class Hud:
         )
         if not busy:
             self._fresh = {}
-        empty = not self._has_text()
-        self._push(None if empty else img)
+        # 无文案，或已空闲隐藏：屏幕上不画（分区数据可仍在）
+        if not self._visible or not self._has_text():
+            self._push(None)
+            self._grip_sync()
+            return False
+        self._push(img)
         self._grip_sync()
         return busy
 
@@ -1477,8 +1517,12 @@ class Hud:
             pass
 
     def _has_text(self) -> bool:
-        """有分区文案或短提示时才需要显示悬浮窗 / 手柄"""
+        """内存里是否还有分区文案或短提示（与屏幕上是否可见无关）"""
         return bool(self.sections or self.note_text)
+
+    def _drawn(self) -> bool:
+        """此刻是否该画在屏幕上：有文案且处于显示期（未空闲隐藏）"""
+        return self._visible and self._has_text()
 
     def _grip_px(self):
         return max(20, int(round(GRIP_BASE_PX * self._scale())))
@@ -1547,7 +1591,7 @@ class Hud:
             from PIL import Image
 
             _, h = self._grip
-            if not self._has_text():
+            if not self._drawn():
                 ctypes.windll.user32.SetWindowPos(
                     ctypes.c_void_p(h),
                     None,
@@ -1578,20 +1622,22 @@ class Hud:
             pass
 
     def _grip_press(self, e):
-        if not self._has_text():
+        if not self._drawn():
             return
+        self._bump_op()
         self._grip_press_at = time.time()
         self._grip_dragging = False
         x, y = self._rect()
         self._off = (e.x_root - x, e.y_root - y)
 
     def _grip_drag(self, e):
-        if not self._has_text():
+        if not self._drawn():
             return
         if not self._grip_dragging:
             if (time.time() - self._grip_press_at) * 1000 < GRIP_HOLD_MS:
                 return
             self._grip_dragging = True
+            self._bump_op()
         try:
             import ctypes
 
@@ -1613,12 +1659,14 @@ class Hud:
     def _grip_release(self, e):
         if self._grip_dragging:
             self._save_pos()
+            self._bump_op()
         self._grip_dragging = False
         self._grip_press_at = 0.0
 
     def _grip_wheel(self, e):
-        if not self._has_text():
+        if not self._drawn():
             return
+        self._bump_op()
         # Windows：delta 为正向上滚 → 看更早内容（增大距底偏移）
         step = max(24, self._view_h // 8)
         delta = step if getattr(e, "delta", 0) > 0 else -step

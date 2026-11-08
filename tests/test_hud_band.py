@@ -42,16 +42,43 @@ def test_paint_viewport_pins_bottom():
     assert img2.size == (400, 120)
 
 
-def test_has_text_gates_hud():
-    """空闲无文案：不该显示手柄；有分区或短提示才算有文案"""
-    from astral_toolkit.app.overlay import Hud
+def test_idle_hide_after_ops():
+    """有文案时显示；模拟空闲超时后隐藏；再写字又显示；note 到期不把已隐藏的再弹出来"""
+    import time
+    from astral_toolkit.app.overlay import IDLE_HIDE_SECS, Hud
 
     h = Hud.__new__(Hud)
+    h.ok = False
     h.sections = {}
+    h.rich = {}
     h.note_text = ""
-    assert h._has_text() is False
-    h.note_text = "一下就没"
-    assert h._has_text() is True
-    h.note_text = ""
+    h._visible = False
+    h._last_op_at = 0.0
+    h._on_content_change(activity=True)
+    assert h._drawn() is False
+
     h.sections = {"导航": "去 ARC-L1"}
-    assert h._has_text() is True
+    h._on_content_change(activity=True)
+    assert h._drawn() is True and h._has_text() is True
+
+    h._last_op_at = time.time() - IDLE_HIDE_SECS - 0.1
+    if (
+        h._visible
+        and h._has_text()
+        and h._last_op_at
+        and time.time() - h._last_op_at >= IDLE_HIDE_SECS
+    ):
+        h._visible = False
+    assert h._drawn() is False
+    assert h._has_text() is True  # 文案还在，只是不画
+
+    h.note_text = ""
+    h._on_content_change(activity=False)  # 提示到期：保持隐藏
+    assert h._drawn() is False
+
+    h._on_content_change(activity=True)  # 功能再次写字
+    assert h._drawn() is True
+
+    h.sections = {}
+    h._on_content_change(activity=True)
+    assert h._drawn() is False
