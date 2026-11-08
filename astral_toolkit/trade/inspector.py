@@ -71,18 +71,16 @@ def get_hover_regions(
 # ---------------------------------------------------------------- 高度阶段级联（2026-11-04 F8 标题带方案）
 # 说明框主体大致落在屏高 24%~70%，标题中文行贴近 24%（观察值，见
 # docs/superpowers/specs/2026-11-04-f8-title-band-ocr.md §1、§3）。认物只要标题那一行，
-# 所以先只认最上面那条窄带，少送像素；认不出再往下放大，最后才用原来的全高竖条。
+# 标题带专责认名；说明框带专责品质/加成与结构锚点。不再全高竖条、不再整屏 OCR（信息过多易误认）。
 # 初值，可以用样本调；改这里只用改这几行。
 TITLE_Y0 = 0.24  # 标题带顶（相对截图高）
 TITLE_Y1 = 0.36  # 标题带底
 BODY_Y0 = 0.24  # 说明框带顶
 BODY_Y1 = 0.70  # 说明框带底
-# (顶, 底, 阶段名, native)，顺序就是级联顺序。native=True 让 RapidOCR 按原尺寸找字（小块图不放大，快 2~3 倍）；
-# 后两档走现有主路径（放大后认得更稳），保准确率不差于改前
+# (顶, 底, 阶段名, native)。native=True：小块图不放大到 736，快 2~3 倍
 HEIGHT_STAGES: Tuple[Tuple[float, float, str, bool], ...] = (
     (TITLE_Y0, TITLE_Y1, "title", True),
     (BODY_Y0, BODY_Y1, "body", False),
-    (0.0, 1.0, "full", False),
 )
 
 
@@ -92,7 +90,7 @@ def get_stage_regions(
     """宽度条带 × 高度阶段 → 裁切顺序 [(像素框, 区域标签, 阶段名, native), ...]
 
     regions：get_hover_regions() 的返回（只管左右，上下是全高）；这里把每个高度阶段都走一遍：
-    先标题带（最省像素），再说明框主体，最后全高。每个阶段内宽度顺序不变（对侧条带 → 30%~70%）。
+    先标题带（认名），再说明框主体（品质/锚点）。每个阶段内宽度顺序不变（对侧条带 → 30%~70%）。
     标签形如 "30-50%@title"，日志里看得出停在哪一档。
     """
     return [
@@ -128,7 +126,10 @@ def region_box(
     stage 给了就用它换掉标签里的阶段（标题带停下后按同一宽度条带补认说明框带用）。"""
     band, _sep, label_stage = (label or "").partition("@")
     reg = HOVER_REGIONS.get(band)
-    y_range = _STAGE_RANGE.get(stage or label_stage or "full")
+    y_key = stage or label_stage or "full"
+    y_range = _STAGE_RANGE.get(y_key)
+    if y_range is None and y_key == "full":
+        y_range = (0.0, 1.0)  # 旧标签「整屏」/「@full」兼容
     if reg is None or y_range is None:
         return None
     y0, y1 = y_range
@@ -164,6 +165,24 @@ _LETTERS = re.compile(r"[A-Za-z]{3,}")
 _STAT = re.compile(
     r"[:：]\s*[-+]?\d|\d\s*%"
 )  # 「属性：数值」行（NDR:20、剩余容量：100%）
+
+
+def _is_en_name(text: str) -> bool:
+    """像不像英文物品名行：连续 ≥3 个字母，或「字母+数字」型号（JS-500、CQ7、TS-2）。
+    太短的（S1）不算，避免把尺寸角标当名字。"""
+    t = (text or "").strip()
+    if not t or has_chinese(t):
+        return False
+    if _LETTERS.search(t):
+        return True
+    folded = re.sub(r"[^a-z0-9]", "", t.lower())
+    return (
+        len(folded) >= 3
+        and any(c.isalpha() for c in folded)
+        and any(c.isdigit() for c in folded)
+    )
+
+
 # 不是物品名的屏幕文字：聊天（[全局]某人：…、[本地]…）、调试信息（Zone: … Pos:）、「名字：」结尾的发言人
 _NOT_ITEM = re.compile(
     r"^\s*\d{1,2}\s*[:：、]\s*\S|^\s*\d{1,2}\.\s+\S|^\s*[\[【(（]\s*(全局|本地|队伍|小队|组织|私聊|好友|系统|派对|Global|Local|Party|Org|Private|Whisper)|"
@@ -256,7 +275,7 @@ def tooltip_pick(tokens, cursor=None, img=None):
     toks = sorted(tokens or [], key=lambda k: (k.box[1], k.box[0]))
     pairs = []
     for e in toks:
-        if has_chinese(e.text) or not _LETTERS.search(e.text):
+        if has_chinese(e.text) or not _is_en_name(e.text):
             continue
         h = max(e.box[3], 12)
         above = [
@@ -405,7 +424,28 @@ def tooltip_pick(tokens, cursor=None, img=None):
     if best:
         _, zh, en, anchored, _box, _ab = best
         return (zh, en), anchored
-    return None, False
+    # 无中文名的型号（JS-500）：标题带只有「字母+数字」英文一行时也当成名字。
+    # 必须带数字，避免把聊天/HUD 的纯英文碎字（thewayi…）当成物品名。
+    en_only = [
+        k
+        for k in toks
+        if _is_en_name(k.text)
+        and any(c.isdigit() for c in k.text)
+        and not _is_anchor(k.text)
+        and not _is_tag(k.text)
+        and not _NOT_ITEM.search(k.text)
+        and not _SENTENCE.search(k.text)
+        and not _STAT.search(k.text)
+        and len(k.text.strip()) <= 40
+    ]
+    if not en_only:
+        return None, False
+    if cursor:
+        cx, cy = cursor
+        pick = min(en_only, key=lambda k: (k.box[0] - cx) ** 2 + (k.box[1] - cy) ** 2)
+    else:
+        pick = min(en_only, key=lambda k: (k.box[1], k.box[0]))
+    return ("", pick.text.strip()), False
 
 
 def _anchor_name(toks, cursor=None, img=None):
@@ -444,7 +484,7 @@ def _anchor_name(toks, cursor=None, img=None):
         for k in above
         if h * 0.6 <= k.box[1] - top < h * 2.2
         and not has_chinese(k.text)
-        and _LETTERS.search(k.text)
+        and _is_en_name(k.text)
     ]
     en = (
         nxt[0].text.strip()
@@ -488,10 +528,10 @@ def _hover_log(crop, tokens, name, note=""):
 
 
 def _strong_canonical(name):
-    """这次认出的名字是不是「高把握库命中」：是就返回汉化包 / 矿物表里的 (中文名, 英文名)，否则 None。
+    """这次认出的名字是不是「高把握库命中」：是就返回标准 (中文名, 英文名)，否则 None。
 
-    只认精确（names.canonical_exact），模糊档不算：弱模糊中文唯一命中就在标题带停下，
-    会白白跳过更靠得住的英文行（docs/superpowers/specs/2026-11-04-f8-title-band-ocr.md §4）。
+    走 names.canonical_exact：汉化/矿物/物品目录精确，以及英文≥0.9 且唯一的高把握模糊。
+    中文弱模糊（ratio≥0.75）不算，避免标题带误停（docs/superpowers/specs/2026-11-04-f8-title-band-ocr.md §4）。
     """
     if not name:
         return None
@@ -539,24 +579,18 @@ def _dbg_texts(tokens, n: int = 8) -> str:
 
 def _read_tooltip(img, cursor, whole_screen=True):
     """→ (文字, (中文名, 英文名) 或 None, 认的范围)
-    识别机制（2026-11-04 F8 标题带方案，见 docs/superpowers/specs/2026-11-04-f8-title-band-ocr.md §3、§4）：
-    1. 先只认说明框顶部的标题窄带（屏高 24%~36%，按原尺寸认字），宽度按鼠标横向位置选
-       （0~30% / 30%~50% / 50%~70% / 70%~100% 选首选条带，不中再用 30%~70% 中间条带）。
-       认出的名字在汉化包 / 矿物表里**精确**对上了就停（高把握库命中，像素最省）。
-    2. 对不上就把高度放大到说明框主体（24%~70%），宽度顺序照旧。
-    3. 再对不上用原来的全高竖条（0%~100%）：说明框标题完整（英文名下面紧跟体积 / 物品类型…）
-       就照旧当认到了——没入库的物品不再为它多跑一次整屏。
-    4. 都还没有：鼠标在屏幕中间带、且从没见过说明框锚点 → 多半在驾驶位，不整屏；否则整屏兜底。
-    whole_screen=False（F8 第一遍）：不整屏兜底，认不出由调用方等一下再截一次（2026-11-06 老大验收：说明框没出完就按了）。
+    识别机制（2026-11-09：标题认名 / Body 品质，见 docs/superpowers/specs/2026-11-04-f8-title-band-ocr.md）：
+    1. 标题带（屏高 24%~36%，native）：高把握库命中（汉化/矿物/物品目录精确，或英文≥0.9 且唯一）就停。
+    2. 说明框带（24%~70%）：库精确或锚点 sure（体积/类型…）就停；这一档也带品质行。
+    3. 不再全高竖条、不再整屏 OCR（信息过多易误认）。
+    whole_screen 参数保留兼容：True/False 行为相同（都不整屏）；F8 第一遍认不出仍由调用方再截一次。
     """
     from ..ocr import recognize
     from . import debug_shots
 
     W, H = img.size
-    best_candidate = None  # 认出的「像样名字」里最早的（放大后也用得上的候选）
-    best_full = None  # 全高档认出的候选：说明框看得最全，字段更齐，优先用它
-    last = ([], None, "整屏")
-    anchor_seen = False
+    best_candidate = None  # 认出的「像样名字」里最早的
+    last = ([], None, "30-50%@body")
     dbg = _debug_on()
     shot = debug_shots.current()
     if dbg:
@@ -595,8 +629,7 @@ def _read_tooltip(img, cursor, whole_screen=True):
             _shot_stop("库精确")
             return tokens, name, label
         if stage != "title" and name and sure:
-            # 放大后的裁切里说明框结构完整：和现有逻辑组合（§4「放大后若出现锚点，仍可与现逻辑组合」）。
-            # 标题带不这样停：窄带路径只认高把握库命中，免得弱结果把英文行 / 说明框主体挡掉
+            # Body：说明框结构完整也可停（没入库的物品）。标题带只认库精确。
             if dbg:
                 _dbg(
                     f"裁切 {label}｜{ms:.0f}ms｜名 {_dbg_name(name)}｜锚点sure=是｜库精确=否｜停·锚点sure｜字 {_dbg_texts(tokens)}",
@@ -607,77 +640,27 @@ def _read_tooltip(img, cursor, whole_screen=True):
         outcome = "继续"
         if name and plausible_name(*name):
             best_candidate = best_candidate or (tokens, name, label)
-            if stage == "full":
-                best_full = best_full or (tokens, name, label)
             outcome = "记候选"
         if dbg:
             _dbg(
                 f"裁切 {label}｜{ms:.0f}ms｜名 {_dbg_name(name)}｜锚点sure={sure}｜库精确=否｜{outcome}｜字 {_dbg_texts(tokens)}"
             )
-        anchor_seen = anchor_seen or any(_is_anchor(k.text) for k in tokens)
         last = (tokens, None, label)
 
-    # 认到的候选：全高档优先（说明框看得最全，品质 / 数量字段更齐）
-    cand = best_full or best_candidate
-    # 驾驶位保护：鼠标在屏幕中间、认过的区域里连说明框的样子（体积 / 制造商 / 物品类型…）都没有，
-    # 多半是开着船按了 F8，不再整屏找（整屏一次 5~16 秒，2026-10-23 两位玩家在驾驶位上按 F8 都等了很久，CPU 也白占）
-    ml, _mt, mr, _mb = HOVER_REGIONS["中间"]
-    inside = cursor is None or (W * ml <= cursor[0] <= W * mr and 0 <= cursor[1] <= H)
-    if inside and not anchor_seen:
-        if dbg:
-            why = "有候选" if cand is not None else "无名字"
-            _dbg(
-                f"驾驶位保护｜跳过整屏｜中间带且无锚点｜采用{why}",
-                "INFO",
-            )
-        _shot_stop("驾驶位保护")
-        return cand if cand is not None else last
-    if not whole_screen:
-        if dbg:
-            _dbg("第一遍不整屏｜等一下再截一次", "INFO")
-        _shot_stop("第一遍·不整屏")
-        return cand if cand is not None else last
-
-    # 都不行的时候全屏兜底
-    if dbg:
-        _dbg("进入整屏兜底", "INFO")
-    t0 = time.perf_counter()
-    full_box = (0, 0, W, H)
-    _shot_attempt(full_box, "整屏", "full", img)
-    full = recognize(img, urgent=True)
-    ms = (time.perf_counter() - t0) * 1000
-    name_full, sure_full = tooltip_pick(full, cursor, img)
-    if name_full and sure_full:
-        if dbg:
-            _dbg(
-                f"整屏｜{ms:.0f}ms｜名 {_dbg_name(name_full)}｜停·锚点sure｜字 {_dbg_texts(full)}",
-                "INFO",
-            )
-        _shot_stop("整屏·锚点sure")
-        return full, name_full, "整屏"
+    cand = best_candidate
     if cand is not None:
         if dbg:
             _dbg(
-                f"整屏｜{ms:.0f}ms｜名 {_dbg_name(name_full)}｜未停｜采用先前候选 {_dbg_name(cand[1])}@{cand[2]}",
+                f"级联结束｜采用候选 {_dbg_name(cand[1])}@{cand[2]}",
                 "INFO",
             )
-        _shot_stop("整屏未停·采用候选")
+        _shot_stop("采用候选")
         return cand
-    if name_full and plausible_name(*name_full):
-        if dbg:
-            _dbg(
-                f"整屏｜{ms:.0f}ms｜名 {_dbg_name(name_full)}｜停·像样名字｜字 {_dbg_texts(full)}",
-                "INFO",
-            )
-        _shot_stop("整屏·像样名字")
-        return full, name_full, "整屏"
     if dbg:
-        _dbg(
-            f"整屏｜{ms:.0f}ms｜名 {_dbg_name(name_full)}｜未识别｜字 {_dbg_texts(full)}",
-            "INFO",
-        )
-    _shot_stop("未识别")
-    return full, None, "整屏"
+        why = "第一遍·等再截" if not whole_screen else "未识别"
+        _dbg(f"级联结束｜{why}", "INFO")
+    _shot_stop("第一遍·不整屏" if not whole_screen else "未识别")
+    return last
 
 
 def tooltip_quality(tokens):
@@ -893,11 +876,27 @@ def inspect_item(
             zh, en = canon
 
         mineral = _is_mineral(zh, en, fuzzy=not canon)  # 汉化包对上了就不模糊配矿名
+        body_rescanned = False
         row_q, row_amt = tooltip_row(tokens)
         q_from_row_label = False
         if row_q is None:
             row_q = tooltip_quality(tokens)
             q_from_row_label = row_q is not None
+        # 标题带停下：品质/加成多在说明框正文，缺品质时补扫 body（制造品加成也走这里）
+        if (
+            isinstance(where, str)
+            and where.endswith("@title")
+            and not mineral
+            and row_q is None
+        ):
+            body = _tooltip_body_tokens(img, cursor, where)
+            if body:
+                tokens = body
+                body_rescanned = True
+                row_q, row_amt = tooltip_row(tokens)
+                if row_q is None:
+                    row_q = tooltip_quality(tokens)
+                    q_from_row_label = row_q is not None
 
         cell_q, cell_n = None, None
         cell_reuse = False
@@ -932,18 +931,17 @@ def inspect_item(
         qty, unit = (row_amt, "SCU") if mineral else ((cell_n or 1), "个")
 
         craft = None
-        body_rescanned = False
         if not mineral and (craft_override or (row_q is None and cell_q is None)):
             # 制造出来的装备无显式品质数字，根据蓝图修饰词倒推各材料槽品质
             try:
                 from ..crafting.crafting import parse_mods, solve_slots, for_item
 
                 mods = parse_mods(tokens)
-                if not mods and for_item(en, zh):
-                    # 标题带命中的制造品：加成行不在标题带里，按同一宽度条带补认一次说明框带，只为了拿加成行
+                if not mods and for_item(en, zh) and not body_rescanned:
+                    # 标题带命中且上面没为品质补扫过：再补一次拿加成行
                     body = _tooltip_body_tokens(img, cursor, where)
                     if body:
-                        tokens = body  # 换成说明框带那一份：日志、收错题拿到的字也更全
+                        tokens = body
                         mods = parse_mods(tokens)
                         body_rescanned = True
                 res = solve_slots(for_item(en, zh), mods) if mods else None

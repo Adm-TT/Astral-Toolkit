@@ -74,7 +74,7 @@ def _setup(monkeypatch, results):
 
 
 def test_miss_twice_grabs_again_and_second_pass_may_go_full(monkeypatch):
-    """第一遍不整屏、认不出 → 再截一张，第二遍照旧（可以整屏）；两遍都没有就是未识别。"""
+    """第一遍认不出 → 再截一张再认；两遍都没有就是未识别（级联已无整屏 OCR）。"""
     imgs, calls, logs, links = _setup(monkeypatch, [None, None])
     assert Hv.hover_once(links) == {"miss": True}
     assert calls == [(0, False), (1, True)] and len(imgs) == 2
@@ -120,7 +120,7 @@ def test_given_image_reads_once_as_before(monkeypatch):
 
 
 def test_read_tooltip_first_pass_skips_full_screen(monkeypatch):
-    """_read_tooltip(whole_screen=False)：条带都认不出也不整屏（只认裁切，不认整张图）。"""
+    """_read_tooltip：只认 title/body 裁切，从不认整张图（whole_screen 参数不再触发整屏 OCR）。"""
     from astral_toolkit import ocr
 
     seen = []
@@ -140,8 +140,8 @@ def test_read_tooltip_first_pass_skips_full_screen(monkeypatch):
     tokens, name, where = I._read_tooltip(_Img(), (2434, 961), whole_screen=False)
     assert name is None and "整张" not in seen and seen
     seen.clear()
-    I._read_tooltip(_Img(), (2434, 961))
-    assert seen[-1] == "整张"
+    I._read_tooltip(_Img(), (2434, 961), whole_screen=True)
+    assert "整张" not in seen and seen
 
 
 def test_inspect_item_passes_first_pass_down(monkeypatch):

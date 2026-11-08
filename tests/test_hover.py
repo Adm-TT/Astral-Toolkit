@@ -1,8 +1,7 @@
 """F8 悬停识别自适应区域与兜底流程测试
 
-2026-11-04 F8 标题带方案（docs/superpowers/specs/2026-11-04-f8-title-band-ocr.md）：
-识别顺序改成「高度阶段 × 宽度条带」的级联——标题带 24%~36%（native=True，主路径）
-→ 说明框带 24%~70% → 全高 0%~100% → 整屏兜底；标题带要「高把握库命中」（汉化包 / 矿物表精确对上）才停。
+2026-11-09：标题带 24%~36%（认名，库精确才停）→ 说明框带 24%~70%（品质/锚点）；
+不再全高竖条、不再整屏 OCR（docs/superpowers/specs/2026-11-04-f8-title-band-ocr.md）。
 """
 
 import unittest
@@ -80,10 +79,16 @@ _ITEM = [
     OcrToken("VeraCompensator2", 90, (350, 324, 100, 18)),
     OcrToken("体积：20uSCU", 90, (350, 348, 100, 18)),
 ]
-# 认错一个字的同一件物品（中文弱模糊、英文也不精确）
-_WEAK = [
+# 中文弱模糊 + 英文高把握模糊（≥0.9）：标题带可停
+_WEAK_EN_OK = [
     OcrToken("实准枪口补偿器", 90, (350, 300, 100, 18)),
     OcrToken("VeraCompensato", 90, (350, 324, 100, 18)),
+    OcrToken("体积：20uSCU", 90, (350, 348, 100, 18)),
+]
+# 中文弱模糊 + 英文太糊（<0.9）：标题带不停
+_WEAK = [
+    OcrToken("实准枪口补偿器", 90, (350, 300, 100, 18)),
+    OcrToken("VeraCompens", 90, (350, 324, 100, 18)),
     OcrToken("体积：20uSCU", 90, (350, 348, 100, 18)),
 ]
 
@@ -114,6 +119,7 @@ def _names(monkeypatch, pairs):
     en_map = {names._fold_en(en): (zh, en) for zh, en in t.items()}
     monkeypatch.setattr(names, "table", lambda: t)
     monkeypatch.setattr(names, "_index", lambda: (zh_map, en_map))
+    monkeypatch.setattr(names, "_from_items", lambda en: None)  # 不走本机物品目录
 
 
 class TestReadTooltipExecution(unittest.TestCase):
@@ -181,31 +187,23 @@ class TestReadTooltipExecution(unittest.TestCase):
         self.assertEqual(len(calls), 3)
         self.assertEqual(calls[2], ((300, 240), False, (200, 460)))  # 说明框带 24%~70%
 
-    def test_fullscreen_fallback(self):
-        """标题带、说明框带、全高都没认到，整屏兜底命中"""
+    def test_no_fullscreen_after_title_body(self):
+        """标题带、说明框带都没认到：不再整屏，返回未识别"""
         calls = []
 
         def fake_recognize(img, urgent=False, offset=(0, 0), native=False):
             calls.append((offset, native, img.size))
-            if len(calls) <= 6:  # 3 个高度阶段 × 2 个宽度条带
-                return []
-            return [
-                OcrToken("实准枪口补偿器2", 90, (350, 300, 100, 18)),
-                OcrToken("VeraCompensator2", 90, (350, 324, 100, 18)),
-                OcrToken("体积：20uSCU", 90, (350, 348, 100, 18)),
-            ]
+            return []
 
         self.ocr.recognize = fake_recognize
         toks, name, where = _read_tooltip(self.img, (100, 500))  # 鼠标在 10%
-        self.assertEqual(where, "整屏")
-        self.assertEqual(name, ("实准枪口补偿器2", "VeraCompensator2"))
-        self.assertEqual(len(calls), 7)
-        self.assertEqual(calls[-1][2], (1000, 1000))  # 整屏是整张图
+        self.assertIsNone(name)
+        self.assertEqual(len(calls), 4)  # 2 高度 × 2 宽度，无整屏
+        self.assertTrue(str(where).endswith("@body") or str(where).endswith("@title"))
 
 
 def test_cascade_order_and_cockpit_guard(monkeypatch):
-    """级联顺序：标题带 2 个宽度 → 说明框带 2 个 → 全高 2 个（native 只有标题带是 True）；
-    鼠标在中间带、一直没见到说明框特征：多半在驾驶位，不整屏"""
+    """级联顺序：标题带 2 个宽度 → 说明框带 2 个（native 只有标题带是 True）；不再全高/整屏"""
     _names(monkeypatch, {})
     calls = _fake_ocr(monkeypatch, [[OcrToken("SCM 220", 90, (60, 300, 60, 18))]])
     toks, name, where = _read_tooltip(MockImage(1000, 1000), (500, 500))
@@ -215,8 +213,6 @@ def test_cascade_order_and_cockpit_guard(monkeypatch):
         ((300, 240), True, (400, 120)),  # 标题带 30-70%
         ((300, 240), False, (200, 460)),  # 说明框带 30-50%
         ((300, 240), False, (400, 460)),  # 说明框带 30-70%
-        ((300, 0), False, (200, 1000)),  # 全高 30-50%
-        ((300, 0), False, (400, 1000)),  # 全高 30-70%
     ]
 
 
@@ -243,8 +239,17 @@ def test_title_stage_falls_back_to_english_line(monkeypatch):
     assert name == ("实准枪口补偿器", "VeraCompensator2")
 
 
+def test_title_stage_stops_on_english_fuzzy_unique(monkeypatch):
+    """中文弱模糊但英文≥0.9 且唯一：标题带算库精确，第一次就停"""
+    _names(monkeypatch, {"实准枪口补偿器2": "VeraCompensator2"})
+    calls = _fake_ocr(monkeypatch, [_WEAK_EN_OK])
+    toks, name, where = _read_tooltip(MockImage(1000, 1000), (100, 500))
+    assert where == "30-50%@title" and len(calls) == 1
+    assert name == ("实准枪口补偿器", "VeraCompensato")
+
+
 def test_title_stage_does_not_stop_on_weak_fuzzy(monkeypatch):
-    """中文弱模糊（canonical 的 ratio≥0.75 档会命中）+ 英文不精确：标题带不停，放大到说明框带"""
+    """中文弱模糊 + 英文太糊（<0.9）：标题带不停，放大到说明框带靠锚点 sure 停"""
     _names(monkeypatch, {"实准枪口补偿器2": "VeraCompensator2"})
     calls = _fake_ocr(monkeypatch, [_WEAK])
     toks, name, where = _read_tooltip(MockImage(1000, 1000), (100, 500))
@@ -253,35 +258,37 @@ def test_title_stage_does_not_stop_on_weak_fuzzy(monkeypatch):
 
 
 def test_weak_fuzzy_still_resolved_later(monkeypatch):
-    """弱模糊不在窄带停，但认物结果不丢：inspect_item 后面还会用完整 canonical 纠正"""
+    """英文不够糊时标题带已能停；英文太糊时放大后 inspect_item 仍用完整 canonical 纠正"""
     from astral_toolkit.trade.inspector import inspect_item
 
     _names(monkeypatch, {"实准枪口补偿器2": "VeraCompensator2"})
-    _fake_ocr(monkeypatch, [_WEAK])
+    _fake_ocr(monkeypatch, [_WEAK_EN_OK])
     res = inspect_item(MockImage(1000, 1000), (100, 500))
     assert res is not None
     assert res["raw"] == ("实准枪口补偿器", "VeraCompensato")
     assert (res["zh"], res["en"]) == ("实准枪口补偿器2", "VeraCompensator2")
     assert res["sure"]
+    assert str(res["where"]).endswith("@title")
 
 
-def test_full_stage_stops_on_anchor_without_library_hit(monkeypatch):
-    """前三档都没认到、全高档看到完整说明框（英文下紧跟体积）：照旧当认到了，不为没入库的物品再跑整屏"""
+def test_body_stage_stops_on_anchor_without_library_hit(monkeypatch):
+    """标题带没库命中、说明框带看到完整说明框（英文下紧跟体积）：锚点 sure 停，不整屏"""
     _names(monkeypatch, {})
-    calls = _fake_ocr(monkeypatch, [[], [], [], [], [], _ITEM])
+    calls = _fake_ocr(monkeypatch, [[], [], _ITEM])
     toks, name, where = _read_tooltip(MockImage(1000, 1000), (100, 500))
-    # 全高第二个宽度条带（30~70%）认到的
-    assert where == "30-70%@full" and len(calls) == 6
+    assert where == "30-50%@body" and len(calls) == 3
     assert name == ("实准枪口补偿器2", "VeraCompensator2")
 
 
-def test_cockpit_guard_allows_fullscreen_when_anchor_seen(monkeypatch):
-    """认过的区域里有说明框特征（体积…）但没对上名字：照旧整屏兜底"""
+def test_no_fullscreen_when_anchor_only(monkeypatch):
+    """只有体积锚点、抽不出名字：级联结束也不整屏"""
     _names(monkeypatch, {})
     anchor_only = [OcrToken("体积：20uSCU", 90, (60, 348, 100, 18))]
-    calls = _fake_ocr(monkeypatch, [[], [], [], [], [], anchor_only])
-    _read_tooltip(MockImage(1000, 1000), (500, 500))
-    assert calls[-1][2] == (1000, 1000)
+    calls = _fake_ocr(monkeypatch, [anchor_only])
+    toks, name, where = _read_tooltip(MockImage(1000, 1000), (500, 500))
+    assert name is None
+    assert len(calls) == 4
+    assert not any(off == (0, 0) and sz == (1000, 1000) for off, _n, sz in calls)
 
 
 if __name__ == "__main__":

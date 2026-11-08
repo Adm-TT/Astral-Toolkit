@@ -177,6 +177,7 @@ def test_inspect_item_matched_name_is_not_fuzzy_mineral(monkeypatch):
         "_read_tooltip",
         lambda img, cur: (toks, ("刚毅", "Fortitude"), "50-70%@title"),
     )
+    monkeypatch.setattr(I, "_tooltip_body_tokens", lambda *a, **k: None)
     monkeypatch.setattr(I, "cell_labels", lambda *a, **k: (None, 1))
     monkeypatch.setattr(names, "canonical", lambda zh, en: ("刚毅", "Fortitude"))
     res = I.inspect_item(_Img(), (2395, 945))

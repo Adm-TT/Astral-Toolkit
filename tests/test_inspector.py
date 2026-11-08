@@ -323,13 +323,9 @@ def test_stage_regions_order_and_boxes():
 
     assert TITLE_Y0 == 0.24 and TITLE_Y1 == 0.36  # 初值照方案
     assert BODY_Y0 == 0.24 and BODY_Y1 == 0.70
-    assert [s[2] for s in HEIGHT_STAGES] == ["title", "body", "full"]
-    assert [(s[0], s[1]) for s in HEIGHT_STAGES] == [
-        (0.24, 0.36),
-        (0.24, 0.70),
-        (0.0, 1.0),
-    ]
-    assert [s[3] for s in HEIGHT_STAGES] == [True, False, False]  # 只有标题带按原尺寸认
+    assert [s[2] for s in HEIGHT_STAGES] == ["title", "body"]
+    assert [(s[0], s[1]) for s in HEIGHT_STAGES] == [(0.24, 0.36), (0.24, 0.70)]
+    assert [s[3] for s in HEIGHT_STAGES] == [True, False]  # 只有标题带按原尺寸认
 
     regions = [(0.30, 0.0, 0.50, 1.0, "30-50%"), (0.30, 0.0, 0.70, 1.0, "30-70%")]
     got = get_stage_regions(regions, 1000, 1000)
@@ -338,18 +334,14 @@ def test_stage_regions_order_and_boxes():
         "30-70%@title",
         "30-50%@body",
         "30-70%@body",
-        "30-50%@full",
-        "30-70%@full",
     ]
     assert [box for box, *_ in got] == [
         (300, 240, 500, 360),
         (300, 240, 700, 360),
         (300, 240, 500, 700),
         (300, 240, 700, 700),
-        (300, 0, 500, 1000),
-        (300, 0, 700, 1000),
     ]
-    assert [native for *_, native in got] == [True, True, False, False, False, False]
+    assert [native for *_, native in got] == [True, True, False, False]
 
     assert region_box("50-70%@body", 1000, 1000) == (500, 240, 700, 700)
     assert region_box("整屏", 1000, 1000) == (0, 0, 1000, 1000)
@@ -367,22 +359,31 @@ def _tiny_names(monkeypatch):
     en_map = {names._fold_en(en): (zh, en) for zh, en in t.items()}
     monkeypatch.setattr(names, "table", lambda: t)
     monkeypatch.setattr(names, "_index", lambda: (zh_map, en_map))
+    monkeypatch.setattr(names, "_from_items", lambda en: None)
     return names
 
 
-def test_canonical_exact_rejects_fuzzy(monkeypatch):
-    """标题带的「高把握库命中」只认精确：中文弱模糊 / 英文近似那几档都不算"""
+def test_canonical_exact_english_fuzzy_unique(monkeypatch):
+    """标题带库精确：英文≥0.9 且唯一算高把握；中文弱模糊仍不算；英文太糊也不算"""
     names = _tiny_names(monkeypatch)
+    monkeypatch.setattr(
+        names, "_from_items", lambda en: None
+    )  # 不走物品目录，专测汉化表
     assert names.canonical_exact("实准枪口补偿器2") == (
         "实准枪口补偿器2",
         "VeraCompensator2",
     )  # 中文规整精确
-    # 只剩模糊档
-    assert names.canonical_exact("实准枪口补偿器", "VeraCompensato") is None
+    # 英文 OCR 少两三个字母、仍≥0.9 且库里唯一 → 标题带可停
+    assert names.canonical_exact("实准枪口补偿器", "VeraCompensato") == (
+        "实准枪口补偿器2",
+        "VeraCompensator2",
+    )
+    # 中文弱模糊（缺「2」）且英文太糊：不算高把握
+    assert names.canonical_exact("实准枪口补偿器", "VeraCompens") is None
     assert names.canonical("实准枪口补偿器") == (
         "实准枪口补偿器2",
         "VeraCompensator2",
-    )  # 完整 canonical 的模糊档照旧能用（放大后再纠正）
+    )  # 完整 canonical 的中文模糊档照旧能用（放大后再纠正）
     assert names.canonical_exact("実准", "VeraCompensator2") == (
         "实准枪口补偿器2",
         "VeraCompensator2",
@@ -394,8 +395,86 @@ def test_canonical_exact_rejects_fuzzy(monkeypatch):
     assert names.canonical_exact() is None
 
 
+def test_js500_english_code_is_en_name():
+    """短型号英文（JS-500 / CQ7 / TS-2）也算英文名行；S1 太短不当名"""
+    from astral_toolkit.trade import inspector
+
+    assert inspector._is_en_name("JS-500")
+    assert inspector._is_en_name("CQ7")
+    assert inspector._is_en_name("TS-2")
+    assert inspector._is_en_name("MedPen")
+    assert not inspector._is_en_name("体积")
+    assert not inspector._is_en_name("S1")  # 太短，不当物品名
+
+
+def test_tooltip_pick_keeps_js500_english(monkeypatch):
+    """无汉化中文名的型号：中文类别行 + JS-500 要能抽成英文名；只有 JS-500 也能成名"""
+    from astral_toolkit.trade import inspector
+
+    zh = OcrToken("发电机", 90, (100, 40, 80, 16))
+    en = OcrToken("JS-500", 90, (100, 58, 80, 16))
+    name, sure = inspector.tooltip_pick([zh, en], cursor=(100, 50))
+    assert name == ("发电机", "JS-500")
+    assert sure is False
+
+    name_only, sure_only = inspector.tooltip_pick([en], cursor=(100, 50))
+    assert name_only == ("", "JS-500")
+    assert sure_only is False
+
+    vol = OcrToken("体积", 90, (100, 100, 80, 16))
+    name_a, sure_a = inspector.tooltip_pick([zh, en, vol], cursor=(100, 50))
+    assert name_a == ("发电机", "JS-500")
+    assert sure_a is True
+
+
+def test_strong_canonical_hits_item_catalog_english(monkeypatch):
+    """汉化包没有中文名时：物品目录英文精确也算标题带「库精确」"""
+    from astral_toolkit.trade import inspector, names
+
+    _tiny_names(monkeypatch)  # 汉化包里没有 JS-500
+    monkeypatch.setattr(
+        names,
+        "_from_items",
+        lambda en: ("", "JS-500") if (en or "").strip().upper() == "JS-500" else None,
+    )
+
+    assert inspector._strong_canonical(("", "JS-500")) == ("", "JS-500")
+    assert inspector._strong_canonical(("发电机", "JS-500")) == ("", "JS-500")
+    assert inspector._strong_canonical(("", "NOT-A-ITEM")) is None
+
+
+def test_title_band_stops_on_item_catalog_english(monkeypatch):
+    """标题带认出 JS-500 且物品目录精确命中：停在 @title，不放大到整屏"""
+    from astral_toolkit import ocr
+    from astral_toolkit.trade import inspector, names
+
+    _tiny_names(monkeypatch)
+    monkeypatch.setattr(
+        names,
+        "_from_items",
+        lambda en: ("", "JS-500") if (en or "").strip().upper() == "JS-500" else None,
+    )
+
+    calls = []
+
+    def fake_recognize(img, urgent=False, offset=(0, 0), native=False):
+        calls.append((offset, native, img.size))
+        # 标题带相对裁切坐标；offset 会加回整图
+        return [
+            OcrToken("JS-500", 90, (offset[0] + 20, offset[1] + 20, 80, 16)),
+        ]
+
+    monkeypatch.setattr(ocr, "recognize", fake_recognize)
+    img = MockImage(2560, 1440)
+    # 鼠标在右侧：首选 70-100% 条带
+    tokens, name, where = inspector._read_tooltip(img, (2000, 400), whole_screen=True)
+    assert name == ("", "JS-500")
+    assert where.endswith("@title")
+    assert len(calls) == 1  # 标题带一次就停，不进说明框带 / 全高 / 整屏
+
+
 def test_cell_labels_reuse_respects_height_stage(monkeypatch):
-    """角标复用看区域标签的高度阶段：全高条带把鼠标那格圈住了就复用 tokens，标题窄带圈不住就重新认"""
+    """角标复用看区域标签的高度阶段：body 圈住就复用；标题窄带圈不住就重新认"""
     from astral_toolkit.trade import inspector
 
     toks = [OcrToken(text="医疗笔", confidence=0.99, box=(390, 470, 80, 20))]
@@ -405,13 +484,14 @@ def test_cell_labels_reuse_respects_height_stage(monkeypatch):
         "cell_labels",
         lambda img, cur, tokens=None: seen.append(tokens) or (None, 1),
     )
+    monkeypatch.setattr(inspector, "_tooltip_body_tokens", lambda *a, **k: None)
     monkeypatch.setattr(
         inspector,
         "_read_tooltip",
-        lambda img, cur: (toks, ("医疗笔", "MedPen"), "30-50%@full"),
+        lambda img, cur: (toks, ("医疗笔", "MedPen"), "30-50%@body"),
     )
     inspector.inspect_item(MockImage(), (400, 500))
-    assert seen == [toks]  # 鼠标那格在 30-50% 全高条带里：复用同一次识别的 tokens
+    assert seen == [toks]  # 说明框带 24%~70% 把 (400,500) 圈住了：复用
 
     seen.clear()
     monkeypatch.setattr(
@@ -423,19 +503,8 @@ def test_cell_labels_reuse_respects_height_stage(monkeypatch):
     assert seen == [None]  # 标题带只有 24%~36%，不含鼠标那格：重新认一块小图
 
     seen.clear()
-    monkeypatch.setattr(
-        inspector,
-        "_read_tooltip",
-        lambda img, cur: (toks, ("医疗笔", "MedPen"), "30-50%@body"),
-    )
-    inspector.inspect_item(MockImage(), (400, 500))
-    assert seen == [toks]  # 说明框带 24%~70% 把 (400,500) 圈住了：复用
-
-    seen.clear()
     inspector.inspect_item(MockImage(), (400, 200))
-    assert seen == [
-        None
-    ]  # (400,200) 在说明框带上面（旧全高条带里）：不复用，免得拿错格的角标
+    assert seen == [None]  # (400,200) 在标题带停下且 body 补扫被关掉：角标另裁
 
 
 def test_crafted_item_keeps_bonus_lines_after_title_hit(monkeypatch):
@@ -487,7 +556,7 @@ def test_crafted_item_keeps_bonus_lines_after_title_hit(monkeypatch):
 
 
 def test_no_extra_scan_when_no_blueprint_or_bonus_in_tokens(monkeypatch):
-    """不是制造品（没有蓝图）、或者加成行本来就在 tokens 里：不补认说明框带（方案 §5 不为品质加大图 OCR）"""
+    """标题带停下且无品质会补扫 body；已有品质字样 / 非标题带停下则不再补扫"""
     from astral_toolkit import ocr
     from astral_toolkit.trade import inspector
     from astral_toolkit.crafting import crafting
@@ -510,9 +579,17 @@ def test_no_extra_scan_when_no_blueprint_or_bonus_in_tokens(monkeypatch):
     )  # 没有蓝图：不是制造品
     res = inspector.inspect_item(MockImage(), (400, 500))
     assert res is not None
-    assert calls == [] and res["quality"] == 0 and res["craft"] is None
+    # 标题带无品质 → 补扫 body 一次找品质；body 也没有则默认 0
+    assert calls == [1] and res["quality"] == 0 and res["craft"] is None
 
-    # 加成行已经读到了（说明框带 / 全高档停下才会这样）：也不再补认
+    # 标题带已有品质字样：不补扫
+    calls.clear()
+    title_q = title + [OcrToken("品质：650", 90, (350, 88, 80, 16))]
+    monkeypatch.setattr(
+        inspector,
+        "_read_tooltip",
+        lambda img, cur: (title_q, ("能量突击步枪", "P4-AR Rifle"), "30-50%@title"),
+    )
     slots = [{"slot": "Frame", "q": 700}]
     monkeypatch.setattr(crafting, "parse_mods", lambda toks: ["mod"])
     monkeypatch.setattr(crafting, "for_item", lambda en, zh: "bp")
@@ -525,8 +602,7 @@ def test_no_extra_scan_when_no_blueprint_or_bonus_in_tokens(monkeypatch):
     assert res is not None
     assert calls == [] and res["quality"] == 700 and res["craft"] == slots
 
-    # 不是标题带停下的（说明框带、全高低两档、整屏、旧标签、没有标签）：说明框那一段已经认过了，
-    # 绝不能再补认一次（否则 F6 盘点逐格白多一次大图 OCR，正好抵消本方案的提速）
+    # 不是标题带停下的：说明框已认过，绝不能再补认
     monkeypatch.setattr(crafting, "parse_mods", lambda toks: [])
     for where in ("30-50%@body", "30-50%@full", "整屏", "30-50%", None):
         monkeypatch.setattr(
