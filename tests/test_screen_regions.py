@@ -109,3 +109,40 @@ def test_save_validates_boxes(tmp_path, monkeypatch):
         with raises(ValueError):
             sr.save({"x.y": entries}, 3)
     assert p.read_text(encoding="utf-8") == before
+
+
+# 读屏开发工作台第 2 步：原来写死在代码里的区域原样搬进区域文件（老大 11-09；值逐位不变）
+SHIPPED = {
+    "hover.band_30_50": (0.30, 0.0, 0.50, 1.0),
+    "hover.band_50_70": (0.50, 0.0, 0.70, 1.0),
+    "hover.band_30_70": (0.30, 0.0, 0.70, 1.0),
+    "hover.title_rows": (0.0, 0.24, 1.0, 0.36),
+    "hover.body_rows": (0.0, 0.24, 1.0, 0.70),
+    "mining.search": (0.55, 0.33, 1.0, 0.80),
+    "mining.center_tag": (0.42, 0.30, 0.58, 0.47),
+    "nav.displayinfo": (0.66, 0.0, 1.0, 0.22),
+}
+
+
+def test_shipped_regions_equal_code_defaults():
+    from astral_toolkit.mining import screen, signals
+    from astral_toolkit.navigation import displayinfo
+    from astral_toolkit.trade import inspector
+
+    data = json.loads(sr.PATH.read_text(encoding="utf-8"))
+    regions = data["regions"]
+    assert set(regions) == set(SHIPPED)
+    for key, box in SHIPPED.items():
+        (entry,) = regions[key]
+        assert tuple(entry["box"]) == box, key
+        assert entry["aspect"] == "16:9" and entry["kind"] == "read" and entry["note"]
+    # 代码里原来的常数还在、值没变（区域文件缺了就用它们）
+    assert inspector.HOVER_REGIONS["30-50%"] == SHIPPED["hover.band_30_50"]
+    assert inspector.HOVER_REGIONS["50-70%"] == SHIPPED["hover.band_50_70"]
+    assert inspector.HOVER_REGIONS["30-70%"] == SHIPPED["hover.band_30_70"]
+    assert inspector.HOVER_REGIONS["中间"] == SHIPPED["hover.band_30_70"]
+    assert (inspector.TITLE_Y0, inspector.TITLE_Y1) == (0.24, 0.36)
+    assert (inspector.BODY_Y0, inspector.BODY_Y1) == (0.24, 0.70)
+    assert screen.SEARCH == SHIPPED["mining.search"]
+    assert signals.CENTER_TAG == SHIPPED["mining.center_tag"]
+    assert displayinfo.REGION == SHIPPED["nav.displayinfo"]

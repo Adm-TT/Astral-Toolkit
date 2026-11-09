@@ -1,4 +1,29 @@
 {
-  "version": 1,
-  "regions": {}
+  "version": 2,
+  "regions": {
+    "hover.band_30_50": [
+      {"aspect": "16:9", "box": [0.30, 0.0, 0.50, 1.0], "kind": "read", "note": "F8 / 盘点说明框竖带：鼠标在屏宽 0~30% 或 50~70% 时先找这条（原 inspector.HOVER_REGIONS[\"30-50%\"]）；上下只看 hover.title_rows / body_rows"}
+    ],
+    "hover.band_50_70": [
+      {"aspect": "16:9", "box": [0.50, 0.0, 0.70, 1.0], "kind": "read", "note": "F8 / 盘点说明框竖带：鼠标在屏宽 30~50% 或 70~100% 时先找这条（原 inspector.HOVER_REGIONS[\"50-70%\"]）"}
+    ],
+    "hover.band_30_70": [
+      {"aspect": "16:9", "box": [0.30, 0.0, 0.70, 1.0], "kind": "read", "note": "F8 / 盘点说明框竖带：上面那条找不到时的宽带，也是鼠标位置不明时的中间带（原 HOVER_REGIONS[\"30-70%\"]、[\"中间\"]）"}
+    ],
+    "hover.title_rows": [
+      {"aspect": "16:9", "box": [0.0, 0.24, 1.0, 0.36], "kind": "read", "note": "说明框标题那几行的上下（原 inspector.TITLE_Y0 / TITLE_Y1）；左右不用"}
+    ],
+    "hover.body_rows": [
+      {"aspect": "16:9", "box": [0.0, 0.24, 1.0, 0.70], "kind": "read", "note": "说明框正文的上下（原 inspector.BODY_Y0 / BODY_Y1）；左右不用"}
+    ],
+    "mining.search": [
+      {"aspect": "16:9", "box": [0.55, 0.33, 1.0, 0.80], "kind": "read", "note": "采矿扫描面板找字的范围（原 mining/screen.SEARCH）"}
+    ],
+    "mining.center_tag": [
+      {"aspect": "16:9", "box": [0.42, 0.30, 0.58, 0.47], "kind": "read", "note": "雷达信号：准星附近的标签（原 mining/signals.CENTER_TAG）"}
+    ],
+    "nav.displayinfo": [
+      {"aspect": "16:9", "box": [0.66, 0.0, 1.0, 0.22], "kind": "read", "note": "右上角 r_DisplayInfo 调试信息（原 navigation/displayinfo.REGION）"}
+    ]
+  }
 }
