@@ -98,24 +98,6 @@
                 }
             }
         ],
-        "./astral_toolkit/crafting/itemstats.py": [
-            {
-                "code": "reportCallIssue",
-                "range": {
-                    "startColumn": 17,
-                    "endColumn": 26,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 21,
-                    "endColumn": 25,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./astral_toolkit/crafting/materials.py": [
             {
                 "code": "reportOptionalOperand",
