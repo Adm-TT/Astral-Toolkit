@@ -94,6 +94,24 @@ def _tooltip_boxes(size):
     return box, (title if title[3] - title[1] >= H * 0.03 else None)
 
 
+def _title_hit(name):
+    """标题那截认出的名字能不能就停：汉化包精确对上；或者英文行只是 l / I 认混（「IgniteIl Missile」
+    「OmniskyXllCannon」），换回来就精确对上（names 里同一份 l 当 i 的表，两个名字折到一起的不算）。
+    不近似：差一个字母的不算。11-09 老大实测悬浮窗更新慢：点火 II、制空 XII 的中文行常把罗马数字认丢、英文行
+    l / I 认混，以前标题那截停不下、每次都再认一遍整块说明框（多 0.7~1.4 秒）。罗马数字对不对后面还会再核"""
+    from ..trade.inspector import _strong_canonical
+
+    if _strong_canonical(name):
+        return True
+    en = (name or ("", ""))[1] or ""
+    if not en:
+        return False
+    from ..contracts.textkeys import fold_en_loose
+    from ..trade.names import _loose_en
+
+    return bool(_loose_en().get(fold_en_loose(en)))
+
+
 def _ocr(img, box, label, stage, native):
     from ..ocr import recognize
     from ..trade import debug_shots
@@ -111,7 +129,7 @@ def _ocr(img, box, label, stage, native):
 def _read_item(img, cursor):
     """鼠标指着的物品：{zh, en, quality, qty, unit, sure, craft}；认不出返回 None（调用通用 inspector 组件）"""
     from ..trade import debug_shots
-    from ..trade.inspector import _strong_canonical, inspect_item, tooltip_pick
+    from ..trade.inspector import inspect_item, tooltip_pick
 
     debug_shots.begin_if_debug()  # 调试开着时，下面两次裁切记进同一份调试图
     box, title = _tooltip_boxes(img.size)
@@ -119,7 +137,7 @@ def _read_item(img, cursor):
     if title:
         t = _ocr(img, title, "盘点说明框@title", "title", True)
         name, _sure = tooltip_pick(t, cursor, img)
-        if name and _strong_canonical(name):
+        if name and _title_hit(name):
             tokens, where = t, "盘点说明框@title"
     if tokens is None:
         tokens = _ocr(img, box, where, "body", False)

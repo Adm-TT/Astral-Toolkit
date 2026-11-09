@@ -59,6 +59,24 @@ def test_title_hit_reads_only_title_strip(monkeypatch):
     assert title[1] == int(1440 * 0.24) and title[3] == int(1440 * 0.36)
 
 
+def test_title_hit_accepts_l_for_i_but_not_near_names(monkeypatch):
+    """标题那截：英文行 l / I 认混、换回来精确对上的也停（实测点火 II 的英文行是「IgniteIl Missile」）；
+    差一个字母的近似名不停，照旧认整块"""
+    from astral_toolkit.tasks import count
+    from astral_toolkit.trade import inspector, names
+
+    monkeypatch.setattr(inspector, "_strong_canonical", lambda n: None)
+    from astral_toolkit.contracts.textkeys import fold_en_loose
+
+    key = fold_en_loose("IgniteIl Missile")
+    monkeypatch.setattr(
+        names, "_loose_en", lambda: {key: ("点火 II 导弹", "Ignite II Missile")}
+    )
+    assert count._title_hit(("点火导弹", "IgniteIl Missile")) is True
+    assert count._title_hit(("点火导弹", "Ignite Missile")) is False
+    assert count._title_hit(("点火导弹", "")) is False
+
+
 def test_title_miss_reads_whole_region(monkeypatch):
     from astral_toolkit.tasks import count
 
