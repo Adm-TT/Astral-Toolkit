@@ -7,6 +7,7 @@
 4. 确认盘点对账与差额写入库存、清零确认（count_apply, count_cancel）。
 """
 
+import re
 import time
 from typing import Any, Dict, List, Optional, Set, Tuple  # noqa: F401
 
@@ -123,9 +124,87 @@ def _read_item(img, cursor):
     if tokens is None:
         tokens = _ocr(img, box, where, "body", False)
     # 盘点：制造品按蓝图倒推的品质为准，带上各槽品质；标题那截命中的制造品补认加成行也在这块区域里认
-    return inspect_item(
-        img, cursor, tokens=tokens, where=where, craft_override=True, body_box=box
+    return _strict_numeral(
+        inspect_item(
+            img, cursor, tokens=tokens, where=where, craft_override=True, body_box=box
+        )
     )
+
+
+_SIZE = re.compile(r"(?:尺寸|Size)\s*[:：]\s*(\d+)", re.I)
+
+
+def _tooltip_size(tokens):
+    """说明框里「尺寸：2」那一行的数；没有是 None"""
+    for t in tokens or []:
+        m = _SIZE.search(getattr(t, "text", "") or "")
+        if m:
+            return int(m.group(1))
+    return None
+
+
+def _library_size(en):
+    try:
+        from ..contracts.textkeys import en_key
+        from ..gamedata import items
+
+        row = items.get(en_key(en)) if en else None
+        return row.wsize if row else None
+    except Exception:
+        return None
+
+
+def _strict_numeral(r, exists=None):
+    """名字里带罗马数字（点火 II、逮捕者 III、制空 XII）的不许认错（老大 11-09：这是尺寸，关键数据）。对不上就当没认准
+    （sure=False、unsure 写原因），盘点不算，等再认一次或鼠标挪开再指：
+    1. 英文行读到的数字要和配上的标准名一样（l、1、| 当 I）；
+    2. 中文行读到的不一样时：库里真有中文行读的那件（「点火 I 导弹」）→ 可能是另一件，不认；库里没有 → 是中文认字的毛病
+       （中文旁边的 II 常认成一个 I，样本里点火 II 就是这样），不算分歧；
+    3. 英文行找不到数字才看中文行，也要一样；两行都找不到 → 不认；
+    4. 说明框写的尺寸要和库里这件的一样（罗马数字不一定是尺寸：制空 XII 是 4 号，所以只和库里比）。
+    exists(英文名)：库里有没有这件（测试换）"""
+    if not r or not r.get("sure"):
+        return r
+    from ..trade.names import roman_reads, roman_swap
+
+    reads = roman_reads(r.get("raw"), r.get("canon"))
+    if not reads:
+        return r
+    exists = exists or _exists
+    canon = r.get("canon") or ("", "")
+    by_line = {i: (got, want) for i, got, want in reads}
+    en_got, en_want = by_line.get(1, (None, None))
+    zh_got, zh_want = by_line.get(0, (None, None))
+    why = ""
+    if en_got is not None and en_got != en_want:
+        why = "罗马数字对不上（英文行）"
+    elif zh_got is not None and zh_got != zh_want:
+        other = roman_swap(canon[1], en_want or zh_want or [], zh_got)
+        if en_got is None or not other or exists(other):
+            why = "罗马数字对不上（中文行）"
+    elif en_got is None and zh_got is None:
+        why = "罗马数字没认出来"
+    if not why:
+        tip, lib = _tooltip_size(r.get("tokens")), _library_size(r.get("en"))
+        if tip is not None and lib is not None and tip != lib:
+            why = f"尺寸对不上（说明框 {tip}，库里 {lib}）"
+    if why:
+        return {**r, "sure": False, "unsure": why}
+    return r
+
+
+def _exists(en):
+    """库里（游戏数据库或汉化包）有没有这个英文名的物品"""
+    if _library_size(en) is not None:
+        return True
+    try:
+        from ..contracts.textkeys import en_key
+        from ..gamedata import items
+        from ..trade.names import canonical_exact
+
+        return bool(items.get(en_key(en))) or bool(canonical_exact("", en))
+    except Exception:
+        return True  # 查不了：当有，宁可不认
 
 
 def _kl(k):

@@ -117,3 +117,105 @@ def test_body_rescan_uses_given_box(monkeypatch):
     assert (
         inspector._tooltip_body_tokens(img, (10, 10), "盘点说明框@title") is None
     )  # 不给框、标签又不是 F8 的：不补
+
+
+# ---------------------------------------------------------------- 罗马数字不许认错（老大 11-09）
+def test_roman_reads():
+    from astral_toolkit.trade.names import roman_reads, roman_swap
+
+    canon = ("点火 II 导弹", "Ignite II Missile")
+    assert roman_reads(("点火I导弹", "IgniteIl Missile"), canon) == [
+        (0, ["I"], ["II"]),
+        (1, ["II"], ["II"]),
+    ]
+    assert roman_reads(
+        ("逮捕者川导弹", "Arrester Ill Missile"),
+        ("逮捕者 III 导弹", "Arrester III Missile"),
+    ) == [
+        (0, ["III"], ["III"]),
+        (1, ["III"], ["III"]),
+    ]
+    assert roman_reads(("点火导弹", "Ignite Missile"), canon) == [
+        (0, None, ["II"]),
+        (1, None, ["II"]),
+    ]
+    xii = ("制空 XII 加农炮", "Omnisky XII Cannon")
+    assert roman_reads(("制空XII加农炮", "OmniskyXllCannon"), xii)[1] == (
+        1,
+        ["XII"],
+        ["XII"],
+    )
+    assert roman_reads(("狐火", "Foxfire"), ("狐火", "Foxfire")) == []
+    assert (
+        roman_reads(("", "AuroraMkII"), ("", "Aurora MkII TS Module")) == []
+    )  # 粘在词里的不算
+    assert roman_reads(None, None) == []
+    assert roman_swap("Ignite II Missile", ["II"], ["I"]) == "Ignite I Missile"
+    assert roman_swap("Ignite II Missile", ["II"], ["I", "I"]) == ""
+
+
+def _tok(text):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(text=text)
+
+
+def test_strict_numeral_marks_unsure(monkeypatch):
+    from astral_toolkit.tasks import count
+
+    monkeypatch.setattr(
+        count, "_library_size", lambda en: {"Ignite II Missile": 2}.get(en)
+    )
+    base = {
+        "zh": "点火 II 导弹",
+        "en": "Ignite II Missile",
+        "sure": True,
+        "canon": ("点火 II 导弹", "Ignite II Missile"),
+        "raw": ("点火II导弹", "IgniteIl Missile"),
+        "tokens": [_tok("点火II导弹"), _tok("尺寸：2")],
+    }
+    none = lambda en: False  # noqa: E731
+    has_one = lambda en: en == "Ignite I Missile"  # noqa: E731
+
+    def run(exists=none, **kw):
+        return count._strict_numeral({**base, **kw}, exists=exists)
+
+    assert run()["sure"] is True
+    # 英文行少一个 I：不认
+    r = run(raw=("点火II导弹", "Ignite I Missile"))
+    assert r["sure"] is False and "英文行" in r["unsure"]
+    # 中文行少一个 I（样本里真这样）：库里没有点火 I → 中文认字毛病，照认；库里真有点火 I → 不认
+    assert run(raw=("点火I导弹", "IgniteIl Missile"))["sure"] is True
+    r = run(has_one, raw=("点火I导弹", "IgniteIl Missile"))
+    assert r["sure"] is False and "中文行" in r["unsure"]
+    # 英文行找不到数字：中文行说了算
+    assert run(raw=("点火II导弹", "IgniteMissle"))["sure"] is True
+    assert run(raw=("点火I导弹", "IgniteMissle"))["sure"] is False
+    r = run(raw=("点火导弹", "IgniteMissle"))
+    assert r["sure"] is False and "没认出来" in r["unsure"]
+    # 尺寸对不上
+    r = run(tokens=[_tok("尺寸：3")])
+    assert r["sure"] is False and "尺寸" in r["unsure"]
+    assert run(tokens=[])["sure"] is True  # 说明框没有尺寸行：只看数字
+    # 没罗马数字的不动；本来就没认准的原样
+    plain = {
+        "zh": "狐火",
+        "en": "Foxfire",
+        "sure": True,
+        "canon": ("狐火", "Foxfire"),
+        "raw": ("狐火", "Foxfire"),
+        "tokens": [_tok("尺寸：9")],
+    }
+    assert count._strict_numeral(plain) is plain
+    assert count._strict_numeral(None) is None
+    weak = {**base, "sure": False}
+    assert count._strict_numeral(weak) is weak
+
+
+def test_tooltip_size():
+    from astral_toolkit.tasks import count
+
+    assert count._tooltip_size([_tok("体积：31250uSCU"), _tok("尺寸：2")]) == 2
+    assert count._tooltip_size([_tok("Size: 4")]) == 4
+    assert count._tooltip_size([_tok("尺寸")]) is None
+    assert count._tooltip_size(None) is None
