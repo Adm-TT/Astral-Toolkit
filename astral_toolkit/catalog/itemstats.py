@@ -35,9 +35,9 @@ def _firerate(s):
 def _dmgmit(s):
     """护甲的伤害减免：各伤害类型的 multiplier（0.85 = 挡掉 15%），取平均；impact 是另一回事，不算"""
     dr = (s.get("suit_armor") or s.get("clothing") or {}).get("damage_resistance") or {}
-    vals = [
-        v.get("multiplier")
-        for k, v in dr.items()
+    vals: list[float] = [
+        float(v["multiplier"])
+        for v in dr.values()
         if isinstance(v, dict) and isinstance(v.get("multiplier"), (int, float))
     ]
     return round(sum(vals) / len(vals), 4) if vals else None
