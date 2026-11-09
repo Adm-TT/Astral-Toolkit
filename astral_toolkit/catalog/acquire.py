@@ -5,7 +5,7 @@
 原 crafting/acquire.info 里不夹着取数据的规则搬到这里；查商店、物品查询、掉落、维科洛、蓝图、当前位置在
 tasks/catalog_queries/acquire.py（目录迁移 Q3b 从 crafting/acquire 搬去）。
 dev 拆分①（2026-11-09）：那边原来还夹着的几块规则也搬来了——买点用最近几处还是最便宜几处、各行的样子
-（nearest_usable / near_rows / cheapest_rows）、名字找物品 id 时英文名完全一样那一条（exact_id）、维科洛材料的矿点和
+（nearest_usable / near_rows / cheapest_rows）、名字找物品 id 时英文名完全一样的（exact_ids）、维科洛材料的矿点和
 掉落事实（ore_base / mine_fact / loot_fact）。那边只剩按原来的先后取数据（先查最近、算不出才查全部；按条件才查下一样）。
 维科洛材料那一句话在 app/presenters/wikelo.source_text。
 catalog 不读文件、不联网、不碰全局缓存（和 catalog/shops.py、catalog/loot.py 一样）。
@@ -145,11 +145,11 @@ def cheapest_rows(buy, top):
 
 
 # ---------------------------------------------------------------- 名字找物品 id（dev 拆分①从 resolve 搬来）
-def exact_id(hits, name_en):
-    """shops.find 给的 [(id, 英文名, …)] 里英文名和 name_en 完全一样的那一件的 id（大小写、空格、l / I 认混不算不一样）；
-    没有返回 None"""
+def exact_ids(hits, name_en):
+    """shops.find 给的 [(id, 英文名, …)] 里英文名和 name_en 完全一样的那几件的 id，按原顺序（大小写、空格、l / I 认混
+    不算不一样）；没有是 []。给列表不给单个：和原来「有就取第一个」一模一样，不拿 None 兼当「没有」"""
     want = fold_en_loose(name_en)
-    return next((h[0] for h in hits if fold_en_loose(h[1]) == want), None)
+    return [h[0] for h in hits if fold_en_loose(h[1]) == want]
 
 
 # ---------------------------------------------------------------- 维科洛材料去哪弄（dev 拆分①从 material_source / loot_source 搬来）

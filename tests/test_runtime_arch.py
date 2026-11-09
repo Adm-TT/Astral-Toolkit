@@ -417,7 +417,7 @@ _RUNTIME_FORBIDDEN = (
 
 
 # 允许清单（R1 审查）：runtime 里绑到名字上的本项目模块只许 runtime 自己、contracts、core.run_records（lifecycle 写退出记录）；
-# 先拿包再取属性（from ... import core → infrastructure.platform.capture）、没列进上面禁止清单的包（update、run……）也挡得住
+# 先拿包再取属性（from ... import infrastructure → infrastructure.platform.capture、from ... import core → core.settings）、没列进上面禁止清单的包（update、run……）也挡得住
 _RUNTIME_ALLOWED = (
     "astral_toolkit.runtime",
     "astral_toolkit.contracts",
@@ -473,7 +473,8 @@ def test_runtime_layer_stays_below_app():
         "from ...tasks import position",
         "from ...app import bus",
         "from ... import bootstrap",
-        "from ... import core\ninfrastructure.platform.capture.game_area()\n",
+        "from ... import infrastructure\ninfrastructure.platform.capture.game_area()\n",
+        "from ... import core\ncore.settings.load()\n",
         "import astral_toolkit.core as core\n",
         "import astral_toolkit\n",
         "from ...update import data_pack",

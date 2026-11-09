@@ -32,9 +32,9 @@ def resolve(name_en="", name_zh="", item_id=None):
     if item_id is not None or not (name_en or name_zh):
         return item_id
     if name_en:
-        hit = _rules.exact_id(shops.find(name_en, limit=3), name_en)
-        if hit is not None:
-            return hit
+        exact = _rules.exact_ids(shops.find(name_en, limit=3), name_en)
+        if exact:
+            return exact[0]
     if name_zh:
         hits = shops.find(name_zh, limit=3)
         if hits:

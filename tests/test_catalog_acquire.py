@@ -147,12 +147,16 @@ def test_buy_rows_rules():
     assert all(r["dist_m"] is None for r in rows)
 
 
-def test_exact_id_folds_case_space_and_l_for_i():
-    hits = [(1, "Ignite II Missile", "M"), (2, "Ignite III Missile", "M")]
-    assert A.exact_id(hits, "ignite ii missile") == 1
-    assert A.exact_id(hits, "IgniteIl Missile") == 1  # l 当 I
-    assert A.exact_id(hits, "Ignite IV Missile") is None
-    assert A.exact_id([], "x") is None
+def test_exact_ids_folds_case_space_and_l_for_i():
+    hits = [
+        (1, "Ignite II Missile", "M"),
+        (2, "Ignite III Missile", "M"),
+        (3, "Ignite II Missile", "M"),
+    ]
+    assert A.exact_ids(hits, "ignite ii missile") == [1, 3]
+    assert A.exact_ids(hits, "IgniteIl Missile") == [1, 3]  # l 当 I
+    assert A.exact_ids(hits, "Ignite IV Missile") == []
+    assert A.exact_ids([], "x") == []
 
 
 def test_material_facts():

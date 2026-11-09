@@ -36,7 +36,7 @@ def _dmgmit(s):
     """护甲的伤害减免：各伤害类型的 multiplier（0.85 = 挡掉 15%），取平均；impact 是另一回事，不算"""
     dr = (s.get("suit_armor") or s.get("clothing") or {}).get("damage_resistance") or {}
     vals: list[float] = [
-        float(v["multiplier"])
+        v["multiplier"]
         for v in dr.values()
         if isinstance(v, dict) and isinstance(v.get("multiplier"), (int, float))
     ]
