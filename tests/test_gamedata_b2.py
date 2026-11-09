@@ -1011,3 +1011,31 @@ def test_amenity_targets_pins_one_snapshot(monkeypatch, tmp_path):
     )  # 快照 / version() 都经 _db 读清单
     transit.amenity_targets("医疗", data)
     assert n == [1]
+
+
+def test_from_log_reads_each_new_part_once_when_called_together(monkeypatch, tmp_path):
+    """窗口每秒查状态、开始盘点、库存页同时调 from_log：同一段新日志只读一次（11-09 加锁前两边可能一起往前读）"""
+    import threading
+    import time as _time
+    from pathlib import Path
+
+    from astral_toolkit.navigation import position
+
+    log = tmp_path / "Game.log"
+    log.write_text("x" * 100, encoding="utf-8")
+    calls = []
+
+    def slow_read(path, pos, state):
+        calls.append(pos)
+        _time.sleep(0.2)  # 读得慢：另一个调用这时进来
+        return Path(path).stat().st_size
+
+    monkeypatch.setattr(position, "_read_forward", slow_read)
+    monkeypatch.setattr(position, "_from_backups", lambda path: None)
+    monkeypatch.setattr(position, "_log_cache", {})
+    ts = [threading.Thread(target=position.from_log, args=(log,)) for _ in range(3)]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join(5)
+    assert calls == [0]

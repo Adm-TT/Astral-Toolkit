@@ -9,6 +9,7 @@ import json
 import math
 from functools import lru_cache
 import re
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -441,6 +442,9 @@ def display_label(location):
 
 
 _log_cache = {}
+# 读日志读到哪（_log_cache、_backup_cache）一次只让一个调用往前读：窗口每秒查状态、开始盘点、库存页会同时调 from_log，
+# 以前两边可能一起往前读同一段（重复读）或一边把位置推过去另一边漏读（11-09 加锁）
+_log_lock = threading.RLock()
 CHUNK = 4_000_000
 QINV = re.compile(
     r"^<([^>]+)>.*<Query Inventory> Request\[\d+\] Inventory\[\d+:Location:(\d+)\]"
@@ -550,19 +554,20 @@ def from_log(path=None, tail=None):
     path = Path(path) if path else find_log()
     if not path or not Path(path).exists():
         return None
-    size = Path(path).stat().st_size
-    c = _log_cache
-    if (
-        c.get("path") != str(path) or c.get("pos", 0) > size
-    ):  # 换了日志 / 游戏重开（日志变小）
-        c.update(path=str(path), pos=0, state=_LogState())
-    if size > c["pos"]:
-        c["pos"] = _read_forward(path, c["pos"], c["state"])
-        if c["state"].learned:
-            c["state"].learned = False
-            _save_ids()
-    last = c["state"].last
-    return _hit(last) if last else _from_backups(path)
+    with _log_lock:
+        size = Path(path).stat().st_size
+        c = _log_cache
+        if (
+            c.get("path") != str(path) or c.get("pos", 0) > size
+        ):  # 换了日志 / 游戏重开（日志变小）
+            c.update(path=str(path), pos=0, state=_LogState())
+        if size > c["pos"]:
+            c["pos"] = _read_forward(path, c["pos"], c["state"])
+            if c["state"].learned:
+                c["state"].learned = False
+                _save_ids()
+        last = c["state"].last
+        return _hit(last) if last else _from_backups(path)
 
 
 _backup_cache = {}

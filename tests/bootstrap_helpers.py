@@ -7,7 +7,8 @@ from typing import Any
 
 from astral_toolkit import bootstrap
 from astral_toolkit.app import hud_state, lifecycle_gate, ui_stream
-from astral_toolkit.core import capture, run_records
+from astral_toolkit.core import run_records
+from astral_toolkit.infrastructure.platform import capture
 from astral_toolkit.navigation import navigate
 from astral_toolkit.tasks import count
 from astral_toolkit.tasks.navigation import NavDeps

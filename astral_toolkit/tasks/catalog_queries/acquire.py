@@ -3,18 +3,16 @@
 
 游戏里 F8 识别、物品查询、维科洛材料来源都用这里。一次查询按原来的先后取数据：商店、物品搜索、掉落（都在本目录）、
 维科洛和蓝图（crafting）、当前位置（navigation）；挑同款、「哪都没有」、要不要查掉落、各块的样子、详情字典骨架这些组合规则
-在 catalog/acquire.py（IQ-C2）。还夹着取数据、留在这里的规则：_buy_rows（有位置、算得出距离就给最近 3 处，不然给最便宜 3 处）、
-resolve（名字找物品 id 的先后）、material_source / loot_source（维科洛材料去哪弄）。
+在 catalog/acquire.py（IQ-C2）。dev 拆分①（2026-11-09）：_buy_rows、resolve、material_source、loot_source 里的规则也搬过去了，
+这里只按原来的先后取数据、调那边的规则（名字照旧留着：别处和测试按这些名字用、打桩）。
 这里只交事实（目录迁移收尾）：买点的距离给米数 dist_m，写成「就在附近 / 要跳星系 / … Gm」在 app/presenters/catalog；
 材料去哪弄给事实字典，那一句话在 app/presenters/wikelo.source_text（维科洛页、目标页的「去哪弄」都用它，
 目标链经 trade/console 转过来）。命令行「哪买」2026-11-06 删了，它用的整段文字版（text / buy_lines）也跟着删了。
 """
 
-import re as _re
 from typing import Any
 
 from ...catalog import acquire as _rules
-from ...contracts.textkeys import fold_en_loose
 from . import loot, shops
 
 
@@ -23,16 +21,10 @@ def _buy_rows(item_id, here, top=3):
     dist_m 是 None。距离写成文字在 app/presenters/catalog.distance_text"""
     if here:
         rows = shops.nearest(item_id, here, top)
-        if rows and rows[0][0] != float("inf"):
-            return [
-                {"dist_m": d, "price": p, "shop": shop, "place": place}
-                for d, p, shop, place in rows
-            ]
-    buy, _ = shops.where(item_id)
-    return [
-        {"dist_m": None, "price": p, "shop": shop, "place": place}
-        for p, shop, place in buy[:top]
-    ]
+        if _rules.nearest_usable(rows):
+            return _rules.near_rows(rows)
+    buy, _ = shops.where(item_id)  # 算不出距离才查全部
+    return _rules.cheapest_rows(buy, top)
 
 
 def resolve(name_en="", name_zh="", item_id=None):
@@ -40,10 +32,9 @@ def resolve(name_en="", name_zh="", item_id=None):
     if item_id is not None or not (name_en or name_zh):
         return item_id
     if name_en:
-        hits = shops.find(name_en, limit=3)
-        exact = [h for h in hits if fold_en_loose(h[1]) == fold_en_loose(name_en)]
+        exact = _rules.exact_ids(shops.find(name_en, limit=3), name_en)
         if exact:
-            return exact[0][0]
+            return exact[0]
     if name_zh:
         hits = shops.find(name_zh, limit=3)
         if hits:
@@ -175,13 +166,10 @@ def material_source(name_en):
     try:
         from ...mining.locations import where as mine_where, zh_name
 
-        base = _re.sub(r"\s*\(.*?\)", "", name_en).strip()
-        rows = mine_where(base)
+        rows = mine_where(_rules.ore_base(name_en))
         if rows:
             pct, loc = rows[0]
-            return {
-                "mine": {"where": zh_name(loc), "pct": pct, "pure": "Pure" in name_en}
-            }
+            return {"mine": _rules.mine_fact(pct, zh_name(loc), name_en)}
     except Exception:
         pass
     found = loot_source(name_en)
@@ -198,15 +186,4 @@ def loot_source(name_en, name_zh=""):
         )  # 本机没有明细就算没有，不在页面里逐个材料联网等（细查 2026-10-28）
     except Exception:
         return None
-    if not d or not d.get("groups"):
-        return None
-    g = d["groups"][0]
-    return {
-        "regions": g["regions"],
-        "more": bool(d.get("more")),
-        "mine": bool(d.get("mine")),
-        "note": d.get("note"),
-        "box": g["box"],
-        "placed": bool(g.get("placed")),
-        "p": g["p"],
-    }
+    return _rules.loot_fact(d)

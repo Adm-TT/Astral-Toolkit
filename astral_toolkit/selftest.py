@@ -25,7 +25,7 @@ MODULES = (
     "app.overlay",
     "core.perf",
     "core.perfmon",
-    "core.capture",
+    "infrastructure.platform.capture",
     "tasks.catalog_queries.search",
     "tasks.catalog_queries.shops",
     "update.shops",

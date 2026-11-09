@@ -149,7 +149,7 @@ def test_single_instance_lock_file(monkeypatch, tmp_path):
 
 def test_mask_overlay_blacks_out_hud():
     from PIL import Image
-    from astral_toolkit.core.capture import mask_overlay
+    from astral_toolkit.infrastructure.platform.capture import mask_overlay
 
     img = Image.new("RGB", (100, 100), (255, 255, 255))
     mask_overlay(img, 50, 50, rect=(60, 60, 80, 70))  # 截图从屏幕 (50,50) 开始
@@ -324,7 +324,10 @@ def test_hotkey_conflicts(monkeypatch):
 def test_mask_own_window_too():
     """盖在游戏上的 AT 主窗口也涂黑（窗口里的实时栏有信号值 / 质量，会被当成游戏里的字）"""
     from PIL import Image
-    from astral_toolkit.core.capture import mask_overlay, own_window_rects
+    from astral_toolkit.infrastructure.platform.capture import (
+        mask_overlay,
+        own_window_rects,
+    )
 
     img = Image.new("RGB", (200, 100), (255, 255, 255))
     mask_overlay(img, 0, 0, rect=(10, 10, 20, 20), own=[(100, 50, 150, 90)])
@@ -334,11 +337,12 @@ def test_mask_own_window_too():
 
 
 def test_bootstrap_wires_overlay_for_masking(monkeypatch):
-    """截图涂黑用的悬浮窗句柄和「显示着没有」由装配（bootstrap.bind_all）接给 core/capture（core 不 import 界面，CL-C5）；
+    """截图涂黑用的悬浮窗句柄和「显示着没有」由装配（bootstrap.bind_all）接给 infrastructure/platform/capture（core 不 import 界面，CL-C5）；
     每次读悬浮窗模块当时的值；没接当没有悬浮窗"""
     from astral_toolkit import bootstrap
     from astral_toolkit.app import overlay
-    from astral_toolkit.core import capture, run_records
+    from astral_toolkit.core import run_records
+    from astral_toolkit.infrastructure.platform import capture
 
     monkeypatch.setattr(capture, "_overlay_state", None)  # 测完还原
     monkeypatch.setattr(run_records, "_ui_sink", None)

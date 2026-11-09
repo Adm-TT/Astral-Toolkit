@@ -1918,7 +1918,7 @@ def test_displayinfo_yields_to_mining(monkeypatch):
         "_full_read",
         lambda piece, h: calls.append(1) or {**D.parse([]), "global": (1e7, 1e7, 1e7)},
     )
-    import astral_toolkit.core.capture as Cap
+    import astral_toolkit.infrastructure.platform.capture as Cap
     from PIL import Image
 
     monkeypatch.setattr(Cap, "grab_region", lambda r: Image.new("RGB", (400, 300)))

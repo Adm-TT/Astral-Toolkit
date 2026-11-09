@@ -207,7 +207,8 @@ def test_nav_marker_is_wired_by_bootstrap():
 
 def test_bind_all_wires_core_to_ui(monkeypatch):
     """bind_all 顺带把 core 的截图涂黑悬浮窗、运行记录推面板接上（CL-C5）；test 模式只 build 不接"""
-    from astral_toolkit.core import capture, run_records
+    from astral_toolkit.core import run_records
+    from astral_toolkit.infrastructure.platform import capture
     from tests.bootstrap_helpers import app_for_test
 
     monkeypatch.setattr(capture, "_overlay_state", None)  # 测完还原
@@ -267,8 +268,8 @@ def test_hud_state_reads_through_what_bootstrap_gave(monkeypatch):
 
 
 def test_one_cursor_read_for_platform_and_capture(monkeypatch):
-    """读光标全项目一份（core/capture.cursor_pos）：平台层 cursor.pos 转过去，截图换算 cursor_on_image 也用它"""
-    from astral_toolkit.core import capture
+    """读光标全项目一份（infrastructure/platform/capture.cursor_pos）：平台层 cursor.pos 转过去，截图换算 cursor_on_image 也用它"""
+    from astral_toolkit.infrastructure.platform import capture
     from astral_toolkit.infrastructure.platform import cursor
 
     monkeypatch.setattr(capture, "cursor_pos", lambda: (1500, 300))

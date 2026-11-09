@@ -143,7 +143,7 @@ def test_bootstrap_wires_runtime_log_as_sink(monkeypatch, tmp_path):
     """装配（bootstrap.bind_all）把面板那条接到 bus.runtime_log；经名字再调，换掉 bus.runtime_log 也照样走到"""
     import astral_toolkit.app.bus as bus
     from astral_toolkit import bootstrap
-    from astral_toolkit.core import capture
+    from astral_toolkit.infrastructure.platform import capture
 
     monkeypatch.setattr(run_records, "_ui_sink", None)  # 测完还原
     monkeypatch.setattr(capture, "_overlay_state", None)
