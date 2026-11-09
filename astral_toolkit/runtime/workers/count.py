@@ -340,8 +340,11 @@ class _Count:
                 return {"running": self.running()}
             place = self._links.place_now()
             if not place:
-                self._links.note("盘点", "盘点：当前位置未知｜先在游戏中打开一次库存")
-                return {"error": "当前位置未知：先在游戏中打开一次库存"}
+                self._links.note(
+                    "盘点",
+                    "盘点：位置不可靠｜先 /showlocation 或开一次库存",
+                )
+                return {"error": "位置不可靠：先 /showlocation 或在游戏中打开一次库存"}
             sid = self.loop.start(place)
             if sid is None:
                 return {"running": self.running()}

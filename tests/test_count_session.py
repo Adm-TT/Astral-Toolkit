@@ -419,8 +419,10 @@ def test_location_unknown_only_note(monkeypatch):
     )
 
     count = count_helpers.count(_loop_factory=factory)
-    assert count.start() == {"error": "当前位置未知：先在游戏中打开一次库存"}
-    assert notes == [("盘点", "盘点：当前位置未知｜先在游戏中打开一次库存")]
+    assert count.start() == {
+        "error": "位置不可靠：先 /showlocation 或在游戏中打开一次库存"
+    }
+    assert notes == [("盘点", "盘点：位置不可靠｜先 /showlocation 或开一次库存")]
     assert calls == []
 
 
