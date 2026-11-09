@@ -1072,6 +1072,30 @@ def test_halo_step_follows_plan_and_ends_when_removed(monkeypatch):
         H.update(saved)
 
 
+def test_halo_check_from_old_plan_is_dropped(monkeypatch):
+    """核对会话拿着旧方案的代次去核对（这一轮做到一半玩家换了方案）：丢掉，不写悬浮窗、不发总线、不记日志"""
+    calls = []
+    monkeypatch.setattr(
+        navigation_tasks, "_hud_set", lambda *a: calls.append(("hud", a))
+    )
+    monkeypatch.setattr(
+        navigation_tasks, "_wp_log", lambda *a: calls.append(("log", a))
+    )
+    monkeypatch.setattr(
+        navigation_tasks.bus, "publish", lambda *a, **k: calls.append(("bus", a))
+    )
+    H = navigation_tasks._HALO
+    saved = dict(H)
+    try:
+        H.update(plan={"text": "新方案", "band": 5}, sess=H["sess"] + 1)
+        old = H["sess"] - 1
+        assert navigation_tasks.halo_check((2.0e10, 0.0, 0.0), None, old) is None
+        assert navigation_tasks.halo_check((2.0e10, 0.0, 0.0), "clip", old) is None
+        assert calls == []
+    finally:
+        H.update(saved)
+
+
 def test_here_step_timeout_and_name_taken(monkeypatch):
     """here 会话：超时提示一次就结束；拿到坐标时名字已经被热键记路标取走：结束、不存、不提示"""
     from astral_toolkit.system import showloc

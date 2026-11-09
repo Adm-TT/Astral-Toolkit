@@ -87,6 +87,8 @@ class _WatchWorker:
         with self._kick_lock:
             self._kicked = False
         if self._steps.step(session.payload, ctx):
+            # 停也在这把锁里：放到锁外的话，「看过没被叫开」和「停」之间玩家又挂一份方案，start 拿到的是这个
+            # 马上要停的会话，新方案就没人核对了。request_stop 只拿 loop 锁、不写盘（这两个会话没有 run_flag）
             with self._kick_lock:
                 if not self._kicked:
                     self.loop.request_stop(session, StopInfo("done"))
