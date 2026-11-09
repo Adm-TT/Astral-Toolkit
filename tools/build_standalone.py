@@ -70,6 +70,36 @@ def _size(p):
     return sum(f.stat().st_size for f in Path(p).rglob("*") if f.is_file())
 
 
+def _version_file():
+    """AT.exe 的文件说明写成 AstralToolkit：任务管理器里显示的就是它（老大 2026-11-09 定）"""
+    from astral_toolkit.core.version import VERSION
+
+    nums = [int(x) for x in VERSION.split("-")[0].split(".")[:3]]
+    v = tuple(nums + [0] * (4 - len(nums)))
+    p = BUILD / "version_info.txt"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(
+        f"""VSVersionInfo(
+  ffi=FixedFileInfo(filevers={v}, prodvers={v}, mask=0x3f, flags=0x0, OS=0x40004,
+    fileType=0x1, subtype=0x0, date=(0, 0)),
+  kids=[
+    StringFileInfo([StringTable('080404b0', [
+      StringStruct('CompanyName', 'Adm_TT'),
+      StringStruct('FileDescription', 'AstralToolkit'),
+      StringStruct('FileVersion', '{VERSION}'),
+      StringStruct('InternalName', 'AT'),
+      StringStruct('OriginalFilename', 'AT.exe'),
+      StringStruct('ProductName', 'AstralToolkit'),
+      StringStruct('ProductVersion', '{VERSION}')])]),
+    VarFileInfo([VarStruct('Translation', [2052, 1200])])
+  ]
+)
+""",
+        encoding="utf-8",
+    )
+    return p
+
+
 def main():
     t0 = time.time()
     sys.path.insert(0, str(ROOT / "tools"))
@@ -117,6 +147,8 @@ def main():
         "AT",
         "--icon",
         str(ROOT / "astral_toolkit" / "app" / "icon.ico"),
+        "--version-file",
+        str(_version_file()),
         "--distpath",
         str(DIST),
         "--workpath",

@@ -19,6 +19,8 @@
     <ApplicationIcon>icon.ico</ApplicationIcon>
     <Version>1.0.0</Version>
     <Product>AT 星际公民助手</Product>
+    <!-- 任务管理器里显示的名字（文件说明），老大 2026-11-09 定 -->
+    <AssemblyTitle>AstralToolkit</AssemblyTitle>
     <Company>Adm_TT</Company>
     <!-- 瘦身：裁掉用不上的 .NET 代码、不要调试符号、不要别的语言的资源 -->
     <PublishTrimmed>true</PublishTrimmed>
