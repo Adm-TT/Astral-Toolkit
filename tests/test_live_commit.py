@@ -884,11 +884,16 @@ def test_mining_analysis_forwards_to_screen_signals_and_tasks(monkeypatch):
     from astral_toolkit.tasks import goals as t_goals
     from astral_toolkit.tasks import mining_analysis as an
 
-    for name in ("INTERVAL", "VOTE_FRAMES", "SEARCH", "LAST_RAW", "LAST_PANEL"):
+    for name in ("INTERVAL", "VOTE_FRAMES", "LAST_RAW", "LAST_PANEL"):
         monkeypatch.setattr(screen, name, object())
     assert an.interval() is screen.INTERVAL
     assert an.vote_frames() is screen.VOTE_FRAMES
-    assert an.search() is screen.SEARCH
+    # 扫描面板范围 2026-11-09 起按截图尺寸从区域文件取（screen.search_frac），这里原样转过去
+    monkeypatch.setattr(screen, "search_frac", lambda size=None: ("范围", size))
+    assert an.search() == ("范围", None) and an.search((2560, 1440)) == (
+        "范围",
+        (2560, 1440),
+    )
     assert an.last_raw() is screen.LAST_RAW
     assert an.last_panel() is screen.LAST_PANEL
 
@@ -981,7 +986,7 @@ def _fake_an(**over):
     base = dict(
         interval=lambda: 0,
         vote_frames=lambda: 5,
-        search=lambda: (0.5, 0.1, 0.9, 0.6),
+        search=lambda *_size: (0.5, 0.1, 0.9, 0.6),
         analyse=lambda img: Scan(),
         last_raw=lambda: {},
         last_panel=lambda: {},

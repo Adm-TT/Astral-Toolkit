@@ -323,9 +323,14 @@ def find_signatures(img, rec=None):
             continue
         _remember(key, (value, fixed, text))
         out.append((value, fixed, text, (x0, y0, x1, y1)))
+    from ..core import screen_regions
+
     W, H = img.size
-    l, tp, r, b = (int(v * s) for v, s in zip(CENTER_TAG, (W, H, W, H)))  # noqa: E741
-    if CENTER_TAG and not any(
+    tag = screen_regions.frac(
+        "mining.center_tag", CENTER_TAG, (W, H)
+    )  # 区域文件里画的，没有用 CENTER_TAG
+    l, tp, r, b = (int(v * s) for v, s in zip(tag, (W, H, W, H)))  # noqa: E741
+    if tag and not any(
         l <= bx[0] and bx[2] <= r and tp <= bx[1] and bx[3] <= b for *_x, bx in out
     ):
         out += _center_tag(img, (l, tp, r, b))
