@@ -247,6 +247,9 @@ def test_batch_progress_report_and_cancel(tmp_path, monkeypatch):
                 break
             time.sleep(0.05)
         assert st["total"] == 1 and st["done"] == 1 and st["errors"] == 0
+        name = Path(st["report"]).name
+        assert s.call("GET", "/reports/" + quote(name))[0] == 200
+        assert s.call("GET", "/reports/" + quote("../样本/盘点/inv.png"))[0] == 404
     finally:
         s.close()
 
@@ -259,3 +262,23 @@ def test_binds_localhost_only(tmp_path):
         assert httpd.server_address[0] == "127.0.0.1"
     finally:
         httpd.server_close()
+
+
+def test_try_rejects_bad_point(tmp_path, monkeypatch):
+    s = _Srv(tmp_path, monkeypatch)
+    try:
+        for bad in (
+            [None, 1],
+            ["a", 2],
+            [1],
+            5,
+            [1, 2, 3],
+        ):  # 点的位置不对：回 400，不是让请求崩掉
+            st, r = s.call(
+                "POST",
+                "/api/try",
+                {"feature": "count", "id": "0/盘点/inv.png", "point": bad},
+            )
+            assert st == 400 and "位置" in r["error"], bad
+    finally:
+        s.close()

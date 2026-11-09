@@ -1,1 +1,53 @@
-<!doctype html><meta charset="utf-8"><title>读屏开发工作台</title>
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>读屏开发工作台</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header>
+  <h1>读屏开发工作台</h1>
+  <label>功能 <select id="feature"></select></label>
+  <span id="status" class="muted"></span>
+</header>
+<main>
+  <aside id="left">
+    <input id="filter" type="search" placeholder="按文件名筛选">
+    <div id="samples"></div>
+  </aside>
+  <section id="center">
+    <div id="stage"><img id="shot" alt=""><canvas id="overlay"></canvas></div>
+    <p id="hint" class="muted">左边选一张截图。选中右边的一个区域后，在图上拖出一个框就是画这个区域；拖框里面是挪，拖四个角是改大小。</p>
+  </section>
+  <aside id="right">
+    <h2>区域 <span id="aspect" class="muted"></span></h2>
+    <div id="regions"></div>
+    <div class="row">
+      <button id="add">加一个区域</button>
+      <button id="del">删掉这个比例的框</button>
+    </div>
+    <label class="row">种类
+      <select id="kind"><option value="read">要认</option><option value="exclude">排除（不认）</option></select>
+    </label>
+    <label class="col">备注 <textarea id="note" rows="3"></textarea></label>
+    <div class="row">
+      <button id="save" class="primary">存区域</button>
+      <span id="version" class="muted"></span>
+    </div>
+    <h2>试一下</h2>
+    <label class="row"><input id="trymode" type="checkbox"> 点图就试（开着时不画框）</label>
+    <div id="result" class="mono"></div>
+    <h2>批量查</h2>
+    <div class="row">
+      <button id="batch">左边列表里的样本全跑一遍</button>
+      <button id="cancel" disabled>取消</button>
+    </div>
+    <progress id="progress" value="0" max="1"></progress>
+    <div id="batchinfo" class="muted"></div>
+  </aside>
+</main>
+<script type="module" src="/static/app.js"></script>
+</body>
+</html>

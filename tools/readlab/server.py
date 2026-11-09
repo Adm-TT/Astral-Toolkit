@@ -11,6 +11,7 @@
   POST /api/try                  {feature, id, point:[x,y]|null} → 结果
   POST /api/batch                {feature, ids?} → {job}
   GET  /api/batch/<job>          {total, done, errors, finished, cancelled, report}
+  GET  /reports/<文件>           批量查报告（只限报告目录）
   DELETE /api/batch/<job>        取消（跑完手上这张就停，跑完的照样出报告）
 """
 
@@ -200,6 +201,8 @@ class Handler(BaseHTTPRequestHandler):
             )
         if path == "/api/regions":
             return self._json(200, screen_regions.load())
+        if path.startswith("/reports/"):
+            return self._file(self.server.report_dir, path[len("/reports/") :])
         if path.startswith("/api/batch/"):
             job = self.server.jobs.get(path.rsplit("/", 1)[1])
             return (
@@ -208,8 +211,12 @@ class Handler(BaseHTTPRequestHandler):
         return self._err(404, "没有这个地址")
 
     def _static(self, rel: str) -> None:
-        p = (STATIC / rel).resolve()
-        if not p.is_relative_to(STATIC.resolve()) or not p.is_file():
+        self._file(STATIC, rel)
+
+    def _file(self, base: Path, rel: str) -> None:
+        """base 目录里的文件（不许跑出 base）"""
+        p = (base / rel).resolve()
+        if not p.is_relative_to(base.resolve()) or not p.is_file():
             return self._err(404, "没有这个文件")
         ctype = mimetypes.guess_type(p.name)[0] or "application/octet-stream"
         if ctype.startswith("text/") or ctype.endswith("javascript"):
@@ -247,7 +254,12 @@ class Handler(BaseHTTPRequestHandler):
             if not p.is_file():
                 return self._err(404, "没有这张图")
             point = body.get("point")
-            pt = (int(point[0]), int(point[1])) if point else None
+            try:
+                if point is not None and len(point) != 2:
+                    raise ValueError(point)
+                pt = (int(point[0]), int(point[1])) if point is not None else None
+            except (TypeError, ValueError, IndexError):
+                return self._err(400, f"点的位置不对：{point!r}")
             with Image.open(p) as im:
                 img = im.convert("RGB")
             return self._json(200, asdict(features.run(feature, img, pt, batch=False)))
