@@ -57,3 +57,27 @@ def test_non_16_9_images_still_work():
             "hover", Image.new("RGB", size), (size[0] // 2, size[1] // 2), batch=False
         )
         assert r.error == "", (size, r.error)
+
+
+def test_report_lists_every_row_and_errors(tmp_path):
+    from tools.readlab import report
+
+    img = Image.new("RGB", (2560, 1440))
+    ok = features.Result(
+        shapes=[features.Shape((10, 10, 200, 200), "框", "hit")],
+        lines=["认出 <甲>"],
+        ms=12,
+    )
+    bad = features.Result(error="ZeroDivisionError: x", ms=3)
+    rows = [
+        ("a.png", (2560, 1440), ok, img),
+        ("b.png", (3440, 1440), bad, img),
+        ("c.png", (2560, 1440), ok, img),
+    ]
+    page = report.write("count", rows, tmp_path)
+    text = page.read_text(encoding="utf-8")
+    assert text.count("<img") == 3
+    assert "出错 1 张" in text and "21:9 1 张" in text and "16:9 2 张" in text
+    assert "&lt;甲&gt;" in text  # 内容转义
+    pics = page.with_suffix("")
+    assert len(list(pics.glob("*.jpg"))) == 3
