@@ -256,3 +256,38 @@ def same_spot(a: Spot, b: Spot, pitch: float) -> bool | None:
         and a.width == b.width
         and abs(a.y - b.y) <= 0.3 * pitch
     )
+
+
+LOCK_DARK = 15  # 带锁（已停用）的格子很暗：格子里靠两边那一圈平均亮度约 9，普通格子最暗也有 21（2560×1440 样本）
+LOCK_ICON = (110, 210)  # 正中的锁图标最亮约 155（不是物品图标那种 230~255 的高光）
+
+
+def locked(
+    img: Any, cursor: tuple[int, int], cols: list[tuple[int, int]] | None = None
+) -> bool | None:
+    """鼠标那一格是不是带锁的「已停用」格（老大 11-09：照算，标已停用）：格子里很暗、正中有一个中等亮度的小锁。
+    找不到这一格（列、行）返回 None"""
+    cols = cols or columns(img) or _cols_seen.get(tuple(img.size))
+    if not cols:
+        return None
+    rows = rows_at(img, cursor, cols)
+    c = column_of(cols, cursor[0])
+    if rows is None or c is None:
+        return None
+    a, b = cols[c]
+    top, bottom = rows
+    gray = np.asarray(
+        img.crop((a + 10, top + 10, b - 10, bottom - 10)).convert("L"), dtype=np.float32
+    )
+    if gray.size == 0 or gray.shape[1] < 40 or gray.shape[0] < 40:
+        return None
+    ring = float(np.concatenate([gray[:, :15].ravel(), gray[:, -15:].ravel()]).mean())
+    cy, cx = gray.shape[0] // 2, gray.shape[1] // 2
+    center = gray[cy - 18 : cy + 18, cx - 18 : cx + 18]
+    peak = float(center.max())
+    icon = float((center > LOCK_ICON[0]).mean())
+    return (
+        ring < LOCK_DARK
+        and LOCK_ICON[0] <= peak <= LOCK_ICON[1]
+        and 0.03 <= icon <= 0.35
+    )

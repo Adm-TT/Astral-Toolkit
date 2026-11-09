@@ -4,7 +4,8 @@
 def item_line(r, qty_text) -> str:
     """盘点每认出一格，运行日志里记的那一行（老大 11-08 定平时也记，和 F8 一样有结果行）：名字、品质、这一格的数量"""
     q = "" if r.get("quality") is None else f" Q{r['quality']}"
-    return f"盘点认出：{r['zh'] or r['en']}{q}  {qty_text(r['qty'], r['unit'])}"
+    off = "  已停用" if r.get("disabled") else ""
+    return f"盘点认出：{r['zh'] or r['en']}{q}  {qty_text(r['qty'], r['unit'])}{off}"
 
 
 def hud_text(place, items, qty_text) -> str:
@@ -12,7 +13,8 @@ def hud_text(place, items, qty_text) -> str:
     lines = [f"盘点｜{place}"]
     for v in list(items.values())[-8:]:
         q = "" if v["quality"] is None else f" Q{v['quality']}"
+        off = f"（已停用 {v['disabled']}）" if v.get("disabled") else ""
         lines.append(
-            f"{v['zh'] or v['en']}{q} ×{v['cells']}  {qty_text(v['qty'], v['unit'])}"
+            f"{v['zh'] or v['en']}{q} ×{v['cells']}{off}  {qty_text(v['qty'], v['unit'])}"
         )
     return "\n".join(lines)

@@ -141,3 +141,36 @@ def test_spot_reuses_columns_when_hidden(monkeypatch):
     assert V.spot(_inventory(), (1950, _row(1)[0] + 60), None) is not None
     V._cols_seen.clear()
     assert V.spot(_inventory(), (1950, _row(1)[0] + 60), None) is None
+
+
+def test_locked_tile():
+    """带锁的「已停用」格：格子里很暗、正中一个中等亮度的小锁（样本：四周约 9、锁最亮 155）"""
+    from astral_toolkit.trade import count_view as V
+
+    img = _inventory(wide=())
+    d = ImageDraw.Draw(img)
+    top, bottom = _row(1)
+    a, b = COLS[2]
+    d.rectangle((a, top, b, bottom), fill=(9, 10, 12))
+    cx, cy = (a + b) // 2, (top + bottom) // 2
+    d.rectangle((cx - 8, cy - 4, cx + 8, cy + 10), fill=(155, 155, 155))
+    cols = V.columns(img)
+    assert V.locked(img, (cx, cy), cols) is True
+    t0, b0 = _row(0)
+    assert V.locked(img, (cx, (t0 + b0) // 2), cols) is False  # 普通格
+    # 暗格里是亮的物品图标（不是锁）：不算
+    d.rectangle((cx - 8, cy - 4, cx + 8, cy + 10), fill=(250, 250, 250))
+    assert V.locked(img, (cx, cy), cols) is False
+    assert V.locked(img, (1500, 600), cols) is None  # 不在格子区
+
+
+def test_presenter_marks_disabled():
+    from astral_toolkit.app.presenters import count as present
+
+    q = lambda n, u: f"{n} {u}"  # noqa: E731
+    r = {"zh": "铁矿", "en": "Iron", "quality": None, "qty": 1, "unit": "个"}
+    assert present.item_line({**r, "disabled": True}, q).endswith("已停用")
+    assert "已停用" not in present.item_line(r, q)
+    items = {"k": {**r, "cells": 3, "disabled": 1}}
+    assert "×3（已停用 1）" in present.hud_text("站", items, q)
+    assert "已停用" not in present.hud_text("站", {"k": {**r, "cells": 3}}, q)

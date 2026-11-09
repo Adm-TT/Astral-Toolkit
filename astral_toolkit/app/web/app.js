@@ -2155,7 +2155,7 @@ function countDraw() {
   const num = (v, u) => esc(qtyText(+(+v).toFixed(6), u));
   const diff = rv.rows.filter((r) => r.delta), same = rv.rows.length - diff.length;
   box.innerHTML = `<div class="panel" style="margin:12px 0"><h3 style="margin:0 0 8px">对账｜${esc(rv.place)}</h3>
-    <table class="t">${diff.map((r) => `<tr><td>${esc(r.zh || r.en)}${q(r.quality)}${r.craft ? ` <span class="faint" style="font-size:12.5px">${esc(r.craft.map((x) => `${x.slot} ${x.q}`).join(" · "))}</span>` : ""}</td><td class="n">${num(r.book, r.unit)} → ${num(r.game, r.unit)}</td>
+    <table class="t">${diff.map((r) => `<tr><td>${esc(r.zh || r.en)}${q(r.quality)}${r.craft ? ` <span class="faint" style="font-size:12.5px">${esc(r.craft.map((x) => `${x.slot} ${x.q}`).join(" · "))}</span>` : ""}${r.disabled ? ` <span class="faint" style="font-size:12.5px">含已停用 ${+r.disabled} 格</span>` : ""}</td><td class="n">${num(r.book, r.unit)} → ${num(r.game, r.unit)}</td>
       <td class="n" style="color:var(${r.delta > 0 ? "--mint" : "--coral"})">${r.delta > 0 ? "+" : "−"}${num(Math.abs(r.delta), r.unit)}</td></tr>`).join("")}
     ${rv.missing.map((m, i) => `<tr><td>${esc(m.item)}${q(m.quality)}${m.same ? `<div class="faint" style="font-size:12.5px">和盘到的「${esc(m.same)}」挂着同一个中文名，可能是同一件；是的话勾清零</div>` : ""}</td><td class="n muted">${num(m.qty, m.unit)} 未盘到</td>
       <td class="n"><label style="white-space:nowrap"><input type="checkbox" data-zero="${i}"> 清零</label></td></tr>`).join("")}</table>

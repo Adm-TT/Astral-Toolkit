@@ -72,6 +72,13 @@ def _width(item: Any) -> Any:
         return None
 
 
+def locked(img: Any, cursor: Any) -> Any:
+    """鼠标那一格是不是带锁的「已停用」格（trade/count_view.locked）；找不到这一格是 None"""
+    from ..trade import count_view
+
+    return count_view.locked(img, cursor)
+
+
 def same_spot(a: Any, b: Any, height: int) -> Any:
     """两个身份是不是同一格：True / False；有一边没认出页码是 None（交给格子框比较）"""
     from ..trade import cell_grid, count_view

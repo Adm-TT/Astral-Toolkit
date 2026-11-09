@@ -322,6 +322,7 @@ def _count_review(place, items):
                     **m,
                     "qty": m["qty"] + v["qty"],
                     "cells": m["cells"] + v["cells"],
+                    "disabled": m.get("disabled", 0) + v.get("disabled", 0),
                 },
                 lines,
             )
@@ -343,6 +344,9 @@ def _count_review(place, items):
                 "quality": v["quality"],
                 "unit": v["unit"],
                 "cells": v["cells"],
+                "disabled": v.get(
+                    "disabled", 0
+                ),  # 其中带锁「已停用」的格数（老大 11-09：照算，标出来）
                 "craft": v.get("craft"),
                 "book": show(have),
                 "game": show(game),

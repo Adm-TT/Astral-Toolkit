@@ -245,6 +245,8 @@ class _CountWorker:
             return Tick(0.0, seen)
 
         ctx.cells.append(cell)
+        # 带锁的格子是「已停用」（老大 11-09）：照算，记下有几格是停用的，悬浮窗、日志、对账里标出来
+        off = self._locked(img, cursor)
         v = ctx.items.setdefault(
             _key(r),
             {
@@ -259,10 +261,17 @@ class _CountWorker:
         )
         v["qty"] = round(v["qty"] + r["qty"], 6)
         v["cells"] += 1
+        if off:
+            v["disabled"] = v.get("disabled", 0) + 1
         self.loop.commit(
             session,
             ("hud.set", "盘点", self._views.hud_text(session.payload, ctx.items)),
-            ("log", self._views.item_line(r), "COUNT", "INFO"),
+            (
+                "log",
+                self._views.item_line({**r, "disabled": True} if off else r),
+                "COUNT",
+                "INFO",
+            ),
         )
         return Tick(0.0, seen)
 
@@ -294,6 +303,16 @@ class _CountWorker:
                     session, ("log", f"盘点算格子身份出错：{e!r}", "COUNT", "ERROR")
                 )
             return None
+
+    def _locked(self, img: Any, cursor: Any) -> bool:
+        """这一格带不带锁；分析里没有这一项或出错当不带（照常算）"""
+        fn = getattr(self._an, "locked", None)
+        if fn is None:
+            return False
+        try:
+            return bool(fn(img, cursor))
+        except Exception:
+            return False
 
     def _same_spot(self, a: Any, b: Any, height: int) -> bool | None:
         fn = getattr(self._an, "same_spot", None)

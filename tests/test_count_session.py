@@ -1093,3 +1093,46 @@ def test_worker_spot_error_falls_back(monkeypatch):
     logs = [op for op in rec.ops if op[0] == "log" and "身份出错" in op[1]]
     assert len(logs) == 1
     worker.teardown(session, ctx)
+
+
+def test_worker_counts_locked_cells_and_marks_them():
+    """带锁的格子照算，记下几格是已停用（老大 11-09）"""
+    pos = [(100, 100)]
+    cur = [(2100, 700)]
+    lock = [True]
+    links, _ = _fake_links(
+        cursor_pos=lambda: pos[0], grab=lambda: SimpleNamespace(size=(2560, 1440))
+    )
+    analysis: Any = SimpleNamespace(
+        cursor_on_image=lambda img: cur[0],
+        read_item=lambda img, cursor: _item(),
+        cell_box=lambda img, cursor: None,
+        same_cell=lambda a, b: False,
+        in_cell=lambda box, point: False,
+        in_gap=lambda img, cursor: False,
+        locked=lambda img, cursor: lock[0],
+        review=lambda place, items: None,
+    )
+    lines = []
+    views = count_mod.CountViews(
+        hud_text=lambda place, items: "", item_line=lambda r: lines.append(r) or ""
+    )
+    worker = count_mod._CountWorker(analysis, views, links)
+    worker.loop = _CommitRecorder()
+    session = SimpleNamespace(payload="测试站")
+    ctx = worker.setup(session)
+    clock = [0.0]
+
+    def rest_at(screen, on_image, locked):
+        pos[0], cur[0], lock[0] = screen, on_image, locked
+        worker.tick(session, ctx, clock[0])
+        clock[0] += 0.4
+        worker.tick(session, ctx, clock[0])
+        clock[0] += 0.1
+
+    rest_at((100, 100), (1950, 400), True)
+    rest_at((500, 500), (2400, 900), False)
+    v = next(iter(ctx.items.values()))
+    assert v["cells"] == 2 and v["disabled"] == 1
+    assert [bool(r.get("disabled")) for r in lines] == [True, False]
+    worker.teardown(session, ctx)
