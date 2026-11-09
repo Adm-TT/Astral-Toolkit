@@ -86,7 +86,9 @@ def test_status_reuses_log_position_and_preserves_probe_contract(monkeypatch):
     这两样还在，是待做「status() 太重」那条没做完的那半。"""
     from types import SimpleNamespace
 
-    from astral_toolkit.core import capture, settings
+    from astral_toolkit.core import settings
+
+    from astral_toolkit.infrastructure.platform import capture
     from astral_toolkit import ocr
     from astral_toolkit.navigation import position
     from astral_toolkit.crafting import stockplaces

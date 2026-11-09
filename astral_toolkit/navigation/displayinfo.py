@@ -660,7 +660,7 @@ def read(img=None, allow_yield=True, diag=False):
     diag = 写诊断（di_log.txt 一行；字模没读出时存 di_fail 截图）：调试模式开着时 Reader 才传 True（NV-B5）"""
     shot_at = time.time()
     if img is None:  # 只截右上角这一块
-        from ..core.capture import grab_region, game_area
+        from ..infrastructure.platform.capture import grab_region, game_area
 
         area = game_area()
         screen_h = area["height"]

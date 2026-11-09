@@ -10,6 +10,12 @@ Controller 写法（阶段 1–3）：astral_toolkit/app/api/<领域>.py 里写�
 要后台对象的接口由 Controller 的 bound(对象…) 返回 {"接口名": 函数}，bootstrap.routes(app)
 把这个 app 的对象交进去、和 routes() 拼成一张 Api；网页服务拿着它（http_server.Server 的 api），
 HTTP（http_server.Handler.do_POST）走 Api.call，返回格式和模块级 call 一样。
+
+出错的两种写法各有用处，不是不统一（dev 拆分③核过，2026-11-09）：
+- 意料之外的错：接口函数直接抛异常，这里接住 → {"ok": False, "error": 消息}；
+- 业务上的「不行」（正在退出、地点未知要先选、数据暂时取不到…）：用例 return {"error": 消息, …}，还能带别的字段给页面用
+  （比如盘点的 need_place）→ {"ok": True, "data": {"error": …}}。
+窗口（app.js 的 api()）两种都当出错：先看 ok，再看 data.error，后一种把整份 data 挂在错误上给页面读。
 """
 
 import importlib

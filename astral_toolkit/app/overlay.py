@@ -1270,7 +1270,7 @@ class Hud:
             from ..navigation.displayinfo import _region
 
             try:
-                from ..core.capture import game_area
+                from ..infrastructure.platform.capture import game_area
 
                 a = game_area()
                 left, top, w, h = a["left"], a["top"], a["width"], a["height"]

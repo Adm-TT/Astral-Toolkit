@@ -469,7 +469,7 @@ def clusters(items):
 
 def grab():
     """整屏截图；悬浮窗盖住的那块涂黑，不会读到悬浮窗自己的字"""
-    from ..core.capture import grab_screen
+    from ..infrastructure.platform.capture import grab_screen
 
     img = grab_screen()
     try:

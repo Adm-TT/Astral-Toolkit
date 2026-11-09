@@ -491,7 +491,7 @@ def _anchor_name(toks, cursor=None, img=None):
 
 def _cursor_on_image(img):
     """鼠标位置换算成截图像素坐标（截图是游戏画面，见 capture.game_area，1.6.46）"""
-    from ..core.capture import cursor_on_image
+    from ..infrastructure.platform.capture import cursor_on_image
 
     return cursor_on_image(img)
 
