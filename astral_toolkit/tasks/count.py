@@ -143,6 +143,17 @@ def _tooltip_size(tokens):
     return None
 
 
+def _grid_width(item):
+    """游戏数据说这件横占几格（1 / 2）；数据包没带占格信息（旧包）或库里没这件 → None，盘点自己看格子"""
+    en = (item or {}).get("en") or ""
+    try:
+        from ..gamedata import items
+
+        return items.grid_width(en) if en and items.has_grid() else None
+    except Exception:
+        return None
+
+
 def _library_size(en):
     try:
         from ..contracts.textkeys import en_key

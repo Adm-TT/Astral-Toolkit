@@ -1,6 +1,7 @@
 """盘点线程一轮要用的分析（目录迁移 R5）：光标在截图上的哪儿、认鼠标指着的物品、鼠标所在格的框（11-09 加）、收尾时和账上对。
 
-原样转给 trade/inspector._cursor_on_image、tasks/count._read_item、trade/cell_grid、tasks/count._count_review（账还是旧库存那份，
+原样转给 trade/inspector._cursor_on_image、tasks/count._read_item、trade/cell_grid、trade/count_view（页、列、滚动、锁格，11-09）、
+tasks/count._count_review（账还是旧库存那份，
 本批不动库存）；每个函数调用时才导入，导入本模块不带进读屏、文字识别、库存。由 bootstrap 接给盘点线程。
 """
 
@@ -63,13 +64,10 @@ def spot(img: Any, cursor: Any, item: Any) -> Any:
 
 
 def _width(item: Any) -> Any:
-    en = (item or {}).get("en") or ""
-    try:
-        from ..gamedata import items
+    """游戏数据说它横占几格（tasks/count._grid_width）"""
+    from . import count
 
-        return items.grid_width(en) if en and items.has_grid() else None
-    except Exception:
-        return None
+    return count._grid_width(item)
 
 
 def locked(img: Any, cursor: Any) -> Any:
