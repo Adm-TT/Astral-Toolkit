@@ -158,13 +158,16 @@ _HOVER_KEYS = [
     "hover.body_rows",
 ]
 
+# 盘点自己的区域（2026-11-09 画的初版）；说明框暂时还按 F8 那几条竖带认，接上 count.tooltip 后改
+_COUNT_KEYS = ["count.tooltip", "count.grid", "count.scrollbar", "count.page"]
+
 FEATURES: dict[str, Feature] = {
     f.key: f
     for f in (
         Feature(
             "count",
             "盘点",
-            list(_HOVER_KEYS),
+            list(_COUNT_KEYS),
             _count_try,
             lambda img: _tooltip(img, None),
         ),

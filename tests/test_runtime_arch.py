@@ -725,11 +725,12 @@ _COUNT_ANALYSIS_ONLY = (
     "astral_toolkit.trade.inspector",
     "astral_toolkit.tasks.count",
     "astral_toolkit.trade.cell_grid",
+    "astral_toolkit.trade.count_view",  # 11-09：盘点看仓库（页、列、滚动、占几格、锁格），和 cell_grid 同一层
 )
 
 
 def test_count_analysis_and_presenter_stay_in_their_layers():
-    """目录迁移 R5 拆出来的两块：盘点分析（tasks/count_analysis）只往下转给 trade/inspector、tasks/count、trade/cell_grid（界面、runtime、
+    """目录迁移 R5 拆出来的两块：盘点分析（tasks/count_analysis）只往下转给 trade/inspector、tasks/count、trade/cell_grid、trade/count_view（界面、runtime、
     装配、别的 tasks、trade 别的模块都不许，拿整个包再走属性也不许），文件顶上只 import typing（调用时才取）；
     盘点的悬浮窗文字（app/presenters/count）只排版：不导入本项目任何模块（数量写法由 bootstrap 传进来），不用字符串导入"""
     path = _ROOT / "tasks" / "count_analysis.py"

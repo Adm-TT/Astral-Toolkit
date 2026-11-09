@@ -847,7 +847,7 @@ def cell_labels(img, cursor, tokens=None, size=None):
     return (best_q[2] if best_q else None), (best_n[2] if best_n else None)
 
 
-def _tooltip_body_tokens(img, cursor, where):
+def _tooltip_body_tokens(img, cursor, where, box=None):
     """标题带停下后，按同一宽度条带补认一次说明框带（屏高 24%~70%）。
 
     制造品的加成行（「武器伤害 +5%」那种）在说明框正文里，1440p 实测约屏高 59%~65%
@@ -855,6 +855,7 @@ def _tooltip_body_tokens(img, cursor, where):
     标题带命中时 tokens 里没有它们，材料品质倒推（crafting.parse_mods）就没了，F6 的品质 / 各槽品质和
     F8 的「材料品质」都会丢。只在「标题带停下 + 有蓝图 + 需要倒推」时才调（别的物品不为品质再加大图 OCR，
     见方案 §5）。返回补认到的 tokens，没补（不是标题带停下的 / 标签不认）返回 None。
+    box 给了（F6 盘点：区域文件里的 count.tooltip）就补认这一块，不按 F8 的竖带算（2026-11-09）。
     """
     if not (where or "").endswith("@title"):
         return None
@@ -862,7 +863,8 @@ def _tooltip_body_tokens(img, cursor, where):
     from . import debug_shots
 
     W, H = img.size
-    box = region_box(where, W, H, stage="body")
+    if box is None:
+        box = region_box(where, W, H, stage="body")
     if box is None:
         return None
     crop = img.crop(box)
@@ -902,11 +904,13 @@ def inspect_item(
     where=None,
     craft_override=False,
     whole_screen=True,
+    body_box=None,
 ) -> Optional[Dict[str, Any]]:
     """识别鼠标悬停的物品格与说明框，返回结构化字典或 None。
     whole_screen=False（F8 第一遍）：说明框条带都没认出时不整屏兜底，由调用方等一下再截一次。
     craft_override=True（F6 盘点用）：制造品的加成和蓝图完全对上时，用倒推出的品质和各槽品质，
-    读到的品质数字也让位（和 1.1.1 盘点一样）；F8 默认只在没读到品质数字时才倒推：
+    读到的品质数字也让位（和 1.1.1 盘点一样）；F8 默认只在没读到品质数字时才倒推。
+    body_box（F6 盘点用）：标题那截命中的制造品补认加成行时认这一块（count.tooltip），不按 F8 的竖带：
     {
         "zh": 中文名,
         "en": 英文名,
@@ -927,7 +931,9 @@ def inspect_item(
 
     W, H = img.size
     cx, cy = cursor
-    debug_shots.begin_if_debug()
+    if tokens is None or debug_shots.current() is None:
+        # 调用方自己认好字传进来（F6 盘点）时，它已经开了调试会话、记了裁切，别清掉
+        debug_shots.begin_if_debug()
     result = None
     try:
         if tokens is None or where is None:
@@ -998,7 +1004,7 @@ def inspect_item(
                 mods = parse_mods(tokens)
                 if not mods and for_item(en, zh):
                     # 标题带命中的制造品：加成行不在标题带里，按同一宽度条带补认一次说明框带，只为了拿加成行
-                    body = _tooltip_body_tokens(img, cursor, where)
+                    body = _tooltip_body_tokens(img, cursor, where, body_box)
                     if body:
                         tokens = body  # 换成说明框带那一份：日志、收错题拿到的字也更全
                         mods = parse_mods(tokens)

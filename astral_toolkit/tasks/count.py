@@ -7,6 +7,7 @@
 4. 确认盘点对账与差额写入库存、清零确认（count_apply, count_cancel）。
 """
 
+import re
 import time
 from typing import Any, Dict, List, Optional, Set, Tuple  # noqa: F401
 
@@ -71,13 +72,168 @@ def _need_count() -> Any:
 
 
 # ================================================================ 盘点（F6）核心识别与对账
+# 盘点只在区域文件的 count.tooltip 里认说明框（老大 11-09 定）：不走 F8 按鼠标挑的竖带，也不整屏兜底（以前认不出时
+# 整屏一次约 2.8 秒）。先认标题那一截（和 F8 标题带同高：屏高 24%~36%，按原尺寸认字），名字在汉化包里精确对上就停；
+# 对不上再认整块。区域文件读不了用下面的默认值（和区域文件第 7 版一样）
+TOOLTIP = (0.5, 0.1191, 0.7132, 0.8345)
+TITLE_ROWS = (0.24, 0.36)
+
+
+def _tooltip_boxes(size):
+    """→ (整块说明框区域, 标题那一截或 None)，像素"""
+    from ..core import screen_regions
+
+    W, H = size
+    box = screen_regions.px("count.tooltip", TOOLTIP, size)
+    title = (
+        box[0],
+        max(box[1], int(H * TITLE_ROWS[0])),
+        box[2],
+        min(box[3], int(H * TITLE_ROWS[1])),
+    )
+    return box, (title if title[3] - title[1] >= H * 0.03 else None)
+
+
+def _title_hit(name):
+    """标题那截认出的名字能不能就停：汉化包精确对上；或者英文行只是 l / I 认混（「IgniteIl Missile」
+    「OmniskyXllCannon」），换回来就精确对上（names 里同一份 l 当 i 的表，两个名字折到一起的不算）。
+    不近似：差一个字母的不算。11-09 老大实测悬浮窗更新慢：点火 II、制空 XII 的中文行常把罗马数字认丢、英文行
+    l / I 认混，以前标题那截停不下、每次都再认一遍整块说明框（多 0.7~1.4 秒）。罗马数字对不对后面还会再核"""
+    from ..trade.inspector import _strong_canonical
+
+    if _strong_canonical(name):
+        return True
+    en = (name or ("", ""))[1] or ""
+    if not en:
+        return False
+    from ..contracts.textkeys import fold_en_loose
+    from ..trade.names import _loose_en
+
+    return bool(_loose_en().get(fold_en_loose(en)))
+
+
+def _ocr(img, box, label, stage, native):
+    from ..ocr import recognize
+    from ..trade import debug_shots
+
+    crop = img.crop(box)
+    shot = debug_shots.current()
+    if shot is not None:
+        try:
+            shot.add_attempt(label, stage, box, crop)
+        except Exception:
+            pass
+    return recognize(crop, urgent=True, offset=box[:2], native=native)
+
+
 def _read_item(img, cursor):
     """鼠标指着的物品：{zh, en, quality, qty, unit, sure, craft}；认不出返回 None（调用通用 inspector 组件）"""
-    from ..trade.inspector import inspect_item
+    from ..trade import debug_shots
+    from ..trade.inspector import inspect_item, tooltip_pick
 
-    return inspect_item(
-        img, cursor, craft_override=True
-    )  # 盘点：制造品按蓝图倒推的品质为准，带上各槽品质
+    debug_shots.begin_if_debug()  # 调试开着时，下面两次裁切记进同一份调试图
+    box, title = _tooltip_boxes(img.size)
+    tokens, where = None, "盘点说明框"
+    if title:
+        t = _ocr(img, title, "盘点说明框@title", "title", True)
+        name, _sure = tooltip_pick(t, cursor, img)
+        if name and _title_hit(name):
+            tokens, where = t, "盘点说明框@title"
+    if tokens is None:
+        tokens = _ocr(img, box, where, "body", False)
+    # 盘点：制造品按蓝图倒推的品质为准，带上各槽品质；标题那截命中的制造品补认加成行也在这块区域里认
+    return _strict_numeral(
+        inspect_item(
+            img, cursor, tokens=tokens, where=where, craft_override=True, body_box=box
+        )
+    )
+
+
+_SIZE = re.compile(r"(?:尺寸|Size)\s*[:：]\s*(\d+)", re.I)
+
+
+def _tooltip_size(tokens):
+    """说明框里「尺寸：2」那一行的数；没有是 None"""
+    for t in tokens or []:
+        m = _SIZE.search(getattr(t, "text", "") or "")
+        if m:
+            return int(m.group(1))
+    return None
+
+
+def _grid_width(item):
+    """游戏数据说这件横占几格（1 / 2）；数据包没带占格信息（旧包）或库里没这件 → None，盘点自己看格子"""
+    en = (item or {}).get("en") or ""
+    try:
+        from ..gamedata import items
+
+        return items.grid_width(en) if en and items.has_grid() else None
+    except Exception:
+        return None
+
+
+def _library_size(en):
+    try:
+        from ..contracts.textkeys import en_key
+        from ..gamedata import items
+
+        row = items.get(en_key(en)) if en else None
+        return row.wsize if row else None
+    except Exception:
+        return None
+
+
+def _strict_numeral(r, exists=None):
+    """名字里带罗马数字（点火 II、逮捕者 III、制空 XII）的不许认错（老大 11-09：这是尺寸，关键数据）。对不上就当没认准
+    （sure=False、unsure 写原因），盘点不算，等再认一次或鼠标挪开再指：
+    1. 英文行读到的数字要和配上的标准名一样（l、1、| 当 I）；
+    2. 中文行读到的不一样时：库里真有中文行读的那件（「点火 I 导弹」）→ 可能是另一件，不认；库里没有 → 是中文认字的毛病
+       （中文旁边的 II 常认成一个 I，样本里点火 II 就是这样），不算分歧；
+    3. 英文行找不到数字才看中文行，也要一样；两行都找不到 → 不认；
+    4. 说明框写的尺寸要和库里这件的一样（罗马数字不一定是尺寸：制空 XII 是 4 号，所以只和库里比）。
+    exists(英文名)：库里有没有这件（测试换）"""
+    if not r or not r.get("sure"):
+        return r
+    from ..trade.names import roman_reads, roman_swap
+
+    reads = roman_reads(r.get("raw"), r.get("canon"))
+    if not reads:
+        return r
+    exists = exists or _exists
+    canon = r.get("canon") or ("", "")
+    by_line = {i: (got, want) for i, got, want in reads}
+    en_got, en_want = by_line.get(1, (None, None))
+    zh_got, zh_want = by_line.get(0, (None, None))
+    why = ""
+    if en_got is not None and en_got != en_want:
+        why = "罗马数字对不上（英文行）"
+    elif zh_got is not None and zh_got != zh_want:
+        other = roman_swap(canon[1], en_want or zh_want or [], zh_got)
+        if en_got is None or not other or exists(other):
+            why = "罗马数字对不上（中文行）"
+    elif en_got is None and zh_got is None:
+        why = "罗马数字没认出来"
+    if not why:
+        tip, lib = _tooltip_size(r.get("tokens")), _library_size(r.get("en"))
+        if tip is not None and lib is not None and tip != lib:
+            why = f"尺寸对不上（说明框 {tip}，库里 {lib}）"
+    if why:
+        return {**r, "sure": False, "unsure": why}
+    return r
+
+
+def _exists(en):
+    """库里（游戏数据库或汉化包）有没有这个英文名的物品"""
+    if _library_size(en) is not None:
+        return True
+    try:
+        from ..contracts.textkeys import en_key
+        from ..gamedata import items
+        from ..trade.names import canonical_exact
+
+        return bool(items.get(en_key(en))) or bool(canonical_exact("", en))
+    except Exception:
+        return True  # 查不了：当有，宁可不认
 
 
 def _kl(k):
@@ -195,6 +351,7 @@ def _count_review(place, items):
                     **m,
                     "qty": m["qty"] + v["qty"],
                     "cells": m["cells"] + v["cells"],
+                    "disabled": m.get("disabled", 0) + v.get("disabled", 0),
                 },
                 lines,
             )
@@ -216,6 +373,9 @@ def _count_review(place, items):
                 "quality": v["quality"],
                 "unit": v["unit"],
                 "cells": v["cells"],
+                "disabled": v.get(
+                    "disabled", 0
+                ),  # 其中带锁「已停用」的格数（老大 11-09：照算，标出来）
                 "craft": v.get("craft"),
                 "book": show(have),
                 "game": show(game),

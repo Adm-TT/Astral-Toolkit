@@ -98,13 +98,15 @@ def _key(r):  # 制造出来的同名东西，各槽品质不一样就分开记
 
 
 class _Cell(NamedTuple):
-    """算过的一格：物品、数量、格子框（找不到是 None）、认到时光标在截图上的位置"""
+    """算过的一格：物品、数量、格子框（找不到是 None）、认到时光标在截图上的位置、
+    在仓库里的身份（页 / 列 / 占几列 / 内容纵向位置，看不清是 None；11-09 加，滚动、翻页后也认得出是同一格）"""
 
     key: Any
     qty: Any
     box: Any
     x: int
     y: int
+    spot: Any = None
 
 
 @dataclass
@@ -120,6 +122,7 @@ class _CountCtx:
     tries: int = 0
     logged: str | None = None
     box_logged: str | None = None  # 找格子框出错，同一种只记一次（和认物品出错分开记）
+    spot_logged: str | None = None  # 算格子身份出错，同一种只记一次
 
 
 class _CountWorker:
@@ -219,11 +222,17 @@ class _CountWorker:
             box,
             cursor[0],
             cursor[1],
+            self._spot(session, ctx, img, cursor, r),
         )
 
         def same(c):
             if (c.key, c.qty) != (cell.key, cell.qty):
                 return False
+            # 两边都有仓库里的身份、页码也都认出来了：按身份比（滚动、翻页都不怕）；比不了再看框和距离
+            if c.spot is not None and cell.spot is not None:
+                hit = self._same_spot(c.spot, cell.spot, img.size[1])
+                if hit is not None:
+                    return hit
             if c.box and cell.box:
                 return self._an.same_cell(c.box, cell.box)
             if c.box or cell.box:
@@ -236,6 +245,8 @@ class _CountWorker:
             return Tick(0.0, seen)
 
         ctx.cells.append(cell)
+        # 带锁的格子是「已停用」（老大 11-09）：照算，记下有几格是停用的，悬浮窗、日志、对账里标出来
+        off = self._locked(img, cursor)
         v = ctx.items.setdefault(
             _key(r),
             {
@@ -250,10 +261,17 @@ class _CountWorker:
         )
         v["qty"] = round(v["qty"] + r["qty"], 6)
         v["cells"] += 1
+        if off:
+            v["disabled"] = v.get("disabled", 0) + 1
         self.loop.commit(
             session,
             ("hud.set", "盘点", self._views.hud_text(session.payload, ctx.items)),
-            ("log", self._views.item_line(r), "COUNT", "INFO"),
+            (
+                "log",
+                self._views.item_line({**r, "disabled": True} if off else r),
+                "COUNT",
+                "INFO",
+            ),
         )
         return Tick(0.0, seen)
 
@@ -267,6 +285,42 @@ class _CountWorker:
                 self.loop.commit(
                     session, ("log", f"盘点找格子框出错：{e!r}", "COUNT", "ERROR")
                 )
+            return None
+
+    def _spot(
+        self, session: Any, ctx: _CountCtx, img: Any, cursor: Any, item: Any
+    ) -> Any:
+        """这一格在仓库里的身份；分析里没有这一项（旧的测试替身）或出错 → None（退回框和距离），同一种错只记一次"""
+        fn = getattr(self._an, "spot", None)
+        if fn is None:
+            return None
+        try:
+            return fn(img, cursor, item)
+        except Exception as e:
+            if repr(e) != ctx.spot_logged:
+                ctx.spot_logged = repr(e)
+                self.loop.commit(
+                    session, ("log", f"盘点算格子身份出错：{e!r}", "COUNT", "ERROR")
+                )
+            return None
+
+    def _locked(self, img: Any, cursor: Any) -> bool:
+        """这一格带不带锁；分析里没有这一项或出错当不带（照常算）"""
+        fn = getattr(self._an, "locked", None)
+        if fn is None:
+            return False
+        try:
+            return bool(fn(img, cursor))
+        except Exception:
+            return False
+
+    def _same_spot(self, a: Any, b: Any, height: int) -> bool | None:
+        fn = getattr(self._an, "same_spot", None)
+        if fn is None:
+            return None
+        try:
+            return fn(a, b, height)
+        except Exception:
             return None
 
     def _gap(self, img: Any, cursor: Any) -> bool:

@@ -351,3 +351,68 @@ def suggest(query, limit=8):
                 s - len(z) * 0.002, scored.get((zh, en), 0)
             )  # 一样像时短的（更通用的）在前
     return [k for k, _ in sorted(scored.items(), key=lambda kv: -kv[1])[:limit]]
+
+
+# ---------------------------------------------------------------- 罗马数字（盘点：I / II 不许认错，老大 2026-11-09）
+_ROMANS = {
+    "I",
+    "II",
+    "III",
+    "IV",
+    "V",
+    "VI",
+    "VII",
+    "VIII",
+    "IX",
+    "X",
+    "XI",
+    "XII",
+    "XIII",
+    "XIV",
+    "XV",
+    "XVI",
+    "XVII",
+    "XVIII",
+    "XIX",
+    "XX",
+}
+_ROMAN_LIKE = "[IVXLl1|ı川]+"  # OCR 常把 I 认成 l、1、|；中文行里的 III 常认成「川」
+
+
+def _roman_fix(s):
+    return "".join("I" if c in "lL1|ı" else c for c in s.replace("川", "III")).upper()
+
+
+def _roman_pattern(name):
+    """标准名里单独成词的罗马数字 → (认出的名字里找它们的正则, 应有的数字)；没有罗马数字返回 None。
+    别的词照字面比（不分大小写、词间空格可有可无：OCR 常把空格吞掉，「OmniskyXllCannon」）"""
+    words = (name or "").split()
+    want = [w for w in words if w in _ROMANS]
+    if not want:
+        return None
+    parts = [f"({_ROMAN_LIKE})" if w in _ROMANS else re.escape(w) for w in words]
+    return re.compile(r"\s*".join(parts), re.I), want
+
+
+def roman_reads(raw, canon):
+    """认出的名字 raw (中文, 英文) 里、对着标准名 canon 那几个罗马数字的位置读到了什么：
+    [(行号 0 中文 / 1 英文, 读到的数字列表或 None 找不到, 标准名的数字列表)]；标准名两行都没有罗马数字返回 []"""
+    out = []
+    for i, (got, std) in enumerate(zip(raw or ("", ""), canon or ("", ""))):
+        pat = _roman_pattern(std)
+        if pat is None:
+            continue
+        rx, want = pat
+        m = rx.search(got or "")
+        out.append((i, [_roman_fix(g) for g in m.groups()] if m else None, want))
+    return out
+
+
+def roman_swap(name, want, got):
+    """把标准名里的罗马数字 want 依次换成 got：「Ignite II Missile」→「Ignite I Missile」（查库里有没有这件）"""
+    it = iter(got)
+    return (
+        " ".join(next(it) if w in _ROMANS else w for w in (name or "").split())
+        if len(got) == len(want)
+        else ""
+    )
