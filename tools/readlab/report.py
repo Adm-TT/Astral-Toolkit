@@ -23,14 +23,18 @@ INK = {
 }
 
 
-def _thumb(img: Any, r: Result, path: Path) -> None:
+def _thumb(img: Any, r: Result, path: Path, size: tuple[int, int]) -> None:
+    """带框缩略图：img 可以是原图，也可以是已经缩小的图（批量查只留缩略图），框按原图尺寸换算"""
     im = img.convert("RGB").copy()
+    k = im.size[0] / max(1, size[0])
     d = ImageDraw.Draw(im)
     lw = max(2, im.size[1] // 400)
     for s in r.shapes:
-        d.rectangle(s.box, outline=INK.get(s.color, (255, 255, 255)), width=lw)
-    k = THUMB_W / im.size[0]
-    im.resize((THUMB_W, max(1, int(im.size[1] * k)))).save(path, quality=82)
+        box = tuple(int(v * k) for v in s.box)
+        d.rectangle(box, outline=INK.get(s.color, (255, 255, 255)), width=lw)
+    if im.size[0] != THUMB_W:
+        im = im.resize((THUMB_W, max(1, im.size[1] * THUMB_W // im.size[0])))
+    im.save(path, quality=82)
 
 
 def write(
@@ -48,7 +52,7 @@ def write(
     body = []
     for i, (name, size, r, img) in enumerate(rows):
         pic = f"{i:04d}.jpg"
-        _thumb(img, r, pics / pic)
+        _thumb(img, r, pics / pic, size)
         a = screen_regions.aspect_of(size)
         aspects[a] = aspects.get(a, 0) + 1
         lines = "<br>".join(html.escape(x) for x in r.lines)
