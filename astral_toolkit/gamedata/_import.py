@@ -111,11 +111,11 @@ def import_wiki_rows(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) 
     for i, w in enumerate(items if isinstance(items, list) else []):
         if not isinstance(w, dict) or not isinstance(w.get("n"), str):
             continue
-        rows.append((i, w["n"], _s(w.get("cls"))))
+        rows.append((i, w["n"], _s(w.get("cls")), 2 if w.get("g") == 2 else 1))
         alts.extend(
             (i, j, c) for j, c in enumerate(_lst(w.get("alt"))) if isinstance(c, str)
         )
-    conn.executemany("insert into wiki_items values (?,?,?)", rows)
+    conn.executemany("insert into wiki_items values (?,?,?,?)", rows)
     conn.executemany("insert into wiki_alt_classes values (?,?,?)", alts)
 
 

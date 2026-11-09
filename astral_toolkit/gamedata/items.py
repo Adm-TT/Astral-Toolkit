@@ -177,3 +177,15 @@ def first_source_ids(source: str, snap=None) -> dict[str, str]:
         ):
             out.setdefault(item_id, x)
     return out
+
+
+def grid_width(en: str, snap=None) -> int | None:
+    """这件物品在仓库界面里横占几格（1 或 2），按英文名查（不分大小写）；库里没这个名字 → None（调用方自己看格子）。
+    旧数据包没有占格字段时全是 1：盘点那边把 1 当「没说是大物品」，照样会看缝"""
+    if not en:
+        return None
+    with use(snap) as s:
+        rows = s.execute(
+            "select max(g) from wiki_items where lower(n) = lower(?)", (en.strip(),)
+        )
+    return rows[0][0] if rows and rows[0][0] is not None else None
