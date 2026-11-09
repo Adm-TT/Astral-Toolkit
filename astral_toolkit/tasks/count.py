@@ -71,13 +71,61 @@ def _need_count() -> Any:
 
 
 # ================================================================ 盘点（F6）核心识别与对账
+# 盘点只在区域文件的 count.tooltip 里认说明框（老大 11-09 定）：不走 F8 按鼠标挑的竖带，也不整屏兜底（以前认不出时
+# 整屏一次约 2.8 秒）。先认标题那一截（和 F8 标题带同高：屏高 24%~36%，按原尺寸认字），名字在汉化包里精确对上就停；
+# 对不上再认整块。区域文件读不了用下面的默认值（和区域文件第 7 版一样）
+TOOLTIP = (0.5, 0.1191, 0.7132, 0.8345)
+TITLE_ROWS = (0.24, 0.36)
+
+
+def _tooltip_boxes(size):
+    """→ (整块说明框区域, 标题那一截或 None)，像素"""
+    from ..core import screen_regions
+
+    W, H = size
+    box = screen_regions.px("count.tooltip", TOOLTIP, size)
+    title = (
+        box[0],
+        max(box[1], int(H * TITLE_ROWS[0])),
+        box[2],
+        min(box[3], int(H * TITLE_ROWS[1])),
+    )
+    return box, (title if title[3] - title[1] >= H * 0.03 else None)
+
+
+def _ocr(img, box, label, stage, native):
+    from ..ocr import recognize
+    from ..trade import debug_shots
+
+    crop = img.crop(box)
+    shot = debug_shots.current()
+    if shot is not None:
+        try:
+            shot.add_attempt(label, stage, box, crop)
+        except Exception:
+            pass
+    return recognize(crop, urgent=True, offset=box[:2], native=native)
+
+
 def _read_item(img, cursor):
     """鼠标指着的物品：{zh, en, quality, qty, unit, sure, craft}；认不出返回 None（调用通用 inspector 组件）"""
-    from ..trade.inspector import inspect_item
+    from ..trade import debug_shots
+    from ..trade.inspector import _strong_canonical, inspect_item, tooltip_pick
 
+    debug_shots.begin_if_debug()  # 调试开着时，下面两次裁切记进同一份调试图
+    box, title = _tooltip_boxes(img.size)
+    tokens, where = None, "盘点说明框"
+    if title:
+        t = _ocr(img, title, "盘点说明框@title", "title", True)
+        name, _sure = tooltip_pick(t, cursor, img)
+        if name and _strong_canonical(name):
+            tokens, where = t, "盘点说明框@title"
+    if tokens is None:
+        tokens = _ocr(img, box, where, "body", False)
+    # 盘点：制造品按蓝图倒推的品质为准，带上各槽品质；标题那截命中的制造品补认加成行也在这块区域里认
     return inspect_item(
-        img, cursor, craft_override=True
-    )  # 盘点：制造品按蓝图倒推的品质为准，带上各槽品质
+        img, cursor, tokens=tokens, where=where, craft_override=True, body_box=box
+    )
 
 
 def _kl(k):
