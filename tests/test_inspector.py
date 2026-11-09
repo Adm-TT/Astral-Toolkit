@@ -106,7 +106,9 @@ class TestItemInspector(unittest.TestCase):
         self.assertEqual(res["qty"], 5)
         self.assertEqual(res["unit"], "个")
 
-    @patch("astral_toolkit.tasks.count._ocr", return_value=[])  # 盘点自己认 count.tooltip（11-09）：假图不认字
+    @patch(
+        "astral_toolkit.tasks.count._ocr", return_value=[]
+    )  # 盘点自己认 count.tooltip（11-09）：假图不认字
     @patch("astral_toolkit.trade.inspector.inspect_item")
     def test_count_read_item(self, mock_inspect, _mock_ocr):
         from astral_toolkit.tasks.count import _read_item
@@ -305,7 +307,9 @@ def test_count_read_item_uses_craft_override(monkeypatch):
     from astral_toolkit.tasks import count
 
     seen = {}
-    monkeypatch.setattr(count, "_ocr", lambda *a: ["字"])  # 盘点自己认 count.tooltip（11-09）
+    monkeypatch.setattr(
+        count, "_ocr", lambda *a: ["字"]
+    )  # 盘点自己认 count.tooltip（11-09）
     monkeypatch.setattr(inspector, "tooltip_pick", lambda *a: (None, False))
     monkeypatch.setattr(
         inspector, "inspect_item", lambda img, cur, **kw: seen.update(kw) or {"zh": "x"}
