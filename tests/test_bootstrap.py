@@ -139,8 +139,16 @@ def test_build_desktop_binds_everything_to_this_app(monkeypatch):
             assert not hasattr(mining_tasks, "_live")
             assert not hasattr(nav_tasks, "_nav")
             assert app.nav_deps == nav_tasks.NavDeps(
-                app.nav, app.pos, app.game_events, app.results
+                app.nav,
+                app.pos,
+                app.game_events,
+                app.results,
+                app.nav_deps.halo,
+                app.nav_deps.here,
             )
+            # 导航的两个小后台会话由 lifecycle 管着：退出时停（2026-11-09）
+            names = [s.name for s, _ in app.lifecycle._services]
+            assert "halo" in names and "here-watch" in names
             assert app.hotkey_commands._nav is app.nav_deps
             assert count_tasks._count is app.count
             assert not hasattr(hover_tasks, "_links")

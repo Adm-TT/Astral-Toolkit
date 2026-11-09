@@ -35,6 +35,7 @@ from .runtime.lifecycle import (
 )
 from .runtime.results import ResultStore
 from .runtime.workers.game_events import GameEventsWorker
+from .runtime.workers.nav_watch import NavWatch, WatchSteps
 from .runtime.workers.position import LogWatchWorker, PositionWorker
 
 if TYPE_CHECKING:
@@ -293,6 +294,44 @@ def _game_events(pos: Any) -> GameEventsWorker:
         enabled=sys.platform == "win32",
         on_qt_arrived=pos.request_read_now,
     )
+
+
+def nav_watches(
+    results: ResultStore,
+    output: Any,
+    closing: Callable[[], bool],
+    deps_now: Callable[[], Any],
+) -> tuple[NavWatch, NavWatch]:
+    """导航的两个小后台会话（2026-11-09，原来 tasks/navigation 自己起 daemon 线程）：halo（挂着小行星带方案时核对）、
+    here-watch（「用当前位置新建」等 /showlocation）。每一轮做什么用 tasks/navigation 的函数；
+    deps_now 现取 NavDeps（它要等这两个造好才有）"""
+    from .tasks import navigation as navigation_tasks
+
+    halo = NavWatch(
+        "halo",
+        "小行星带核对",
+        WatchSteps(
+            setup=lambda sess: navigation_tasks._halo_state(deps_now()),
+            step=lambda sess, st: navigation_tasks._halo_step(deps_now(), sess, st),
+            wait=navigation_tasks.HALO_WAIT,
+        ),
+        results=results,
+        output=output,
+        closing=closing,
+    )
+    here = NavWatch(
+        "here-watch",
+        "路标等坐标",
+        WatchSteps(
+            setup=lambda _payload: navigation_tasks._here_state(),
+            step=lambda _payload, st: navigation_tasks._here_step(deps_now(), st),
+            wait=0.0,  # 一轮里 wait_new_coords 自己等 1 秒
+        ),
+        results=results,
+        output=output,
+        closing=closing,
+    )
+    return halo, here
 
 
 def _mining_analysis() -> MiningAnalysis:
@@ -593,8 +632,16 @@ def build(
         analysis=_nav_analysis(),
         views=_nav_views(),
     )
+    halo_watch, here_watch = nav_watches(
+        results, output, lifecycle.is_closing, lambda: nav_deps
+    )
     nav_deps = navigation_tasks.NavDeps(
-        nav=nav, pos=pos, game_events=game_events, results=results
+        nav=nav,
+        pos=pos,
+        game_events=game_events,
+        results=results,
+        halo=halo_watch,
+        here=here_watch,
     )
     count = _Count(
         results,
@@ -880,6 +927,15 @@ def _register(app: DesktopApp) -> None:
             SessionLoopService("count", Phase.SESSIONS, app.count.loop),
             gate=False,
         )
+        # 导航的两个小后台会话（2026-11-09 起登记）：点了才开，退出时停、等线程退
+        app.lifecycle.register(
+            SessionLoopService("halo", Phase.SESSIONS, app.nav_deps.halo.loop),
+            gate=False,
+        )
+        app.lifecycle.register(
+            SessionLoopService("here-watch", Phase.SESSIONS, app.nav_deps.here.loop),
+            gate=False,
+        )
 
         app.lifecycle.register(OneShot("ocr-warmup", Phase.WORKERS, factory=start_ocr))
         try:
@@ -902,7 +958,6 @@ def _register(app: DesktopApp) -> None:
         # - overlay：没有停止入口，随进程退出
         # - tray：server 退出前已 remove
         # - task_runner.run_task 临时任务：按需线程，不纳入常驻服务
-        # - 导航 here-watch / halo：B5b 会话内的事
         # - shell-watch / winid：窗口 / 单实例外围
         # - displayinfo-loc：RT-B5b 地点行 OCR 短线程（几百毫秒，daemon）
         app.state["_registered"] = True

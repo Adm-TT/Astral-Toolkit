@@ -938,3 +938,124 @@ def test_start_ops_emits_starting_activity(monkeypatch):
     ops = worker.start_ops(Session(3, threading.Event(), payload))
     assert ops == [("ui", "ui.activity", ("活动", 3, payload, view))]
     assert worker.start_ops(Session(4, threading.Event(), object())) == []
+
+
+# ---------------------------------------------------------------- 导航的小后台会话（halo / here-watch，2026-11-09）
+def _watch(step, *, wait=0.01, closing=lambda: False, setup=lambda payload: {"n": 0}):
+    from astral_toolkit.app.output import BusOutput
+    from astral_toolkit.runtime.results import ResultStore
+    from astral_toolkit.runtime.workers.nav_watch import NavWatch, WatchSteps
+
+    return NavWatch(
+        "t-watch",
+        "测试",
+        WatchSteps(setup=setup, step=step, wait=wait),
+        results=ResultStore(),
+        output=BusOutput(),
+        closing=closing,
+        join_timeout=2.0,
+    )
+
+
+def _until(cond, secs=3.0):
+    end = time.time() + secs
+    while time.time() < end and not cond():
+        time.sleep(0.01)
+    return cond()
+
+
+def test_nav_watch_step_done_ends_session_and_start_is_idempotent():
+    """step 说做完了：会话自己结束；在跑时再 start 同一份不重开（以前「线程活着就不再起」）"""
+    go = threading.Event()
+    seen = []
+
+    def step(payload, st):
+        st["n"] += 1
+        seen.append(payload)
+        return go.is_set()
+
+    w = _watch(step)
+    sid = w.start()
+    assert sid and w.start() == sid and w.running()
+    assert _until(lambda: len(seen) >= 3)
+    go.set()
+    assert _until(lambda: not w.running())
+    assert w.loop.join(2, session_id=sid)
+    assert w.loop.state().state is RunState.STOPPED
+    # 做完了能再开新的一份
+    go.clear()
+    sid2 = w.start()
+    assert sid2 and sid2 != sid and w.running()
+    w.loop.request_shutdown()
+    assert w.loop.join_all(2) == []
+
+
+def test_nav_watch_replace_switches_payload():
+    """换方案：旧会话停掉、等它退，新会话拿新的 payload"""
+    seen = []
+
+    def step(payload, st):
+        seen.append(payload)
+        return False
+
+    w = _watch(step)
+    first = w.start(1)
+    assert _until(lambda: 1 in seen)
+    second = w.replace(2)
+    assert second and second != first
+    n = len(seen)
+    assert _until(lambda: len(seen) > n + 2)
+    assert set(seen[n + 1 :]) == {2}  # 换了以后只跑新的那份
+    w.loop.request_shutdown()
+    assert w.loop.join_all(2) == []
+
+
+def test_nav_watch_refuses_while_closing_and_shutdown_joins():
+    """正在退出：不再开；退出时（lifecycle 的 request_shutdown + join_all）在跑的会话会停、线程会退"""
+    closing = {"on": False}
+    w = _watch(lambda payload, st: False, closing=lambda: closing["on"])
+    assert w.start()
+    w.loop.request_shutdown()
+    assert w.loop.join_all(2) == [] and not w.running()
+    closing["on"] = True
+    assert w.start() is None and w.replace(3) is None
+
+
+def test_halo_step_ends_when_plan_removed(monkeypatch):
+    """挂着方案时核对会话一直跑；取下方案（代次变了）下一轮就自己结束"""
+    from astral_toolkit.navigation import navigate as n
+
+    monkeypatch.setattr(n, "read_clipboard", lambda: "")
+    monkeypatch.setattr(
+        navigation_tasks, "_pos_current", lambda deps: (0.0, None, None)
+    )
+    deps = nav_deps(
+        nav=SimpleNamespace(target=None, space_mode=False),
+        game_events=SimpleNamespace(arrived_at=0.0),
+    )
+    sess = navigation_tasks._HALO["sess"]
+    st = navigation_tasks._halo_state(deps)
+    assert navigation_tasks._halo_step(deps, sess, st) is False
+    assert navigation_tasks._halo_step(deps, sess - 1, st) is True  # 旧方案的会话
+
+
+def test_here_step_timeout_and_name_taken(monkeypatch):
+    """here 会话：超时提示一次就结束；名字被热键记路标取走了直接结束、不提示"""
+    from astral_toolkit.system import showloc
+
+    notes, logs = [], []
+    monkeypatch.setattr(navigation_tasks, "_note_hud", lambda *a: notes.append(a))
+    monkeypatch.setattr(navigation_tasks, "_wp_log", logs.append)
+    monkeypatch.setattr(showloc, "wait_new_coords", lambda old, timeout: (None, ""))
+    monkeypatch.setattr(
+        navigation_tasks, "_HERE", {"name": "矿点", "until": time.time() + 30}
+    )
+    st = {"old": ""}
+    deps = nav_deps()
+    assert navigation_tasks._here_step(deps, st) is False  # 还在等
+    navigation_tasks._HERE["until"] = time.time() - 1
+    assert navigation_tasks._here_step(deps, st) is True
+    assert navigation_tasks._HERE["name"] is None and "未获取到" in notes[-1][1]
+    assert logs == ["等 /showlocation 超时"]
+    notes.clear()
+    assert navigation_tasks._here_step(deps, st) is True and not notes

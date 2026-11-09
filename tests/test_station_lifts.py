@@ -808,6 +808,7 @@ def test_here_watch_save_error_is_reported(monkeypatch):
     import time as _t
     from astral_toolkit.tasks import navigation as t_nav
     from astral_toolkit.navigation import navigate as n
+    from astral_toolkit.runtime.workers.nav_watch import NavWatch
     from astral_toolkit.system import showloc
     from tests.bootstrap_helpers import nav_deps
 
@@ -824,11 +825,14 @@ def test_here_watch_save_error_is_reported(monkeypatch):
     )
     monkeypatch.setattr(t_nav, "_note_hud", lambda *a: notes.append(a))
     monkeypatch.setattr(t_nav, "_wp_log", logs.append)
-    monkeypatch.setattr(
-        t_nav, "_HERE", {"name": "矿点", "until": _t.time() + 30, "thread": None}
-    )
+    monkeypatch.setattr(t_nav, "_HERE", {"name": "矿点", "until": _t.time() + 30})
     t_nav._start_here_watch(deps)
-    t_nav._HERE["thread"].join(5)
+    here = deps.here
+    assert isinstance(here, NavWatch)
+    sid = here.loop.state().session_id
+    # 存完（出错也算）会话自己结束
+    assert sid and here.loop.join(5, session_id=sid)
+    assert not here.running()
     assert notes and "未保存" in notes[-1][1] and any("失败" in x for x in logs)
 
 
@@ -893,20 +897,22 @@ def test_pos_hints_use_latest_read_even_when_hovering():
 
 def test_mark_here_prompts_and_no_double_wait(monkeypatch):
     """记路标热键：先在悬浮窗提示输入 /showlocation（挂到等完）；「用当前位置新建」已经在等时不再等第二份（第 4 批审查）"""
-    import threading
     import time as _t
+    from types import SimpleNamespace
+
     from astral_toolkit.system import showloc
     from astral_toolkit.tasks import navigation as t_nav
     from tests.bootstrap_helpers import nav_deps
 
     notes = []
-    deps = nav_deps()
+    waiting = {"on": False}  # here 会话在不在等（假的）
+    deps = nav_deps(here=SimpleNamespace(running=lambda: waiting["on"]))
     monkeypatch.setattr(
         t_nav, "_note_hud", lambda sec, text, secs=None: notes.append((sec, text, secs))
     )
     monkeypatch.setattr(t_nav, "_wp_log", lambda m: None)
     monkeypatch.setattr(showloc, "showlocation", lambda log=None: (None, "没读到"))
-    monkeypatch.setattr(t_nav, "_HERE", {"name": None, "until": 0, "thread": None})
+    monkeypatch.setattr(t_nav, "_HERE", {"name": None, "until": 0})
     assert t_nav.mark_here(deps) == {"error": "没读到"}
     assert (
         notes[0][0] == "定位"
@@ -918,15 +924,7 @@ def test_mark_here_prompts_and_no_double_wait(monkeypatch):
     monkeypatch.setattr(
         showloc, "showlocation", lambda log=None: called.append(1) or (None, "x")
     )
-    ev = threading.Event()
-    th = threading.Thread(target=ev.wait, args=(5,))
-    th.start()
-    monkeypatch.setattr(
-        t_nav, "_HERE", {"name": "矿点", "until": _t.time() + 30, "thread": th}
-    )
-    try:
-        assert t_nav.mark_here(deps) == {"pending": True} and not called
-        assert "矿点" in notes[-1][1]
-    finally:
-        ev.set()
-        th.join(5)
+    waiting["on"] = True
+    monkeypatch.setattr(t_nav, "_HERE", {"name": "矿点", "until": _t.time() + 30})
+    assert t_nav.mark_here(deps) == {"pending": True} and not called
+    assert "矿点" in notes[-1][1]

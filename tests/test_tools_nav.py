@@ -1339,11 +1339,9 @@ def test_halo_overshoot_after_each_jump(monkeypatch, tmp_path):
 
         # 实时坐标喂给看量子的线程（读数每 0.25 秒一份，线程每 20 毫秒看一次）：每次起跳都刷回只剩方案；
         # 慢读数连续 3 秒才算停下，游戏卡一下不算；从起点跳的那趟停下后标出来（审查 2026-11-08 第三轮）
-        class _Fast(threading.Event):
-            def wait(self, timeout=None):
-                return super().wait(0.02)
+        from tests.bootstrap_helpers import nav_deps
 
-        deps = SimpleNamespace(
+        deps = nav_deps(
             nav=SimpleNamespace(target=None, space_mode=False),
             game_events=SimpleNamespace(arrived_at=0.0),
         )
@@ -1364,11 +1362,15 @@ def test_halo_overshoot_after_each_jump(monkeypatch, tmp_path):
                 return last[0]
 
             monkeypatch.setattr(t_nav, "_pos_current", reading)
-            ev = _Fast()
+            ev = threading.Event()
             huds.clear()
-            th = threading.Thread(
-                target=t_nav._halo_watch, args=(deps, sess, ev), daemon=True
-            )
+            st = t_nav._halo_state(deps)
+
+            def run():  # halo 会话的一轮一轮（这里每 20 毫秒一轮）
+                while not ev.is_set() and not t_nav._halo_step(deps, sess, st):
+                    ev.wait(0.02)
+
+            th = threading.Thread(target=run, daemon=True)
             th.start()
             deadline = _t.time() + 6
             while todo and _t.time() < deadline:
