@@ -64,8 +64,6 @@ class _WatchLike(Protocol):
 
     def start(self, payload: Any = None) -> Any: ...
 
-    def replace(self, payload: Any) -> Any: ...
-
     def running(self) -> bool: ...
 
 
@@ -1132,9 +1130,8 @@ def halo_pin(deps: NavDeps, /, frm="", to="", band=5, qd=""):
         return {"error": "此航线不穿过该带"}
     r["text"] = halo.plan_text(r) + "\n退出量子后自动核对是否在带内"
     with _HALO["lock"]:
-        # 代次加一：旧方案的核对会话下一轮看到就自己结束（下面再换成新的一份）
+        # 代次加一：核对会话下一轮看到换了方案就从头记；旧方案还没出完的核对结果按代次作废
         _HALO["sess"] += 1
-        sess = _HALO["sess"]
         _HALO.update(
             plan=r,
             last=None,
@@ -1151,14 +1148,13 @@ def halo_pin(deps: NavDeps, /, frm="", to="", band=5, qd=""):
         _hud_set("小行星带", r["text"])
     # 先记方案那行再开核对会话：会话一起来就会核对、记日志（审查 2026-11-08 第三轮）
     _wp_log(f"小行星带方案：{frm} → {to} 第{band}带，剩 {r['dropout']} Gm 断开")
-    deps.halo.replace(
-        sess
-    )  # 2026-11-09 起由 SessionLoop 跑（deps.halo），退出时会停、会等它退
+    # 核对会话（2026-11-09 起由 SessionLoop 跑，deps.halo）：已经在跑就是它，跟上新方案；退出时会停、会等它退
+    deps.halo.start()
     return r
 
 
 def halo_unpin():
-    """取下方案：代次加一，核对会话下一轮（HALO_WAIT 秒内）看到就自己结束"""
+    """取下方案：核对会话下一轮（HALO_WAIT 秒内）看到没有方案了就自己结束"""
     with _HALO["lock"]:
         _HALO["sess"] += 1
         _HALO.update(
@@ -1170,8 +1166,9 @@ def halo_unpin():
 
 @dataclass
 class _HaloSeen:
-    """halo 会话里要记着的几样（一个会话一份）"""
+    """halo 会话里要记着的几样：跟着哪一份方案（代次），换了方案就从头记（以前是换一条新线程）"""
 
+    sess: int | None  # 跟着的方案代次；None = 还没开始跟
     arr: float  # 游戏日志上次说量子到了的时刻
     seen_live: float | None = None  # 上一份处理过的实时读数的读数时间
     live_at: float = 0.0  # 上次按实时坐标核对的时刻
@@ -1179,20 +1176,32 @@ class _HaloSeen:
     in_qt: bool = False  # 在一跳里：测到起跳、还没确认停下
     slow_since: float | None = None  # 一跳里读数慢下来的那一刻（读数时间）
 
+    def follow(self, sess: int, arr: float) -> None:
+        """换成跟新的一份方案：其余从头记"""
+        self.sess, self.arr = sess, arr
+        self.seen_live, self.live_at, self.prev = None, 0.0, None
+        self.in_qt, self.slow_since = False, None
+
 
 def _halo_state(deps: NavDeps) -> _HaloSeen:
-    """halo 会话开始时"""
-    return _HaloSeen(arr=deps.game_events.arrived_at)
+    """halo 会话开始时：还没跟哪份方案，第一轮跟上当前的"""
+    return _HaloSeen(sess=None, arr=deps.game_events.arrived_at)
 
 
-def _halo_step(deps: NavDeps, sess, st: _HaloSeen) -> bool:
+def _halo_step(deps: NavDeps, st: _HaloSeen) -> bool:
     """挂着方案时的一轮（halo 会话每 HALO_WAIT 秒一次）：读右上角的实时坐标自动核对（每秒一次）；读不到时
     玩家自己在聊天框输 /showlocation 也能核对（/showlocation 只在必要时用，2026-10-27 用户定；太空导航进行中时
-    剪贴板归导航管）。方案取下或换了（代次变了）返回 True，会话自己结束（2026-11-09 由 _halo_watch 的循环体改来）"""
+    剪贴板归导航管）。2026-11-09 由 _halo_watch 的循环体改来：一个会话跟着当前方案，换了方案（代次变了）从头记、
+    不重开会话；方案取下了返回 True，会话自己结束"""
     from ..navigation import navigate as n
 
-    if sess != _HALO["sess"]:
+    with _HALO["lock"]:
+        cur, pinned = _HALO["sess"], _HALO["plan"] is not None
+    if not pinned:
         return True
+    if st.sess != cur:
+        st.follow(cur, deps.game_events.arrived_at)
+    sess = cur
     nav = deps.nav
     events = deps.game_events
     try:

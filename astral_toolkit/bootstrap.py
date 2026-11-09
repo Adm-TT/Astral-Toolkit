@@ -311,8 +311,8 @@ def nav_watches(
         "halo",
         "小行星带核对",
         WatchSteps(
-            setup=lambda sess: navigation_tasks._halo_state(deps_now()),
-            step=lambda sess, st: navigation_tasks._halo_step(deps_now(), sess, st),
+            setup=lambda _payload: navigation_tasks._halo_state(deps_now()),
+            step=lambda _payload, st: navigation_tasks._halo_step(deps_now(), st),
             wait=navigation_tasks.HALO_WAIT,
         ),
         results=results,

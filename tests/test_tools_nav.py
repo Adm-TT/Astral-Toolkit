@@ -1348,7 +1348,7 @@ def test_halo_overshoot_after_each_jump(monkeypatch, tmp_path):
         monkeypatch.setattr(n, "read_clipboard", lambda: "")
 
         def watch(seq, arrive=None):  # arrive：喂到第几份读数时游戏日志说量子到了
-            sess = pin()
+            pin()
             before = len(log())
             todo = [tuple(x) for x in seq]
             t0, fed, last = _t.time(), [], []
@@ -1367,7 +1367,7 @@ def test_halo_overshoot_after_each_jump(monkeypatch, tmp_path):
             st = t_nav._halo_state(deps)
 
             def run():  # halo 会话的一轮一轮（这里每 20 毫秒一轮）
-                while not ev.is_set() and not t_nav._halo_step(deps, sess, st):
+                while not ev.is_set() and not t_nav._halo_step(deps, st):
                     ev.wait(0.02)
 
             th = threading.Thread(target=run, daemon=True)

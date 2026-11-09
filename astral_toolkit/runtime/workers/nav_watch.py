@@ -1,7 +1,7 @@
 """导航的两个小后台会话（2026-11-09 从 tasks/navigation 自己起的 daemon 线程搬来）：
 
 - halo：挂着小行星带方案时每 0.3 秒核对一次（读右上角实时坐标、剪贴板里的 /showlocation）；
-  方案取下或换了就自己结束；
+  换了方案接着跑（从头记），方案取下了就自己结束；
 - here：点了「用当前位置新建」后等剪贴板出现 /showlocation 坐标，存好或超时就自己结束。
 
 线程、停止、退出时等线程退都交给 SessionLoop（和导航、采矿、盘点一样，退出时由 lifecycle 停；正在退出时不再开新的）。
@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -37,14 +38,13 @@ class WatchSteps:
 class _WatchWorker:
     """SessionLoop 的 Worker：只转调 WatchSteps；step 说做完了就按 done 停掉自己这个会话"""
 
-    retries: int = 3
+    # 一轮出错不重来，会话按出错结束（和以前线程出错就退一样；here 结束后热键记路标会自己等坐标）
+    retries: int = 1
     stale_after: dict[str, float] = {}
-    needs_foreground: bool = (
-        False  # 游戏不在前台也照样核对 / 等坐标（以前的线程就不管前台）
-    )
-    restart_while_stopping: bool = (
-        True  # 换方案时旧的一轮卡住了也能开新的（旧结果按方案代次作废）
-    )
+    # 游戏不在前台也照样核对 / 等坐标（以前的线程就不管前台）
+    needs_foreground: bool = False
+    # 上一个会话收尾卡住了也能开新的（旧结果按方案代次 / 路标名作废）
+    restart_while_stopping: bool = True
     log_tag: str = "NAV"
     loop: Any = None
 
@@ -52,6 +52,14 @@ class _WatchWorker:
         self.name = name
         self.display_name = display_name
         self._steps = steps
+        # 「又被叫开了」：这一轮开始后有人调过 NavWatch.start（比如这一轮刚看到方案取下、玩家马上又挂了一份）。
+        # 这一轮说做完了也不停，下一轮再看；和「决定停」在同一把锁里，不会停掉刚叫开的（DeepSeek 审查 2026-11-09）
+        self._kick_lock = threading.Lock()
+        self._kicked = False
+
+    def kick(self) -> None:
+        with self._kick_lock:
+            self._kicked = True
 
     @property
     def idle_close(self) -> float | None:
@@ -76,9 +84,13 @@ class _WatchWorker:
         return self._steps.setup(session.payload)
 
     def tick(self, session: Session, ctx: Any, now: float) -> Tick:
+        with self._kick_lock:
+            self._kicked = False
         if self._steps.step(session.payload, ctx):
-            self.loop.request_stop(session, StopInfo("done"))
-            return Tick(0.0)
+            with self._kick_lock:
+                if not self._kicked:
+                    self.loop.request_stop(session, StopInfo("done"))
+                    return Tick(0.0)
         return Tick(self._steps.wait)
 
     def on_pause(self, session: Session, ctx: Any) -> list[tuple[Any, ...]]:
@@ -112,7 +124,7 @@ class _WatchWorker:
 
 
 class NavWatch:
-    """一个小后台的起停外壳：start 开（同一份 payload 已经在跑就是它）、replace 换一份；
+    """一个小后台的起停外壳：start 开（已经在跑就是它），会话做完了自己结束；
     loop 交给 lifecycle（SessionLoopService），退出时按会话停、等线程退"""
 
     def __init__(
@@ -144,8 +156,9 @@ class NavWatch:
         return bool(self.loop.running())
 
     def start(self, payload: Any = None) -> int | None:
-        """开会话；同一份 payload 已经在跑就是它。上一个刚做完、线程还在收尾：等它退了再开。
-        正在退出（或换不下来）返回 None"""
+        """开会话；同一份 payload 已经在跑就是它（它这一轮就算说做完了也接着跑）。上一个刚做完、线程还在收尾：
+        等它退了再开（只在「刚做完又点」那一下，收尾很快）。正在退出（或开不了）返回 None"""
+        self._worker.kick()
         sid = self.loop.start(payload)
         if sid is None and not self._closing():
             st = self.loop.state()
@@ -153,10 +166,3 @@ class NavWatch:
                 self.loop.join(session_id=st.session_id)
                 sid = self.loop.start(payload)
         return sid
-
-    def replace(self, payload: Any) -> int | None:
-        """换成新的一份：先停当前的（等它这一轮做完，一般不到 0.3 秒；超时也照样开新的），再开"""
-        sid = self.loop.request_stop_current(StopInfo("replaced"))
-        if sid is not None:
-            self.loop.join(session_id=sid)
-        return self.start(payload)
