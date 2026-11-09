@@ -1,10 +1,10 @@
 """OCR 核心识别与推理管道"""
 
-from typing import Any, Callable, List, Sequence, Tuple, Union
+from typing import Any, Callable, List, Tuple, Union
 import numpy as np
 from PIL import Image
 
-from .models import OcrToken
+from .models import OcrQuad, OcrToken
 
 _engine = None
 
@@ -18,26 +18,26 @@ def _get_engine():
     return _engine
 
 
-def raw_detector() -> Callable[[np.ndarray], Sequence[Tuple[Any, str, float]]]:
-    """返回底层四点检测识别函数：func(arr) -> [(quad, text, conf), ...]
+def _rows(result) -> list:
+    """引擎一次检测 + 识别的结果 → [(四点, 文字, 把握), …]。两种引擎：rapidocr_onnxruntime 给 (结果, 耗时) 元组，
+    结果没字时是 None；rapidocr 3.x 给对象，没字时 boxes 是 None（以前 recognize 在这种情况下会因为 zip(None) 出错，11-09 修）"""
+    if isinstance(result, tuple):
+        return list(result[0] or [])
+    if getattr(result, "boxes", None) is None:
+        return []
+    return list(zip(result.boxes.tolist(), result.txts, result.scores))
 
-    兼容 rapidocr_onnxruntime 和 rapidocr (支持 Python 3.13) 两种实现。
-    """
+
+def detect(arr: np.ndarray) -> List[OcrQuad]:
+    """检测 + 识别一块图（numpy 数组，原样送引擎，不换通道）→ [OcrQuad(四点, 文字, 把握 0~1)]。
+    给要看斜度的读屏用（采矿扫描面板）；只要文字和正框的用 recognize。
+    2026-11-09 取代 raw_detector()：别处不再拿引擎的原始格式，统一从这里拿（以后换引擎只改 ocr 包）"""
     eng: Any = _get_engine()
-    if eng.kind.startswith("rapidocr_onnxruntime"):
-        return lambda arr: eng(arr)[0] or []
-
-    def run(arr: np.ndarray):
-        r = eng(arr)
-        if r.boxes is None:
-            return []
-        return list(zip(r.boxes.tolist(), r.txts, r.scores))
-
-    return run
+    return [OcrQuad(q, t, c) for q, t, c in _rows(eng(arr))]
 
 
-def raw_recognizer() -> Callable[[np.ndarray], Tuple[str, float]]:
-    """返回底层单行识别函数：func(arr) -> (text, conf)"""
+def _line_reader() -> Callable[[np.ndarray], Tuple[str, float]]:
+    """单行识别（跳过检测）：func(arr) -> (text, conf 0~1)。两种引擎的写法不一样，这里分开（原 raw_recognizer，11-09 收成内部的）"""
     eng: Any = _get_engine()
     if eng.kind.startswith("rapidocr_onnxruntime"):
 
@@ -83,11 +83,7 @@ def recognize(
     else:
         result = eng(arr, **kw)
 
-    rows = (
-        result[0]
-        if isinstance(result, tuple)
-        else list(zip(result.boxes, result.txts, result.scores))
-    )
+    rows = _rows(result)
     ox, oy = offset
     tokens: List[OcrToken] = []
     for box, text, score in rows or []:
@@ -107,7 +103,7 @@ def recognize(
 
 def read_line(image: Union[Image.Image, np.ndarray]) -> Tuple[str, float]:
     """只认一行字（跳过检测）：输入 PIL 单行文字图或 ndarray → (文字, 置信度)。比整块识别快很多"""
-    rec = raw_recognizer()
+    rec = _line_reader()
     if isinstance(image, np.ndarray):
         arr = image
     else:
