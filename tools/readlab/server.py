@@ -24,7 +24,7 @@ import uuid
 from dataclasses import asdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import parse_qs, unquote, urlparse
 
 from PIL import Image
@@ -144,7 +144,9 @@ class Lab(ThreadingHTTPServer):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server: Lab
+    @property
+    def lab(self) -> Lab:
+        return cast(Lab, self.server)
 
     def log_message(self, format: str, *args: Any) -> None:  # noqa: A002 - 不往控制台刷每个请求
         pass
@@ -189,9 +191,9 @@ class Handler(BaseHTTPRequestHandler):
                 ],
             )
         if path == "/api/samples":
-            return self._json(200, self.server.samples())
+            return self._json(200, self.lab.samples())
         if path == "/api/image":
-            p = self.server.resolve((parse_qs(url.query).get("id") or [""])[0])
+            p = self.lab.resolve((parse_qs(url.query).get("id") or [""])[0])
             if p is None:
                 return self._err(403, "不在样本目录里")
             if not p.is_file():
@@ -202,9 +204,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/regions":
             return self._json(200, screen_regions.load())
         if path.startswith("/reports/"):
-            return self._file(self.server.report_dir, path[len("/reports/") :])
+            return self._file(self.lab.report_dir, path[len("/reports/") :])
         if path.startswith("/api/batch/"):
-            job = self.server.jobs.get(path.rsplit("/", 1)[1])
+            job = self.lab.jobs.get(path.rsplit("/", 1)[1])
             return (
                 self._json(200, job["state"]) if job else self._err(404, "没有这个任务")
             )
@@ -229,9 +231,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._err(404, "没有这个地址")
         try:
             body = self._body() or {}
-            version = screen_regions.save(
-                body.get("regions"), int(body.get("version", -1))
-            )
+            regions = body.get("regions")
+            if not isinstance(regions, dict):
+                raise ValueError("regions 要是 {键: [条目, …]}")
+            version = screen_regions.save(regions, int(body.get("version", -1)))
         except screen_regions.StaleRegions:
             return self._err(409, "区域文件已被改过，刷新后再存")
         except (ValueError, TypeError, AttributeError) as e:
@@ -248,7 +251,7 @@ class Handler(BaseHTTPRequestHandler):
         if feature not in features.FEATURES:
             return self._err(400, "没有这个功能")
         if path == "/api/try":
-            p = self.server.resolve(body.get("id", ""))
+            p = self.lab.resolve(body.get("id", ""))
             if p is None:
                 return self._err(403, "不在样本目录里")
             if not p.is_file():
@@ -264,14 +267,14 @@ class Handler(BaseHTTPRequestHandler):
                 img = im.convert("RGB")
             return self._json(200, asdict(features.run(feature, img, pt, batch=False)))
         if path == "/api/batch":
-            ids = body.get("ids") or [s["id"] for s in self.server.samples()]
-            return self._json(200, {"job": self.server.start_batch(feature, list(ids))})
+            ids = body.get("ids") or [s["id"] for s in self.lab.samples()]
+            return self._json(200, {"job": self.lab.start_batch(feature, list(ids))})
         return self._err(404, "没有这个地址")
 
     def do_DELETE(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
         job = (
-            self.server.jobs.get(path.rsplit("/", 1)[1])
+            self.lab.jobs.get(path.rsplit("/", 1)[1])
             if path.startswith("/api/batch/")
             else None
         )

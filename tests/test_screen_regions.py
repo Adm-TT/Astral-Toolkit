@@ -146,3 +146,106 @@ def test_shipped_regions_equal_code_defaults():
     assert screen.SEARCH == SHIPPED["mining.search"]
     assert signals.CENTER_TAG == SHIPPED["mining.center_tag"]
     assert displayinfo.REGION == SHIPPED["nav.displayinfo"]
+
+
+def test_readers_follow_the_region_file(tmp_path, monkeypatch):
+    """在区域文件里改了，读屏代码就按新的取；文件里没有就用原来的值"""
+    from PIL import Image
+
+    from astral_toolkit.mining import screen
+    from astral_toolkit.navigation import displayinfo
+    from astral_toolkit.trade import inspector
+
+    W, H = 2560, 1440
+    regs = inspector.get_hover_regions(
+        (int(W * 0.8), H // 2), W
+    )  # 鼠标在右边：先找 50-70% 带
+    before = inspector.get_stage_regions(regs, W, H)
+    assert before[0][0] == (int(W * 0.5), int(H * 0.24), int(W * 0.7), int(H * 0.36))
+
+    entry = lambda box: [{"aspect": "16:9", "box": box, "kind": "read", "note": "测试"}]  # noqa: E731
+    _use(
+        tmp_path,
+        monkeypatch,
+        {
+            "version": 1,
+            "regions": {
+                "hover.band_50_70": entry([0.52, 0.0, 0.66, 1.0]),
+                "hover.title_rows": entry([0.0, 0.25, 1.0, 0.33]),
+                "mining.search": entry([0.6, 0.3, 0.9, 0.7]),
+                "nav.displayinfo": entry([0.7, 0.0, 1.0, 0.2]),
+            },
+        },
+    )
+    after = inspector.get_stage_regions(regs, W, H)
+    assert after[0][0] == (int(W * 0.52), int(H * 0.25), int(W * 0.66), int(H * 0.33))
+    assert inspector.region_box("50-70%@title", W, H) == after[0][0]
+    assert inspector.region_box("30-70%@body", W, H) == (
+        int(W * 0.3),
+        int(H * 0.24),
+        int(W * 0.7),
+        int(H * 0.7),
+    )
+    img = Image.new("RGB", (W, H))
+    assert screen._search(img) == (0.6, 0.3, 0.9, 0.7)
+    piece = displayinfo.crop(img)
+    assert piece.size == (int(W * 1.0) - int(W * 0.7), int(H * 0.2)) or piece.size == (
+        (int(W * 1.0) - int(W * 0.7)) * displayinfo.UPSCALE,
+        int(H * 0.2) * displayinfo.UPSCALE,
+    )
+
+
+def test_frac_survives_hand_broken_files(tmp_path, monkeypatch):
+    """区域文件被手改坏：读屏照常，用默认值，不抛（审查 11-09）"""
+    p = _use(tmp_path, monkeypatch)
+    for regions in (
+        {"x.y": 1},
+        {"x.y": [{"aspect": 16, "box": list(A)}]},
+        {"x.y": [{"aspect": ["16", "9"], "box": list(A)}]},
+        {
+            "x.y": [{"aspect": "16:9", "box": [0.5, 0.0, 0.5001, 1.0]}]
+        },  # 窄到裁出 0 像素
+        {"x.y": [{"aspect": "16:9", "box": "0,0,1,1"}]},
+    ):
+        p.write_text(json.dumps({"version": 1, "regions": regions}), encoding="utf-8")
+        assert sr.frac("x.y", D, (2560, 1440)) == D, regions
+
+
+def test_frac_ignores_exclude_and_far_aspects(tmp_path, monkeypatch):
+    _use(
+        tmp_path,
+        monkeypatch,
+        {
+            "version": 1,
+            "regions": {
+                "ex.y": [{"aspect": "16:9", "box": list(A), "kind": "exclude"}],
+                "wide.y": [{"aspect": "21:9", "box": list(B), "kind": "read"}],
+            },
+        },
+    )
+    assert sr.frac("ex.y", D, (2560, 1440)) == D  # 排除区不当要认的区域用
+    assert sr.frac("wide.y", D, (2560, 1440)) == D  # 只有 21:9 的：16:9 不借，用默认值
+    assert sr.frac("wide.y", D, (3440, 1440)) == B
+
+
+def test_read_failure_is_not_cached(tmp_path, monkeypatch):
+    p = _use(
+        tmp_path,
+        monkeypatch,
+        {
+            "version": 1,
+            "regions": {"x.y": [{"aspect": "16:9", "box": list(A), "kind": "read"}]},
+        },
+    )
+    real = type(p).read_text
+    calls = []
+
+    def flaky(self, *a, **k):
+        calls.append(1)
+        if len(calls) == 1:
+            raise PermissionError("被占用")
+        return real(self, *a, **k)
+
+    monkeypatch.setattr(type(p), "read_text", flaky)
+    assert sr.frac("x.y", D) == D  # 这次读不到
+    assert sr.frac("x.y", D) == A  # 下次照常读到，不是一直用默认值

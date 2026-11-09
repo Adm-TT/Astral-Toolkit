@@ -1,6 +1,7 @@
 """读屏开发工作台（tools/readlab）：统一接口、本机服务、批量报告。假图，不读真截图、不碰真实设置"""
 
 from pathlib import Path
+from typing import Any
 
 from PIL import Image
 
@@ -109,7 +110,7 @@ class _Srv:
         self.base = f"http://127.0.0.1:{self.httpd.server_address[1]}"
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
 
-    def call(self, method, path, body=None):
+    def call(self, method, path, body=None) -> tuple[int, Any]:
         data = None if body is None else _json.dumps(body).encode("utf-8")
         req = urllib.request.Request(self.base + path, data=data, method=method)
         req.add_header("Content-Type", "application/json")
@@ -221,6 +222,7 @@ def test_batch_progress_report_and_cancel(tmp_path, monkeypatch):
 
     monkeypatch.setattr(features, "run", slow)
     s = _Srv(tmp_path, monkeypatch, n=5)
+    st: Any = {}
     try:
         job = s.call("POST", "/api/batch", {"feature": "mining"})[1]["job"]
         for _ in range(100):

@@ -28,6 +28,10 @@ Frac = tuple[float, float, float, float]
 PATH = Path(__file__).resolve().parent.parent / "screen_regions.json"
 KINDS = ("read", "exclude")
 _ASPECT = re.compile(r"^(\d{1,3}):(\d{1,3})$")
+MIN_SIDE = 0.005  # 框至少这么宽、这么高（比例）：再窄裁出来是 0 像素，读屏会出错
+MAX_ASPECT_GAP = (
+    0.2  # 截图比例和条目比例差太多（|log 比|，16:9 对 21:9 是 0.29）就不借，用默认值
+)
 _NAMED = {"21:9": (64, 27)}  # 21:9 显示器实际是 64:27（3440×1440、2560×1080）
 
 _lock = threading.Lock()
@@ -49,7 +53,9 @@ def aspect_of(size: tuple[int, int]) -> str:
     return f"{w // g}:{h // g}"
 
 
-def _ratio(aspect: str) -> float | None:
+def _ratio(aspect: Any) -> float | None:
+    if not isinstance(aspect, str):
+        return None
     if aspect in _NAMED:
         aw, ah = _NAMED[aspect]
         return aw / ah
@@ -64,7 +70,7 @@ def _box_ok(box: Any) -> bool:
         return False
     if not all(isinstance(v, (int, float)) and 0.0 <= v <= 1.0 for v in box):
         return False
-    return box[0] < box[2] and box[1] < box[3]
+    return box[2] - box[0] >= MIN_SIDE and box[3] - box[1] >= MIN_SIDE
 
 
 def _entry_ok(e: Any) -> bool:
@@ -92,7 +98,11 @@ def load() -> dict:
         if not isinstance(data, dict) or not isinstance(data.get("regions"), dict):
             raise ValueError("格式不对")
         data = {"version": int(data.get("version", 0)), "regions": data["regions"]}
-    except (OSError, ValueError, TypeError):
+    except (
+        OSError
+    ):  # 偶尔读不到（被占用、正在替换）：这次用默认值，不记进缓存，下次再读
+        return {"version": 0, "regions": {}}
+    except (ValueError, TypeError):
         data = {"version": 0, "regions": {}}
     with _lock:
         _cache.update(key=key, data=data)
@@ -100,15 +110,27 @@ def load() -> dict:
 
 
 def frac(key: str, default: Frac, size: tuple[int, int] | None = None) -> Frac:
-    """区域（比例）：size 给了按截图宽高比挑最接近的一条，没给取第一条；找不到用 default"""
-    entries = [e for e in load()["regions"].get(key) or [] if _entry_ok(e)]
-    if not entries:
+    """要认的区域（比例）：size 给了按截图宽高比挑最接近的一条（差太多不借），没给取第一条；
+    找不到、文件被手改坏了，都用 default——读屏不能因为区域文件出错"""
+    try:
+        entries = load()["regions"].get(key)
+        entries = (
+            [e for e in entries if _entry_ok(e) and e.get("kind", "read") == "read"]
+            if isinstance(entries, list)
+            else []
+        )
+        if not entries:
+            return default
+        if size and size[0] and size[1]:
+            want = math.log(size[0] / size[1])
+            gap = lambda e: abs(math.log(_ratio(e["aspect"]) or 1.0) - want)  # noqa: E731
+            entries.sort(key=gap)
+            if gap(entries[0]) > MAX_ASPECT_GAP:
+                return default
+        l, t, r, b = (float(v) for v in entries[0]["box"])  # noqa: E741
+        return (l, t, r, b)
+    except Exception:
         return default
-    if size:
-        want = math.log(size[0] / size[1])
-        entries.sort(key=lambda e: abs(math.log(_ratio(e["aspect"]) or 1.0) - want))
-    l, t, r, b = (float(v) for v in entries[0]["box"])  # noqa: E741
-    return (l, t, r, b)
 
 
 def px(key: str, default: Frac, size: tuple[int, int]) -> tuple[int, int, int, int]:

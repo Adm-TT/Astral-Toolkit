@@ -18,6 +18,19 @@ _rec = None
 # 右边一直到屏幕边上（1.6.42）：16:10 屏幕（2560×1600）上鼹鼠炮塔的面板挤到了屏幕最右边，
 # 以前只找到 92% 宽，质量、抗性、不稳定性的数字正好在外面，只读到标签（2026-10-23 用户反馈）
 SEARCH = (0.55, 0.33, 1.0, 0.80)
+
+
+def search_frac(size=None):
+    """扫描面板找字的范围（比例）：区域文件 mining.search（读屏开发工作台里画），没有就用 SEARCH（2026-11-09）"""
+    from ..core import screen_regions
+
+    return screen_regions.frac("mining.search", SEARCH, size)
+
+
+def _search(img):
+    return search_frac(img.size)
+
+
 SEG_TARGET_PX = (
     16  # 切块识别时把字放大到约这么高（实测 2K 下 7px 字放大到 14px 效果最好）
 )
@@ -486,7 +499,7 @@ def find_panels(img):
     from .parse import rows
 
     LAST_PANEL.clear()
-    items = read_region_seg(img, SEARCH)
+    items = read_region_seg(img, _search(img))
     if not items:
         return []
     h = statistics.median(it[2] for it in items) or 10
@@ -564,7 +577,8 @@ def _note_panel(img, items):
     if not items:
         return
     W, H = img.size
-    ox, oy = int(SEARCH[0] * W), int(SEARCH[1] * H)
+    search = _search(img)  # 一次取定：区域文件中途被存也不会一半新一半旧
+    ox, oy = int(search[0] * W), int(search[1] * H)
     x0 = ox + min(i[3][0] for i in items)
     y0 = oy + min(i[3][1] for i in items)
     x1 = ox + max(i[3][2] for i in items)
@@ -657,26 +671,28 @@ def _window(img, box, h, below=10):
     """面板框往外扩一圈，作为下一次只读这一块的范围。下面多留一截：以前为了把货舱（矿袋）带上；矿袋 2026-11-08
     删了，范围没改（改了读进来的字就变，要重跑样本回归），读进来的货舱那几行由 _scan_part 丢掉"""
     W, H = img.size
+    search = _search(img)  # 一次取定：区域文件中途被存也不会一半新一半旧
     x0, y0, x1, y1 = box
     h = h or H * 0.009
     return (
-        max(int(SEARCH[0] * W), int(x0 - 3 * h)),
-        max(int(SEARCH[1] * H), int(y0 - 3 * h)),
+        max(int(search[0] * W), int(x0 - 3 * h)),
+        max(int(search[1] * H), int(y0 - 3 * h)),
         min(W, int(x1 + 3 * h)),
-        min(int(SEARCH[3] * H), int(y1 + below * h)),
+        min(int(search[3] * H), int(y1 + below * h)),
     )
 
 
 def _guess_window(img):
     """整片找没读全、但找到了面板的一部分（LAST_PANEL）：按面板大约 20 字宽、30 字高往外扩"""
     W, H = img.size
+    search = _search(img)  # 一次取定：区域文件中途被存也不会一半新一半旧
     x0, y0, x1, y1 = LAST_PANEL["box"]
     h = LAST_PANEL.get("h") or H * 0.009
     return (
-        max(int(SEARCH[0] * W), int(x0 - 3 * h)),
-        max(int(SEARCH[1] * H), int(y0 - 14 * h)),
+        max(int(search[0] * W), int(x0 - 3 * h)),
+        max(int(search[1] * H), int(y0 - 14 * h)),
         min(W, int(max(x1, x0 + 20 * h) + 3 * h)),
-        min(int(SEARCH[3] * H), int(y1 + 14 * h)),
+        min(int(search[3] * H), int(y1 + 14 * h)),
     )
 
 
@@ -694,7 +710,7 @@ def _locate(img, up=1.0):
     from PIL import Image
 
     W, H = img.size
-    l, t, r, b = SEARCH  # noqa: E741
+    l, t, r, b = _search(img)  # noqa: E741
     ox, oy, bottom_lim = int(l * W), int(t * H), int(b * H)
     crop = img.crop((ox, oy, int(r * W), bottom_lim))
     if up != 1:
@@ -784,13 +800,14 @@ def _use_det(img, r, cache=True):
 def _wider(img, win):
     """整块读没读全时再试一次的范围：往上、往右多放一些（面板右半边的品质、上面的标题被切在外面的时候）"""
     W, H = img.size
+    search = _search(img)  # 一次取定：区域文件中途被存也不会一半新一半旧
     x0, y0, x1, y1 = win
     w, h = x1 - x0, y1 - y0
     return (
-        max(int(SEARCH[0] * W), int(x0 - 0.1 * w)),
-        max(int(SEARCH[1] * H), int(y0 - 0.25 * h)),
+        max(int(search[0] * W), int(x0 - 0.1 * w)),
+        max(int(search[1] * H), int(y0 - 0.25 * h)),
         min(W, int(x1 + 0.8 * w)),
-        min(int(SEARCH[3] * H), int(y1 + 0.05 * h)),
+        min(int(search[3] * H), int(y1 + 0.05 * h)),
     )
 
 

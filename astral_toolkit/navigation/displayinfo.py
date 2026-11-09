@@ -21,6 +21,14 @@ REGION = (
 )  # 右上角：左、上、右、下（占屏幕比例）；只截用得到的几行，识别快一半
 UPSCALE = 2
 
+
+def _region(size):
+    """右上角调试信息的范围：区域文件 nav.displayinfo（读屏开发工作台里画），没有就用 REGION（2026-11-09）"""
+    from ..core import screen_regions
+
+    return screen_regions.frac("nav.displayinfo", REGION, size)
+
+
 _NUM = r"(-?\d[\d,]*\.?\d*)"
 POS = re.compile(
     rf"Zone:\s*(?P<zone>.+?)\s*P[o0]s:\s*{_NUM}\s*(?P<u1>km|m)\s*{_NUM}\s*(?P<u2>km|m)\s*{_NUM}\s*(?P<u3>km|m)",
@@ -208,7 +216,7 @@ def crop(img):
     from PIL import Image
 
     w, h = img.size
-    l, t, r, b = REGION  # noqa: E741
+    l, t, r, b = _region((w, h))  # noqa: E741
     piece = img.crop((int(w * l), int(h * t), int(w * r), int(h * b)))
     return piece.resize((piece.width * UPSCALE, piece.height * UPSCALE), Image.LANCZOS)
 
@@ -654,12 +662,16 @@ def read(img=None, allow_yield=True, diag=False):
     if img is None:  # 只截右上角这一块
         from ..core.capture import grab_region, game_area
 
-        screen_h = game_area()["height"]
-        piece = grab_region(REGION)
+        area = game_area()
+        screen_h = area["height"]
+        w = area.get("width")
+        piece = grab_region(
+            _region((w, screen_h) if w else None)
+        )  # 拿不到宽就用第一条（16:9）
     else:
         w, h = img.size
         screen_h = h
-        l, t, r, b = REGION  # noqa: E741
+        l, t, r, b = _region((w, h))  # noqa: E741
         piece = img.crop((int(w * l), int(h * t), int(w * r), int(h * b)))
     info = None
     from . import gridtext

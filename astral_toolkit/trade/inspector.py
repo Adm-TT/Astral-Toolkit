@@ -13,6 +13,7 @@ import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
+from ..core import screen_regions
 from .names import canonical, has_chinese, split_bilingual  # noqa: F401
 
 # 物品说明框识别区域配置：按鼠标横向位置自适应分级识别
@@ -86,6 +87,37 @@ HEIGHT_STAGES: Tuple[Tuple[float, float, str, bool], ...] = (
 )
 
 
+# 读屏开发工作台（2026-11-09）：上面这些区域可以在工作台里画，存进区域文件 screen_regions.json；
+# 运行时按截图尺寸从那里取，取不到用上面写死的值（两边初值逐位相同）。「鼠标在哪就挑哪条带」的规则还在 get_hover_regions
+_BAND_KEYS = {
+    "30-50%": "hover.band_30_50",
+    "50-70%": "hover.band_50_70",
+    "30-70%": "hover.band_30_70",
+    "中间": "hover.band_30_70",
+}
+_ROW_KEYS = {"title": "hover.title_rows", "body": "hover.body_rows"}
+
+
+def _band_lr(band: str, size: Tuple[int, int]) -> Tuple[float, float]:
+    """竖带的左右（比例）：区域文件里有就用它，没有用 HOVER_REGIONS"""
+    l, t, r, b = HOVER_REGIONS[band]  # noqa: E741
+    key = _BAND_KEYS.get(band)
+    if key:
+        l, _t, r, _b = screen_regions.frac(key, (l, t, r, b), size)  # noqa: E741
+    return l, r
+
+
+def _stage_rows(
+    stage: str, top: float, bottom: float, size: Tuple[int, int]
+) -> Tuple[float, float]:
+    """高度阶段的上下（比例）：标题带、说明框带从区域文件取，全高不变"""
+    key = _ROW_KEYS.get(stage)
+    if not key:
+        return top, bottom
+    _l, t, _r, b = screen_regions.frac(key, (0.0, top, 1.0, bottom), size)
+    return t, b
+
+
 def get_stage_regions(
     regions: List[Tuple[float, float, float, float, str]], width: int, height: int
 ) -> List[Tuple[Tuple[int, int, int, int], str, str, bool]]:
@@ -94,22 +126,24 @@ def get_stage_regions(
     regions：get_hover_regions() 的返回（只管左右，上下是全高）；这里把每个高度阶段都走一遍：
     先标题带（最省像素），再说明框主体，最后全高。每个阶段内宽度顺序不变（对侧条带 → 30%~70%）。
     标签形如 "30-50%@title"，日志里看得出停在哪一档。
+    band 名在 HOVER_REGIONS 里的，左右按区域文件取（传进来的 left/right 只当默认值）；
+    「中间」和 30-70% 共用区域 hover.band_30_70，改它也会改驾驶位保护的中间带。
     """
-    return [
-        (
-            (
+    size = (width, height)
+    out = []
+    for top, bottom, stage, native in HEIGHT_STAGES:
+        top, bottom = _stage_rows(stage, top, bottom, size)
+        for left, _band_top, right, _band_bottom, band in regions:
+            if band in HOVER_REGIONS:
+                left, right = _band_lr(band, size)
+            box = (
                 int(width * left),
                 int(height * top),
                 int(width * right),
                 int(height * bottom),
-            ),
-            f"{band}@{stage}",
-            stage,
-            native,
-        )
-        for top, bottom, stage, native in HEIGHT_STAGES
-        for left, _band_top, right, _band_bottom, band in regions
-    ]
+            )
+            out.append((box, f"{band}@{stage}", stage, native))
+    return out
 
 
 _STAGE_RANGE: Dict[str, Tuple[float, float]] = {
@@ -127,15 +161,16 @@ def region_box(
     认两种写法："30-50%@title"（带高度阶段）和旧的 "30-50%" / "整屏"（按全高算）。
     stage 给了就用它换掉标签里的阶段（标题带停下后按同一宽度条带补认说明框带用）。"""
     band, _sep, label_stage = (label or "").partition("@")
-    reg = HOVER_REGIONS.get(band)
-    y_range = _STAGE_RANGE.get(stage or label_stage or "full")
-    if reg is None or y_range is None:
+    stage_name = stage or label_stage or "full"
+    y_range = _STAGE_RANGE.get(stage_name)
+    if band not in HOVER_REGIONS or y_range is None:
         return None
-    y0, y1 = y_range
+    left, right = _band_lr(band, (width, height))
+    y0, y1 = _stage_rows(stage_name, y_range[0], y_range[1], (width, height))
     return (
-        int(width * reg[0]),
+        int(width * left),
         int(height * y0),
-        int(width * reg[2]),
+        int(width * right),
         int(height * y1),
     )
 
@@ -640,7 +675,7 @@ def _read_tooltip(img, cursor, whole_screen=True):
         return cand if cand is not None else last
     # 驾驶位保护：鼠标在屏幕中间、认过的区域里连说明框的样子（体积 / 制造商 / 物品类型…）都没有，
     # 多半是开着船按了 F8，不再整屏找（整屏一次 5~16 秒，2026-10-23 两位玩家在驾驶位上按 F8 都等了很久，CPU 也白占）
-    ml, _mt, mr, _mb = HOVER_REGIONS["中间"]
+    ml, mr = _band_lr("中间", (W, H))
     inside = cursor is None or (W * ml <= cursor[0] <= W * mr and 0 <= cursor[1] <= H)
     if inside and not anchor_seen:
         if dbg:

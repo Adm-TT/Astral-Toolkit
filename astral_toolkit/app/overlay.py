@@ -1203,7 +1203,7 @@ class Hud:
             self._mk_put(h2, None, 0, 0)
             return
         try:
-            from ..navigation.displayinfo import REGION
+            from ..navigation.displayinfo import _region
 
             left, top, w, h = data["area"]
             m = dict(data["proj"], label=data["label"])
@@ -1215,7 +1215,7 @@ class Hud:
             else:
                 px, py = edge_point(m.get("angle", 0), w, h, EDGE_MARGIN * scale)
             x, y = px - ax, py - ay
-            x, y = avoid_box(x, y, img.width, img.height, w, h, REGION)
+            x, y = avoid_box(x, y, img.width, img.height, w, h, _region((w, h)))
             self._mk_put(h1, img, left + x, top + y)
             ring = ring_image(m, scale, plate)
             self._mk_put(h2, ring, left + w / 2 - ring.width / 2, top + h * 0.72)
@@ -1267,7 +1267,7 @@ class Hud:
         （2026-10-28 用户反馈「读不到位置」，F10 截图里右上角整块是黑的）。盖到了就挪到它下面，和导航记号一样"""
         try:
             import ctypes
-            from ..navigation.displayinfo import REGION
+            from ..navigation.displayinfo import _region
 
             try:
                 from ..core.capture import game_area
@@ -1281,7 +1281,9 @@ class Hud:
                     ctypes.windll.user32.GetSystemMetrics(1),
                 )
             x, y = self._rect()
-            nx, ny = avoid_box(x - left, y - top, img.width, img.height, w, h, REGION)
+            nx, ny = avoid_box(
+                x - left, y - top, img.width, img.height, w, h, _region((w, h))
+            )
             if (nx, ny) != (x - left, y - top):
                 ctypes.windll.user32.SetWindowPos(
                     ctypes.c_void_p(HWND),
