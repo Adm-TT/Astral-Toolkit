@@ -9,7 +9,7 @@
 .venv\Scripts\python.exe -X utf8 -m tools.readlab --samples D:\某个样本目录 --port 8765 --no-browser
 ```
 
-不给 `--samples` 时用：`E:\Claude公主的书\项目资料\测试数据`、`tests\samples`、`tools\sample_sweep.py` 登记的截图来源（有的才用）。批量报告放在第一个样本根下的 `工作台报告\`。
+不给 `--samples` 时只用 `E:\Claude公主的书\项目资料\测试数据`（挑过的样本）；别的目录用 `--samples` 指定，私人截图文件夹不要放进来。批量报告放在第一个样本根下的 `工作台报告\`。
 
 ## 用
 

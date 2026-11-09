@@ -1,7 +1,7 @@
 """起读屏开发工作台：.venv\\Scripts\\python.exe -X utf8 -m tools.readlab [--samples 目录 ...] [--port 端口]
 
-不给 --samples 时用这些样本根（有的才用）：E:\\Claude公主的书\\项目资料\\测试数据、tests\\samples，
-以及 tools\\sample_sweep.py 里登记的截图来源。起好后自动打开浏览器；Ctrl+C 停。
+不给 --samples 时只用老大挑过的样本：E:\\Claude公主的书\\项目资料\\测试数据（11-09 老大：不要把 Windows 截图文件夹
+这些私人截图混进来）；要看别的目录用 --samples 指定。起好后自动打开浏览器；Ctrl+C 停。
 """
 
 from __future__ import annotations
@@ -18,20 +18,8 @@ DEFAULT_ROOTS = [Path(r"E:\Claude公主的书\项目资料\测试数据")]
 
 
 def default_roots() -> list[Path]:
-    roots = list(DEFAULT_ROOTS)
-    try:
-        from tools import sample_sweep
-
-        roots += [d for _label, d in sample_sweep.SOURCES]
-    except Exception:  # sample_sweep 改了结构也不影响开工作台
-        roots.append(ROOT / "tests" / "samples")
-    seen, out = set(), []
-    for r in roots:
-        key = str(r.resolve()).lower() if r.exists() else None
-        if key and key not in seen and r.is_dir():
-            seen.add(key)
-            out.append(r)
-    return out
+    """默认样本根：只用挑过的测试数据（有才用）"""
+    return [r for r in DEFAULT_ROOTS if r.is_dir()]
 
 
 def main(argv: list[str] | None = None) -> None:
