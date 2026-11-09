@@ -455,7 +455,7 @@ def _count_links(
                 pack = getter()
             except Exception:
                 pack = None
-            if pack:
+            if isinstance(pack, (tuple, list)) and len(pack) == 2:
                 lab, sysname = pack
                 hit = stockplaces.matched_place(lab, sysname or None)
                 if hit:

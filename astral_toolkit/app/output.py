@@ -16,7 +16,10 @@ from . import bus, hud_state, ui_stream
 def _hud_set(section, text, rich=None, activity=True):
     hud = hud_state._hud()
     if hud is not None:
-        hud.set(section, text, rich, activity=activity)
+        try:
+            hud.set(section, text, rich, activity=activity)
+        except TypeError:
+            hud.set(section, text, rich)
 
 
 def _note(section, text, secs=None):

@@ -109,34 +109,12 @@ def band_max_height(area_h: int) -> int:
     return max(1, int(round(area_h * BAND_H_MAX)))
 
 
-def band_size(area_w: int, area_h: int | None = None) -> tuple[int, int]:
-    """兼容旧调用：(宽, 最大高)；area_h 缺省时高占位 1。"""
-    w = band_width(area_w)
-    h = band_max_height(area_h) if area_h is not None else 1
-    return w, h
-
-
 def band_origin(area: dict) -> tuple[int, int]:
     """客户区字典 → 默认左上角屏幕坐标（左 30%、贴顶）"""
     return (
         int(area["left"] + area["width"] * BAND_X0),
         int(area["top"]),
     )
-
-
-def dock_top_xy(
-    area: dict, win_w: int, x_hint: int, *, di_left_frac: float = 0.66
-) -> tuple[int, int]:
-    """贴客户区顶边的屏幕坐标：Y=top；X 用 hint 夹在客户区内，盖住右上读屏区则左移。"""
-    left = int(area["left"])
-    top = int(area["top"])
-    gw = int(area["width"])
-    win_w = max(1, int(win_w))
-    x = max(left, min(int(x_hint), left + max(0, gw - win_w)))
-    di_l = left + int(gw * di_left_frac)
-    if x < di_l < x + win_w:
-        x = max(left, di_l - win_w)
-    return x, top
 
 
 def clamp_scroll_from_bottom(scroll: float, content_h: int, view_h: int) -> float:
@@ -1188,11 +1166,6 @@ class Hud:
 
     def sleep(self, seconds):
         time.sleep(seconds)
-
-    def scroll_by(self, delta: float):
-        """正文相对视口滚动（正数往上看更早内容）。任何线程可调；顶栏滚轮走队列。"""
-        if self.ok:
-            self._q.put(("scroll", float(delta)))
 
     # ---------------------------------------------------------------- 悬浮窗线程
     def _thread(self):

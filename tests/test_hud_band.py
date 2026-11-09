@@ -13,19 +13,6 @@ def test_band_width_height_and_origin():
     )
 
 
-def test_dock_top_xy_pins_top_and_dodges_di_left():
-    """贴顶：Y 永远是客户区 top；盖住右上读屏区时 X 左移"""
-    from astral_toolkit.app.overlay import dock_top_xy
-
-    area = {"left": 100, "top": 50, "width": 1920, "height": 1080}
-    # 不挡 DI：保持 hint，Y=50
-    assert dock_top_xy(area, 400, 200) == (200, 50)
-    # 挡 DI（左缘 66%）：往左让到 di_l - win_w
-    di_l = 100 + int(1920 * 0.66)
-    x, y = dock_top_xy(area, 768, di_l - 100)  # 右缘越过 di_l
-    assert y == 50 and x == di_l - 768
-
-
 def test_clamp_scroll_from_bottom():
     from astral_toolkit.app.overlay import clamp_scroll_from_bottom
 
@@ -128,13 +115,15 @@ def test_set_quiet_still_updates_text():
     """F6 轮询 activity=False：改字照旧；有文案时保持显示"""
     from astral_toolkit.app.overlay import Hud
 
+    import queue
+
     h = Hud.__new__(Hud)
     h.ok = False
     h.sections = {}
     h.rich = {}
     h.note_text = ""
     h._visible = False
-    h._q = None
+    h._q = queue.Queue()
 
     h.set("盘点", "盘点｜站")
     assert h._drawn() is True
