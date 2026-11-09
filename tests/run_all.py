@@ -151,6 +151,7 @@ MODULES = [
     "tests.test_nav_fps",
     "tests.test_count_session",
     "tests.test_count_read",
+    "tests.test_count_view",
     "tests.test_cell_grid",
     "tests.test_screen_regions",
     "tests.test_readlab",

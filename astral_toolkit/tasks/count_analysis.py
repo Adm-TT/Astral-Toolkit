@@ -52,6 +52,33 @@ def in_cell(box: Any, point: Any) -> bool:
     return cell_grid.inside(box, point)
 
 
+def spot(img: Any, cursor: Any, item: Any) -> Any:
+    """鼠标指的那一格在仓库里的身份（页、最左那列、占几列、内容里的纵向位置；trade/count_view.spot）；看不清是 None。
+    占几格按游戏数据（gamedata.items.grid_width）：数据包带占格信息才信，不带（旧数据包）当不知道、让它自己看格子"""
+    from ..trade import count_view, inspector
+
+    sp = count_view.spot(img, cursor, _width(item))
+    inspector._dbg(f"盘点格子身份：光标 {tuple(cursor)} {sp}")
+    return sp
+
+
+def _width(item: Any) -> Any:
+    en = (item or {}).get("en") or ""
+    try:
+        from ..gamedata import items
+
+        return items.grid_width(en) if en and items.has_grid() else None
+    except Exception:
+        return None
+
+
+def same_spot(a: Any, b: Any, height: int) -> Any:
+    """两个身份是不是同一格：True / False；有一边没认出页码是 None（交给格子框比较）"""
+    from ..trade import cell_grid, count_view
+
+    return count_view.same_spot(a, b, height * cell_grid.PITCH)
+
+
 def review(place: Any, items: Any) -> Any:
     """这轮看到的和账上对（tasks/count._count_review）"""
     from . import count

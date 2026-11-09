@@ -452,6 +452,11 @@ def test_grid_width_from_wiki_items(monkeypatch, tmp_path):
     assert items.grid_width("Odd Value") == 1  # 只认数字 2
     assert items.grid_width("Nope") is None
     assert items.grid_width("") is None
+    assert items.has_grid() is True
+    # 旧数据包：一件 g=2 都没有 → 盘点不能信「占 1 格」
+    _write_min_sources(tmp_path)
+    rebuild_if_needed()
+    assert items.has_grid() is False
 
 
 def test_rebuild_skips_when_unchanged(monkeypatch, tmp_path):

@@ -189,3 +189,10 @@ def grid_width(en: str, snap=None) -> int | None:
             "select max(g) from wiki_items where lower(n) = lower(?)", (en.strip(),)
         )
     return rows[0][0] if rows and rows[0][0] is not None else None
+
+
+def has_grid(snap=None) -> bool:
+    """这份数据包带不带占格信息（有哪怕一件 g=2）：旧数据包没有时，盘点不能信「占 1 格」，要自己看格子"""
+    with use(snap) as s:
+        rows = s.execute("select 1 from wiki_items where g = 2 limit 1")
+    return bool(rows)
