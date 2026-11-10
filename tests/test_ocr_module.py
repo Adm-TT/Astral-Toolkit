@@ -155,6 +155,44 @@ def test_engine_params_keys():
     assert gpu["EngineConfig.onnxruntime.use_dml"] is True
 
 
+def test_download_with_retry_recovers(monkeypatch):
+    """CDN 抖两下后第三次成功：不抛；退避用 sleep 假实现，不真等。"""
+    import logging
+    from astral_toolkit.ocr import runtime as OR
+
+    calls = {"n": 0}
+    slept = []
+
+    def flaky():
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise OSError("模拟断网")
+
+    monkeypatch.setattr(OR.time, "sleep", lambda s: slept.append(s))
+    OR._download_with_retry(flaky, log=logging.getLogger("test"), what="测下载")
+    assert calls["n"] == 3
+    assert slept == [2, 4]  # 2**1, 2**2；合计 < 30s 封顶
+
+
+def test_download_with_retry_exhausted(monkeypatch):
+    """三次都失败：带次数提示的 RuntimeError，根因链式保留。"""
+    import logging
+    from astral_toolkit.ocr import runtime as OR
+
+    def always_fail():
+        raise OSError("一直断")
+
+    monkeypatch.setattr(OR.time, "sleep", lambda s: None)
+    try:
+        OR._download_with_retry(
+            always_fail, log=logging.getLogger("test"), what="测下载"
+        )
+        raise AssertionError("应该抛 RuntimeError")
+    except RuntimeError as e:
+        assert "已试 3 次" in str(e)
+        assert isinstance(e.__cause__, OSError)
+
+
 def test_read_line_does_not_disable_detect(monkeypatch):
     """rapidocr 3.x 会把 use_det 写进引擎：read_line 之后 recognize 仍须能检测。"""
     import numpy as np

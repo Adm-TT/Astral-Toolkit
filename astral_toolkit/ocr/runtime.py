@@ -233,6 +233,39 @@ def rapidocr():
     return _engine
 
 
+# 模型下载：底层 DownloadFile 单次请求已有 timeout；外层再有限重试，避免 CDN 抖一下就整条安装失败
+_MODEL_DL_ATTEMPTS = 3
+_MODEL_DL_BACKOFF_CAP_S = 30.0  # 退避等待合计封顶（不含单次下载本身）
+
+
+def _download_with_retry(run, *, log, what: str) -> None:
+    """run() 失败则指数退避重试，最多 _MODEL_DL_ATTEMPTS 次；退避合计不超过约 30 秒。"""
+    last: Exception | None = None
+    waited = 0.0
+    for attempt in range(1, _MODEL_DL_ATTEMPTS + 1):
+        try:
+            run()
+            return
+        except Exception as e:
+            last = e
+            if attempt >= _MODEL_DL_ATTEMPTS:
+                break
+            delay = min(2**attempt, max(0.0, _MODEL_DL_BACKOFF_CAP_S - waited))
+            if delay <= 0:
+                break
+            log.warning(
+                "%s失败（第 %s/%s 次）：%s；%.0f 秒后重试",
+                what,
+                attempt,
+                _MODEL_DL_ATTEMPTS,
+                e,
+                delay,
+            )
+            time.sleep(delay)
+            waited += delay
+    raise RuntimeError(f"{what}失败（已试 {_MODEL_DL_ATTEMPTS} 次）：{last}") from last
+
+
 def ensure_models() -> None:
     """把 PP-OCRv6 tiny 的 det/rec onnx 下进 rapidocr/models（已存在则校验跳过）。
     打包和源码安装都要调，避免玩家第一次认字时联网。"""
@@ -262,16 +295,21 @@ def ensure_models() -> None:
         )
         url = info["model_dir"]
         dest = root / Path(url).name
-        DownloadFile.run(
-            DownloadFileInput(
-                file_url=url,
-                save_path=dest,
-                logger=logger,
-                sha256=info.get("SHA256"),
+        name = dest.name
+
+        def _one(url=url, dest=dest, sha=info.get("SHA256")):
+            DownloadFile.run(
+                DownloadFileInput(
+                    file_url=url,
+                    save_path=dest,
+                    logger=logger,
+                    sha256=sha,
+                )
             )
-        )
-        if not dest.is_file():
-            raise FileNotFoundError(f"OCR 模型未就绪：{dest}")
+            if not dest.is_file():
+                raise FileNotFoundError(f"OCR 模型未就绪：{dest}")
+
+        _download_with_retry(_one, log=logger, what=f"下载 OCR 模型 {name}")
 
 
 def warmup() -> None:
