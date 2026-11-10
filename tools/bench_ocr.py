@@ -52,7 +52,7 @@ def main():
     t = time.perf_counter()
     warmup()
     out.append(
-        f"- 识别引擎加载：{(time.perf_counter() - t) * 1000:.0f} ms（{ocr_device()}，显卡部分 {','.join(OR.GPU_PARTS) or '无'}）"
+        f"- 识别引擎加载：{(time.perf_counter() - t) * 1000:.0f} ms（{ocr_device()}，模型 {OR.OCR_VERSION}/{OR.MODEL_TYPE}，显卡={'整引擎 DirectML' if OR.rapidocr().gpu else '关'}）"
     )
     samples = sorted((ROOT / "测试数据" / "识别样本").glob("*.png"))[:3]
     if not samples:

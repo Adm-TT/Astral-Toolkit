@@ -156,10 +156,12 @@ def install():
     _pip("--upgrade", "pip", "-q")
     ok = _pip("mss", "pillow", "numpy")
     print("\n安装中文识别组件…")
-    ocr = _pip("rapidocr_onnxruntime") or _pip("rapidocr", "onnxruntime")
+    ocr = _pip("rapidocr")
     if sys.platform == "win32":
         print("配置 DirectML 显卡加速…")
         use_directml()
+    else:
+        ocr = bool(ocr and _pip("onnxruntime"))
     print()
     exe = None
     try:

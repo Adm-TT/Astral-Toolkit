@@ -44,11 +44,17 @@ class TestOcrDeviceSwitch(unittest.TestCase):
         mock_eng.text_det.session.get_providers.return_value = ["CPUExecutionProvider"]
         mock_mod = MagicMock()
         mock_mod.RapidOCR.return_value = mock_eng
+        mock_mod.EngineType = MagicMock()
+        mock_mod.ModelType = MagicMock(side_effect=lambda x: x)
+        mock_mod.OCRVersion = MagicMock(side_effect=lambda x: x)
 
         with (
-            patch.dict(sys.modules, {"rapidocr_onnxruntime": mock_mod}),
+            patch.dict(sys.modules, {"rapidocr": mock_mod}),
+            patch.object(OR, "_engine_params", return_value={}),
             patch.object(settings, "update") as mock_update,
         ):
+            # 新版探测路径：text_det.session.session.get_providers()
+            mock_eng.text_det.session.session = mock_eng.text_det.session
             dev = OR.set_ocr_device("cpu")
             self.assertEqual(dev, "CPU")
             mock_update.assert_called_with(ocr_device="cpu", always_use_gpu=False)
@@ -56,16 +62,22 @@ class TestOcrDeviceSwitch(unittest.TestCase):
     def test_set_ocr_device_gpu(self):
         mock_eng = MagicMock(spec=["text_det"])
         mock_eng.text_det = MagicMock(spec=["session"])
-        mock_eng.text_det.session.get_providers.return_value = [
+        mock_ort = MagicMock()
+        mock_ort.get_providers.return_value = [
             "DmlExecutionProvider",
             "CPUExecutionProvider",
         ]
+        mock_eng.text_det.session.session = mock_ort
         mock_mod = MagicMock()
         mock_mod.RapidOCR.return_value = mock_eng
+        mock_mod.EngineType = MagicMock()
+        mock_mod.ModelType = MagicMock(side_effect=lambda x: x)
+        mock_mod.OCRVersion = MagicMock(side_effect=lambda x: x)
 
         # 不受环境变量 DUBHE_OCR_CPU 和本机设置影响
         with (
-            patch.dict(sys.modules, {"rapidocr_onnxruntime": mock_mod}),
+            patch.dict(sys.modules, {"rapidocr": mock_mod}),
+            patch.object(OR, "_engine_params", return_value={}),
             patch.dict(os.environ, {"DUBHE_OCR_CPU": "0"}),
             patch.object(OR, "USE_GPU", True),
             patch.object(OR, "gpu_available", return_value=True),

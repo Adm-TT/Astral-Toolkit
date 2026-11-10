@@ -70,6 +70,54 @@ def _size(p):
     return sum(f.stat().st_size for f in Path(p).rglob("*") if f.is_file())
 
 
+def _ensure_ppocrv6_tiny_models():
+    """打包前把 PP-OCRv6 tiny 的 det/rec onnx 下进 rapidocr/models，再靠 --collect-data rapidocr 打进安装包。
+    wheel 默认只带 small；不预下的话玩家首次启动会去 ModelScope 联网（方案禁止）。"""
+    from rapidocr import ModelType, OCRVersion, RapidOCR
+    from rapidocr.inference_engine.base import FileInfo, InferSession
+    from rapidocr.utils.download_file import DownloadFile, DownloadFileInput
+    from rapidocr.utils.log import logger
+    from rapidocr.utils.typings import EngineType, TaskType
+
+    # 触发一次构造，拿到 model_root_dir（包内 models/）
+    eng = RapidOCR(
+        params={
+            "Global.use_cls": False,
+            "Det.ocr_version": OCRVersion.PPOCRV6,
+            "Det.model_type": ModelType.TINY,
+            "Rec.ocr_version": OCRVersion.PPOCRV6,
+            "Rec.model_type": ModelType.TINY,
+        }
+    )
+    root = Path(eng.cfg.Global.model_root_dir)
+    root.mkdir(parents=True, exist_ok=True)
+    for task in (TaskType.DET, TaskType.REC):
+        info = InferSession.get_model_url(
+            FileInfo(
+                EngineType.ONNXRUNTIME,
+                OCRVersion.PPOCRV6,
+                task,
+                eng.cfg.Det.lang_type
+                if task == TaskType.DET
+                else eng.cfg.Rec.lang_type,
+                ModelType.TINY,
+            )
+        )
+        url = info["model_dir"]
+        dest = root / Path(url).name
+        DownloadFile.run(
+            DownloadFileInput(
+                file_url=url,
+                save_path=dest,
+                logger=logger,
+                sha256=info.get("SHA256"),
+            )
+        )
+        if not dest.is_file():
+            raise SystemExit(f"❌ 打包需要的 OCR 模型没下到：{dest}")
+        print(f"OCR 模型就绪：{dest.name}（{dest.stat().st_size // 1024} KB）")
+
+
 def _version_file():
     """AT.exe 的文件说明写成 AstralToolkit：任务管理器里显示的就是它（老大 2026-11-09 定）"""
     from astral_toolkit.core.version import VERSION
@@ -124,6 +172,7 @@ def main():
     os.environ["PYTHONPATH"] = str(
         ROOT
     )  # PyInstaller 在单独的进程里找包，要让它也找得到 astral_toolkit
+    _ensure_ppocrv6_tiny_models()  # wheel 默认只带 small；tiny 必须事先下好再 --collect-data，玩家断网也能认字
     # astral_toolkit 自带的数据文件（网页界面、汉化对照、图标、字体……）和全部模块：逐个列出，不依赖 PyInstaller 自己去找
     # （第一次构建时 --collect-data astral_toolkit 报「not a package」，数据文件全漏了，2026-10-26）
     pkg = ROOT / "astral_toolkit"
@@ -159,7 +208,7 @@ def main():
         str(ROOT),
         *extra,
         "--collect-data",
-        "rapidocr_onnxruntime",
+        "rapidocr",
         "--collect-binaries",
         "onnxruntime",
         "--hidden-import",

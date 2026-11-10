@@ -120,7 +120,7 @@ def build():
     add("D-DIN 字体", [font] if font.is_file() else [])
     dejavu = ROOT / "astral_toolkit" / "fonts" / "LICENSE-DejaVu.txt"
     add("DejaVu Sans Mono 字体", [dejavu] if dejavu.is_file() else [])
-    # 安装包没附原文、许可证是 Apache-2.0 的（flatbuffers、rapidocr-onnxruntime；RapidOCR 的模型来自 PaddleOCR，也是 Apache-2.0）：
+    # 安装包没附原文、许可证是 Apache-2.0 的（flatbuffers、rapidocr；RapidOCR 的模型来自 PaddleOCR，也是 Apache-2.0）：
     # Apache-2.0 要求附全文，从环境里别的组件附带的 Apache 原文取一份
     apache = [
         f"{n} {v}"

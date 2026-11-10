@@ -6,6 +6,13 @@ import numpy as np
 from PIL import Image
 
 
+class _Out:
+    """模拟新版 rapidocr.RapidOCROutput"""
+
+    def __init__(self, boxes, txts, scores):
+        self.boxes, self.txts, self.scores = boxes, txts, scores
+
+
 class TestOcrModule(unittest.TestCase):
     def test_imports_and_exports(self):
         from astral_toolkit.ocr import (
@@ -56,11 +63,11 @@ class TestOcrModule(unittest.TestCase):
         from astral_toolkit.ocr import recognize, OcrToken
 
         mock_eng = MagicMock()
-        mock_eng.kind = "rapidocr_onnxruntime"
-        # 模拟 RapidOCR 返回: [([[10, 20], [110, 20], [110, 50], [10, 50]], "量子石", 0.95)]
-        mock_eng.return_value = (
-            [([[10, 20], [110, 20], [110, 50], [10, 50]], "量子石", 0.95)],
-            0.01,
+        mock_eng.kind = "rapidocr.main"
+        mock_eng.return_value = _Out(
+            [[[10, 20], [110, 20], [110, 50], [10, 50]]],
+            ["量子石"],
+            [0.95],
         )
 
         with patch("astral_toolkit.ocr.engine._get_engine", return_value=mock_eng):
@@ -73,12 +80,23 @@ class TestOcrModule(unittest.TestCase):
             self.assertEqual(tokens[0].confidence, 95.0)
             self.assertEqual(tokens[0].box, (15, 25, 100, 30))
 
+    def test_recognize_empty_boxes(self):
+        from astral_toolkit.ocr import recognize
+
+        mock_eng = MagicMock()
+        mock_eng.kind = "rapidocr.main"
+        mock_eng.return_value = _Out(None, None, None)
+
+        with patch("astral_toolkit.ocr.engine._get_engine", return_value=mock_eng):
+            tokens = recognize(Image.new("RGB", (40, 20)))
+            self.assertEqual(tokens, [])
+
     def test_read_line_with_pil_and_numpy(self):
         from astral_toolkit.ocr import read_line
 
         mock_eng = MagicMock()
-        mock_eng.kind = "rapidocr_onnxruntime"
-        mock_eng.return_value = ([("4,280", 0.98)], 0.005)
+        mock_eng.kind = "rapidocr.main"
+        mock_eng.return_value = _Out(None, ["4,280"], [0.98])
 
         with patch("astral_toolkit.ocr.engine._get_engine", return_value=mock_eng):
             # 1. 传入 PIL Image
@@ -97,12 +115,12 @@ class TestOcrModule(unittest.TestCase):
         from astral_toolkit.ocr import raw_detector, raw_recognizer
 
         mock_eng = MagicMock()
-        mock_eng.kind = "rapidocr_onnxruntime"
+        mock_eng.kind = "rapidocr.main"
 
         def _side_effect(*args, **kwargs):
             if kwargs.get("use_det") is False:
-                return ([("123", 0.99)], 0.005)
-            return ([([[0, 0], [10, 0], [10, 10], [0, 10]], "123", 0.99)], 0.01)
+                return _Out(None, ["123"], [0.99])
+            return _Out([[[0, 0], [10, 0], [10, 10], [0, 10]]], ["123"], [0.99])
 
         mock_eng.side_effect = _side_effect
 
@@ -119,3 +137,7 @@ class TestOcrModule(unittest.TestCase):
             t, c = rec(arr)
             self.assertEqual(t, "123")
             self.assertEqual(c, 0.99)
+
+
+if __name__ == "__main__":
+    unittest.main()
