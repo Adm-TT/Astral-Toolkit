@@ -2797,8 +2797,10 @@ _FS_B5_FIRST_ARG = {
         "_hints_near": "deps",
         "_save_here": "deps",
         "_start_here_watch": "deps",
+        "_here_step": "deps",
         "_coord_desc": "deps",
-        "_halo_watch": "deps",
+        "_halo_state": "deps",
+        "_halo_step": "deps",
     },
     "trade.py": {"nav_shop": "deps*"},
 }

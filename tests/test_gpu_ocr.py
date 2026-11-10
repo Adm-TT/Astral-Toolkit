@@ -297,8 +297,6 @@ def test_switch_device_reaches_every_caller(monkeypatch):
 
     made = _fake_engines(monkeypatch)
     monkeypatch.setattr(OE, "_engine", None)
-    monkeypatch.setattr(S, "_engine", None)
-    monkeypatch.setattr(S, "_rec", None)
     img, arr = Image.new("RGB", (16, 16)), np.zeros((16, 16, 3), dtype=np.uint8)
 
     def use_all():

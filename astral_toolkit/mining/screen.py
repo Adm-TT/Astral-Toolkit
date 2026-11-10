@@ -7,11 +7,20 @@
 
 import re
 
-# 复用统一 OCR 模块的底层检测与单行识别器
-from ..ocr import raw_detector as _ocr, raw_recognizer as _recognize
+# 识别走统一 OCR 包（ocr.detect / ocr.read_line）
+from ..ocr import detect as _detect, read_line as _read_line
 
-_engine = None
-_rec = None
+
+def _ocr():
+    """检测 + 识别：func(arr) -> [OcrQuad(四点, 文字, 把握 0~1)]（ocr.detect；采矿要四点看面板斜度）。
+    11-09 起走 ocr 包的统一入口，不再拿引擎原始格式；名字留着，测试按它换"""
+    return _detect
+
+
+def _recognize():
+    """单行识别：func(arr) -> (文字, 把握 0~1)（ocr.read_line，跳过检测）"""
+    return _read_line
+
 
 # 搜索区域：(左, 上, 右, 下)，按屏幕宽高的比例。驾驶位和炮塔位的面板位置不同，
 # 所以取一大块，再按文字聚类自动找出"扫描结果"和"货舱"两个面板。

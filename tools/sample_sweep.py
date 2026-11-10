@@ -1,7 +1,8 @@
 """稳定性测试：把电脑里所有截图样本过一遍 AT 的每个读屏功能，看会不会出错、认出了什么、花了多久
 
 用法（在项目根目录）：.venv\\Scripts\\python.exe -X utf8 tools\\sample_sweep.py [输出.md]
-  样本：tests\\samples、userdata\\shots\\{live,hover}（项目和「下载」里的天枢）、图片\\Screenshots、游戏 ScreenShots
+  样本：tests\\samples、userdata\\shots\\{live,hover}（项目和「下载」里的天枢）、项目资料\\测试数据（含子文件夹，不含工作台报告）、游戏 ScreenShots。
+  不扫 Windows 截图文件夹（老大 11-09 定：那里混着私人截图，游戏截图挑进 测试数据\\Windows截图挑选）
   每张图依次跑：扫描面板（screen.analyse）、雷达信号（signals.find_signatures）、物品说明框（_read_tooltip）、
   右上角调试信息（displayinfo）。只在本机跑，不上传任何图片。
   结果写到 测试数据\\稳定性测试_<时间>.md（汇总 + 每张图一行）和同名 .json（明细）
@@ -31,7 +32,7 @@ SOURCES = [
         "下载天枢·F8截图",
         HOME / "Downloads" / "Dubhe_1.6.2" / "userdata" / "shots" / "hover",
     ),
-    ("Windows 截图", HOME / "Pictures" / "Screenshots"),
+    ("测试数据", Path(r"E:\Claude公主的书\项目资料\测试数据")),
     ("游戏截图", Path(r"D:\StarCitizen\LIVE\ScreenShots")),
 ]
 EXT = {".png", ".jpg", ".jpeg"}
@@ -42,7 +43,11 @@ def files():
     for label, d in SOURCES:
         if not d.is_dir():
             continue
-        for p in sorted(d.iterdir()):
+        # 测试数据按子文件夹放（识别样本、盘点样本、历史截图…）：往下找；工作台报告里是画了框的缩略图，不要
+        files = d.rglob("*") if label == "测试数据" else d.iterdir()
+        for p in sorted(files):
+            if "工作台报告" in p.parts:
+                continue
             if p.suffix.lower() in EXT and p.stat().st_size > 10_000:
                 key = (p.name, p.stat().st_size)
                 if key in seen:  # 两个天枢里同一张图只跑一次

@@ -11,7 +11,9 @@ from astral_toolkit.contracts.blueprints import assign_keys
 from astral_toolkit.contracts.textkeys import blueprint_norm, blueprint_search_norm
 from astral_toolkit.core import i18n
 from astral_toolkit.crafting import crafting as C
-from astral_toolkit.crafting import itemstats
+from astral_toolkit.crafting import (
+    crafting as craft_data,
+)  # 成品属性取数据在这（11-09 删了 crafting/itemstats）
 from astral_toolkit.crafting import quality
 from astral_toolkit.crafting import reverse
 from astral_toolkit.gamedata import crafting as gd_crafting
@@ -286,8 +288,8 @@ def _install(monkeypatch):
     monkeypatch.setattr(gd_crafting, "for_item", for_item)
     monkeypatch.setattr(gd_crafting, "containing", containing)
     monkeypatch.setattr(gd_crafting, "using_material", using_material)
-    monkeypatch.setattr(itemstats, "item", _fake_item)
-    monkeypatch.setattr(itemstats, "version", _fake_version)
+    monkeypatch.setattr(craft_data, "_stat_item", _fake_item)
+    monkeypatch.setattr(craft_data, "_stats_version", _fake_version)
     monkeypatch.setattr(i18n, "gear_zh_of_item", _fake_gear_zh)
     monkeypatch.setattr(i18n, "mineral_zh", lambda en: MIN_ZH.get(en, en))
     monkeypatch.setattr(mining_data, "best_price", _fake_best_price)
@@ -1421,7 +1423,9 @@ def test_craft_browse_spec_tags_and_filters(monkeypatch):
         # 个人武器的子类型是 Small / Medium / Large：不能当成护甲的轻重
         "uuid-weapon": {**ITEMS["uuid-weapon"], "sub": "Medium"},
     }
-    monkeypatch.setattr(itemstats, "item", lambda u: extra.get(u) or _fake_item(u))
+    monkeypatch.setattr(
+        craft_data, "_stat_item", lambda u: extra.get(u) or _fake_item(u)
+    )
     try:
         laser = api.craft_browse(cat="vehiclegear/mininglaser")
         # 采矿激光器游戏里只写尺寸：等级、类别不写也不给下拉（审查 2026-11-08）

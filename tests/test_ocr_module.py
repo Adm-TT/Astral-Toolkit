@@ -12,8 +12,8 @@ class TestOcrModule(unittest.TestCase):
             OcrToken,
             recognize,
             read_line,
-            raw_detector,
-            raw_recognizer,
+            OcrQuad,
+            detect,
             warmup,
             set_ocr_device,
             ocr_device,
@@ -26,8 +26,9 @@ class TestOcrModule(unittest.TestCase):
         self.assertIs(OcrToken, DirectOcrToken)
         self.assertTrue(callable(recognize))
         self.assertTrue(callable(read_line))
-        self.assertTrue(callable(raw_detector))
-        self.assertTrue(callable(raw_recognizer))
+        self.assertTrue(callable(detect))
+        self.assertNotIn("raw_detector", __import__("astral_toolkit.ocr").ocr.__all__)
+        self.assertEqual(OcrQuad._fields, ("quad", "text", "conf"))
         self.assertTrue(callable(warmup))
         self.assertTrue(callable(set_ocr_device))
         self.assertTrue(callable(ocr_device))
@@ -93,8 +94,9 @@ class TestOcrModule(unittest.TestCase):
             self.assertEqual(txt2, "4,280")
             self.assertEqual(conf2, 0.98)
 
-    def test_raw_detector_and_recognizer(self):
-        from astral_toolkit.ocr import raw_detector, raw_recognizer
+    def test_detect_and_read_line(self):
+        """detect 给 OcrQuad（四点原样、把握 0~1）；read_line 走同一个引擎的单行识别（跳过检测）"""
+        from astral_toolkit.ocr import OcrQuad, detect, read_line
 
         mock_eng = MagicMock()
         mock_eng.kind = "rapidocr_onnxruntime"
@@ -102,20 +104,47 @@ class TestOcrModule(unittest.TestCase):
         def _side_effect(*args, **kwargs):
             if kwargs.get("use_det") is False:
                 return ([("123", 0.99)], 0.005)
-            return ([([[0, 0], [10, 0], [10, 10], [0, 10]], "123", 0.99)], 0.01)
+            return ([([[0, 0], [10, 0.5], [10, 10], [0, 10]], "123", 0.99)], 0.01)
 
         mock_eng.side_effect = _side_effect
 
         with patch("astral_toolkit.ocr.engine._get_engine", return_value=mock_eng):
-            det = raw_detector()
-            self.assertTrue(callable(det))
             arr = np.zeros((50, 50, 3), dtype=np.uint8)
-            res = det(arr)
+            res = detect(arr)
             self.assertEqual(len(res), 1)
-            self.assertEqual(res[0][1], "123")
+            self.assertIsInstance(res[0], OcrQuad)
+            quad, text, conf = res[0]
+            self.assertEqual((text, conf), ("123", 0.99))
+            self.assertEqual(quad[1], [10, 0.5])  # 浮点角点原样，采矿靠它算斜度
 
-            rec = raw_recognizer()
-            self.assertTrue(callable(rec))
-            t, c = rec(arr)
+            t, c = read_line(arr)
             self.assertEqual(t, "123")
             self.assertEqual(c, 0.99)
+
+    def test_no_text_both_engines(self):
+        """没字的图：旧引擎给 (None, 耗时)，3.x 给 boxes=None —— detect / recognize 都给空，不出错"""
+        from astral_toolkit.ocr import detect, recognize
+
+        arr = np.zeros((20, 20, 3), dtype=np.uint8)
+        old = MagicMock(return_value=(None, 0.01))
+        old.kind = "rapidocr_onnxruntime"
+        new = MagicMock(return_value=MagicMock(boxes=None, txts=(), scores=()))
+        new.kind = "rapidocr"
+        for eng in (old, new):
+            with patch("astral_toolkit.ocr.engine._get_engine", return_value=eng):
+                self.assertEqual(detect(arr), [])
+                self.assertEqual(recognize(arr), [])
+
+    def test_detect_rapidocr3_object(self):
+        """3.x 引擎给对象：boxes 是 numpy，转成列表四点"""
+        from astral_toolkit.ocr import detect
+
+        boxes = np.array([[[1.5, 2.0], [9.0, 2.5], [9.0, 8.0], [1.5, 8.0]]])
+        eng = MagicMock(
+            return_value=MagicMock(boxes=boxes, txts=("AB",), scores=(0.8,))
+        )
+        eng.kind = "rapidocr"
+        with patch("astral_toolkit.ocr.engine._get_engine", return_value=eng):
+            res = detect(np.zeros((20, 20, 3), dtype=np.uint8))
+        self.assertEqual(res[0].quad, [[1.5, 2.0], [9.0, 2.5], [9.0, 8.0], [1.5, 8.0]])
+        self.assertEqual((res[0].text, res[0].conf), ("AB", 0.8))
