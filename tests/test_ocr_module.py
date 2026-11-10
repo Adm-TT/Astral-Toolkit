@@ -5,6 +5,8 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 from PIL import Image
 
+from tests.minipytest import skip
+
 
 class _Out:
     """模拟新版 rapidocr.RapidOCROutput"""
@@ -137,6 +139,56 @@ class TestOcrModule(unittest.TestCase):
             t, c = rec(arr)
             self.assertEqual(t, "123")
             self.assertEqual(c, 0.99)
+
+
+def test_engine_params_keys():
+    """不 mock _engine_params：核对 PP-OCRv6 tiny 与 use_dml 键名"""
+    from astral_toolkit.ocr import runtime as OR
+
+    cpu = OR._engine_params(False)
+    assert cpu["Global.use_cls"] is False
+    assert cpu["Det.model_type"].value == "tiny"
+    assert cpu["Rec.model_type"].value == "tiny"
+    assert cpu["Det.ocr_version"].value == "PP-OCRv6"
+    assert "EngineConfig.onnxruntime.use_dml" not in cpu
+    gpu = OR._engine_params(True)
+    assert gpu["EngineConfig.onnxruntime.use_dml"] is True
+
+
+def test_read_line_does_not_disable_detect(monkeypatch):
+    """rapidocr 3.x 会把 use_det 写进引擎：read_line 之后 recognize 仍须能检测。"""
+    import numpy as np
+    from PIL import Image, ImageDraw
+    from astral_toolkit.ocr import runtime as OR
+    from astral_toolkit.ocr import engine as OE
+    from astral_toolkit import ocr as O
+
+    try:
+        import rapidocr  # noqa: F401
+    except ImportError:
+        skip("没有 rapidocr")
+
+    monkeypatch.setattr(OR, "USE_GPU", False)
+    monkeypatch.setattr(OR, "is_gpu_preferred", lambda: False)
+    monkeypatch.setattr(OR, "gpu_available", lambda: False)
+    monkeypatch.setattr(OR, "_engine", None)
+    monkeypatch.setattr(OR, "_cpu_fallback", False)
+    monkeypatch.setattr(OE, "_engine", None)
+
+    img = Image.new("RGB", (220, 64), color=(255, 255, 255))
+    ImageDraw.Draw(img).text((12, 18), "AT123", fill=(0, 0, 0))
+    before = O.recognize(img)
+    O.read_line(img)
+    after = O.recognize(img)
+    assert OR.rapidocr().eng.use_det is True
+    # 空白图可能两边都空；有字时 read_line 前后都应能检出（允许偶发空，但不可一边有一边无）
+    if before:
+        assert after, "read_line 之后 recognize 不应变成空结果"
+    # 强制走一次检测路径：人造高对比色块+字，至少引擎 use_det 保持 True
+    arr = np.zeros((80, 240, 3), dtype=np.uint8)
+    arr[:] = 255
+    O.recognize(arr)
+    assert OR.rapidocr().eng.use_det is True
 
 
 if __name__ == "__main__":

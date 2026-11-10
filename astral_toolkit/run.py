@@ -162,6 +162,15 @@ def install():
         use_directml()
     else:
         ocr = bool(ocr and _pip("onnxruntime"))
+    if ocr:
+        try:
+            from .ocr.runtime import ensure_models
+
+            print("下载 PP-OCRv6 tiny 识别模型（离线打包用；已存在则跳过）…")
+            ensure_models()
+        except Exception as e:
+            print(f"❌ 识别模型没下好：{e}")
+            ocr = False
     print()
     exe = None
     try:

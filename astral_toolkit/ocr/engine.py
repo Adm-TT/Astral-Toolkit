@@ -22,8 +22,6 @@ def _as_rows(result: Any) -> Sequence[Tuple[Any, str, float]]:
     """把 RapidOCR 返回值收成 [(quad, text, conf), ...]。空结果为 []。"""
     if result is None:
         return []
-    if isinstance(result, tuple):
-        return result[0] or []
     boxes = getattr(result, "boxes", None)
     if boxes is None:
         return []
@@ -50,9 +48,6 @@ def raw_recognizer() -> Callable[[np.ndarray], Tuple[str, float]]:
 
     def run(arr: np.ndarray) -> Tuple[str, float]:
         r = eng(arr, use_det=False, use_cls=False, use_rec=True)
-        if isinstance(r, tuple):
-            res = r[0] or []
-            return (res[0][0], float(res[0][1])) if res else ("", 0.0)
         txts = getattr(r, "txts", None)
         scores = getattr(r, "scores", None)
         if not txts:

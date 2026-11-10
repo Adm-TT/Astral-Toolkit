@@ -71,51 +71,14 @@ def _size(p):
 
 
 def _ensure_ppocrv6_tiny_models():
-    """打包前把 PP-OCRv6 tiny 的 det/rec onnx 下进 rapidocr/models，再靠 --collect-data rapidocr 打进安装包。
-    wheel 默认只带 small；不预下的话玩家首次启动会去 ModelScope 联网（方案禁止）。"""
-    from rapidocr import ModelType, OCRVersion, RapidOCR
-    from rapidocr.inference_engine.base import FileInfo, InferSession
-    from rapidocr.utils.download_file import DownloadFile, DownloadFileInput
-    from rapidocr.utils.log import logger
-    from rapidocr.utils.typings import EngineType, TaskType
+    """打包前把 PP-OCRv6 tiny 下进 rapidocr/models，再靠 --collect-data rapidocr 打进安装包。"""
+    from astral_toolkit.ocr import runtime as OR
 
-    # 触发一次构造，拿到 model_root_dir（包内 models/）
-    eng = RapidOCR(
-        params={
-            "Global.use_cls": False,
-            "Det.ocr_version": OCRVersion.PPOCRV6,
-            "Det.model_type": ModelType.TINY,
-            "Rec.ocr_version": OCRVersion.PPOCRV6,
-            "Rec.model_type": ModelType.TINY,
-        }
-    )
-    root = Path(eng.cfg.Global.model_root_dir)
-    root.mkdir(parents=True, exist_ok=True)
-    for task in (TaskType.DET, TaskType.REC):
-        info = InferSession.get_model_url(
-            FileInfo(
-                EngineType.ONNXRUNTIME,
-                OCRVersion.PPOCRV6,
-                task,
-                eng.cfg.Det.lang_type
-                if task == TaskType.DET
-                else eng.cfg.Rec.lang_type,
-                ModelType.TINY,
-            )
-        )
-        url = info["model_dir"]
-        dest = root / Path(url).name
-        DownloadFile.run(
-            DownloadFileInput(
-                file_url=url,
-                save_path=dest,
-                logger=logger,
-                sha256=info.get("SHA256"),
-            )
-        )
-        if not dest.is_file():
-            raise SystemExit(f"❌ 打包需要的 OCR 模型没下到：{dest}")
-        print(f"OCR 模型就绪：{dest.name}（{dest.stat().st_size // 1024} KB）")
+    try:
+        OR.ensure_models()
+    except Exception as e:
+        raise SystemExit(f"❌ 打包需要的 OCR 模型没下好：{e}") from e
+    print(f"OCR 模型就绪：{OR.OCR_VERSION}/{OR.MODEL_TYPE}")
 
 
 def _version_file():

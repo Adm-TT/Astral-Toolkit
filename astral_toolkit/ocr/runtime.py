@@ -55,14 +55,11 @@ def is_gpu_preferred():
 
 
 def _ort_session(eng):
-    """从 RapidOCR 取出底层 InferenceSession（新版 text_det.session.session；懒加载未就绪则 None）"""
+    """从 RapidOCR 取出底层 InferenceSession（text_det.session.session；懒加载未就绪则 None）"""
     td = getattr(eng, "text_det", None)
     if td is None:
         return None
     wrap = getattr(td, "session", None)
-    if wrap is None:
-        infer = getattr(td, "infer", None)
-        wrap = getattr(infer, "session", None) if infer is not None else None
     if wrap is None:
         return None
     return getattr(wrap, "session", wrap)
@@ -116,6 +113,12 @@ class _Locked:
         with self.lock:
             self.eng, self.kind, self.gpu = eng, type(eng).__module__, gpu
 
+    def _call_eng(self, a, kw):
+        # rapidocr 3.x 的 use_det/use_cls/use_rec 会写进引擎状态、调用结束不还原；
+        # 每次都显式带默认，调用方要关检测（read_line）再覆盖，避免认完一行后整段识别永远空结果
+        call_kw = {"use_det": True, "use_cls": False, "use_rec": True, **kw}
+        return self.eng(*a, **call_kw)
+
     def _infer(self, a, kw, native):
         td = getattr(self.eng, "text_det", None)
         if native and td is None:
@@ -127,11 +130,11 @@ class _Locked:
                     pass
             td = getattr(self.eng, "text_det", None)
         if not native or td is None or not hasattr(td, "limit_side_len") or not a:
-            return self.eng(*a, **kw)
+            return self._call_eng(a, kw)
         old = (td.limit_side_len, td.limit_type)
         try:
             td.limit_type, td.limit_side_len = "max", max(a[0].shape[:2])
-            return self.eng(*a, **kw)
+            return self._call_eng(a, kw)
         finally:
             td.limit_side_len, td.limit_type = old
 
@@ -230,9 +233,54 @@ def rapidocr():
     return _engine
 
 
+def ensure_models() -> None:
+    """把 PP-OCRv6 tiny 的 det/rec onnx 下进 rapidocr/models（已存在则校验跳过）。
+    打包和源码安装都要调，避免玩家第一次认字时联网。"""
+    from pathlib import Path
+
+    from rapidocr import ModelType, OCRVersion, RapidOCR
+    from rapidocr.inference_engine.base import FileInfo, InferSession
+    from rapidocr.utils.download_file import DownloadFile, DownloadFileInput
+    from rapidocr.utils.log import logger
+    from rapidocr.utils.typings import EngineType, TaskType
+
+    eng = RapidOCR(params=_engine_params(False))
+    root = Path(eng.cfg.Global.model_root_dir)
+    root.mkdir(parents=True, exist_ok=True)
+    for task, lang in (
+        (TaskType.DET, eng.cfg.Det.lang_type),
+        (TaskType.REC, eng.cfg.Rec.lang_type),
+    ):
+        info = InferSession.get_model_url(
+            FileInfo(
+                EngineType.ONNXRUNTIME,
+                OCRVersion(OCR_VERSION),
+                task,
+                lang,
+                ModelType(MODEL_TYPE),
+            )
+        )
+        url = info["model_dir"]
+        dest = root / Path(url).name
+        DownloadFile.run(
+            DownloadFileInput(
+                file_url=url,
+                save_path=dest,
+                logger=logger,
+                sha256=info.get("SHA256"),
+            )
+        )
+        if not dest.is_file():
+            raise FileNotFoundError(f"OCR 模型未就绪：{dest}")
+
+
 def warmup() -> None:
-    """启动时预加载识别引擎。不返回引擎对象。"""
-    rapidocr()
+    """启动时预加载识别引擎和 det/rec 模型。不返回引擎对象。"""
+    locked = rapidocr()
+    for name in ("_load_det_model", "_load_rec_model"):
+        load = getattr(locked.eng, name, None)
+        if callable(load):
+            load()
 
 
 def set_ocr_device(target):
