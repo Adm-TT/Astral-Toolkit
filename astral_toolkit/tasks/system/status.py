@@ -179,7 +179,7 @@ def _system_info():
 
         # onnxruntime 的显卡版包名是 onnxruntime-directml：哪个装了写哪个
         names = (
-            "rapidocr_onnxruntime",
+            "rapidocr",
             "onnxruntime",
             "onnxruntime-directml",
             "numpy",
