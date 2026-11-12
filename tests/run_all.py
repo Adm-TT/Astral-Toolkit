@@ -122,6 +122,7 @@ MODULES = [
     "tests.test_mining_inputs",
     "tests.test_mining_analysis",
     "tests.test_mining_presenter",
+    "tests.test_mining_feedback",
     "tests.test_gamedata_b4",
     "tests.test_gamedata_b6",
     "tests.test_gamedata_b5",
@@ -137,6 +138,7 @@ MODULES = [
     "tests.test_catalog_search",
     "tests.test_catalog_shops",
     "tests.test_catalog_acquire",
+    "tests.test_catalog_itemstats",
     "tests.test_catalog_loot",
     "tests.test_catalog_presenter",
     "tests.test_catalog_usecases",
@@ -150,6 +152,12 @@ MODULES = [
     "tests.test_pos_service",
     "tests.test_nav_fps",
     "tests.test_count_session",
+    "tests.test_count_read",
+    "tests.test_count_view",
+    "tests.test_cell_grid",
+    "tests.test_screen_regions",
+    "tests.test_readlab",
+    "tests.test_stock_count_fixes",
 ]
 
 if __name__ == "__main__":

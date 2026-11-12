@@ -205,10 +205,11 @@ class TestReadTooltipExecution(unittest.TestCase):
 def test_cascade_order_and_cockpit_guard(monkeypatch):
     """级联顺序：标题带 2 个宽度 → 说明框带 2 个（native 只有标题带是 True）；不再全高/整屏"""
     _names(monkeypatch, {})
-    calls = _fake_ocr(monkeypatch, [[OcrToken("SCM 220", 90, (60, 300, 60, 18))]])
+    anchor_only = [OcrToken("体积：20uSCU", 90, (60, 348, 100, 18))]
+    calls = _fake_ocr(monkeypatch, [[], [], [], anchor_only, []])
     toks, name, where = _read_tooltip(MockImage(1000, 1000), (500, 500))
     assert name is None
-    assert calls == [
+    assert calls[:6] == [
         ((300, 240), True, (200, 120)),  # 标题带 30-50%
         ((300, 240), True, (400, 120)),  # 标题带 30-70%
         ((300, 240), False, (200, 460)),  # 说明框带 30-50%

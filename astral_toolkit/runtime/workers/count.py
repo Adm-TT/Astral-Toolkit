@@ -4,7 +4,7 @@
 读光标、认物品、记格子、出新格 HUD、收尾时算对账。
 
 目录迁移 R5（2026-11-07）：外面的东西都由 bootstrap 接进来，本模块不再经 _T / _H 动态去 tasks、app 取——
-一轮要用的分析（analysis：光标在截图上的哪儿、认鼠标指着的物品、收尾时和账上对；tasks/count_analysis 原样转给
+一轮要用的分析（analysis：光标在截图上的哪儿、认鼠标指着的物品、鼠标所在格的框、收尾时和账上对；tasks/count_analysis 原样转给
 trade/inspector、tasks/count）、悬浮窗文字（views：app/presenters/count）、外面的东西（CountLinks：读光标、抓图、
 游戏在不在前台、热键名、调试图目录、开始时在哪个地点、悬浮窗短提示、正在退出时不让开始）。
 """
@@ -15,7 +15,7 @@ import sys
 import threading
 import traceback
 from dataclasses import dataclass, field
-from typing import Any, Callable, Protocol
+from typing import Any, Callable, NamedTuple, Protocol
 
 from ..results import ResultStore
 from ..session import SessionLoop, StopInfo, Tick
@@ -34,6 +34,22 @@ class CountAnalysis(Protocol):
         """鼠标指着的物品：{zh, en, quality, qty, unit, sure, craft}；认不出是 None"""
         ...
 
+    def cell_box(self, img: Any, cursor: Any) -> Any:
+        """鼠标所在物品格的框 (左, 上, 右, 下)；找不到是 None"""
+        ...
+
+    def same_cell(self, a: Any, b: Any) -> bool:
+        """两个格子框是不是同一格"""
+        ...
+
+    def in_cell(self, box: Any, point: Any) -> bool:
+        """这一点在不在这个格子框里"""
+        ...
+
+    def in_gap(self, img: Any, cursor: Any) -> bool:
+        """鼠标是不是停在两格之间的缝上"""
+        ...
+
     def review(self, place: Any, items: Any) -> Any:
         """这轮看到的和账上对：{rows, missing, ...}"""
         ...
@@ -45,6 +61,8 @@ class CountViews:
 
     # 悬浮窗里的盘点文字：(地点, 这轮记下的物品) → 文字
     hud_text: Callable[[Any, Any], str]
+    # 每认出一格，运行日志里记的那一行：(这一格认出的物品) → 文字
+    item_line: Callable[[Any], str]
 
 
 @dataclass(frozen=True)
@@ -79,17 +97,32 @@ def _key(r):  # 制造出来的同名东西，各槽品质不一样就分开记
     )
 
 
+class _Cell(NamedTuple):
+    """算过的一格：物品、数量、格子框（找不到是 None）、认到时光标在截图上的位置、
+    在仓库里的身份（页 / 列 / 占几列 / 内容纵向位置，看不清是 None；11-09 加，滚动、翻页后也认得出是同一格）"""
+
+    key: Any
+    qty: Any
+    box: Any
+    x: int
+    y: int
+    spot: Any = None
+
+
 @dataclass
 class _CountCtx:
     """一次盘点的全部可变状态：线程重启也换一份新的"""
 
     items: dict = field(default_factory=dict)
-    cells: set = field(default_factory=set)
+    # 已经算过的格（_Cell）
+    cells: list = field(default_factory=list)
     prev_pos: tuple[int, int] | None = None
     still_since: float = 0.0
     done_pos: tuple[int, int] | None = None
     tries: int = 0
     logged: str | None = None
+    box_logged: str | None = None  # 找格子框出错，同一种只记一次（和认物品出错分开记）
+    spot_logged: str | None = None  # 算格子身份出错，同一种只记一次
 
 
 class _CountWorker:
@@ -173,17 +206,47 @@ class _CountWorker:
         ctx.done_pos, ctx.tries = pos, 0
         # 同一格重复认到也算「看到」，要在去重之前刷新 60 秒计时
         seen = {"item": now}
-        W, H = img.size
-        cell = (
+        # 同一种东西（名字、品质、数量都一样）挪进另一格才算新的一格（老大 11-09）：
+        # 先在截图上找出鼠标所在那一格的框，和算过的同样东西的框重叠超过一半就是同一格又认了一次。
+        # 停在两格之间的缝上的那次直接不算（下面）。只有一边找到框（悬浮窗涂黑了那块）：看另一边的停点在不在这个框里；
+        # 两边都没框才退回看距离：横竖都不到 0.045 屏高（约 0.45 格）算同一格——光看距离分不全
+        # （同一格里挪得远会多算），所以只当最后的后备。方案：计划\盘点重设计_找格子框_1109.md
+        near = img.size[1] * 0.045
+        box = self._box(session, ctx, img, cursor)
+        if box is None and self._gap(img, cursor):
+            # 停在两格之间的缝上：分不清认出来的是哪一格，这次不算，等鼠标停进格子里（老大 11-09 实测重复算一格）
+            return Tick(0.0, seen)
+        cell = _Cell(
             _key(r),
             r["qty"],
-            round(cursor[0] / (W * 0.065)),
-            round(cursor[1] / (H * 0.11)),
+            box,
+            cursor[0],
+            cursor[1],
+            self._spot(session, ctx, img, cursor, r),
         )
-        if cell in ctx.cells:
+
+        def same(c):
+            if (c.key, c.qty) != (cell.key, cell.qty):
+                return False
+            # 两边都有仓库里的身份、页码也都认出来了：按身份比（滚动、翻页都不怕）；比不了再看框和距离
+            if c.spot is not None and cell.spot is not None:
+                hit = self._same_spot(c.spot, cell.spot, img.size[1])
+                if hit is not None:
+                    return hit
+            if c.box and cell.box:
+                return self._an.same_cell(c.box, cell.box)
+            if c.box or cell.box:
+                return self._an.in_cell(
+                    c.box or cell.box, (cell.x, cell.y) if c.box else (c.x, c.y)
+                )
+            return abs(c.x - cell.x) <= near and abs(c.y - cell.y) <= near
+
+        if any(same(c) for c in ctx.cells):
             return Tick(0.0, seen)
 
-        ctx.cells.add(cell)
+        ctx.cells.append(cell)
+        # 带锁的格子是「已停用」（老大 11-09）：照算，记下有几格是停用的，悬浮窗、日志、对账里标出来
+        off = self._locked(img, cursor)
         v = ctx.items.setdefault(
             _key(r),
             {
@@ -198,6 +261,8 @@ class _CountWorker:
         )
         v["qty"] = round(v["qty"] + r["qty"], 6)
         v["cells"] += 1
+        if off:
+            v["disabled"] = v.get("disabled", 0) + 1
         # activity=False：轮询改字不刷新悬浮窗 30 秒空闲计时，也不把已隐藏的再弹出来
         self.loop.commit(
             session,
@@ -207,8 +272,69 @@ class _CountWorker:
                 self._views.hud_text(session.payload, ctx.items),
                 False,
             ),
+            (
+                "log",
+                self._views.item_line({**r, "disabled": True} if off else r),
+                "COUNT",
+                "INFO",
+            ),
         )
         return Tick(0.0, seen)
+
+    def _box(self, session: Any, ctx: _CountCtx, img: Any, cursor: Any) -> Any:
+        """鼠标所在格的框；找框出错当找不到（退回别的判断，盘点不能停），同一种错日志里只记一次"""
+        try:
+            return self._an.cell_box(img, cursor)
+        except Exception as e:
+            if repr(e) != ctx.box_logged:
+                ctx.box_logged = repr(e)
+                self.loop.commit(
+                    session, ("log", f"盘点找格子框出错：{e!r}", "COUNT", "ERROR")
+                )
+            return None
+
+    def _spot(
+        self, session: Any, ctx: _CountCtx, img: Any, cursor: Any, item: Any
+    ) -> Any:
+        """这一格在仓库里的身份；分析里没有这一项（旧的测试替身）或出错 → None（退回框和距离），同一种错只记一次"""
+        fn = getattr(self._an, "spot", None)
+        if fn is None:
+            return None
+        try:
+            return fn(img, cursor, item)
+        except Exception as e:
+            if repr(e) != ctx.spot_logged:
+                ctx.spot_logged = repr(e)
+                self.loop.commit(
+                    session, ("log", f"盘点算格子身份出错：{e!r}", "COUNT", "ERROR")
+                )
+            return None
+
+    def _locked(self, img: Any, cursor: Any) -> bool:
+        """这一格带不带锁；分析里没有这一项或出错当不带（照常算）"""
+        fn = getattr(self._an, "locked", None)
+        if fn is None:
+            return False
+        try:
+            return bool(fn(img, cursor))
+        except Exception:
+            return False
+
+    def _same_spot(self, a: Any, b: Any, height: int) -> bool | None:
+        fn = getattr(self._an, "same_spot", None)
+        if fn is None:
+            return None
+        try:
+            return fn(a, b, height)
+        except Exception:
+            return None
+
+    def _gap(self, img: Any, cursor: Any) -> bool:
+        """停在缝上吗；判断出错当不是（照常算，错误 _box 已经记过一次）"""
+        try:
+            return bool(self._an.in_gap(img, cursor))
+        except Exception:
+            return False
 
     def on_pause(self, session: Any, ctx: _CountCtx) -> list[tuple[Any, ...]]:
         return []
@@ -328,23 +454,30 @@ class _Count:
     def take_review(self):
         return self.loop.shared_take(REVIEW)
 
+    def publish_review(self, *, restore=None, clear=False):
+        self.loop.shared_publish(
+            REVIEW, "count", "review", restore=restore, clear=clear
+        )
+
     def hotkey(self):
         return self._worker.hotkey()
 
-    def start(self):
+    def start(self, place=""):
         refused = self._links.refuse()
         if refused:
             return refused
         with self._start_lock:
             if not self._enabled or self.running():
                 return {"running": self.running()}
-            place = self._links.place_now()
+            place = place or self._links.place_now()
             if not place:
                 self._links.note(
-                    "盘点",
-                    "盘点：位置不可靠｜先 /showlocation 或开一次库存",
+                    "盘点", "盘点：当前位置未知｜请到 AT 库存页选择盘点地点"
                 )
-                return {"error": "位置不可靠：先 /showlocation 或在游戏中打开一次库存"}
+                return {
+                    "error": "当前位置未知：请到 AT 库存页选择盘点地点，或在游戏中打开一次库存",
+                    "need_place": True,
+                }
             sid = self.loop.start(place)
             if sid is None:
                 return {"running": self.running()}

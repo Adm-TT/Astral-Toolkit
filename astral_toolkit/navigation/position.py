@@ -9,6 +9,7 @@ import json
 import math
 from functools import lru_cache
 import re
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -62,13 +63,23 @@ def shop_point(fields):
         if base:
             iname = base["i"]
             pm = re.fullmatch(r"(?i)pyro(\d)", iname)
-            p = find_point(
-                internal=f"P{pm.group(1)}_L{m.group(1)}"
-                if pm
-                else f"{iname}_L{m.group(1)}"
-            )
-            if p:
-                return p
+            # 斯坦顿的星球现在叫 OOC_Stanton_3_ArcCorp，它的拉格朗日点叫 OOC_Stanton3_L4（老数据 Stanton3、Stanton3_L4）：
+            # 以前只按「星球内部名_L4」找，斯坦顿的拉格朗日站商店算远近时被放到了星球中心（2026-11-07 跟着斯坦顿地点
+            # 一起修）。新旧两种叫法都试，星球和拉格朗日点叫法不一样也找得到；两种都有先认老的（和 from_code 一样）
+            sm = re.match(r"(?i)(?:OOC_)?Stanton_?(\d)(?:_|$)", iname)
+            if pm:
+                tries = [f"P{pm.group(1)}_L{m.group(1)}"]
+            elif sm:
+                tries = [
+                    f"Stanton{sm.group(1)}_L{m.group(1)}",
+                    f"OOC_Stanton{sm.group(1)}_L{m.group(1)}",
+                ]
+            else:
+                tries = [f"{iname}_L{m.group(1)}"]
+            for internal in tries:
+                p = find_point(internal=internal)
+                if p:
+                    return p
     for name in (planet, station, system and system + " Star"):
         if name:
             p = find_point(name=name)
@@ -78,22 +89,99 @@ def shop_point(fields):
 
 
 def from_code(code):
-    """日志里的地点代码 → 星图点"""
+    """日志里的地点代码 → 星图点。
+    斯坦顿的星图内部名改过：星球 / 卫星现在叫 OOC_Stanton_4_Microtech、OOC_Stanton_1b_Aberdeen，拉格朗日点叫
+    OOC_Stanton1_L1；日志里还是旧代码（Stanton4_NewBabbage、RR_HUR_L1）。先按旧内部名找（老数据），找不到再按现在的
+    叫法找——以前只按旧名找，斯坦顿全对不上：物品查询不按远近排、盘点认不出地点（2026-11-07 老大在新巴贝奇发现）。
+    先按旧内部名找的几步（拉格朗日站、近轨道站、星球 / 卫星，加上 shop_point 里拉格朗日点那一步）只为老数据和测试里的
+    假星图留着：确认星图数据里斯坦顿都是 OOC_ 叫法、测试的假星图（test_tools_catalog 的 POINTS 等）改成新叫法以后一起删
+    （待做记着）。同一批补上老大日志里以前就认不出的：行星近轨道站 RR_HUR_LEO（星图的点里没有站，算星球；派罗的
+    RR_P3_LEO 也是）、JUMP 表里没有的跳跃点（RR_JP_StantonMagnus、RR_JP_NyxCastra）、列夫斯基 Nyx_Levski
+    （以前先按 Nyx 找，找不到直接给 None；现在先认列夫斯基）"""
     m = re.match(r"RR_(ARC|HUR|CRU|MIC)_L(\d)", code)
     if m:
-        return find_point(internal=f"{PLANET_CODE[m.group(1)]}_L{m.group(2)}")
+        old = f"{PLANET_CODE[m.group(1)]}_L{m.group(2)}"
+        return find_point(internal=old) or find_point(internal="OOC_" + old)
+    m = re.match(r"RR_(ARC|HUR|CRU|MIC|P\d)_LEO", code)
+    if m:  # 行星近轨道站：星图的点里没有站，算星球（派罗的按 Pyro3 找，星图里叫 pyro3）
+        k = m.group(1)
+        if k.startswith("P"):
+            return find_point(internal=f"Pyro{k[1:]}")
+        body = PLANET_CODE[k]
+        return find_point(internal=body) or _ooc_body(body)
     m = re.match(r"RR_P(\d)_L(\d)", code)
     if m:
         return find_point(internal=f"P{m.group(1)}_L{m.group(2)}")
     m = re.match(r"RR_JP_(\w+)", code)
-    if m and m.group(1) in JUMP:
-        return find_point(name=JUMP[m.group(1)])
-    m = re.match(r"(Stanton\d[a-z]?|Pyro\d[a-z]?|Nyx\d?)", code, re.I)
     if m:
-        return find_point(internal=m.group(1))
+        return _jump_point(m.group(1))
     if code.startswith("Delamar") or "Levski" in code:
         return find_point(name="Delamar")
+    m = re.match(r"(Stanton\d[a-z]?|Pyro\d[a-z]?|Nyx\d?)", code, re.I)
+    if m:
+        return find_point(internal=m.group(1)) or _ooc_body(m.group(1))
     return None
+
+
+def _jump_point(key):
+    """日志里跳跃点那段（StantonPyro、StantonMagnus、NyxCastra）→ 星图里的跳跃点：JUMP 表里有的先按表里的名字找；
+    表里没有、或者按名字找不到的，按两个星系名拼现在的内部名找（OOC_JumpPoint_stanton_magnus、jumppoint_nyx_castra）；
+    都对不上给 None"""
+    p = find_point(name=JUMP[key]) if key in JUMP else None
+    if p:
+        return p
+    ab = _jump_parts(key)
+    if not ab:
+        return None
+    a, b = (x.lower() for x in ab)
+    return find_point(internal=f"OOC_JumpPoint_{a}_{b}") or find_point(
+        internal=f"jumppoint_{a}_{b}"
+    )
+
+
+def _jump_parts(key):
+    """日志里跳跃点那段 → 两个词：StantonMagnus → (Stanton, Magnus)，拼星图里跳跃点的内部名用
+    （OOC_JumpPoint_stanton_magnus）；不是正好两个首字母大写的词拼起来的给 None。站名别按它拼：
+    RR_JP_StantonMagnus 那个站是尼克斯星门，见 _station_zh"""
+    parts = re.findall(r"[A-Z][a-z]+", key)
+    return (parts[0], parts[1]) if len(parts) == 2 and "".join(parts) == key else None
+
+
+def _ooc_body(old):
+    """旧的斯坦顿星球 / 卫星内部名（Stanton4、Stanton1b）→ 星图里现在叫 OOC_Stanton_4_Microtech 的那个点
+    （卫星的编号带字母，不会认成星球）；不是斯坦顿、星图里没有、游戏数据库不可用都给 None。
+    给出去的是一份新的，调用方改了不碰缓存"""
+    from ..gamedata import GamedataError
+
+    m = re.fullmatch(r"stanton(\d[a-z]?)", old, re.I)
+    if not m:
+        return None
+    try:
+        v = _data_version()
+        # 拿不到版本号就现查、不缓存（不然数据换了还用旧表）
+        table = _ooc_bodies(v) if v is not None else _ooc_table()
+    except GamedataError:
+        return None
+    p = table.get(m.group(1).lower())
+    return dict(p) if p else None
+
+
+@lru_cache(maxsize=1)
+def _ooc_bodies(_version):
+    """_ooc_table 按库版本缓存、只留当前版本"""
+    return _ooc_table()
+
+
+def _ooc_table():
+    """星图里 OOC_Stanton_<编号>_<名字> 的点按编号（4、1b）排成表；同编号取源里第一个"""
+    from ..gamedata import starmap as gd_starmap
+
+    out = {}
+    for p in gd_starmap.data_dict()["points"]:
+        m = re.match(r"OOC_Stanton_(\d[a-z]?)_", p.get("i") or "", re.I)
+        if m:
+            out.setdefault(m.group(1).lower(), p)
+    return out
 
 
 def _place_zh(key="", prefix=None):
@@ -156,7 +244,8 @@ def _station_table(_version):
 
 
 def place_name(code):
-    """日志里的地点代码 → 具体地点的中文名：Stanton4_NewBabbage → 新巴贝奇，RR_ARC_L1 → 弧 L1 广袤森林站"""
+    """日志里的地点代码 → 具体地点的中文名：Stanton4_NewBabbage → 新巴贝奇，RR_ARC_L1 → 弧 L1 广袤森林站，
+    RR_HUR_LEO → 埃弗勒斯空间站，RR_JP_StantonMagnus → 尼克斯星门"""
     return _place_name(code, _data_version())
 
 
@@ -173,6 +262,14 @@ def _data_version():
 
 @lru_cache(maxsize=256)
 def _place_name(code, _version):
+    if re.match(r"RR_(?:(?:ARC|HUR|CRU|MIC|P\d)_LEO|JP_)", code):
+        # 行星近轨道站、星门站：站名查游戏数据库的站内地点表，和盘点地点列表一致。星门不能按代码里的星系名拼：
+        # RR_JP_StantonMagnus 是尼克斯星门（游戏把通往尼克斯的星门建在了原来马格努斯跳跃点的位置），RR_JP_NyxCastra
+        # 是斯坦顿星门（2026-11-07 斯坦顿地点第二轮复查发现）。以前星门站叫「斯坦顿 - 派罗 跳跃点」这类跳跃点的叫法，
+        # 盘点记成了自定义地点：旧名字在盘点地点的别名里（stockplaces._ALIASES）。表里没有再走下面的老办法
+        hit = _station_zh(code)
+        if hit:
+            return hit
     m = re.match(r"RR_(ARC|HUR|CRU|MIC)_L(\d)", code)
     if m:
         return (
@@ -203,6 +300,22 @@ def _place_name(code, _version):
     if hit:
         return hit
     return re.sub(r"(?<=[a-z])(?=[A-Z])", " ", rest).replace("_", " ")
+
+
+def _station_zh(code):
+    """站内地点表（游戏数据库 city_places）里这个站代码（rr_jp_stantonmagnus）的站名：中文，没有中文用英文；
+    表里没有、游戏数据库不可用给 None"""
+    from ..gamedata import GamedataError, places
+
+    key = code.lower()
+    try:
+        rows = places.city_places()
+    except GamedataError:
+        return None
+    for r in rows:
+        if str(r.get("city") or "").lower() == key:
+            return r.get("city_zh") or r.get("site_en") or None
+    return None
 
 
 _LOOSE = [
@@ -266,6 +379,7 @@ def reset_names():
     _ini_cache.clear()
     _place_name.cache_clear()
     _station_table.cache_clear()
+    _ooc_bodies.cache_clear()
 
 
 def _ini_label(code):
@@ -328,6 +442,9 @@ def display_label(location):
 
 
 _log_cache = {}
+# 读日志读到哪（_log_cache、_backup_cache）一次只让一个调用往前读：窗口每秒查状态、开始盘点、库存页会同时调 from_log，
+# 以前两边可能一起往前读同一段（重复读）或一边把位置推过去另一边漏读（11-09 加锁）
+_log_lock = threading.RLock()
 CHUNK = 4_000_000
 QINV = re.compile(
     r"^<([^>]+)>.*<Query Inventory> Request\[\d+\] Inventory\[\d+:Location:(\d+)\]"
@@ -429,24 +546,28 @@ def _hit(last):
 
 def from_log(path=None, tail=None):
     """游戏日志里你最近所在的地点：(时间戳, 具体地点中文名, 星图点) 或 None。
-    第一次从头读一遍；之后只读日志新增的部分（很快）。这次游戏还没有位置信号就用上一次游戏的日志"""
+    第一次从头读一遍；之后只读日志新增的部分（很快）。这次游戏还没有位置信号才用上一次游戏的日志；
+    这次有信号、认不出就当不知道（以前认不出也退回上一局：上一局的斯坦顿认得出以后，人在别处按 F6 会拿上一局的地点
+    对账，2026-11-07 斯坦顿地点审查发现）"""
     from ..system.gamelog import find_log
 
     path = Path(path) if path else find_log()
     if not path or not Path(path).exists():
         return None
-    size = Path(path).stat().st_size
-    c = _log_cache
-    if (
-        c.get("path") != str(path) or c.get("pos", 0) > size
-    ):  # 换了日志 / 游戏重开（日志变小）
-        c.update(path=str(path), pos=0, state=_LogState())
-    if size > c["pos"]:
-        c["pos"] = _read_forward(path, c["pos"], c["state"])
-        if c["state"].learned:
-            c["state"].learned = False
-            _save_ids()
-    return _hit(c["state"].last) or _from_backups(path)
+    with _log_lock:
+        size = Path(path).stat().st_size
+        c = _log_cache
+        if (
+            c.get("path") != str(path) or c.get("pos", 0) > size
+        ):  # 换了日志 / 游戏重开（日志变小）
+            c.update(path=str(path), pos=0, state=_LogState())
+        if size > c["pos"]:
+            c["pos"] = _read_forward(path, c["pos"], c["state"])
+            if c["state"].learned:
+                c["state"].learned = False
+                _save_ids()
+        last = c["state"].last
+        return _hit(last) if last else _from_backups(path)
 
 
 _backup_cache = {}
@@ -512,13 +633,3 @@ def distance(here, p):
     if here["sys"] and p["sys"] and here["sys"] != p["sys"]:
         return 1e15
     return math.dist((here["x"], here["y"], here["z"]), (p["x"], p["y"], p["z"]))
-
-
-def fmt_distance(m):
-    if m >= 1e15:
-        return "要跳星系"
-    if m < 1e6:
-        return "就在附近"
-    if m < 1e9:
-        return f"{m / 1e6:,.0f} 千公里"
-    return f"{m / 1e9:,.1f} Gm"

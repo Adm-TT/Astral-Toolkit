@@ -13,6 +13,7 @@ import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
+from ..core import screen_regions
 from .names import canonical, has_chinese, split_bilingual  # noqa: F401
 
 # 物品说明框识别区域配置：按鼠标横向位置自适应分级识别
@@ -84,6 +85,37 @@ HEIGHT_STAGES: Tuple[Tuple[float, float, str, bool], ...] = (
 )
 
 
+# 读屏开发工作台（2026-11-09）：上面这些区域可以在工作台里画，存进区域文件 screen_regions.json；
+# 运行时按截图尺寸从那里取，取不到用上面写死的值（两边初值逐位相同）。「鼠标在哪就挑哪条带」的规则还在 get_hover_regions
+_BAND_KEYS = {
+    "30-50%": "hover.band_30_50",
+    "50-70%": "hover.band_50_70",
+    "30-70%": "hover.band_30_70",
+    "中间": "hover.band_30_70",
+}
+_ROW_KEYS = {"title": "hover.title_rows", "body": "hover.body_rows"}
+
+
+def _band_lr(band: str, size: Tuple[int, int]) -> Tuple[float, float]:
+    """竖带的左右（比例）：区域文件里有就用它，没有用 HOVER_REGIONS"""
+    l, t, r, b = HOVER_REGIONS[band]  # noqa: E741
+    key = _BAND_KEYS.get(band)
+    if key:
+        l, _t, r, _b = screen_regions.frac(key, (l, t, r, b), size)  # noqa: E741
+    return l, r
+
+
+def _stage_rows(
+    stage: str, top: float, bottom: float, size: Tuple[int, int]
+) -> Tuple[float, float]:
+    """高度阶段的上下（比例）：标题带、说明框带从区域文件取，全高不变"""
+    key = _ROW_KEYS.get(stage)
+    if not key:
+        return top, bottom
+    _l, t, _r, b = screen_regions.frac(key, (0.0, top, 1.0, bottom), size)
+    return t, b
+
+
 def get_stage_regions(
     regions: List[Tuple[float, float, float, float, str]], width: int, height: int
 ) -> List[Tuple[Tuple[int, int, int, int], str, str, bool]]:
@@ -92,22 +124,24 @@ def get_stage_regions(
     regions：get_hover_regions() 的返回（只管左右，上下是全高）；这里把每个高度阶段都走一遍：
     先标题带（认名），再说明框主体（品质/锚点）。每个阶段内宽度顺序不变（对侧条带 → 30%~70%）。
     标签形如 "30-50%@title"，日志里看得出停在哪一档。
+    band 名在 HOVER_REGIONS 里的，左右按区域文件取（传进来的 left/right 只当默认值）；
+    「中间」和 30-70% 共用区域 hover.band_30_70，改它也会改驾驶位保护的中间带。
     """
-    return [
-        (
-            (
+    size = (width, height)
+    out = []
+    for top, bottom, stage, native in HEIGHT_STAGES:
+        top, bottom = _stage_rows(stage, top, bottom, size)
+        for left, _band_top, right, _band_bottom, band in regions:
+            if band in HOVER_REGIONS:
+                left, right = _band_lr(band, size)
+            box = (
                 int(width * left),
                 int(height * top),
                 int(width * right),
                 int(height * bottom),
-            ),
-            f"{band}@{stage}",
-            stage,
-            native,
-        )
-        for top, bottom, stage, native in HEIGHT_STAGES
-        for left, _band_top, right, _band_bottom, band in regions
-    ]
+            )
+            out.append((box, f"{band}@{stage}", stage, native))
+    return out
 
 
 _STAGE_RANGE: Dict[str, Tuple[float, float]] = {
@@ -125,18 +159,18 @@ def region_box(
     认两种写法："30-50%@title"（带高度阶段）和旧的 "30-50%" / "整屏"（按全高算）。
     stage 给了就用它换掉标签里的阶段（标题带停下后按同一宽度条带补认说明框带用）。"""
     band, _sep, label_stage = (label or "").partition("@")
-    reg = HOVER_REGIONS.get(band)
-    y_key = stage or label_stage or "full"
-    y_range = _STAGE_RANGE.get(y_key)
-    if y_range is None and y_key == "full":
+    stage_name = stage or label_stage or "full"
+    y_range = _STAGE_RANGE.get(stage_name)
+    if y_range is None and stage_name == "full":
         y_range = (0.0, 1.0)  # 旧标签「整屏」/「@full」兼容
-    if reg is None or y_range is None:
+    if band not in HOVER_REGIONS or y_range is None:
         return None
-    y0, y1 = y_range
+    left, right = _band_lr(band, (width, height))
+    y0, y1 = _stage_rows(stage_name, y_range[0], y_range[1], (width, height))
     return (
-        int(width * reg[0]),
+        int(width * left),
         int(height * y0),
-        int(width * reg[2]),
+        int(width * right),
         int(height * y1),
     )
 
@@ -496,7 +530,7 @@ def _anchor_name(toks, cursor=None, img=None):
 
 def _cursor_on_image(img):
     """鼠标位置换算成截图像素坐标（截图是游戏画面，见 capture.game_area，1.6.46）"""
-    from ..core.capture import cursor_on_image
+    from ..infrastructure.platform.capture import cursor_on_image
 
     return cursor_on_image(img)
 
@@ -551,15 +585,12 @@ def _debug_on() -> bool:
 
 
 def _dbg(msg: str, level: str = "DEBUG") -> None:
-    """调试模式才往运行日志打一行（tag=HOVER）。"""
+    """调试模式才记一行识别细节：只进 logs/debug_日期.log，不进窗口运行日志（2026-11-08 老大定细节只进文件）"""
     if not _debug_on():
         return
-    try:
-        from ..app import bus
+    from ..core import day_logs
 
-        bus.runtime_log(str(msg), tag="HOVER", level=level)
-    except Exception:
-        pass
+    day_logs.write("debug", f"[{level}] [识别] {msg}")
 
 
 def _dbg_name(name: Optional[Tuple[str, str]]) -> str:
@@ -776,7 +807,7 @@ def cell_labels(img, cursor, tokens=None, size=None):
     return (best_q[2] if best_q else None), (best_n[2] if best_n else None)
 
 
-def _tooltip_body_tokens(img, cursor, where):
+def _tooltip_body_tokens(img, cursor, where, box=None):
     """标题带停下后，按同一宽度条带补认一次说明框带（屏高 24%~70%）。
 
     制造品的加成行（「武器伤害 +5%」那种）在说明框正文里，1440p 实测约屏高 59%~65%
@@ -784,6 +815,7 @@ def _tooltip_body_tokens(img, cursor, where):
     标题带命中时 tokens 里没有它们，材料品质倒推（crafting.parse_mods）就没了，F6 的品质 / 各槽品质和
     F8 的「材料品质」都会丢。只在「标题带停下 + 有蓝图 + 需要倒推」时才调（别的物品不为品质再加大图 OCR，
     见方案 §5）。返回补认到的 tokens，没补（不是标题带停下的 / 标签不认）返回 None。
+    box 给了（F6 盘点：区域文件里的 count.tooltip）就补认这一块，不按 F8 的竖带算（2026-11-09）。
     """
     if not (where or "").endswith("@title"):
         return None
@@ -791,7 +823,8 @@ def _tooltip_body_tokens(img, cursor, where):
     from . import debug_shots
 
     W, H = img.size
-    box = region_box(where, W, H, stage="body")
+    if box is None:
+        box = region_box(where, W, H, stage="body")
     if box is None:
         return None
     crop = img.crop(box)
@@ -807,14 +840,17 @@ def _tooltip_body_tokens(img, cursor, where):
 
 
 def _is_mineral(zh, en, fuzzy=True):
-    """矿（按 SCU 算量、品质看说明框那一行）：英文名在采矿信号表里，或中文名是船挖矿名。
+    """矿（按 SCU 算量、品质看说明框那一行）：英文名（原矿的去掉原矿那截，names.raw_base）在采矿信号表里，或中文名是
+    船挖矿名（原矿名也算）。原矿也是矿：「塔兰导电石原矿」Taranite (Raw) 照样按 SCU（原矿和精炼分开认以后，2026-11-08）。
     fuzzy=False：名字已经在汉化包里精确对上了（inspect_item 的 canon），矿名也只认精确的、不模糊兜底——
     「刚毅」（发电机）被配成「刚玉」、「冰块」（冷却器）配成「冰」都是模糊配的（2026-11-06 老大验收 F8）"""
     try:
         from ..mining.data import SIGNATURES
         from ..core.i18n import mineral_en
+        from .names import raw_base
 
-        return (en or "").strip().lower() in {k.lower() for k in SIGNATURES} or bool(
+        name = raw_base(en) or (en or "").strip()
+        return name.lower() in {k.lower() for k in SIGNATURES} or bool(
             zh and mineral_en(zh, fuzzy=fuzzy)
         )
     except Exception:
@@ -828,11 +864,13 @@ def inspect_item(
     where=None,
     craft_override=False,
     whole_screen=True,
+    body_box=None,
 ) -> Optional[Dict[str, Any]]:
     """识别鼠标悬停的物品格与说明框，返回结构化字典或 None。
     whole_screen=False（F8 第一遍）：说明框条带都没认出时不整屏兜底，由调用方等一下再截一次。
     craft_override=True（F6 盘点用）：制造品的加成和蓝图完全对上时，用倒推出的品质和各槽品质，
-    读到的品质数字也让位（和 1.1.1 盘点一样）；F8 默认只在没读到品质数字时才倒推：
+    读到的品质数字也让位（和 1.1.1 盘点一样）；F8 默认只在没读到品质数字时才倒推。
+    body_box（F6 盘点用）：标题那截命中的制造品补认加成行时认这一块（count.tooltip），不按 F8 的竖带：
     {
         "zh": 中文名,
         "en": 英文名,
@@ -853,7 +891,9 @@ def inspect_item(
 
     W, H = img.size
     cx, cy = cursor
-    debug_shots.begin_if_debug()
+    if tokens is None or debug_shots.current() is None:
+        # 调用方自己认好字传进来（F6 盘点）时，它已经开了调试会话、记了裁切，别清掉
+        debug_shots.begin_if_debug()
     result = None
     try:
         if tokens is None or where is None:
@@ -889,7 +929,7 @@ def inspect_item(
             and not mineral
             and row_q is None
         ):
-            body = _tooltip_body_tokens(img, cursor, where)
+            body = _tooltip_body_tokens(img, cursor, where, body_box)
             if body:
                 tokens = body
                 body_rescanned = True
@@ -938,8 +978,8 @@ def inspect_item(
 
                 mods = parse_mods(tokens)
                 if not mods and for_item(en, zh) and not body_rescanned:
-                    # 标题带命中且上面没为品质补扫过：再补一次拿加成行
-                    body = _tooltip_body_tokens(img, cursor, where)
+                    # 标题带命中且上面没为品质补扫过：再补一次拿加成行（F6 盘点按 body_box 认区域文件那一块）
+                    body = _tooltip_body_tokens(img, cursor, where, body_box)
                     if body:
                         tokens = body
                         mods = parse_mods(tokens)

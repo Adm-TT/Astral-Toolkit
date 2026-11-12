@@ -50,7 +50,6 @@ def _fake_view(rock="铜", **extra):
         "rock": rock,
         "hud": f"HUD {rock}",
         "hud_rich": "",
-        "bag_text": "",
         "at": "12:00:00",
         "mass": 10000,
         "total_scu": 10.0,
@@ -469,9 +468,7 @@ def _world(monkeypatch, tmp_path, analyse=None):
     monkeypatch.setattr(paths, "log", lambda name: tmp_path / name)
     monkeypatch.setattr(paths, "shots", lambda name: tmp_path)
     monkeypatch.setattr(screen, "grab", grab)
-    monkeypatch.setattr(
-        screen, "analyse", analyse or (lambda img: (_rock(), ({}, None, None)))
-    )
+    monkeypatch.setattr(screen, "analyse", analyse or (lambda img: _rock()))
     monkeypatch.setattr(screen, "INTERVAL", 0)
     monkeypatch.setattr(screen, "LAST_RAW", {})
     monkeypatch.setattr(screen, "LAST_PANEL", {})
@@ -662,10 +659,9 @@ def test_tick_scan_rolls_back_ui_when_commit_fails(monkeypatch):
     live = mining_helpers.live()
     ctx = live_mod._Ctx(_Log(), Path("."), time.time(), screen.VOTE_FRAMES)
     scan = _rock("坏")
-    bag = ({}, "bag")
-    ctx.recent.append((scan, bag))
-    ctx.recent.append((scan, bag))
-    monkeypatch.setattr(screen, "enqueue_rock", lambda q, s, b: False)
+    ctx.recent.append(scan)
+    ctx.recent.append(scan)
+    monkeypatch.setattr(screen, "enqueue_rock", lambda q, s: False)
     monkeypatch.setattr(screen, "vote", lambda scans: (scan, True))
     monkeypatch.setattr(
         t_mining,
@@ -680,7 +676,7 @@ def test_tick_scan_rolls_back_ui_when_commit_fails(monkeypatch):
 
     monkeypatch.setattr(live.loop, "commit", commit)
     live_mod._Live._tick_scan(
-        live, Session(7, threading.Event()), ctx, scan, {}, None, 1.0, None
+        live, Session(7, threading.Event()), ctx, scan, None, 1.0, None
     )
     assert calls
     attempted = [op for op in calls[0][0] if op[0] == "ui"]

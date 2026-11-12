@@ -1,7 +1,8 @@
 """物品查询用例交给展示层的结果（IQ-B5）：不可变，只放值，不取数据、不排版。
 
 用例在 tasks/catalog.py，排版在 app/presenters/catalog.py。facts：tasks/catalog_queries/acquire.info 给的详情字典
-（取数据在那边，大部分组合规则在 catalog/acquire；买点那块还在 tasks/catalog_queries/acquire，见那边说明）。"""
+（取数据在那边，大部分组合规则在 catalog/acquire；买点那块还在 tasks/catalog_queries/acquire，见那边说明）。
+买点的距离是米数（dist_m），写成文字在 app/presenters/catalog（目录迁移收尾）。"""
 
 from dataclasses import dataclass
 from typing import Any

@@ -632,6 +632,9 @@ table.t th.n { text-align: right; }
 .modal-card { width: min(620px, calc(100vw - 32px)); max-height: calc(100vh - 40px); display: flex; flex-direction: column;
   background: var(--pop); border: 1px solid var(--edge); border-radius: var(--r-md); box-shadow: 0 30px 60px rgba(4, 9, 16, .45); animation: ink 160ms ease-out both; }
 .modal-card.wide { width: min(880px, calc(100vw - 32px)); }
+.modal-card.nudge { animation: nudge 200ms ease-out; }   /* 填过内容的弹窗点外面不关：卡片轻轻跳一下 */
+.modal [data-close].hint { outline: 2px solid var(--primary); outline-offset: 2px; }   /* 同时「关闭」「取消」描一圈边 */
+@keyframes nudge { 50% { transform: scale(1.015); } }
 .modal-head { display: flex; align-items: flex-start; gap: 14px; padding: 22px 24px 16px; border-bottom: 1px solid var(--line); }
 .modal-head h2 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: 1px; }
 .modal-head p { margin: 3px 0 0; color: var(--muted); font-size: 13px; }

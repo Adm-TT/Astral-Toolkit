@@ -29,6 +29,12 @@ _ALIASES = {
     "Baijini Point": ("Baijini",),
     "Port Tressler": ("Tressler",),
     "Seraphim Station": ("Seraphim",),
+    # 星门站以前的自动地点名：日志 RR_JP_… 那时给的是跳跃点的叫法，对不上这张表，盘点记成了自定义地点。
+    # 2026-11-07 改成站名（navigation/position._station_zh）以后，旧名字下的库存记录照样归到星门站
+    "Pyro Gateway (Stanton)": ("斯坦顿 - 派罗 跳跃点", "Stanton-Pyro Jump Point"),
+    "Stanton Gateway (Pyro)": ("Pyro-Stanton Jump Point", "派罗 - 斯坦顿 跳跃点"),
+    "Nyx Gateway (Pyro)": ("Pyro - Nyx Jump Point", "派罗 - 尼克斯 跳跃点"),
+    "Pyro Gateway (Nyx)": ("Jumppoint_Nyx_Pyro", "尼克斯 - 派罗 跳跃点"),
 }
 # 商店数据读不到时的保底（星系, 星球, 卫星, 名字, 城市?）
 _FALLBACK = (

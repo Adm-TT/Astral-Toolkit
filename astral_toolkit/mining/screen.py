@@ -7,17 +7,39 @@
 
 import re
 
-# 复用统一 OCR 模块的底层检测与单行识别器
-from ..ocr import raw_detector as _ocr, raw_recognizer as _recognize
+# 识别走统一 OCR 包（ocr.detect / ocr.read_line）
+from ..ocr import detect as _detect, read_line as _read_line
 
-_engine = None
-_rec = None
+
+def _ocr():
+    """检测 + 识别：func(arr) -> [OcrQuad(四点, 文字, 把握 0~1)]（ocr.detect；采矿要四点看面板斜度）。
+    11-09 起走 ocr 包的统一入口，不再拿引擎原始格式；名字留着，测试按它换"""
+    return _detect
+
+
+def _recognize():
+    """单行识别：func(arr) -> (文字, 把握 0~1)（ocr.read_line，跳过检测）"""
+    return _read_line
+
 
 # 搜索区域：(左, 上, 右, 下)，按屏幕宽高的比例。驾驶位和炮塔位的面板位置不同，
 # 所以取一大块，再按文字聚类自动找出"扫描结果"和"货舱"两个面板。
 # 右边一直到屏幕边上（1.6.42）：16:10 屏幕（2560×1600）上鼹鼠炮塔的面板挤到了屏幕最右边，
 # 以前只找到 92% 宽，质量、抗性、不稳定性的数字正好在外面，只读到标签（2026-10-23 用户反馈）
 SEARCH = (0.55, 0.33, 1.0, 0.80)
+
+
+def search_frac(size=None):
+    """扫描面板找字的范围（比例）：区域文件 mining.search（读屏开发工作台里画），没有就用 SEARCH（2026-11-09）"""
+    from ..core import screen_regions
+
+    return screen_regions.frac("mining.search", SEARCH, size)
+
+
+def _search(img):
+    return search_frac(img.size)
+
+
 SEG_TARGET_PX = (
     16  # 切块识别时把字放大到约这么高（实测 2K 下 7px 字放大到 14px 效果最好）
 )
@@ -456,7 +478,7 @@ def clusters(items):
 
 def grab():
     """整屏截图；悬浮窗盖住的那块涂黑，不会读到悬浮窗自己的字"""
-    from ..core.capture import grab_screen
+    from ..infrastructure.platform.capture import grab_screen
 
     img = grab_screen()
     try:
@@ -475,19 +497,23 @@ def grab():
 
 
 def find_panels(img):
-    """返回 (扫描面板的文字行, 货舱面板的文字行)。
-    驾驶位的扫描面板中间有一大段空白，会被分成上下两个聚类（数值一块、成分一块），这里再拼回去"""
+    """返回扫描面板的文字行。
+    驾驶位的扫描面板中间有一大段空白，会被分成上下两个聚类（数值一块、成分一块），这里再拼回去。
+    面板下面的货舱（「货舱 0.30/96.00 SCU」那块）照样认出来、从扫描面板里分出去（不分的话它的字会混进扫描面板），
+    只是不读里面的内容（矿袋功能 2026-11-08 删了，老大：要新的识别方案）"""
     import re
     import statistics
+    from typing import Any
+
     from .parse import rows
 
     LAST_PANEL.clear()
-    items = read_region_seg(img, SEARCH)
+    items = read_region_seg(img, _search(img))
     if not items:
-        return [], []
+        return []
     h = statistics.median(it[2] for it in items) or 10
 
-    def describe(g):
+    def describe(g) -> dict[str, Any]:
         text = " ".join(rows(g))
         box = (
             min(i[3][0] for i in g),
@@ -503,7 +529,7 @@ def find_panels(img):
             left=min(labs)
             if labs
             else box[0],  # 标签那一列的左边（不算左边挨着的速度表）
-            bag=(bool(re.search(r"\d[.,]\d+\s*/\s*\S*\d", text)) or "货舱" in text)
+            cargo=(bool(re.search(r"\d[.,]\d+\s*/\s*\S*\d", text)) or "货舱" in text)
             and "SC" in text.upper(),
             comp=len(re.findall(r"\d{1,3}[.,]\d{2}\s*%?", text))
             + 2 * ("组成" in text or "SCU" in text.upper()),
@@ -511,25 +537,25 @@ def find_panels(img):
         )
 
     info = [describe(g) for g in clusters(items)]
-    bag = next((c for c in info if c["bag"]), None)
-    if bag is not None and bag["top"] >= 2 and bag["comp"] >= 2:
+    cargo = next((c for c in info if c["cargo"]), None)
+    if cargo is not None and cargo["top"] >= 2 and cargo["comp"] >= 2:
         # 1.6.71：扫描面板和下面的货舱连成了一个聚类（Golem 太空样本，五种成分的面板一直拉到货舱）：
         # 「货舱」那一行及以下归货舱，上面的还是扫描面板
-        ys = [i[3][1] for i in bag["items"] if re.search(r"货舱|\d\s*/\s*\d", i[0])]
+        ys = [i[3][1] for i in cargo["items"] if re.search(r"货舱|\d\s*/\s*\d", i[0])]
         if ys:
             cut = min(ys) - 0.5 * h
-            upper = [i for i in bag["items"] if i[3][3] <= cut]
-            lower = [i for i in bag["items"] if i[3][3] > cut]
-            info.remove(bag)
+            upper = [i for i in cargo["items"] if i[3][3] <= cut]
+            lower = [i for i in cargo["items"] if i[3][3] > cut]
+            info.remove(cargo)
             if upper:
                 info.append(describe(upper))
-            bag = describe(lower) if lower else None
-            if bag:
-                info.append(bag)
-    rest = [c for c in info if c is not bag]
+            cargo = describe(lower) if lower else None
+            if cargo:
+                info.append(cargo)
+    rest = [c for c in info if c is not cargo]
     comp = max(rest, key=lambda c: c["comp"] + c["top"], default=None)
     if comp is None:
-        return [], rows(bag["items"]) if bag else []
+        return []
     chosen = comp["items"]
     if (
         comp["top"] < 2
@@ -547,7 +573,7 @@ def find_panels(img):
             chosen = max(cands, key=lambda c: c["top"])["items"] + chosen
     chosen = _panel_only(chosen, h)
     _note_panel(img, chosen)
-    return rows(chosen), rows(bag["items"]) if bag else []
+    return rows(chosen)
 
 
 LAST_PANEL = {}  # 最近一帧认到的扫描面板在屏幕上的位置：{box, cut（顶着屏幕右边）, h（字高）}
@@ -560,7 +586,8 @@ def _note_panel(img, items):
     if not items:
         return
     W, H = img.size
-    ox, oy = int(SEARCH[0] * W), int(SEARCH[1] * H)
+    search = _search(img)  # 一次取定：区域文件中途被存也不会一半新一半旧
+    ox, oy = int(search[0] * W), int(search[1] * H)
     x0 = ox + min(i[3][0] for i in items)
     y0 = oy + min(i[3][1] for i in items)
     x1 = ox + max(i[3][2] for i in items)
@@ -627,8 +654,7 @@ def _panel_only(items, h):
 LAST_RAW = {
     "t": 0.0,
     "scan": [],
-    "bag": [],
-}  # 最近一帧 OCR 出来的原文（问题反馈时一起打包）
+}  # 最近一帧 OCR 出来的扫描面板原文（问题反馈时一起打包）
 
 
 PANEL_CACHE = {"win": None, "t": 0.0, "size": None}
@@ -651,28 +677,31 @@ def _panel_items(items):
 
 
 def _window(img, box, h, below=10):
-    """面板框往外扩一圈，作为下一次只读这一块的范围（下面多留一截把货舱带上）"""
+    """面板框往外扩一圈，作为下一次只读这一块的范围。下面多留一截：以前为了把货舱（矿袋）带上；矿袋 2026-11-08
+    删了，范围没改（改了读进来的字就变，要重跑样本回归），读进来的货舱那几行由 _scan_part 丢掉"""
     W, H = img.size
+    search = _search(img)  # 一次取定：区域文件中途被存也不会一半新一半旧
     x0, y0, x1, y1 = box
     h = h or H * 0.009
     return (
-        max(int(SEARCH[0] * W), int(x0 - 3 * h)),
-        max(int(SEARCH[1] * H), int(y0 - 3 * h)),
+        max(int(search[0] * W), int(x0 - 3 * h)),
+        max(int(search[1] * H), int(y0 - 3 * h)),
         min(W, int(x1 + 3 * h)),
-        min(int(SEARCH[3] * H), int(y1 + below * h)),
+        min(int(search[3] * H), int(y1 + below * h)),
     )
 
 
 def _guess_window(img):
     """整片找没读全、但找到了面板的一部分（LAST_PANEL）：按面板大约 20 字宽、30 字高往外扩"""
     W, H = img.size
+    search = _search(img)  # 一次取定：区域文件中途被存也不会一半新一半旧
     x0, y0, x1, y1 = LAST_PANEL["box"]
     h = LAST_PANEL.get("h") or H * 0.009
     return (
-        max(int(SEARCH[0] * W), int(x0 - 3 * h)),
-        max(int(SEARCH[1] * H), int(y0 - 14 * h)),
+        max(int(search[0] * W), int(x0 - 3 * h)),
+        max(int(search[1] * H), int(y0 - 14 * h)),
         min(W, int(max(x1, x0 + 20 * h) + 3 * h)),
-        min(int(SEARCH[3] * H), int(y1 + 14 * h)),
+        min(int(search[3] * H), int(y1 + 14 * h)),
     )
 
 
@@ -690,7 +719,7 @@ def _locate(img, up=1.0):
     from PIL import Image
 
     W, H = img.size
-    l, t, r, b = SEARCH  # noqa: E741
+    l, t, r, b = _search(img)  # noqa: E741
     ox, oy, bottom_lim = int(l * W), int(t * H), int(b * H)
     crop = img.crop((ox, oy, int(r * W), bottom_lim))
     if up != 1:
@@ -738,18 +767,19 @@ def _locate(img, up=1.0):
     return win, seen
 
 
-def _split_bag(lines):
-    """整块读出来的行 → (扫描面板的行, 货舱的行)：从「货舱 / 0.00/96.00 SCU」那行起算货舱"""
+def _scan_part(lines):
+    """整块读出来的行 → 扫描面板的行：从「货舱 / 0.00/96.00 SCU」那行起是货舱，不要（矿袋功能 2026-11-08 删了）"""
     import re
 
     for i, ln in enumerate(lines):
         if "货舱" in ln or re.search(r"\d[.,]\d{2}\s*/\s*\d", ln):
-            return lines[:i], lines[i:]
-    return lines, []
+            return lines[:i]
+    return lines
 
 
 def _use_det(img, r, cache=True):
-    """整块读的结果记下来：面板位置（LAST_PANEL、下一帧的读取范围；没读全的 cache=False，只记位置）"""
+    """整块读的结果记下来：面板位置（LAST_PANEL、下一帧的读取范围；没读全的 cache=False，只记位置）。
+    返回扫描面板的行"""
     import statistics
     import time as _t
 
@@ -773,19 +803,20 @@ def _use_det(img, r, cache=True):
     )
     if cache:
         PANEL_CACHE.update(win=_window(img, box, h), t=_t.time(), size=img.size)
-    return _split_bag(lines)
+    return _scan_part(lines)
 
 
 def _wider(img, win):
     """整块读没读全时再试一次的范围：往上、往右多放一些（面板右半边的品质、上面的标题被切在外面的时候）"""
     W, H = img.size
+    search = _search(img)  # 一次取定：区域文件中途被存也不会一半新一半旧
     x0, y0, x1, y1 = win
     w, h = x1 - x0, y1 - y0
     return (
-        max(int(SEARCH[0] * W), int(x0 - 0.1 * w)),
-        max(int(SEARCH[1] * H), int(y0 - 0.25 * h)),
+        max(int(search[0] * W), int(x0 - 0.1 * w)),
+        max(int(search[1] * H), int(y0 - 0.25 * h)),
         min(W, int(x1 + 0.8 * w)),
-        min(int(SEARCH[3] * H), int(y1 + 0.05 * h)),
+        min(int(search[3] * H), int(y1 + 0.05 * h)),
     )
 
 
@@ -793,12 +824,12 @@ LAST_PATH = {"path": None}  # 这一帧是哪条路读出来的（调试 / 打�
 
 
 def analyse(img):
-    """读一帧：先只读上次面板所在的那一块（1.6.71，快）；没有或读不全就整片找；整片找也没读全、
+    """读一帧的扫描面板：先只读上次面板所在的那一块（1.6.71，快）；没有或读不全就整片找；整片找也没读全、
     但找到了面板的一部分（雪地、雾里常见），再把那一块交给整块检测读一遍"""
     import time as _t
-    from .parse import parse_scan, parse_bag
+    from .parse import parse_scan
 
-    scan_lines = bag_lines = None
+    scan_lines = None
     det_scan = None
     LAST_PATH["path"] = "none"
     c = PANEL_CACHE
@@ -806,7 +837,7 @@ def analyse(img):
         r = read_box(img, c["win"])
         if r and r[1].valid:
             LAST_PANEL.clear()
-            scan_lines, bag_lines = _use_det(img, r)
+            scan_lines = _use_det(img, r)
             det_scan = r[1]
             LAST_PATH["path"] = "cache"
         else:
@@ -829,18 +860,18 @@ def analyse(img):
                 LAST_PATH["path"] = "locate"
             LAST_PANEL.clear()
             if r and r[1].valid:
-                scan_lines, bag_lines = _use_det(img, r)
+                scan_lines = _use_det(img, r)
                 det_scan = r[1]
             elif r and r[2]:
                 # 面板在、读不全：照样记下面板位置（被屏幕右边挡住的提示、只读质量抗性的破碎方案要用）
-                scan_lines, bag_lines = _use_det(img, r, cache=False)
+                scan_lines = _use_det(img, r, cache=False)
             else:
-                scan_lines, bag_lines = [], []
+                scan_lines = []
         elif not seen:
             LAST_PANEL.clear()
-            scan_lines, bag_lines = [], []
+            scan_lines = []
     if scan_lines is None:
-        scan_lines, bag_lines = find_panels(img)
+        scan_lines = find_panels(img)
         s = parse_scan(scan_lines)
         LAST_PATH["path"] = "seg" if s.valid else "none"
         if s.valid and LAST_PANEL.get("box"):
@@ -849,22 +880,16 @@ def analyse(img):
                 t=_t.time(),
                 size=img.size,
             )
-        elif LAST_PANEL.get("box") and (scan_lines or bag_lines):
+        elif LAST_PANEL.get("box") and scan_lines:
+            # LAST_PANEL 记了面板位置就一定找到了扫描面板那几行（find_panels 认到面板才记位置）
             r = read_box(img, _guess_window(img))
             if r and r[1].valid:
-                scan_lines, bag_lines = _use_det(img, r)
+                scan_lines = _use_det(img, r)
                 det_scan = r[1]
                 LAST_PATH["path"] = "guess"
-    if scan_lines or bag_lines:
-        LAST_RAW.update(t=_t.time(), scan=list(scan_lines), bag=list(bag_lines))
-    try:  # 矿袋容量按现在选的船（MOLE 96、勘探者和魔像 32）
-        from .laser import current_ship
-        from .data import SHIPS
-
-        cap = float(SHIPS[current_ship()]["bag"])
-    except Exception:
-        cap = 96.0
-    return det_scan or parse_scan(scan_lines), parse_bag(bag_lines, cap)
+    if scan_lines:
+        LAST_RAW.update(t=_t.time(), scan=list(scan_lines))
+    return det_scan or parse_scan(scan_lines)
 
 
 def panel_seen(scan, raw=None):
@@ -1051,19 +1076,19 @@ def _set_pending(queue, scan):
     _reject[id(queue)] = (weakref.ref(queue), scan)
 
 
-def enqueue_rock(queue, scan, bag=None):
-    """把新帧放进投票队列（队列元素是 (scan, bag) 元组）。返回 True 表示换了石头、队列已清空。
+def enqueue_rock(queue, scan):
+    """把新帧放进投票队列（队列元素就是每一帧的扫描读数）。返回 True 表示换了石头、队列已清空。
     和上一帧对不上时不急着清队列：先和队列共识（≥3 帧的质量/抗性/不稳定性容差共识）比对——
     和共识一致说明上一帧是离群误读，弹掉它，保住积累的好帧；和共识不一致说明这一帧可疑，先记下
     丢掉（误读帧不占投票位）；连续两帧可疑且互相同一块石头，才是真换了石头，清空重计。
     以前一帧认错就清空队列，之后 4 帧白攒，结果迟迟出不来"""
     key = id(queue)
     cleared = False
-    if not queue or _same_rock(scan, queue[-1][0]):
+    if not queue or _same_rock(scan, queue[-1]):
         _reject.pop(key, None)
-        queue.append((scan, bag))
+        queue.append(scan)
         return False
-    ref = _rock_consensus([x[0] for x in queue]) if len(queue) >= 3 else None
+    ref = _rock_consensus(list(queue)) if len(queue) >= 3 else None
     if ref is not None:
         if _same_rock(scan, ref):
             queue.pop()  # 上一帧是离群误读，弹掉
@@ -1081,5 +1106,5 @@ def enqueue_rock(queue, scan, bag=None):
         _reject.pop(key, None)
         queue.clear()
         cleared = True
-    queue.append((scan, bag))
+    queue.append(scan)
     return cleared

@@ -37,13 +37,13 @@ def vote_frames() -> Any:
     return _screen().VOTE_FRAMES
 
 
-def search() -> Any:
-    """在屏幕哪一块找扫描面板（左、上、右、下，按屏幕比例）"""
-    return _screen().SEARCH
+def search(size: Any = None) -> Any:
+    """在屏幕哪一块找扫描面板（左、上、右、下，按屏幕比例；按截图尺寸从区域文件取，2026-11-09）"""
+    return _screen().search_frac(size)
 
 
 def analyse(*args: Any, **kwargs: Any) -> Any:
-    """一帧画面：(扫描面板读数, 矿袋)"""
+    """一帧画面的扫描面板读数"""
     return _screen().analyse(*args, **kwargs)
 
 

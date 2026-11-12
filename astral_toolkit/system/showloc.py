@@ -23,7 +23,6 @@ if WIN:
 
     _u32.GetForegroundWindow.restype = wintypes.HWND
     _k32.OpenProcess.restype = wintypes.HANDLE
-    _u32.GetAsyncKeyState.restype = ctypes.c_short
     _WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
 
 

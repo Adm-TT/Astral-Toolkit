@@ -123,11 +123,20 @@ def wiki_class_names():
     return out
 
 
+# 原矿 / 矿石的键（read_ini 已去掉「,P」）和游戏英文的叫法：items_commodities_taranite_raw = 塔兰导电石原矿（Taranite (Raw)）、
+# items_commodities_gold_ore = 金矿石（Gold (Ore)）、items_commodities_raw_ice = 原冰（Raw Ice）
+_RAW_KEYS = (
+    (re.compile(r"items_commodities_([a-z]+)_raw"), "{} (Raw)"),
+    (re.compile(r"items_commodities_([a-z]+)_ore"), "{} (Ore)"),
+    (re.compile(r"items_commodities_raw_([a-z]+)"), "Raw {}"),
+)
+
 ALIASES = {}  # zh2en_items 顺带记下来：{汉化包里的英文写法: wiki 正名}（写错 / 过时的，搜旧写法也能找到）
 
 
 def zh2en_items(ini, wiki_cls=None):
-    """物品名：「中文\\nEnglish」或「中文English」→ {中文: English}（交易查价、截图对照用）。
+    """物品名：「中文\\nEnglish」或「中文English」→ {中文: English}（交易查价、截图对照用）；原矿 / 矿石只有中文的（塔兰导电石原矿、
+    金矿石、原冰），英文按键名拼成游戏里的叫法（_RAW_KEYS，2026-11-08 原矿和精炼分开）。
     wiki_cls（{类名: wiki 英文名}，None = 自动取）：键名 item_Name_<类名> 能对上 wiki 时以 wiki 正名为准——汉化包里有 37 条英文写错或过时
     （「CF-227 Bulldog Repeater」游戏现在叫 Badger、「Monolith Arms」→ Monolith Armor Arms），商店 / 掉落数据都挂在正名下（1.6.49）；
     汉化包的写法记进 ALIASES"""
@@ -224,6 +233,20 @@ def zh2en_items(ini, wiki_cls=None):
         )
         if m:
             put(m.group(1), m.group(2))
+            continue
+        raw = next(
+            (
+                f.format(r.group(1).capitalize())
+                for p, f in _RAW_KEYS
+                if (r := p.fullmatch(kl))
+            ),
+            None,
+        )
+        if raw and re.search(f"[{CJK}]", first) and not re.search("[A-Za-z]", first):
+            # 原矿 / 矿石汉化包里只有中文（「塔兰导电石原矿」「金矿石」「原冰」）：英文按键名拼成游戏里的叫法 Taranite (Raw)、
+            # Gold (Ore)、Raw Ice（火神石原矿游戏英文写 Hephaestanite (R)，这里统一成 (Raw)）。原矿和精炼是两样东西，
+            # 不能都对到「Taranite」上（老大 2026-11-08 定分开）
+            put(first, raw)
     return zh2en
 
 

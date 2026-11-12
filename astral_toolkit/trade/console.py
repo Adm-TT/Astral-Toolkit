@@ -6,6 +6,7 @@
 """
 
 import os
+import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,7 +29,8 @@ from .market_text import (
 
 def material_source(name_en):
     """目标（crafting/goals）用的旧名字：目标改用新实现时删。目录迁移 Q3b 起转给 tasks/catalog_queries/acquire——
-    trade 往上调 tasks 只许这一处（老大 11-07 定：留着转发、钉住这一条；门禁 test_trade_reaches_up_into_tasks_only_where_listed）"""
+    trade 往上调 tasks 只许这一处（老大 11-07 定：留着转发、钉住这一条；门禁 test_trade_reaches_up_into_tasks_only_where_listed）。
+    目录迁移收尾起转过来的是事实，那一句话由 tasks/goals 调 app/presenters/wikelo.source_text 拼"""
     from ..tasks.catalog_queries.acquire import material_source as f
 
     return f(name_en)
@@ -107,21 +109,24 @@ class Trade:
         item = self.catalog.get(item_id)
         if not item:
             return item_id
-        with self.db.connection() as c:
-            zh = [
-                r[0]
-                for r in c.execute(
-                    "SELECT alias FROM aliases WHERE item_id=?", (item_id,)
-                )
-                if has_chinese(r[0])
-            ]
-        name = None
-        for a in zh:
-            hit = canonical(a, "")
-            if hit and _similar(_fold(hit[1]), _fold(item.name)):
-                name = hit[0]
-                break
-        name = name or zh_for(item.name) or (zh[0] if zh else None)
+        # 先用它自己的英文名在汉化包里的中文名：F8 以前模糊配上时会把本体的中文名记到变体上，别名排前面的话电池会显示成
+        # 「德美科 轻机枪（Demeco LMG Battery (100 cap)）」（待做 126，老大 2026-11-08 定直接修）；汉化包里没有它，才看记下的别名
+        name = zh_for(item.name)
+        if not name:
+            with self.db.connection() as c:
+                zh = [
+                    r[0]
+                    for r in c.execute(
+                        "SELECT alias FROM aliases WHERE item_id=?", (item_id,)
+                    )
+                    if has_chinese(r[0])
+                ]
+            for a in zh:
+                hit = canonical(a, "")
+                if hit and _similar(_fold(hit[1]), _fold(item.name)):
+                    name = hit[0]
+                    break
+            name = name or (zh[0] if zh else None)
         return f"{name}（{item.name}）" if name else item.name
 
     # ---------------------------------------------------------------- 查价
@@ -149,9 +154,14 @@ def _quality(text):
 
 def ore_item(item):
     """交易库里的这个物品是不是矿（矿按 SCU 记、存成 uSCU，和库存页、F6 同一行；别的按个）。
-    和 F8 用同一个判断（inspector._is_mineral）；市场上的名字可能带「(Raw)」「（原矿）」这种后缀，先去掉"""
-    import re
+    和 F8 用同一个判断（inspector._is_mineral，开头写 Raw 的原矿名它自己去掉）；市场上的名字末尾可能带「(Raw)」「（原矿）」
+    这种括号，先去掉再认。只管按什么单位记：原矿和精炼是不是同一件另说（不是，matching.alias_ok）"""
     from .inspector import _is_mineral
 
-    n = re.sub(r"\s*[（(][^（）()]*[)）]\s*$", "", item.name or "").strip()
+    n = _PAREN_TAIL.sub("", item.name or "").strip()
     return _is_mineral(n if has_chinese(n) else "", n)
+
+
+_PAREN_TAIL = re.compile(
+    r"\s*[（(][^（）()]*[)）]\s*$"
+)  # 名字末尾括号里那截（ore_item 用）

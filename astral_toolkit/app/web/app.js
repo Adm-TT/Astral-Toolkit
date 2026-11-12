@@ -26,7 +26,7 @@ function api(name, args = {}) {
       j = await r.json();
     } catch (e) { throw new Error("连不上 AT 后台（可能正在重启），稍后再试"); }
     if (!j.ok) throw new Error(j.error || "操作失败");
-    if (j.data && j.data.error) throw new Error(j.data.error);
+    if (j.data && j.data.error) { const error = new Error(j.data.error); error.data = j.data; throw error; }
     return j.data;
   })();
   if (key) { _inflight.set(key, p); p.finally(() => _inflight.delete(key)).catch(() => {}); }
@@ -101,7 +101,7 @@ function popOver(anchor, html, { cls = "", onClose = null, align = "right" } = {
   };
   place();
   const p = { el, q: (s) => el.querySelector(s), anchor, place, form: cls.includes("confirm"), dirty: false };
-  el.addEventListener("input", () => { p.dirty = true; });     // 填过东西的小表单：点外面、滚动都不关，只有「取消」或 Esc 关
+  el.addEventListener("input", (e) => { if (!e.target.closest?.("[data-filter]")) p.dirty = true; });   // 填过东西的小表单：点外面、滚动都不关，只有「取消」或 Esc 关；搜索框（data-filter）不算
   p.close = () => { const i = POPS.indexOf(p); if (i < 0) return; POPS.splice(i, 1); el.remove(); if (onClose) onClose(); };
   POPS.push(p);
   anchor.setAttribute("aria-expanded", "true");
@@ -190,7 +190,7 @@ function menu(anchor, items) {
 })();
 
 // 游戏里的热键（和 tasks/system/settings.py 的 HOTKEYS 一样）：[设置名, 默认键, 名字, 说明]
-const HOTKEYS = [["live_key", "F5", "采矿助手开关", "开启后 120 秒未检测到扫描面板和信号自动关闭"], ["count_key", "F6", "盘点", "开始 / 结束盘点"],
+const HOTKEYS = [["live_key", "F5", "采矿助手开关", "自动关闭时间可在下方「采矿助手」调整"], ["count_key", "F6", "盘点", "开始 / 结束盘点"],
   ["mark_key", "", "记录路标", "按下后在聊天框输入 /showlocation，将当前位置保存为路标"], ["trade_capture_key", "F8", "物品识别", "鼠标停在物品上时按下；鼠标移开自动收起，按住 Ctrl 不收；按住 Shift 再按钉住"],
   ["fix_key", "", "一键定位", "手动定位时按下，再在聊天框输入 /showlocation"], ["report_key", "F10", "问题反馈", "保存当前截图和识别结果"],
   ["ore_key", "", "原矿记录", "记录当前矿石和坐标"]];
@@ -313,9 +313,9 @@ function connect() {
 }
 
 // ================================================================ 顶栏 / 实时栏
-const HUD_ORDER = ["辅助", "信号", "扫描", "矿袋", "导航", "小行星带", "物品", "交易", "路标", "反馈"];
+const HUD_ORDER = ["辅助", "信号", "扫描", "导航", "小行星带", "物品", "交易", "路标", "反馈"];
 const HUD_LABEL = { 扫描: "采矿助手", 导航: "导航" };            // 悬浮窗分区显示名（内部还叫扫描 / 导航）
-const HUD_COLOR = { 辅助: "#8b98a9", 信号: "#6cb8ff", 扫描: "#55d394", 矿袋: "#b59aff", 导航: "#f2b84b", 小行星带: "#f2b84b", 物品: "#ff9e6e", 交易: "#ff9e6e" };
+const HUD_COLOR = { 辅助: "#8b98a9", 信号: "#6cb8ff", 扫描: "#55d394", 导航: "#f2b84b", 小行星带: "#f2b84b", 物品: "#ff9e6e", 交易: "#ff9e6e" };
 
 function renderHud() {
   const keys = Object.keys(state.hud).sort((a, b) => (HUD_ORDER.indexOf(a) + 99) % 99 - (HUD_ORDER.indexOf(b) + 99) % 99);
@@ -450,7 +450,7 @@ try { applyTheme(localStorage.getItem("theme")); } catch (e) { /* 读不了就�
 function renderTop() {
   const s = state.status;
   if (!s) return;
-  applyTheme(s.settings?.theme);
+  if ((s.settings?.theme === "light") !== (document.documentElement.dataset.theme === "light")) applyTheme(s.settings?.theme);
   $("#hk").textContent = s.hover_key;
   const p = s.position;
   const sysZh = { Stanton: "斯坦顿", Pyro: "派罗", Nyx: "尼克斯" };
@@ -608,7 +608,7 @@ PAGES.live = () => {
   const plans = (sc?.plans || []).map(planHTML).join("");
   $("#page").innerHTML = `
     <div class="row" style="justify-content:space-between;align-items:flex-start">
-      <div><h1>采矿助手</h1><p class="lede">扫描石头后识别成分，按下方「配置」计算破碎方案和精炼收益。按 <kbd>${esc(state.status?.settings?.live_key || "F5")}</kbd> 开关，120 秒未检测到扫描面板和信号自动关闭；游戏建议使用无边框全屏，窗口模式也可用，画面越小识别越不准。</p></div>
+      <div><h1>采矿助手</h1><p class="lede">扫描石头后识别成分，按下方「配装」计算破碎方案和精炼收益。按 <kbd>${esc(state.status?.settings?.live_key || "F5")}</kbd> 开关，${esc(s.settings?.mining_idle_close ?? 120)} 秒未检测到扫描面板和信号自动关闭；游戏建议使用无边框全屏，窗口模式也可用，画面越小识别越不准。</p></div>
       <div class="row" style="gap:8px;flex:none"><button type="button" class="btn" id="ore-open">原矿记录</button>
       ${s.live ? `<button class="btn stop" id="live-toggle">停止扫描</button>` : `<button class="btn primary" id="live-toggle">开始扫描</button>`}</div>
     </div>
@@ -638,14 +638,14 @@ PAGES.live = () => {
           ${sc.craft.length || sc.craft_mats?.length ? `<h3 style="margin-top:14px">制造</h3>${(sc.craft_mats || []).map((m) => craftMatBtn(m)).join("")}${sc.craft.map((c) => `<div class="muted">${esc(c)}</div>`).join("")}` : ""}
         </div>
       </div>
-      ${sc.bag ? `<div class="panel" style="margin-top:14px"><h3>矿袋 ${sc.bag.used}/${sc.bag.cap} SCU</h3><div class="meter"><i style="width:${Math.min(100, sc.bag.used / sc.bag.cap * 100)}%;background:var(--violet)"></i></div>
-        <p class="muted" style="margin:8px 0 0">${sc.bag.items.map((x) => `${esc(x.name)} ${x.scu}`).join("，") || "空"}</p></div>` : ""}
     ` : `<div class="panel"><p class="muted" style="margin:0">${s.live ? (s.live_paused ? "切回游戏后扫描石头" : "扫描中…在游戏中扫描石头") : "暂无扫描结果。点击「开始扫描」后在游戏中扫描石头"}</p></div>`}
     ${state.signals ? `<h2>雷达信号 <span class="faint" style="font-weight:400;font-size:13px">${esc(state.signals.at)}${state.signals.area ? `｜${esc(state.signals.area)}` : ""}</span>${state.signals.stale ? ` <span class="tag noqt">已过期：${esc(state.signals.stale)} 之后未检测到信号</span>` : ""} <span style="float:right">${fbBtn("signal")}</span></h2><div class="panel">${state.signals.lines.map((l) => `<div>${esc(l)}</div>`).join("")}${(state.signals.unknown || []).map((v) => `<div class="row" style="margin-top:8px;gap:8px;align-items:center"><span class="muted">${money(v)}</span><input class="input sig-name" data-v="${v}" size="16" placeholder="起个名字"><button class="btn small" data-sig="${v}">记下</button></div>`).join("")}</div>` : ""}
     ${state.scans.length > 1 ? `<h2>本次扫描记录</h2><div class="panel"><table class="t"><tr><th>时间</th><th>矿物</th><th class="n">质量</th><th class="n">抗性</th><th>方案</th></tr>
       ${state.scans.map((x) => `<tr><td class="faint">${esc(x.at)}</td><td>${esc(x.rock)}</td><td class="n">${money(x.mass)}</td><td class="n">${x.resistance}%</td><td class="muted">${esc(x.plans[0]?.short || "")}</td></tr>`).join("")}</table></div>` : ""}
-    <h2>配置</h2>
-    <div class="panel" id="gear">加载中…</div>
+    <div class="two" style="align-items:start">
+      <div><h2>配装</h2><div class="panel" id="gear">加载中…</div></div>
+      <div><h2>关注的矿和信号</h2><div class="panel" id="mining-focus">加载中…</div></div>
+    </div>
     <h2>手动计算</h2>
     <div class="panel"><div class="row">
       <label class="field">质量 kg<input class="input" id="m-mass" inputmode="decimal" size="9"></label>
@@ -655,7 +655,7 @@ PAGES.live = () => {
       <div id="m-out" style="margin-top:10px"></div></div>`;
   $("#live-toggle").onclick = async () => {
     const on = !(state.status && state.status.live);
-    if (on && state.gear && !state.gear.chosen) { toast("先在下方「配置」中选择采矿船"); $("#gear").scrollIntoView({ behavior: "smooth" }); return; }
+    if (on && state.gear && !state.gear.chosen) { toast("先在下方「配装」中选择采矿船"); $("#gear").scrollIntoView({ behavior: "smooth" }); return; }
     $("#live-toggle").disabled = true;
     try {
       await api(on ? "live_start" : "live_stop");
@@ -678,6 +678,28 @@ PAGES.live = () => {
 async function gearInit() {
   try { state.gear = await api("mining_gear"); } catch (e) { $("#gear").innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
   gearRender();
+  miningFocusRender();
+}
+
+function miningFocusRender() {
+  const box = $("#mining-focus"), items = state.gear?.focus;
+  if (!box || !items) return;
+  const chip = (x) => `<button type="button" class="chip${x.on ? " on" : ""}" data-focus="${esc(x.key)}" aria-pressed="${x.on}">${esc(x.name)}</button>`;
+  // 两类雷达信号（地面信号、太空残骸）另起一行；自己起名的、认不出的「未知」不归类，开了关注不上悬浮窗（老大 2026-11-08）
+  box.innerHTML = `<p class="muted" style="margin-top:0">只筛选游戏悬浮窗；窗口和记录保留全部。全部不选时悬浮窗不显示矿物和信号。</p>
+    <div class="row" style="margin-bottom:10px;gap:8px"><button class="btn small" data-focus-all="1">全部</button><button class="btn small" data-focus-all="0">清空</button></div>
+    <div class="chips">${items.filter((x) => !x.signal).map(chip).join("")}</div>
+    <p class="muted" style="margin:12px 0 6px">雷达信号</p>
+    <div class="chips">${items.filter((x) => x.signal).map(chip).join("")}</div>
+    <p class="muted" style="margin:8px 0 0;font-size:12.5px">开了关注以后，自己起名的信号和认不出的「未知」信号不上悬浮窗。</p>`;
+  const save = async (keys) => {
+    box.querySelectorAll("button").forEach((b) => b.disabled = true);
+    try { state.gear = await api("set_mining_focus", { keys }); toast("已保存"); }
+    catch (e) { toast(e.message); }
+    miningFocusRender();
+  };
+  box.querySelectorAll("[data-focus-all]").forEach((b) => b.onclick = () => save(b.dataset.focusAll === "1" ? null : []));
+  box.querySelectorAll("[data-focus]").forEach((b) => b.onclick = () => save(items.filter((x) => x.key === b.dataset.focus ? !x.on : x.on).map((x) => x.key)));
 }
 
 const GEAR_STATS = [["power", "功率"], ["res", "抗性"], ["instab", "不稳定性"], ["window", "绿区"], ["rate", "充能"]];
@@ -711,7 +733,7 @@ function gearRender() {
       <span class="chips">${lo.heads.map(([k, mods], i) => `<span class="chip">${esc(headName(k))}${(lo.craft || [])[i] ? "（自制）" : ""}${mods.length ? ` <i>+${esc(gearModsText(g, mods))}</i>` : ""}</span>`).join("")}</span>
       <span class="muted num">总功率 <b>${money(sum.power)}</b> W</span>
       ${(g.gadgets || []).length ? `<span class="muted">手持工具 ${g.gadgets.filter((x) => x.on).length}/${g.gadgets.length}</span>` : ""}
-      <button class="btn small" id="g-open" style="margin-left:auto">修改配置</button></div>
+      <button class="btn small" id="g-open" style="margin-left:auto">选择矿头 / 模组</button></div>
       ${ship.is_default ? `<p class="gear-hint">当前为出厂配置。按实际安装的矿头和模组修改后，破碎方案才准确</p>` : ""}`;
     $("#g-open").onclick = () => { state.gearOpen = true; gearRender(); };
     return;
@@ -723,7 +745,7 @@ function gearRender() {
     const h = g.heads.find((x) => x.key === hk), c = craft[i], cd = ship.cards[i], pw = (ship.power || [])[i];
     const slots = Array.from({ length: h.slots }, (_, j) => {
       const m = mods[j] ? g.modules.find((x) => x.key === mods[j]) : null;
-      return `<button type="button" class="chip g-slot${m ? "" : " empty"}" data-h="${i}" data-m="${j}" title="${esc(m ? m.desc : "点击选择模组")}">${m ? esc(m.name) : "空槽"}</button>`;
+      return `<button type="button" class="chip g-slot${m ? "" : " empty"}" data-h="${i}" data-m="${j}" title="${esc(m ? m.desc : "点击选择模组")}">${m ? esc(m.name) : "＋ 选择模组"}</button>`;
     }).join("");
     return `<div class="gear-card">
       <div class="gear-k"><span>矿头 ${lo.heads.length > 1 ? i + 1 : ""}</span>
@@ -731,7 +753,7 @@ function gearRender() {
       <select class="input g-head" data-h="${i}"${ship.fixed ? " disabled" : ""} title="${esc(h.desc)}">${heads.map((x) => `<option value="${x.key}"${x.key === hk ? " selected" : ""}>${esc(x.name)}</option>`).join("")}</select>
       <div class="gear-pw num">${cd.power !== cd.base ? `<span class="faint">${money(cd.base)} →</span> ` : ""}<b>${money(cd.power)}</b> W</div>
       <div class="gear-stats num">${GEAR_STATS.map(([k, l]) => `<div><span>${l}</span><b class="${gearGood(k, cd.stats[k])}">${cd.stats[k] ? pctTxt(cd.stats[k]) : "0"}</b></div>`).join("")}</div>
-      ${h.slots ? `<div class="chips">${slots}</div>` : `<div class="faint" style="font-size:13px">此矿头没有模组槽</div>`}
+      ${h.slots ? `<div class="faint" style="font-size:13px">模组（点击槽位选择）</div><div class="chips">${slots}</div>` : `<div class="faint" style="font-size:13px">此矿头没有模组槽</div>`}
       ${c ? `<div class="g-craft">
         <div class="faint" style="font-size:12.5px">${pw ? `自制品质使激光功率 ${pw.pct >= 0 ? "+" : ""}${pw.pct}%（两个槽合计）；框架（铁）的品质只影响耐久` : ""}</div>
         <div class="row" style="gap:6px"><button class="btn small g-preset" data-h="${i}" data-q="500" type="button">商店品质 500</button><button class="btn small g-preset" data-h="${i}" data-q="1000" type="button">最佳 1000</button></div>
@@ -761,11 +783,11 @@ function gearRender() {
     const cur = JSON.parse(JSON.stringify(lo));
     patch(cur);
     try { state.gear = await api("set_mining_gear", { ship: ship.key, loadout: cur }); gearRender(); toast("已保存"); }
-    catch (e) { toast(e.message); }
+    catch (e) { toast(e.message); gearRender(); }   // 存不上：照存着的配装重画，控件退回原样，和下面的读数对得上（审查 2026-11-08）
   };
   $("#g-close").onclick = () => { state.gearOpen = false; gearRender(); };
   $("#g-ship").onchange = async (e) => {
-    try { state.gear = await api("set_mining_gear", { ship: e.target.value }); gearRender(); } catch (er) { toast(er.message); }
+    try { state.gear = await api("set_mining_gear", { ship: e.target.value }); gearRender(); } catch (er) { toast(er.message); gearRender(); }
   };
   if ($("#g-crew")) $("#g-crew").onchange = (e) => save((c) => { c.crew = +e.target.value; });
   box.querySelectorAll(".g-pre").forEach((b) => (b.onclick = async () => {
@@ -1025,13 +1047,13 @@ function drawMineral() {
 // ================================================================ 制造
 PAGES.craft = () => {
   // 蓝图字典：按类别 / 子类 / 部位 / 厂商筛选，点一份看要什么材料；也能直接搜名字
-  const f = (state.cb = state.cb || { cat: "", sub: "", part: "", maker: "", q: "", unlocked: false, mat: "", mq: null });
+  const f = (state.cb = state.cb || { cat: "", sub: "", part: "", maker: "", size: "", grade: "", cls: "", q: "", unlocked: false, mat: "", mq: null });
   if (state.craftMat) {                // 从扫描结果 / 矿物页点「可制造 N 份蓝图」过来：只按这种矿筛
-    f.cat = f.sub = f.part = f.maker = f.q = ""; f.unlocked = false;
+    f.cat = f.sub = f.part = f.maker = f.size = f.grade = f.cls = f.q = ""; f.unlocked = false;
     f.mat = state.craftMat.en; f.mq = state.craftMat.q; state.craftMat = null;
   }
   if (state.craftJump) {               // 从别处点「制造」跳过来：清掉所有筛选（包括「只看默认已解锁」），只按名字搜
-    f.cat = f.sub = f.part = f.maker = f.mat = ""; f.mq = null; f.unlocked = false; f.q = state.craftJump.replace(/#\d+$/, ""); state.craftJump = null;
+    f.cat = f.sub = f.part = f.maker = f.size = f.grade = f.cls = f.mat = ""; f.mq = null; f.unlocked = false; f.q = state.craftJump.replace(/#\d+$/, ""); state.craftJump = null;
   }
   $("#page").innerHTML = `<h1>制造</h1><p class="lede">查看蓝图所需材料、品质对属性的影响和蓝图来源任务。可按类别筛选或搜索名称。</p>
     <div class="row"><input class="input" id="cq" placeholder="例：P4-AR / 头盔 / Arrowhead" style="width:320px"><button class="btn primary" id="cgo">搜索</button>
@@ -1060,8 +1082,10 @@ PAGES.craft = () => {
       if ($("#cmatx")) $("#cmatx").onclick = () => { f.mat = ""; f.mq = null; load(); };
       $("#ccats").innerHTML = [{ key: "", label: "全部", count: r.cats.reduce((a, c) => a + c.count, 0) }, ...r.cats]
         .map((c) => `<button class="btn small${c.key === f.cat ? " primary" : ""}" data-cat="${esc(c.key)}">${esc(c.label)} <span class="faint">${c.count}</span></button>`).join("");
-      $("#cfil").innerHTML = sel("csub", "子类", r.subs, f.sub) + sel("cpart", "部位", r.parts, f.part) + sel("cmaker", "厂商", r.makers, f.maker);
-      ["csub", "cpart", "cmaker"].forEach((id) => { const e = $("#" + id); if (e) e.onchange = () => { f[{ csub: "sub", cpart: "part", cmaker: "maker" }[id]] = e.value; if (id === "csub") f.part = f.maker = ""; if (id === "cpart") f.maker = ""; load(); }; });
+      $("#cfil").innerHTML = sel("csub", "子类", r.subs, f.sub) + sel("cpart", "部位", r.parts, f.part) + sel("cmaker", "厂商", r.makers, f.maker)
+        + sel("csize", "尺寸", r.sizes || [], f.size) + sel("cgrade", "等级", r.grades || [], f.grade) + sel("ccls", "分类", r.clss || [], f.cls);   // 后三个只有船零件有（CR-D1）
+      const FIL = ["csub", "cpart", "cmaker", "csize", "cgrade", "ccls"], KEY = { csub: "sub", cpart: "part", cmaker: "maker", csize: "size", cgrade: "grade", ccls: "cls" };
+      FIL.forEach((id, i) => { const e = $("#" + id); if (e) e.onchange = () => { f[KEY[id]] = e.value; FIL.slice(i + 1).forEach((x) => { f[KEY[x]] = ""; }); load(); }; });   // 换了前面的，后面的清掉
       $("#clist").innerHTML = "";
       shown = 0;
     }
@@ -1074,7 +1098,7 @@ PAGES.craft = () => {
   $("#cgo").onclick = search;
   $("#cq").onkeydown = (e) => { if (e.key === "Enter") search(); };   // 只管回车，别的键（退格、删除、方向键）照常
   $("#cun").onchange = () => { f.unlocked = $("#cun").checked; load(); };
-  $("#ccats").onclick = (e) => { const b = e.target.closest("button[data-cat]"); if (b) { f.cat = b.dataset.cat; f.sub = f.part = f.maker = ""; load(); } };
+  $("#ccats").onclick = (e) => { const b = e.target.closest("button[data-cat]"); if (b) { f.cat = b.dataset.cat; f.sub = f.part = f.maker = f.size = f.grade = f.cls = ""; load(); } };
   $("#cmore").onclick = () => load(true);
   $("#clist").onclick = (e) => { const b = e.target.closest("button[data-k]"); if (b) showCraft(b.dataset.k, b); };
   load().then(() => state.craftKey && showCraft(state.craftKey));
@@ -1256,7 +1280,7 @@ async function navHaloView() {
   if (!still()) return;
   const h = state.halo || (state.halo = { frm: "ARC-L1", band: 5, to: null });
   box.innerHTML = `<div class="panel">
-      <p class="muted" style="margin:0 0 12px">Aaron Halo 是环绕斯坦顿恒星的 10 条小行星带（距恒星 19.67–21.30 Gm）。选择出发点和目标带后，AT 计算量子跳跃的目标，以及剩余距离为多少时按 U 退出，即可停在该带内。数据和算法来自 SCMiner。</p>
+      <p class="muted" style="margin:0 0 12px">Aaron Halo 是环绕斯坦顿恒星的一圈小行星带（距恒星 19.60–21.39 Gm），里面有 10 条石头密的子带。选择出发点和目标带后，AT 计算量子跳跃的目标，以及剩余距离为多少时按鼠标左键退出，即可停在该带内。环带边界、量子速度用游戏数据；子带位置、密度和算法来自 SCMiner。</p>
       <div class="row" style="gap:10px;flex-wrap:wrap">
         <label>出发点 <select class="input" id="hfrm">${o.points.map((p) => `<option value="${esc(p.key)}" ${p.key === h.frm ? "selected" : ""}>${esc(p.label)}</option>`).join("")}</select></label>
       </div>
@@ -1308,7 +1332,7 @@ function drawHaloRoutes() {
     <ol style="margin:0 0 8px 18px;padding:0;line-height:1.8">
       <li>在 ${esc(x.from_zh)} 选择 ${esc(x.to_zh)}，充能后量子跳跃</li>
       <li>注意 HUD 上 ${esc(x.to_zh)} 的剩余距离</li>
-      <li>显示 <b>${gmText(x.dropout)}</b> 左右按 <kbd>U</kbd>（或关闭量子驱动器）退出</li>
+      <li>显示 <b>${gmText(x.dropout)}</b> 左右按 <kbd>鼠标左键</kbd> 退出（别按 U：U 是整船断电，船要晚一秒多才停）</li>
       <li>断开后 AT 读右上角位置，自动核对是否位于第${x.band}带内（读不到时在聊天框输入 /showlocation）</li>
     </ol>
     <p class="muted" style="font-size:13px">提示：宁早勿晚，提前退出后再补跳一小段</p>
@@ -1853,7 +1877,7 @@ function openModal({ title, sub = "", body = "", foot = "", wide = false, onClos
     <div class="modal-head"><div><h2>${esc(title)}</h2>${sub ? `<p>${sub}</p>` : ""}</div><button type="button" class="btn small" data-close>关闭</button></div>
     <div class="modal-body">${body}</div>${foot ? `<div class="modal-foot">${foot}</div>` : ""}</div>`;
   document.body.appendChild(m);
-  const md = { el: m, q: (s) => m.querySelector(s) };
+  const md = { el: m, q: (s) => m.querySelector(s), dirty: false };
   md.close = () => {
     const i = MODALS.indexOf(md);
     if (i < 0) return;
@@ -1862,7 +1886,22 @@ function openModal({ title, sub = "", body = "", foot = "", wide = false, onClos
     if (onClose) onClose();
   };
   MODALS.push(md);
-  m.addEventListener("mousedown", (e) => { if (e.target === m) md.close(); });
+  // 填过内容的弹窗（打过字、改过选项、换过地点）点外面不关，只有「关闭」「取消」或 Esc 关，和小表单一样；
+  // 没填过的、只在搜索框（data-filter）里打过字的，点外面照旧关
+  const mark = (e) => { if (!e.target.closest?.("[data-filter]")) md.dirty = true; };
+  ["input", "change", "placechange"].forEach((n) => m.addEventListener(n, mark));
+  m.addEventListener("mousedown", (e) => {
+    if (e.target !== m) return;
+    if (!md.dirty) { md.close(); return; }
+    // 挡住了：卡片轻轻跳一下，「关闭」「取消」描一圈边（关了动画效果的电脑上也看得到），提示点它们；输入框不失焦
+    e.preventDefault();
+    const card = m.querySelector(".modal-card");
+    card.classList.remove("nudge"); void card.offsetWidth; card.classList.add("nudge");
+    const btns = m.querySelectorAll("[data-close]");
+    btns.forEach((b) => b.classList.add("hint"));
+    clearTimeout(md.hintT);
+    md.hintT = setTimeout(() => btns.forEach((b) => b.classList.remove("hint")), 1200);
+  });
   m.querySelectorAll("[data-close]").forEach((b) => (b.onclick = md.close));
   return md;
 }
@@ -1876,7 +1915,7 @@ async function pickPlace(current = "") {
     const md = openModal({
       title: "选择存放地点", wide: true, onClose: () => resolve(result),
       sub: "游戏中可存放物品的空间站、城市、星门和休息站。飞船、前哨等不在列表中的地点，可在下方自定义",
-      body: `<input class="input" id="pp-q" placeholder="搜索地点：新巴贝奇 / Area18 / 弧 L1 / 派罗" autocomplete="off">
+      body: `<input class="input" id="pp-q" data-filter placeholder="搜索地点：新巴贝奇 / Area18 / 弧 L1 / 派罗" autocomplete="off">
         <div id="pp-list" class="pp-list"></div>
         <div class="row" style="align-items:flex-end;border-top:1px solid var(--line);padding-top:12px">
           <label class="field" style="flex:1">自定义地点（飞船、前哨等）<input class="input" id="pp-name" placeholder="例：MOLE 货舱"></label>
@@ -2116,16 +2155,16 @@ function countDraw() {
   const num = (v, u) => esc(qtyText(+(+v).toFixed(6), u));
   const diff = rv.rows.filter((r) => r.delta), same = rv.rows.length - diff.length;
   box.innerHTML = `<div class="panel" style="margin:12px 0"><h3 style="margin:0 0 8px">对账｜${esc(rv.place)}</h3>
-    <table class="t">${diff.map((r) => `<tr><td>${esc(r.zh || r.en)}${q(r.quality)}${r.craft ? ` <span class="faint" style="font-size:12.5px">${esc(r.craft.map((x) => `${x.slot} ${x.q}`).join(" · "))}</span>` : ""}</td><td class="n">${num(r.book, r.unit)} → ${num(r.game, r.unit)}</td>
+    <table class="t">${diff.map((r) => `<tr><td>${esc(r.zh || r.en)}${q(r.quality)}${r.craft ? ` <span class="faint" style="font-size:12.5px">${esc(r.craft.map((x) => `${x.slot} ${x.q}`).join(" · "))}</span>` : ""}${r.disabled ? ` <span class="faint" style="font-size:12.5px">含已停用 ${+r.disabled} 格</span>` : ""}</td><td class="n">${num(r.book, r.unit)} → ${num(r.game, r.unit)}</td>
       <td class="n" style="color:var(${r.delta > 0 ? "--mint" : "--coral"})">${r.delta > 0 ? "+" : "−"}${num(Math.abs(r.delta), r.unit)}</td></tr>`).join("")}
-    ${rv.missing.map((m, i) => `<tr><td>${esc(m.item)}${q(m.quality)}</td><td class="n muted">${num(m.qty, m.unit)} 未盘到</td>
+    ${rv.missing.map((m, i) => `<tr><td>${esc(m.item)}${q(m.quality)}${m.same ? `<div class="faint" style="font-size:12.5px">和盘到的「${esc(m.same)}」挂着同一个中文名，可能是同一件；是的话勾清零</div>` : ""}</td><td class="n muted">${num(m.qty, m.unit)} 未盘到</td>
       <td class="n"><label style="white-space:nowrap"><input type="checkbox" data-zero="${i}"> 清零</label></td></tr>`).join("")}</table>
     ${same ? `<p class="faint" style="margin:6px 0 0">${same} 项数量一致</p>` : ""}
     <div class="row" style="justify-content:flex-end;gap:8px;margin-top:10px"><button type="button" class="btn small" id="cr-no">取消</button><button type="button" class="btn small primary" id="cr-ok">确认</button></div></div>`;
-  $("#cr-no").onclick = async () => { await api("count_cancel"); state.count = { ...c, review: null }; countDraw(); };
+  $("#cr-no").onclick = async () => { await api("count_cancel"); if (state.count?.review === rv) state.count = { ...state.count, review: null }; countDraw(); };
   $("#cr-ok").onclick = async () => {
     const zero = [...box.querySelectorAll("[data-zero]:checked")].map((x) => rv.missing[+x.dataset.zero].key);
-    try { stockShow(await api("count_apply", { zero })); state.count = { ...c, review: null }; countDraw(); toast("已按盘点结果更新"); }
+    try { stockShow(await api("count_apply", { zero })); if (state.count?.review === rv) state.count = { ...state.count, review: null }; countDraw(); toast("已按盘点结果更新"); }
     catch (err) { toast(err.message); }
   };
 }
@@ -2150,6 +2189,7 @@ function stockInDialog(pre = {}) {
       <label class="field">备注<textarea class="input" id="si-note" rows="2" placeholder="选填"></textarea></label>`,
     foot: `<button type="button" class="btn" data-close>取消</button><button type="button" class="btn" id="si-more">保存并继续</button><button type="button" class="btn primary" id="si-ok">保存</button>` });
   if (pre.unit) md.q("#si-unit").value = pre.unit;
+  if ((pre.qty ?? "") !== "" || (pre.quality ?? "") !== "") md.dirty = true;   // 从物品页带进来的数量、品质是玩家填过的：点外面也护住
   bindBinSelect(md, md.q("#si-bin"));
   // 1.6.67：能制造的东西，按材料槽填品质（品质栏自动算平均）
   let craftSlots = [];
@@ -2348,6 +2388,23 @@ async function stockLedgerDialog() {
   load();
 }
 
+async function countToggle() {
+  try {
+    let r;
+    try { r = await api("count_toggle"); }
+    catch (err) { if (!err.data?.need_place) throw err; r = err.data; }
+    if (r.need_place) {
+      toast(r.error);
+      const place = await pickPlace("");
+      if (!place) return;
+      r = await api("count_toggle", { place });
+    }
+    if (r.error) toast(r.error);
+    state.count = { ...(state.count || {}), ...r, running: !!r.running };
+    countDraw();
+  } catch (err) { toast(err.message); }
+}
+
 PAGES.stock = async () => {
   const f = (state.stockF ||= { q: "", kind: "", qr: "", goal: "", sort: "name", desc: false });
   f.goal ??= "";
@@ -2373,10 +2430,7 @@ PAGES.stock = async () => {
   $("#sf-reset").onclick = () => { Object.assign(f, { q: "", kind: "", qr: "", goal: "", sort: "name", desc: false }); renderPage(); };
   $("#st-ledger").onclick = $("#st-ledger2").onclick = () => stockLedgerDialog();
   $("#st-mode").onchange = (e) => stockSetMode(e.target.value);
-  $("#st-count").onclick = async () => {
-    try { const r = await api("count_toggle"); if (r.error) toast(r.error); state.count = { ...(state.count || {}), running: !!r.running }; countDraw(); }
-    catch (err) { toast(err.message); }
-  };
+  $("#st-count").onclick = countToggle;
   api("count_state").then((r) => { state.count = r; countDraw(); }).catch(() => {});
   $("#st-in").onclick = () => {
     const { place, bin } = stockSelParts();
@@ -2487,10 +2541,7 @@ async function stockSimple() {
   $("#st-ledger").onclick = () => stockLedgerDialog();
   $("#ss-q").oninput = () => { f.q = $("#ss-q").value; stockSimpleDraw(); };
   $("#st-in").onclick = () => stockInDialog(f.place ? { place: f.place } : {});
-  $("#st-count").onclick = async () => {
-    try { const r = await api("count_toggle"); if (r.error) toast(r.error); state.count = { ...(state.count || {}), running: !!r.running }; countDraw(); }
-    catch (err) { toast(err.message); }
-  };
+  $("#st-count").onclick = countToggle;
   api("count_state").then((r) => { state.count = r; countDraw(); }).catch(() => {});
   $("#ss-undo").onclick = (e) => {                             // 撤的是全部地点里最近的一笔（不管筛选），先写清楚撤哪笔再确认
     const last = stockLastUndo();
@@ -2505,7 +2556,7 @@ async function stockSimple() {
     const counts = {};
     d.rows.forEach((r) => { counts[r.place] = (counts[r.place] || 0) + 1; });
     const places = [["", "全部地点", d.rows.length], ...Object.keys(counts).sort((a, b) => a.localeCompare(b, "zh-CN")).map((p) => [p, p, counts[p]])];
-    const p = popOver(e.currentTarget, `<div style="padding:8px;width:280px"><input class="input" placeholder="搜索地点" aria-label="搜索地点" style="margin-bottom:6px">
+    const p = popOver(e.currentTarget, `<div style="padding:8px;width:280px"><input class="input" placeholder="搜索地点" aria-label="搜索地点" data-filter style="margin-bottom:6px">
       <div role="listbox" style="max-height:264px;overflow-y:auto" class="menu-list"></div></div>`, { cls: "menu", align: "left" });
     if (!p) return;
     const list = p.q("[role=listbox]"), inp = p.q("input");
@@ -2714,7 +2765,7 @@ function goalsDraw() {
 // 设置页「文字识别硬件」里的当前状态（实际在哪算、为什么没用上显卡）：status 每秒推一次，只更新这一段
 function ocrStateHtml(s, c) {
   return `当前实际运行：<b style="color:${s.ocr_device === '显卡' ? 'var(--ok,#2e7d32)' : 'inherit'}">${esc(s.ocr_device || 'CPU')}</b>
-      ${!s.gpu_available && (c.ocr_device || 'gpu') === 'gpu' ? `<br><span class="muted" style="font-size:12px;color:var(--warn,#d9822b)">⚠️ 当前 Python 环境未检测到 DirectML 支持，已自动切换为 CPU 运行。<br>如需显卡加速，请在终端执行：<code>.venv\\Scripts\\pip install onnxruntime-directml</code></span>` : ''}
+      ${!s.gpu_available && (c.ocr_device || 'cpu') === 'gpu' ? `<br><span class="muted" style="font-size:12px;color:var(--warn,#d9822b)">⚠️ 当前 Python 环境未检测到 DirectML 支持，已自动切换为 CPU 运行。<br>如需显卡加速，请在终端执行：<code>.venv\\Scripts\\pip install onnxruntime-directml</code></span>` : ''}
       ${s.ocr_error ? `<br><span class="muted" style="font-size:12px;color:var(--err,#d32f2f)">错误详情：${esc(s.ocr_error)}</span>` : ''}`;
 }
 
@@ -2763,6 +2814,10 @@ PAGES.settings = () => {
       <div class="set"><div>大小</div>${segH("ov-scale", [["0.5", "50%"], ["0.75", "75%"], ["1", "100%"]], String(Math.min(1, +(c.hud_scale ?? 1))), "悬浮窗大小")}</div>
       <div class="set"><div>底板</div>${segH("ov-plate", [["0.6", "浅"], ["0.72", "标准"], ["0.85", "深"]], String(+(c.hud_plate ?? 0.72)), "底板")}</div>
       <div class="set"><div>配色</div>${segH("ov-theme", [["默认", "默认"], ["蓝金", "蓝金"], ["浅色", "浅色"]], c.hud_theme || "默认", "悬浮窗配色")}</div></div>
+    <h2>采矿助手</h2>
+    <div class="panel"><div class="set" style="border:0;padding:0"><div>自动关闭时间
+      <p>连续未检测到扫描面板和信号多久后关闭；切出游戏暂停计时。可设 30–1800 秒，默认 120 秒。</p></div>
+      <label class="field">秒<input class="input" id="mining-idle" type="number" min="30" max="1800" step="1" value="${esc(c.mining_idle_close ?? 120)}" style="width:100px"></label></div></div>
     <h2>导航</h2>
     <div class="panel"><div class="set" style="border:0;padding:0"><div>帧数
       <p>导航时每秒读几次游戏右上角、刷新几次记号和转向提示。越高转镜头时记号越跟手，也越占 CPU；电脑忙时实际会低一些。默认 5。</p></div>
@@ -2777,12 +2832,12 @@ PAGES.settings = () => {
       <p>F8 识别物品时，将名字那一行文字的小截图和正确名字发给作者（认错的都发，认对的抽一部分），用于改进识别。不含整屏截图。</p></div>
       <button class="switch ${c.train_upload !== false ? "on" : ""}" id="train-sw" aria-label="帮助改进识别"></button></div>
     <div class="set"><div>文字识别硬件 (OCR)
-      <p>选择文字识别（F8 物品识别、全屏扫描）使用的硬件设备。<br>
+      <p>选择文字识别（F8 物品识别、盘点、采矿助手、导航）用处理器还是显卡。默认用处理器；显卡识别快一些（作者电脑上 F8 每次约快 0.2 秒），但 AT 会多占两三百 MB 内存。<br>
       <span id="ocr-state">${ocrStateHtml(s, c)}</span>
       </p></div>
-      ${segH("ocr-device", [["gpu", "显卡 (GPU)"], ["cpu", "处理器 (CPU)"]], (c.ocr_device || (c.always_use_gpu !== false ? "gpu" : "cpu")), "文字识别硬件")}</div>
+      ${segH("ocr-device", [["gpu", "显卡 (GPU)"], ["cpu", "处理器 (CPU)"]], (c.ocr_device || "cpu"), "文字识别硬件")}</div>
     <div class="set"><div>调试模式
-      <p>开启后，F8 物品识别与 F6 盘点会把裁切阶段、停因写入运行日志，并在 userdata/shots/debug/ 落下识别区域调试图；导航读游戏右上角时每读一次在 userdata/logs/di_log.txt 记一行（导航记号收起的原因也记在这里），没读出的画面存到 userdata/shots/di_fail/。都只在本机，不上传，便于排查认错、偏慢、裁切区域不对或导航记号消失。日志和磁盘占用会明显增加；平时请保持关闭。</p></div>
+      <p>开启后，F8 物品识别与 F6 盘点每一步的裁切、耗时、停因写进 userdata/logs/debug_日期.log（不在右边运行日志里刷屏），并在 userdata/shots/debug/ 落下识别区域调试图；导航读游戏右上角时每读一次在 userdata/logs/di_log.txt 记一行（导航记号收起的原因也记在这里），没读出的画面存到 userdata/shots/di_fail/。都只在本机，不上传；导出日志时带上日志文件、不带图。便于排查认错、偏慢、裁切区域不对或导航记号消失。日志和磁盘占用会明显增加；平时请保持关闭。</p></div>
       <button class="switch ${c.debug_mode ? "on" : ""}" id="debug-sw" aria-label="调试模式"></button></div>
     <div class="set" style="border:0;padding:0"><div>导出日志
       <p>将运行日志、设置和系统信息打包到桌面，发给作者用于排查问题。不含聊天记录、浏览数据等个人信息。识别类问题（扫描、F8、导航）建议附上出现问题时的游戏截图。</p></div>
@@ -2836,31 +2891,40 @@ PAGES.settings = () => {
   };
   $("#fb-clear").onclick = (e) => popconfirm(e.currentTarget, { title: "清空反馈记录？", sub: "已导出的文件不受影响", okText: "清空", danger: true,
     onOk: async () => { try { await api("feedback_clear"); fbList(); toast("已清空"); } catch (err) { toast(err.message); } } });
-  $("#ui-theme").onchange = async (e) => {
-    applyTheme(e.target.value);
-    try { state.status.settings = await api("set_settings", { theme: e.target.value }); } catch (err) { toast(err.message); }
-  };
-  for (const [id, key] of [["#ov-scale", "hud_scale"], ["#ov-plate", "hud_plate"], ["#nav-fps", "nav_fps"]]) {
-    $(id).onchange = async (e) => {
-      try { state.status.settings = await api("set_settings", { [key]: +e.target.value }); toast("已保存"); } catch (err) { toast(err.message); }
-    };
-  }
-  $("#ov-theme").onchange = async (e) => {
-    try { state.status.settings = await api("set_settings", { hud_theme: e.target.value }); toast("已保存"); } catch (err) { toast(err.message); }
-  };
-  const ocrDev = $("#ocr-device");
-  if (ocrDev) {
-    ocrDev.onchange = async (e) => {
-      try {
-        state.status.settings = await api("set_settings", { ocr_device: e.target.value });
-        state.status = await api("status");
-        renderPage();
-        toast(`已切换为${e.target.value === "gpu" ? "显卡 (GPU)" : "处理器 (CPU)"}`);
-      } catch (err) {
+  // 分段选择和开关都是先变界面再存。没存上（设置文件被杀毒、同步软件占着等）就退回上次存上的样子，
+  // 玩家照提示「再点一次」才对得上；等结果时玩家又点了别的，不退（s1 复查）
+  const saveSeg = (id, key, { num = false, show = null, done = null } = {}) => {
+    const el = $(id);
+    if (!el) return;
+    let saved = el.value;
+    el.onchange = async () => {
+      const v = el.value;
+      show?.(v);
+      try { state.status.settings = await api("set_settings", { [key]: num ? +v : v }); }
+      catch (err) {
+        if (el.value === v) { el.value = saved; show?.(saved); }
         toast(err.message);
+        return;
       }
+      saved = v;
+      if (done) await done(v); else toast("已保存");
     };
-  }
+  };
+  saveSeg("#ui-theme", "theme", { show: applyTheme, done: () => {} });
+  for (const [id, key] of [["#ov-scale", "hud_scale"], ["#ov-plate", "hud_plate"], ["#nav-fps", "nav_fps"]]) saveSeg(id, key, { num: true });
+  saveSeg("#ov-theme", "hud_theme");
+  saveSeg("#ocr-device", "ocr_device", { done: async (v) => {
+    try { state.status = await api("status"); renderPage(); } catch (err) { toast(err.message); return; }
+    toast(`已切换为${v === "gpu" ? "显卡 (GPU)" : "处理器 (CPU)"}`);
+  } });
+  $("#mining-idle").onchange = async (e) => {
+    const el = e.target, seconds = Number(el.value);
+    if (!el.value || !Number.isInteger(seconds) || seconds < 30 || seconds > 1800) {
+      toast("自动关闭时间请填 30–1800 秒的整数"); el.value = state.status.settings.mining_idle_close ?? 120; return;
+    }
+    try { state.status.settings = await api("set_settings", { mining_idle_close: seconds }); el.value = state.status.settings.mining_idle_close; toast("已保存"); }
+    catch (err) { el.value = state.status.settings.mining_idle_close ?? 120; toast(err.message); }
+  };
   const upgList = (r) => {
     const el = $("#upg-found");
     if (!el) return;
@@ -2885,26 +2949,17 @@ PAGES.settings = () => {
     try { upgList(await api("upgrade_check", { online: true })); } catch (err) { toast(err.message); }
     b.disabled = false; b.textContent = "检查更新";
   };
-  $("#fb-sw").onclick = async (e) => {
-    const on = !e.currentTarget.classList.contains("on");
-    e.currentTarget.classList.toggle("on", on);
-    try { state.status.settings = await api("set_settings", { feedback_upload: on }); } catch (err) { toast(err.message); }
-  };
-  $("#train-sw").onclick = async (e) => {
-    const on = !e.currentTarget.classList.contains("on");
-    e.currentTarget.classList.toggle("on", on);
-    try { state.status.settings = await api("set_settings", { train_upload: on }); } catch (err) { toast(err.message); }
-  };
-  $("#debug-sw").onclick = async (e) => {
-    const on = !e.currentTarget.classList.contains("on");
-    e.currentTarget.classList.toggle("on", on);
-    try { state.status.settings = await api("set_settings", { debug_mode: on }); } catch (err) { toast(err.message); }
-  };
-  $("#upd-sw").onclick = async (e) => {
-    const on = !e.currentTarget.classList.contains("on");
-    e.currentTarget.classList.toggle("on", on);
-    try { state.status.settings = await api("set_settings", { update_online: on }); } catch (err) { toast(err.message); }
-  };
+  // 开关同理（见上面 saveSeg）：先拨过去再存，没存上拨回上次存上的样子
+  for (const [id, key] of [["#fb-sw", "feedback_upload"], ["#train-sw", "train_upload"], ["#debug-sw", "debug_mode"], ["#upd-sw", "update_online"]]) {
+    const sw = $(id);
+    let saved = sw.classList.contains("on");
+    sw.onclick = async () => {
+      const on = !sw.classList.contains("on");
+      sw.classList.toggle("on", on);
+      try { state.status.settings = await api("set_settings", { [key]: on }); saved = on; }
+      catch (err) { if (sw.classList.contains("on") === on) sw.classList.toggle("on", saved); toast(err.message); }
+    };
+  }
   $("#upg").addEventListener("click", async (e) => {
     const back = e.target.closest(".upg-back");
     if (back) {
@@ -2928,8 +2983,8 @@ PAGES.settings = () => {
   });
 
   $("#admin-sw").onclick = async () => {
-    state.status.settings = await api("set_settings", { admin: c.admin === false });
-    renderPage();
+    try { state.status.settings = await api("set_settings", { admin: c.admin === false }); renderPage(); }
+    catch (err) { toast(err.message); }  // 没存上：开关没动过（存上了才重画）
   };
   // 1.6.60：热键不用下拉框选，点一下、按一下要用的键（F1–F12；Esc 取消）。1.6.70：所有热键都能改；默认不设的按 Delete 清掉
   document.querySelectorAll("[data-hk]").forEach((b) => (b.onclick = () => {
@@ -3024,10 +3079,11 @@ async function showDisclaimer() {
   box.innerHTML = `<div class="gate-card" role="dialog" aria-modal="true"><div class="legal" style="max-height:60vh">${await disclaimerHTML()}</div>
     <button class="btn" id="gate-close">关闭</button></div>`;
   document.body.appendChild(box);
-  const close = () => box.remove();
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  const close = () => { document.removeEventListener("keydown", onKey); box.remove(); };
   $("#gate-close").onclick = close;
   box.addEventListener("click", (e) => { if (e.target === box) close(); });
-  document.addEventListener("keydown", function esc(e) { if (e.key === "Escape") { close(); document.removeEventListener("keydown", esc); } });
+  document.addEventListener("keydown", onKey);
 }
 
 

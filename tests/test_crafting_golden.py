@@ -5,12 +5,15 @@ CR-B1～B6 拆制造代码时，这些输出应当一个字都不变。
 
 import logging
 from types import SimpleNamespace
+from typing import Any
 
 from astral_toolkit.contracts.blueprints import assign_keys
 from astral_toolkit.contracts.textkeys import blueprint_norm, blueprint_search_norm
 from astral_toolkit.core import i18n
 from astral_toolkit.crafting import crafting as C
-from astral_toolkit.crafting import itemstats
+from astral_toolkit.crafting import (
+    crafting as craft_data,
+)  # 成品属性取数据在这（11-09 删了 crafting/itemstats）
 from astral_toolkit.crafting import quality
 from astral_toolkit.crafting import reverse
 from astral_toolkit.gamedata import crafting as gd_crafting
@@ -285,8 +288,8 @@ def _install(monkeypatch):
     monkeypatch.setattr(gd_crafting, "for_item", for_item)
     monkeypatch.setattr(gd_crafting, "containing", containing)
     monkeypatch.setattr(gd_crafting, "using_material", using_material)
-    monkeypatch.setattr(itemstats, "item", _fake_item)
-    monkeypatch.setattr(itemstats, "version", _fake_version)
+    monkeypatch.setattr(craft_data, "_stat_item", _fake_item)
+    monkeypatch.setattr(craft_data, "_stats_version", _fake_version)
     monkeypatch.setattr(i18n, "gear_zh_of_item", _fake_gear_zh)
     monkeypatch.setattr(i18n, "mineral_zh", lambda en: MIN_ZH.get(en, en))
     monkeypatch.setattr(mining_data, "best_price", _fake_best_price)
@@ -320,7 +323,7 @@ def _head_weapon(note=""):
         "zh": "测试步枪",
         "en": "Test Rifle",
         "kind": "个人武器",
-        "tags": ["S3", "A 级", "军用"],
+        "tags": [],
         "maker": "MakerW",
         "sec": 125,
         "unlocked": True,
@@ -348,7 +351,7 @@ def _head_laser(note=""):
         "zh": "霍夫斯泰德 S2 采矿激光器",
         "en": "Hofstede-S2 Mining Laser",
         "kind": "采矿激光器",
-        "tags": ["S2", "B 级", "工业"],
+        "tags": ["S2"],
         "maker": "Shubin",
         "sec": 300,
         "unlocked": True,
@@ -1404,6 +1407,49 @@ def test_craft_search_browse_detail(monkeypatch):
             "Test Helmet",
             "Test Rifle",
         ]
+    finally:
+        G.clear_caches()
+
+
+def test_craft_browse_spec_tags_and_filters(monkeypatch):
+    """CR-D1：船零件那行带尺寸 / 等级 / 类别，选了船零件类多三组筛选（窗口走 app.api）；
+    护甲那行和标题带轻 / 中 / 重；个人武器照旧不带"""
+    from astral_toolkit.app.api import crafting as api
+
+    _install(monkeypatch)
+    extra = {
+        "uuid-armor": {"size": 1, "grade": "A", "sub": "Heavy", "s": {}},
+        "uuid-dup1": {"size": 1, "grade": "C", "cls": "Civilian", "s": {}},
+        # 个人武器的子类型是 Small / Medium / Large：不能当成护甲的轻重
+        "uuid-weapon": {**ITEMS["uuid-weapon"], "sub": "Medium"},
+    }
+    monkeypatch.setattr(
+        craft_data, "_stat_item", lambda u: extra.get(u) or _fake_item(u)
+    )
+    try:
+        laser = api.craft_browse(cat="vehiclegear/mininglaser")
+        # 采矿激光器游戏里只写尺寸：等级、类别不写也不给下拉（审查 2026-11-08）
+        assert [r["tags"] for r in laser["rows"]] == ["S2"]
+        assert laser["sizes"] == []  # 子类就是 S2
+        assert laser["grades"] == [] and laser["clss"] == []
+        cooler = api.craft_browse(cat="vehiclegear/cooler")
+        assert [r["tags"] for r in cooler["rows"]] == [
+            "S1 · C 级 · 民用 · 配方 1/2 · 2 分钟",
+            "S1 · 配方 2/2 · 3 分钟",
+        ]
+        assert cooler["grades"] == [{"key": "C", "label": "C 级", "count": 1}]
+        picked = api.craft_browse(cat="vehiclegear/cooler", grade="C")
+        assert [r["key"] for r in picked["rows"]] == ["Same Widget#1"]
+        assert api.craft_browse(cat="vehiclegear/cooler", cls="Military")["total"] == 0
+        armour = api.craft_browse(cat="fpsgear/armour")
+        assert [r["tags"] for r in armour["rows"]] == ["头盔 · 战斗 · 重型"]
+        assert not {"sizes", "grades", "clss"} & set(armour)
+        assert api.craft_browse(cat="fpsgear/weapons")["rows"][0]["tags"] == "突击步枪"
+        # 护甲、个人武器的尺寸 / 等级是物品属性里的默认值：标题只写轻重
+        helmet: Any = G.craft_detail("Test Helmet")
+        rifle: Any = G.craft_detail("Test Rifle")
+        assert helmet["head"]["tags"] == ["重型"]
+        assert rifle["head"]["tags"] == []
     finally:
         G.clear_caches()
 

@@ -1,4 +1,4 @@
-"""采矿线程（目录迁移 R3 从 app/engines/live.py 搬来）：扫描面板识别、雷达信号、破碎方案、袋子（_Live）
+"""采矿线程（目录迁移 R3 从 app/engines/live.py 搬来）：扫描面板识别、雷达信号、破碎方案（_Live）
 
 目录迁移 R3（2026-11-07）：本模块只留扫描节奏、会话、取消和结果提交。一轮识别要用的分析（analysis：
 tasks/mining_analysis，原样转给 mining/screen、mining/signals、tasks/mining 等）、活动磁贴（views：
@@ -32,7 +32,7 @@ class MiningAnalysis(Protocol):
 
     def interval(self) -> float: ...
     def vote_frames(self) -> int: ...
-    def search(self) -> Any: ...
+    def search(self, size: Any = None) -> Any: ...
     def analyse(self, *args: Any, **kwargs: Any) -> Any: ...
     def last_raw(self) -> Any: ...
     def last_panel(self) -> Any: ...
@@ -79,6 +79,9 @@ class MiningLinks:
     yield_ocr: Callable[[], Any]
     # 设置里的 live_on 跟着开关写（app/output.setting_run_flag）；一定要给
     run_flag: RunFlag
+    # 设置在 bootstrap 缓存读取，运行中改动下一轮生效；默认保留原有行为。
+    idle_seconds: Callable[[], float] = lambda: 120.0
+    focus: Callable[[], Any] = lambda: None
 
 
 def _pub(kind, data):
@@ -190,7 +193,12 @@ class _Live:
     display_name = "采矿助手"
     activity_kind = "mining"
     retries = 3
-    idle_close: float | None = 120.0  # 所有通道最近一次「看到」都超过这么久：自动关闭
+
+    @property
+    def idle_close(self) -> float:
+        """所有通道最近一次「看到」都超过设置时间后自动关闭。"""
+        return self._links.idle_seconds()
+
     stale_after: dict[str, float] = {"panel": 20.0, "signals": 20.0}
     needs_foreground = True
     restart_while_stopping = True
@@ -309,17 +317,17 @@ class _Live:
     def stop_ops(self, session, info):
         """「已停止」确认的 ops（循环在锁内套用；纯函数，只读 info）。逐字照 dev 三处收尾
 
-        user：清三块 → 记「引擎已停止」→ scan_hint → live running=False（不发 note）
-        idle：清三块 → scan_hint → live auto_off → note（不写「引擎已停止」）
-        error：清三块 → scan_hint → live error → note（不写「引擎已停止」）
+        user：清两块 → 记「引擎已停止」→ scan_hint → live running=False（不发 note）
+        idle：清两块 → scan_hint → live auto_off → note（不写「引擎已停止」）
+        error：清两块 → scan_hint → live error → note（不写「引擎已停止」）
         shutdown：什么都不发；replaced 不经这里
         """
         if info.reason not in ("user", "idle", "error"):
             return []
         hotkey = info.hotkey or "F5"
-        ops: list[tuple] = [_del("信号", "扫描", "矿袋")]
+        ops: list[tuple] = [_del("信号", "扫描")]
         if info.reason == "user":
-            # 列表顺序照设计表：清三块 → record → scan_hint → live（执行顺序里 record 是锁后类）
+            # 列表顺序照设计表：清两块 → record → scan_hint → live（执行顺序里 record 是锁后类）
             ops.append(_record("MINING", "采矿助手引擎已停止", "LIVE"))
         ops.append(_pub("scan_hint", {"why": "", "text": ""}))
         if info.reason == "user":
@@ -377,7 +385,7 @@ class _Live:
 
     def before_retry(self, session, ctx, error):
         """重来前把上一轮的旧结果清掉（新一轮的过期清理不认旧的）"""
-        return [_del("信号", "扫描", "矿袋")]
+        return [_del("信号", "扫描")]
 
     def on_pause(self, session, ctx):
         if ctx is None:
@@ -457,7 +465,7 @@ class _Live:
                 ctx.ui["state"] = "stale"
                 ctx.ui["stale_since"] = since
                 shown_scan = self.results.get(MINING_SCAN)
-                ops.append(_del("扫描", "矿袋"))
+                ops.append(_del("扫描"))
                 ops.append(
                     _pub(
                         "scan",
@@ -475,8 +483,8 @@ class _Live:
         log = ctx.log
         wall = time.time()
         img = self._links.grab()
-        l, t, r, b = n.search()  # noqa: E741
         W, H = img.size
+        l, t, r, b = n.search((W, H))  # noqa: E741
         # 省电：画面几乎没变、这个画面已经出过结果（或根本没有面板）就不重复识别。
         # 整屏缩小比一次，扫描面板那块再单独细一点比一次（面板里数字变了、整屏几乎没变的情况）
         small = np.asarray(
@@ -508,7 +516,7 @@ class _Live:
             return Tick(n.interval(), {})
         observed: dict[str, float] = {}
         # ---- 扫描面板（先看有没有面板：有面板时屏幕上的质量等数字会被当成信号，信号识别就暂停）
-        scan, bag = n.analyse(img)
+        scan = n.analyse(img)
         raw = n.last_raw().get("scan") if n.last_raw().get("t", 0) >= wall else None
         # 真有面板才算（读全了，或认出面板上的字 / 带矿名的成分）。只读到几个零散数字不算：勘探者驾驶舱右边的
         # 高度表、气压会被拼成「质量 0.7、抗性 76」，以前因此一直当面板开着，信号识别整段暂停（2026-10-23 Calliope）
@@ -566,6 +574,7 @@ class _Live:
                 (area or {}).get("zh"),
                 n.rocks_stamp(),
                 n.mine_file_stamp(),
+                self.loop.config_rev,
             )  # 换了石头表、读数改没改过、自己起了名都重发
             if (
                 sigs
@@ -580,6 +589,14 @@ class _Live:
                     else None
                 )
                 lines = n.mark_goal_lines(n.describe_all(found, where, area))
+                focus = self._links.focus()
+                hud_lines = (
+                    lines
+                    if focus is None
+                    else n.mark_goal_lines(
+                        n.describe_all(found, where, area, focus=focus)
+                    )
+                )
                 unknown = [
                     v
                     for v in sorted(sigs)
@@ -600,8 +617,9 @@ class _Live:
                         "信号",
                         "\n".join(
                             x.split("｜精炼后")[0].replace("信号 ", "")
-                            for x in lines[:4]
-                        ),
+                            for x in hud_lines[:4]
+                        )
+                        or "未发现关注的信号",
                     ),
                     _say(
                         f"雷达信号: {sorted(sigs)} 产区: {(area or {}).get('zh') or '未知'}",
@@ -635,22 +653,22 @@ class _Live:
             if not scan.valid:
                 ctx.settled = ctx.same >= 2  # 画面里没有扫描面板，静止时不用一直认
         if scan.valid:
-            self._tick_scan(session, ctx, scan, bag, img, now, stamp)
+            self._tick_scan(session, ctx, scan, img, now, stamp)
         elif part_ok and len(ctx.part) >= 2:
-            self._tick_part(session, ctx, bag, now, stamp)
+            self._tick_part(session, ctx, now, stamp)
         return Tick(n.interval(), observed)
 
-    def _tick_scan(self, session, ctx, scan, bag, img, now, stamp):
+    def _tick_scan(self, session, ctx, scan, img, now, stamp):
         n = self._an
         log = ctx.log
-        if n.enqueue_rock(ctx.recent, scan, bag):
+        if n.enqueue_rock(ctx.recent, scan):
             ctx.unstable_n = 0  # 换了石头：投票队列重计
         # 这一帧和队列里的石头对不上、被当成可疑帧先记下（没进队列）：这次不投票、不发结果。
         # 以前照样拿队列里上一块石头的帧投票，换石头后的第一帧会把上一块的结果又发一遍（2026-10-24 玩家反馈：
         # 画面是 5561 / 18.35 SCU 的新石头，发出去的是上一块 10187 / 33.71 SCU）
-        accepted = bool(ctx.recent) and ctx.recent[-1][0] is scan
+        accepted = bool(ctx.recent) and ctx.recent[-1] is scan
         if accepted and len(ctx.recent) >= 2:
-            best, stable = n.vote([x[0] for x in ctx.recent])
+            best, stable = n.vote(list(ctx.recent))
             # 每帧都读全了、但几帧之间对不上（投不出结果）：也算没出结果，留一张图
             ctx.unstable_n = 0 if stable else ctx.unstable_n + 1
             if (
@@ -659,21 +677,20 @@ class _Live:
             ):
                 ctx.miss_t, ctx.unstable_n = now, 0
                 self._save_miss(
-                    ctx, img, "读不稳", [str(x[0]) for x in list(ctx.recent)[-3:]]
+                    ctx, img, "读不稳", [str(x) for x in list(ctx.recent)[-3:]]
                 )
             key = (round(best.mass or 0), best.resistance, best.instability)
-            # 任何影响计算的字段变了（总 SCU、成分、评级、矿袋）都重新发布，修正后的数也要推出去
+            # 任何影响计算的字段变了（总 SCU、成分、评级）都重新发布，修正后的数也要推出去
             shown = (
                 key,
                 best.total_scu,
                 best.rock,
                 best.difficulty,
                 tuple(best.composition),
-                ctx.recent[-1][1][1],
                 self.loop.config_rev,
             )
             if stable and best.valid and shown != ctx.last_shown and session.alive():
-                view = n.scan_view(best, ctx.recent[-1][1])  # 慢：算完再看一次有没有停
+                view = n.scan_view(best)  # 慢：算完再看一次有没有停
                 prev_ui = dict(ctx.ui)
                 ctx.ui.update(
                     state="running", scan=view, stale_since=None, quality="complete"
@@ -685,10 +702,8 @@ class _Live:
                         "SCAN",
                     ),
                     _set("扫描", view["hud"], view.get("hud_rich")),
+                    _ui("ui.activity", self._views.activity(session.id, ctx.ui)),
                 ]
-                if view["bag_text"]:
-                    ops.append(_set("矿袋", view["bag_text"]))
-                ops.append(_ui("ui.activity", self._views.activity(session.id, ctx.ui)))
                 if not self.loop.commit(
                     session, *ops, slot=MINING_SCAN, value=view, stamp=stamp
                 ):
@@ -699,7 +714,7 @@ class _Live:
                 if ctx.hint["why"]:
                     self.loop.commit(session, *self._hint_ops(ctx, None))
                 ctx.last_key, ctx.last_shown, ctx.scan_live = key, shown, True
-                log.write(f"{time.strftime('%F %T')} {best} {ctx.recent[-1][1]}\n")
+                log.write(f"{time.strftime('%F %T')} {best}\n")
                 log.flush()
                 try:
                     img.save(ctx.shots / f"{time.strftime('%H%M%S')}.png")
@@ -710,13 +725,13 @@ class _Live:
         # 同一个画面认够一轮投票（5 帧）、结果也出了，就不再重复认（每 RECHECK_SECONDS 秒仍复核一次）
         ctx.settled = ctx.last_shown is not None and ctx.done_here >= n.vote_frames()
 
-    def _tick_part(self, session, ctx, bag, now, stamp):
+    def _tick_part(self, session, ctx, now, stamp):
         n = self._an
-        best, stable = n.vote_partial([x[0] for x in ctx.part])
+        best, stable = n.vote_partial(list(ctx.part))
         # 读一半的帧（面板顶出屏幕）连续两帧一致、又和完整读数队列里的石头不是同一块：说明已经换了石头，
         # 旧石头的完整读数作废（不然转回来读全时，第一帧新石头会被当成可疑帧挡掉，旧结果又冒出来）
         # 只看质量（差 1% 以上才算换了）：同一块石头开着激光时抗性会变（45% ↔ 65%），不能因此清掉
-        prev_rock = ctx.recent[-1][0] if ctx.recent else None
+        prev_rock = ctx.recent[-1] if ctx.recent else None
         if (
             stable
             and prev_rock is not None
@@ -736,7 +751,7 @@ class _Live:
             self.loop.config_rev,
         )
         if stable and shown != ctx.last_shown and session.alive():
-            view = n.scan_view(best, bag, cut=True)
+            view = n.scan_view(best, cut=True)
             prev_ui = dict(ctx.ui)
             ctx.ui.update(
                 state="running", scan=view, stale_since=None, quality="partial"

@@ -12,9 +12,12 @@ from PIL import Image
 
 def _live(monkeypatch, D, ready=True):
     piece = Image.new("RGB", (870, 316))
-    monkeypatch.setattr("astral_toolkit.core.capture.grab_region", lambda region: piece)
     monkeypatch.setattr(
-        "astral_toolkit.core.capture.game_area",
+        "astral_toolkit.infrastructure.platform.capture.grab_region",
+        lambda region: piece,
+    )
+    monkeypatch.setattr(
+        "astral_toolkit.infrastructure.platform.capture.game_area",
         lambda: {"left": 0, "top": 0, "width": 2560, "height": 1440},
     )
     monkeypatch.setattr("astral_toolkit.navigation.gridtext.ready", lambda h: ready)
@@ -79,11 +82,11 @@ def test_read_calls_diag_only_when_asked(monkeypatch):
         displayinfo, "_GRID_OK", {"at": 0.0}
     )  # read 会改它：换成新字典，测完还原
     monkeypatch.setattr(
-        "astral_toolkit.core.capture.grab_region",
+        "astral_toolkit.infrastructure.platform.capture.grab_region",
         lambda region: Image.new("RGB", (400, 100)),
     )
     monkeypatch.setattr(
-        "astral_toolkit.core.capture.game_area",
+        "astral_toolkit.infrastructure.platform.capture.game_area",
         lambda: {"left": 0, "top": 0, "width": 1920, "height": 1080},
     )
     monkeypatch.setattr("astral_toolkit.navigation.gridtext.ready", lambda h: True)

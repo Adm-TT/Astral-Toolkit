@@ -142,7 +142,8 @@ def _no_exact(zh="", en=""):
 def _install(monkeypatch, rows=None, calls=None):
     contracts = _patch_data(monkeypatch, rows, calls)
     monkeypatch.setattr(gd_wikelo, "print_places", lambda key, snap=None: [])
-    monkeypatch.setattr(QA, "material_source", lambda name: "来源：" + name)
+    # 查询给事实、那一句由展示层写（目录迁移收尾）：假的也给事实，下面的黄金字面量不变
+    monkeypatch.setattr(QA, "material_source", lambda name: {"note": "来源：" + name})
     monkeypatch.setattr(names, "canonical_exact", _no_exact)
     return contracts
 
@@ -437,7 +438,7 @@ def test_wikelo_detail_tip_exception_is_empty(monkeypatch):
         def source(name):
             if name == "Kopion Horn":
                 raise RuntimeError("来源坏了")
-            return "来源：" + name
+            return {"note": "来源：" + name}
 
         monkeypatch.setattr(QA, "material_source", source)
         out = goals.wikelo_detail("gear-1")
@@ -533,7 +534,8 @@ def test_wikelo_uses_full_name_not_loosened_distinct(monkeypatch):
         assert wikelo.uses("Polaris Bit Extra", "Polaris 点数 扩展") == []
 
 
-def test_wikelo_uses_full_name_recognises_ore_suffix_distinct(monkeypatch):
+def test_wikelo_uses_full_name_does_not_match_the_ore(monkeypatch):
+    """全名只认一样的：精炼的「萨德宁」不对维科洛要的「萨德宁矿石」（原矿和精炼分开，老大 2026-11-08 定）；原矿名一样就对上"""
     row = {
         "id": "sald",
         "type": "收集",
@@ -553,8 +555,9 @@ def test_wikelo_uses_full_name_recognises_ore_suffix_distinct(monkeypatch):
             return None
 
         monkeypatch.setattr(names, "canonical_exact", exact)
-        assert wikelo.uses("Saldynium", "萨德宁") == [(row, 7, "个")]
-        assert wikelo.uses("", "萨德宁") == [(row, 7, "个")]
+        assert wikelo.uses("Saldynium", "萨德宁") == []
+        assert wikelo.uses("", "萨德宁") == []
+        assert wikelo.uses("Saldynium (Ore)", "萨德宁矿石") == [(row, 7, "个")]
 
 
 def test_wikelo_uses_keeps_order_and_units(monkeypatch):

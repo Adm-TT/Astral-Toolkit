@@ -35,6 +35,7 @@ from .runtime.lifecycle import (
 )
 from .runtime.results import ResultStore
 from .runtime.workers.game_events import GameEventsWorker
+from .runtime.workers.nav_watch import NavWatch, WatchSteps
 from .runtime.workers.position import LogWatchWorker, PositionWorker
 
 if TYPE_CHECKING:
@@ -295,6 +296,44 @@ def _game_events(pos: Any) -> GameEventsWorker:
     )
 
 
+def nav_watches(
+    results: ResultStore,
+    output: Any,
+    closing: Callable[[], bool],
+    deps_now: Callable[[], Any],
+) -> tuple[NavWatch, NavWatch]:
+    """导航的两个小后台会话（2026-11-09，原来 tasks/navigation 自己起 daemon 线程）：halo（挂着小行星带方案时核对）、
+    here-watch（「用当前位置新建」等 /showlocation）。每一轮做什么用 tasks/navigation 的函数；
+    deps_now 现取 NavDeps（它要等这两个造好才有）"""
+    from .tasks import navigation as navigation_tasks
+
+    halo = NavWatch(
+        "halo",
+        "小行星带核对",
+        WatchSteps(
+            setup=lambda _payload: navigation_tasks._halo_state(deps_now()),
+            step=lambda _payload, st: navigation_tasks._halo_step(deps_now(), st),
+            wait=navigation_tasks.HALO_WAIT,
+        ),
+        results=results,
+        output=output,
+        closing=closing,
+    )
+    here = NavWatch(
+        "here-watch",
+        "路标等坐标",
+        WatchSteps(
+            setup=lambda _payload: navigation_tasks._here_state(),
+            step=lambda _payload, st: navigation_tasks._here_step(deps_now(), st),
+            wait=0.0,  # 一轮里 wait_new_coords 自己等 1 秒
+        ),
+        results=results,
+        output=output,
+        closing=closing,
+    )
+    return halo, here
+
+
 def _mining_analysis() -> MiningAnalysis:
     """采矿线程一轮识别要用的分析（目录迁移 R3）：tasks/mining_analysis 这个模块（原样转给 mining/screen、
     mining/signals、tasks/mining 等）"""
@@ -317,7 +356,10 @@ def _mining_links(options: Mapping[str, Any]) -> MiningLinks:
     app/miss_shots 的后台队列存（lifecycle 登记它）；设置里的 live_on 跟着开关写。overrides 给了 grab /
     foreground 就用给的（测试用）"""
     from .app.miss_shots import MissShotsService
-    from .core import paths
+    from .core import paths, settings
+    from .mining.data import focus_keys
+
+    view = settings.View()
 
     def grab() -> Any:
         from .mining import screen
@@ -356,6 +398,10 @@ def _mining_links(options: Mapping[str, Any]) -> MiningLinks:
         miss_shots=MissShotsService(),
         yield_ocr=yield_ocr,
         run_flag=setting_run_flag("live_on"),
+        idle_seconds=lambda: settings.mining_idle_seconds(
+            view.get("mining_idle_close")
+        ),
+        focus=lambda: focus_keys(view.get("mining_focus")),
     )
 
 
@@ -375,7 +421,12 @@ def _count_views() -> CountViews:
 
         return present_count.hud_text(place, items, hover_tasks.qty_text)
 
-    return CountViews(hud_text=hud_text)
+    def item_line(r: Any) -> str:
+        from .tasks import hover as hover_tasks
+
+        return present_count.item_line(r, hover_tasks.qty_text)
+
+    return CountViews(hud_text=hud_text, item_line=item_line)
 
 
 def _count_live_place(pos: Any) -> tuple[str, str] | None:
@@ -402,7 +453,7 @@ def _count_links(
     """盘点线程要的外面的东西（目录迁移 R5：以前盘点线程在构造器里自己造、或经 `_T` / `_H` 动态去 tasks、app 取）。
     读光标（infrastructure/platform/cursor）、抓图（mining/screen）、游戏在不在前台（tasks/mining）、热键名（tasks/navigation
     读设置，读不了就是 F6）、调试图目录（trade/debug_shots）、开始时在哪个库存地点（crafting/stockplaces；没有日志地点
-    时用右上角实时地点——须对得上库存列表；再不行按上次记的位置经 tasks/stock 找）、悬浮窗短提示（app/hud_state）、
+    时用右上角实时地点——须对得上库存列表；仍未知返回空，由盘点入口提示玩家手选）、悬浮窗短提示（app/hud_state）、
     正在退出时不让开始（app/lifecycle_gate）都是用的时候才取；
     overrides 给了 cursor_pos / foreground 就用给的（测试用）。
     live_place_src：单元素列表，build 在造好 PositionWorker 后填入「() → (label, sys) | None」。"""
@@ -460,13 +511,8 @@ def _count_links(
                 hit = stockplaces.matched_place(lab, sysname or None)
                 if hit:
                     return hit["label"]
-        # 再按上次记的位置找（和以前一样，这时才导入 tasks/stock、tasks/trade）
-        from .tasks import stock as stock_tasks
-        from .tasks import trade as trade_tasks
-
-        return stock_tasks._place_of(
-            trade_tasks.trade().db.get("last_location", "") or ""
-        )[0]
+        # 仍未知：不读上次入库位置（可能早已不在那儿），交给盘点入口提示玩家手选
+        return ""
 
     def note(section: str, text: str) -> None:
         from .app import hud_state
@@ -623,8 +669,16 @@ def build(
         analysis=_nav_analysis(),
         views=_nav_views(),
     )
+    halo_watch, here_watch = nav_watches(
+        results, output, lifecycle.is_closing, lambda: nav_deps
+    )
     nav_deps = navigation_tasks.NavDeps(
-        nav=nav, pos=pos, game_events=game_events, results=results
+        nav=nav,
+        pos=pos,
+        game_events=game_events,
+        results=results,
+        halo=halo_watch,
+        here=here_watch,
     )
     live_place_src: list[Any] = [None]
     count = _Count(
@@ -679,17 +733,28 @@ def bind_all(app: DesktopApp, *, replace: bool = False) -> None:
     from .tasks import count as count_tasks
 
     _bind_core_to_ui()
+    _bind_platform_to_hud()
     navigate_data.HINTS = app.pos.hints
     count_tasks.bind(app.count, replace=replace)
     lifecycle_gate.bind_closing(app.lifecycle.is_closing, replace=replace)
     ui_stream.bind_switches(app.live, app.nav, app.pos, replace=replace)
 
 
+def _bind_platform_to_hud() -> None:
+    """悬浮窗「物品」按 Shift 钉住、按住 Ctrl 不收、挪开就收要读键、读光标：接平台层那一份
+    （目录迁移收尾；app 层不直接 import infrastructure，以前 hud_state 自己调 Win32）"""
+    from .app import hud_state
+    from .infrastructure.platform import cursor, keys
+
+    hud_state.set_platform(cursor.pos, keys.down)
+
+
 def _bind_core_to_ui() -> None:
     """core 不反过来 import 界面（CL-C5）：截图时涂黑悬浮窗要的句柄 / 显示着没有、运行记录推到运行日志面板，都在这里接。
     每次现读悬浮窗模块当时的 HWND / SHOWN；经名字调 bus.runtime_log（测试换掉也照样走到）"""
     from .app import bus, overlay
-    from .core import capture, run_records
+    from .core import run_records
+    from .infrastructure.platform import capture
 
     capture.set_overlay_state(lambda: (overlay.HWND, overlay.SHOWN))
     run_records.set_ui_sink(
@@ -901,6 +966,15 @@ def _register(app: DesktopApp) -> None:
             SessionLoopService("count", Phase.SESSIONS, app.count.loop),
             gate=False,
         )
+        # 导航的两个小后台会话（2026-11-09 起登记）：点了才开，退出时停、等线程退
+        app.lifecycle.register(
+            SessionLoopService("halo", Phase.SESSIONS, app.nav_deps.halo.loop),
+            gate=False,
+        )
+        app.lifecycle.register(
+            SessionLoopService("here-watch", Phase.SESSIONS, app.nav_deps.here.loop),
+            gate=False,
+        )
 
         app.lifecycle.register(OneShot("ocr-warmup", Phase.WORKERS, factory=start_ocr))
         try:
@@ -923,7 +997,6 @@ def _register(app: DesktopApp) -> None:
         # - overlay：没有停止入口，随进程退出
         # - tray：server 退出前已 remove
         # - task_runner.run_task 临时任务：按需线程，不纳入常驻服务
-        # - 导航 here-watch / halo：B5b 会话内的事
         # - shell-watch / winid：窗口 / 单实例外围
         # - displayinfo-loc：RT-B5b 地点行 OCR 短线程（几百毫秒，daemon）
         app.state["_registered"] = True

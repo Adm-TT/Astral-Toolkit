@@ -96,29 +96,28 @@ def test_station_bonus_texts():
     assert station_bonus("S", minerals, _inputs()) == ""
 
 
-def test_analyze_numbers_and_bag():
-    """结果里只有数和中文名：矿袋、精炼方案、卖到哪、方案全从输入来；石头没有矿就不查精炼和制造"""
-    bag = ({"Gold": 1.5}, 1.5, 96.0)
-    r = analyze(_scan(), bag, _inputs())
+def test_analyze_numbers():
+    """结果里只有数和中文名：精炼方案、卖到哪、方案全从输入来；石头没有矿就不查精炼和制造（矿袋 2026-11-08 删了）"""
+    r = analyze(_scan(), _inputs())
     assert r.rock == "钨" and r.at == "12:00:00" and not r.cut
     assert r.minerals == (("钨", "Tungsten", 12.0),)
     assert r.refine[0].value == 1234.0 and r.refine[0].yields == (("钨", 6.0),)
     assert r.sell == (("钨", "城"),) and r.craft == ("提示",)
     assert r.plans[0].throttle == 0.5 and r.plans[0].gadget_label == ""
-    assert r.bag is not None and r.bag.used == 1.5 and r.bag.items == (("金", 1.5),)
+    assert not hasattr(r, "bag")
 
     def boom(*a, **k):
         raise AssertionError("没有矿不该查")
 
     empty = _inputs(refined_plan=boom)
     only_inert = _scan(composition=[("Inert Materials", 100.0, None)])
-    r = analyze(only_inert, ({}, None, None), empty)
-    assert not r.refine and not r.craft and r.bag is None
+    r = analyze(only_inert, empty)
+    assert not r.refine and not r.craft
 
 
 def test_result_summaries():
     """悬浮窗要的汇总都在结果里算好：惰性占比（0.5% 门槛）、高低品质配对、按矿合计和排序"""
-    r = analyze(_scan(), ({}, None, None), _inputs())
+    r = analyze(_scan(), _inputs())
     assert r.inert_pct == 40.0
     assert [(h.zh, h.q, h.scu, h.low_q) for h in r.high_lots] == [("钨", 662, 2.0, 363)]
     assert [(g.zh, g.inert, g.pct) for g in r.composition] == [
@@ -127,7 +126,7 @@ def test_result_summaries():
     ]
     assert [(s.q, s.high) for s in r.composition[0].subs] == [(662, True), (363, False)]
     little = _scan(composition=[("Gold", 99.6, 500), ("Inert Materials", 0.4, None)])
-    assert analyze(little, ({}, None, None), _inputs()).inert_pct is None
+    assert analyze(little, _inputs()).inert_pct is None
 
 
 def test_composition_sort_ties_at_two_decimals_keep_order():
@@ -139,10 +138,10 @@ def test_composition_sort_ties_at_two_decimals_keep_order():
             ("Tungsten", 19.9, 400),
         ]
     )
-    r = analyze(scan, ({}, None, None), _inputs())
+    r = analyze(scan, _inputs())
     assert [g.zh for g in r.composition] == ["金", "钨"]
     near = _scan(composition=[("Gold", 30.001, 500), ("Tungsten", 30.004, 500)])
-    r = analyze(near, ({}, None, None), _inputs())
+    r = analyze(near, _inputs())
     assert [g.zh for g in r.composition] == ["金", "钨"]
 
 
@@ -159,7 +158,7 @@ def test_result_cannot_be_changed():
         goal_targets=(("Tungsten", freeze(target)),),
         craft_mats=(("Tungsten", {"count": 1, "gates": [600]}),),
     )
-    r = analyze(_scan(), ({}, None, None), inputs)
+    r = analyze(_scan(), inputs)
     assert isinstance(r.goals[0], MappingProxyType)
     assert isinstance(r.craft_mats[0], MappingProxyType)
     assert r.goals[0]["goals"] == ("蓝图",) and r.craft_mats[0]["gates"] == (600,)

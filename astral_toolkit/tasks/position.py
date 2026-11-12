@@ -1,7 +1,7 @@
 """定位的分析能力（目录迁移章程 R1）：后台定位线程（runtime/workers/position.py）只管什么时候读、存住当前位置；
 读到右上角以后认地点中文名、算属于哪个星系、离哪最近，字模学好没有，游戏日志里最后在哪，都经 bootstrap 接到这里。
 
-本模块不持有「当前位置」、不起线程；实现还在 navigation/ 和 core/capture，在函数里 import（导入本模块不碰它们）。
+本模块不持有「当前位置」、不起线程；实现还在 navigation/ 和 infrastructure/platform/capture，在函数里 import（导入本模块不碰它们）。
 """
 
 
@@ -28,7 +28,7 @@ def locate(g, *, when, local, zone, local_ok):
 
 def glyphs_ready():
     """读右上角用的字模，在现在的游戏窗口高度下学好没有"""
-    from ..core.capture import game_area
+    from ..infrastructure.platform.capture import game_area
     from ..navigation import gridtext
 
     return gridtext.ready(game_area()["height"])

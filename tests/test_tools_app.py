@@ -149,7 +149,7 @@ def test_single_instance_lock_file(monkeypatch, tmp_path):
 
 def test_mask_overlay_blacks_out_hud():
     from PIL import Image
-    from astral_toolkit.core.capture import mask_overlay
+    from astral_toolkit.infrastructure.platform.capture import mask_overlay
 
     img = Image.new("RGB", (100, 100), (255, 255, 255))
     mask_overlay(img, 50, 50, rect=(60, 60, 80, 70))  # 截图从屏幕 (50,50) 开始
@@ -234,10 +234,19 @@ def test_export_logs(monkeypatch, tmp_path):
 
     user = tmp_path / "userdata"
     (user / "logs").mkdir(parents=True)
-    (user / "logs" / "app_log.txt").write_text("启动", encoding="utf-8")
+    (user / "logs" / "app_log.txt").write_text(
+        "启动\n→ C:\\Users\\SomeUser\\AppData\\Local\\AT\\data\\prices.json\n",
+        encoding="utf-8",
+    )
     (user / "logs" / "nav_log.txt").write_text("导航", encoding="utf-8")
     (user / "logs" / "runrec_2099-01-01.log").write_text(
         "2099-01-01 00:00:00.000 [INFO] [SYSTEM] 本机服务已启动\n", encoding="utf-8"
+    )
+    (user / "logs" / "runlog_2099-01-01.log").write_text(
+        "00:00:00 [INFO] [HOVER] F8 价格与数据同步完成\n", encoding="utf-8"
+    )
+    (user / "logs" / "debug_2099-01-01.log").write_text(
+        "00:00:00 [DEBUG] [识别] 识别路径开始\n", encoding="utf-8"
     )
     (user / "settings.json").write_text("{}", encoding="utf-8")
     (user / "window").mkdir()
@@ -254,9 +263,15 @@ def test_export_logs(monkeypatch, tmp_path):
         "logs/app_log.txt",
         "logs/nav_log.txt",
         "logs/runrec_2099-01-01.log",
+        "logs/runlog_2099-01-01.log",
+        "logs/debug_2099-01-01.log",
         "settings.json",
         "系统信息.txt",
     } <= set(names)
+    log = zipfile.ZipFile(r["path"]).read("logs/app_log.txt").decode("utf-8")
+    assert (
+        "启动" in log and "SomeUser" not in log
+    )  # 导出时抹掉 Windows 用户名（调试模式复查）
     assert not any("window" in n or "Cookies" in n for n in names)
     info = zipfile.ZipFile(r["path"]).read("系统信息.txt").decode("utf-8")
     assert "AT 版本" in info and "Python" in info
@@ -309,7 +324,10 @@ def test_hotkey_conflicts(monkeypatch):
 def test_mask_own_window_too():
     """盖在游戏上的 AT 主窗口也涂黑（窗口里的实时栏有信号值 / 质量，会被当成游戏里的字）"""
     from PIL import Image
-    from astral_toolkit.core.capture import mask_overlay, own_window_rects
+    from astral_toolkit.infrastructure.platform.capture import (
+        mask_overlay,
+        own_window_rects,
+    )
 
     img = Image.new("RGB", (200, 100), (255, 255, 255))
     mask_overlay(img, 0, 0, rect=(10, 10, 20, 20), own=[(100, 50, 150, 90)])
@@ -319,11 +337,12 @@ def test_mask_own_window_too():
 
 
 def test_bootstrap_wires_overlay_for_masking(monkeypatch):
-    """截图涂黑用的悬浮窗句柄和「显示着没有」由装配（bootstrap.bind_all）接给 core/capture（core 不 import 界面，CL-C5）；
+    """截图涂黑用的悬浮窗句柄和「显示着没有」由装配（bootstrap.bind_all）接给 infrastructure/platform/capture（core 不 import 界面，CL-C5）；
     每次读悬浮窗模块当时的值；没接当没有悬浮窗"""
     from astral_toolkit import bootstrap
     from astral_toolkit.app import overlay
-    from astral_toolkit.core import capture, run_records
+    from astral_toolkit.core import run_records
+    from astral_toolkit.infrastructure.platform import capture
 
     monkeypatch.setattr(capture, "_overlay_state", None)  # 测完还原
     monkeypatch.setattr(run_records, "_ui_sink", None)
@@ -386,7 +405,7 @@ def test_feedback_report_bundle(monkeypatch, tmp_path):
     _v = False
     for _m in (t_hover, t_sys):
         monkeypatch.setattr(_m, "WIN", _v)
-    screen.LAST_RAW.update(t=1.0, scan=["扫描结果", "质量： 123"], bag=[])
+    screen.LAST_RAW.update(t=1.0, scan=["扫描结果", "质量： 123"])
     from astral_toolkit.runtime.results import MINING_SIGNALS, ResultStore
 
     results = ResultStore()
@@ -578,3 +597,61 @@ def test_feedback_upload_pack_send_retry(tmp_path, monkeypatch):
         F.send(later, "auto")[1] == "自动发送已关闭" and len(sent) == n
     )  # 关掉后排队的也不发
     assert F.retry_pending(fb) == 0 and len(sent) == n
+
+
+def test_set_settings_tells_when_not_saved(monkeypatch, tmp_path):
+    """设置文件暂时读不到（被杀毒、同步软件占着）或写不进去：这次改动没存上，设置页要告诉玩家再点一次，
+    不能装作存好了（以前只在控制台打一行；待做原第 468 行）；读写正常照旧存上"""
+    from astral_toolkit import bootstrap
+    from astral_toolkit.app import bus
+    from astral_toolkit.core import paths, settings
+    from astral_toolkit.tasks import system as t_sys
+    from tests.bootstrap_helpers import app_for_test
+
+    monkeypatch.setattr(bus, "publish", lambda *a, **k: None)
+    with app_for_test() as app:
+        sources = bootstrap.status_sources(app)
+        locked = tmp_path / "locked.json"
+        locked.mkdir()  # 读这个「文件」报 OSError：和被别的程序占着一样
+        monkeypatch.setattr(settings, "FILE", locked)
+        r = t_sys.set_settings(sources, theme="light")
+        assert "没存上" in r["error"] and "再点一次" in r["error"]
+        ok = tmp_path / "ok.json"
+        monkeypatch.setattr(settings, "FILE", ok)
+
+        def busy(*a, **k):
+            raise PermissionError("被别的程序占着")
+
+        real = paths.write_json
+        monkeypatch.setattr(paths, "write_json", busy)
+        r = t_sys.set_settings(sources, theme="light")
+        assert "写不进去" in r["error"] and "没存上" in r["error"]
+        monkeypatch.setattr(paths, "write_json", real)
+        r = t_sys.set_settings(sources, theme="light")
+        assert r.get("theme") == "light" and settings.load()["theme"] == "light"
+
+
+def test_set_hotkey_unread_settings_says_not_saved(monkeypatch, tmp_path):
+    """改热键先读设置查撞键：设置文件暂时读不到时拿到的只是默认值，按默认值查会误报「F8 已用于物品识别」，
+    要直接说这次没存上、再点一次（s1 复查）；读得到时按真实设置查"""
+    import json
+
+    from astral_toolkit import bootstrap
+    from astral_toolkit.app import bus
+    from astral_toolkit.core import settings
+    from astral_toolkit.tasks import system as t_sys
+    from tests.bootstrap_helpers import app_for_test
+
+    monkeypatch.setattr(bus, "publish", lambda *a, **k: None)
+    with app_for_test() as app:
+        sources = bootstrap.status_sources(app)
+        locked = tmp_path / "locked.json"
+        locked.mkdir()  # 读这个「文件」报 OSError：和被别的程序占着一样
+        monkeypatch.setattr(settings, "FILE", locked)
+        r = t_sys.set_settings(sources, live_key="F8")  # 默认值里 F8 是物品识别
+        assert "没存上" in r["error"] and "已用于" not in r["error"]
+        ok = tmp_path / "ok.json"
+        ok.write_text(json.dumps({"trade_capture_key": "F11"}), encoding="utf-8")
+        monkeypatch.setattr(settings, "FILE", ok)
+        r = t_sys.set_settings(sources, live_key="F8")  # 物品识别早改成 F11：F8 空着
+        assert r.get("live_key") == "F8" and settings.load()["live_key"] == "F8"

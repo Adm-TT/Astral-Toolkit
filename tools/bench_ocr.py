@@ -4,7 +4,7 @@ F8 按 inspector.HEIGHT_STAGES 的高度阶段分别量（2026-11-04 标题带�
 新方案主路径）→ 说明框带 24%~70% → 旧全高中间条带 0~100%（对比基线），宽度统一取中间 30%~70%；
 最后再量一次整屏。没有测速样本时退回扫描样本，再没有就跳过这几项。
 用法（项目根目录）：
-  .venv\\Scripts\\python.exe -X utf8 tools\\bench_ocr.py            显卡（默认设置）
+  .venv\\Scripts\\python.exe -X utf8 tools\\bench_ocr.py            按设置里选的设备（默认处理器；量显卡先在设置页切显卡）
   set DUBHE_OCR_CPU=1 后再跑一次 = 纯 CPU
 结果追加到 测试数据\\识别测速.md。只在本机跑，不上传图片
 """
@@ -52,7 +52,7 @@ def main():
     t = time.perf_counter()
     warmup()
     out.append(
-        f"- 识别引擎加载：{(time.perf_counter() - t) * 1000:.0f} ms（{ocr_device()}，显卡部分 {','.join(OR.GPU_PARTS) or '无'}）"
+        f"- 识别引擎加载：{(time.perf_counter() - t) * 1000:.0f} ms（{ocr_device()}，模型 {OR.OCR_VERSION}/{OR.MODEL_TYPE}，显卡={'整引擎 DirectML' if OR.rapidocr().gpu else '关'}）"
     )
     samples = sorted((ROOT / "测试数据" / "识别样本").glob("*.png"))[:3]
     if not samples:

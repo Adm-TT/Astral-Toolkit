@@ -152,7 +152,7 @@ def game_area():
     try:
         import ctypes
         from ctypes import wintypes
-        from ..system import showloc
+        from ...system import showloc
 
         u32 = ctypes.windll.user32
         hwnd = showloc.find_game_window()
@@ -215,15 +215,23 @@ def grab_region(box):
     return img
 
 
-def cursor_on_image(img):
-    """鼠标位置换算成截图（游戏画面）里的像素坐标；鼠标不在画面里也照样换算（可能是负数或超出）"""
+def cursor_pos():
+    """读一次 Windows 光标位置（GetCursorPos，屏幕像素）→ (x, y)；读不了照样抛出去。
+    全项目读光标只这一份（目录迁移收尾）：下面截图换算、盘点线程（infrastructure/platform/cursor 转过来）、
+    悬浮窗「物品」挪开就收（app/hud_state，bootstrap 接）都用它"""
     import ctypes
     from ctypes import wintypes
 
     pt = wintypes.POINT()
     ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
+    return (pt.x, pt.y)
+
+
+def cursor_on_image(img):
+    """鼠标位置换算成截图（游戏画面）里的像素坐标；鼠标不在画面里也照样换算（可能是负数或超出）"""
+    x, y = cursor_pos()
     a = game_area()
     s = _scale(_sct().monitors[1])
-    return int(pt.x * s - a["left"]) * img.width // max(1, a["width"]), int(
-        pt.y * s - a["top"]
+    return int(x * s - a["left"]) * img.width // max(1, a["width"]), int(
+        y * s - a["top"]
     ) * img.height // max(1, a["height"])

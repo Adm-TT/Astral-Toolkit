@@ -54,7 +54,7 @@ def status(sources: StatusSources, /):
         cur_dev = ocr_device()
         out["ocr_device"] = cur_dev
         out["gpu_available"] = gpu_available()
-        out["ocr_mode"] = cfg.get("ocr_device", "gpu")
+        out["ocr_mode"] = cfg.get("ocr_device", "cpu")
         out["ocr_error"] = last_ocr_error()
     except Exception:
         out["ocr_device"] = "CPU"
@@ -62,16 +62,18 @@ def status(sources: StatusSources, /):
         out["ocr_mode"] = "cpu"
         out["ocr_error"] = ""
     if WIN:
-        from ...core.capture import game_size
+        from ...infrastructure.platform.capture import game_size
 
         out["game_size"] = (
             game_size()
         )  # 游戏画面多大：低于 1080 高时页面上提醒识别会不准
+    log_t = 0.0
     try:
         from ...navigation.position import current
 
         here = current()
         if here:
+            log_t = here["t"]
             out["position"] = {
                 "label": here["label"],
                 "minutes": int(here["age"] // 60),
@@ -97,14 +99,6 @@ def status(sources: StatusSources, /):
     # 只有游戏日志里有更新的地点（比如到别的站开了库存）才换掉它
     lab_t, lab = src.pos_label()
     if lab and time.time() - lab_t < 3 * 3600:
-        log_t = 0.0
-        try:
-            from ...navigation.position import from_log
-
-            hit = from_log()
-            log_t = hit[0] if hit else 0.0
-        except Exception:
-            pass
         if lab_t >= log_t:
             sys_t, sysname = src.pos_system()
             out["position"] = {
@@ -185,7 +179,7 @@ def _system_info():
 
         # onnxruntime 的显卡版包名是 onnxruntime-directml：哪个装了写哪个
         names = (
-            "rapidocr_onnxruntime",
+            "rapidocr",
             "onnxruntime",
             "onnxruntime-directml",
             "numpy",
@@ -205,6 +199,10 @@ def _system_info():
     return "\n".join(lines) + "\n"
 
 
+# 按天的日志文件：运行记录（core/run_records）、窗口运行日志和调试日志（core/day_logs）
+_DAY_LOGS = ("runrec_*.log", "runlog_*.log", "debug_*.log")
+
+
 def export_logs():
     """「导出日志」：运行日志 + 设置 + 一页系统说明打成一个压缩包，放到桌面，并在文件夹里选中它"""
     from ...core import paths
@@ -217,10 +215,18 @@ def export_logs():
         log_files = []
         if paths.LOGS.exists():
             log_files = sorted(
-                set(paths.LOGS.glob("*.txt*")) | set(paths.LOGS.glob("runrec_*.log"))
-            )  # 含轮换 .txt.old 与运行记录
+                set(paths.LOGS.glob("*.txt*"))
+                | {p for pat in _DAY_LOGS for p in paths.LOGS.glob(pat)}
+            )  # 含轮换 .txt.old、运行记录、窗口运行日志、调试日志
+        from .feedback import _scrub
+
         for p in log_files:
-            z.write(p, f"logs/{p.name}")
+            try:
+                text = p.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            # 抹掉 Windows 用户名这类个人信息（问题反馈那条早就抹了，导出这条以前原样带走；调试模式复查）
+            z.writestr(f"logs/{p.name}", _scrub(text))
             files += 1
         for name in ("settings.json", "goals.json"):
             p = paths.USER / name

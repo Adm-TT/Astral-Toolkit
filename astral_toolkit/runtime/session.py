@@ -159,7 +159,10 @@ class Worker(Protocol):
     # 可选类属性 activity_kind（如 "mining"）、log_tag（如 "NAV"）/ display_name（如「导航」）：
     # 有就由 _confirm_stop_locked 发展示终态、框架日志按它标；不在协议里声明，按 getattr 读
     retries: int
-    idle_close: float | None
+
+    @property
+    def idle_close(self) -> float | None: ...
+
     stale_after: dict[str, float]
     needs_foreground: bool
     restart_while_stopping: bool
@@ -311,11 +314,14 @@ class SessionLoop:
     def running(self) -> bool:
         """逻辑运行中：当前会话 ∈ STARTING / RUNNING / PAUSED（STOPPING 时为 False）"""
         with self._lock:
-            return self._current is not None and self._current.state in (
-                RunState.STARTING,
-                RunState.RUNNING,
-                RunState.PAUSED,
-            )
+            return self._running_locked()
+
+    def _running_locked(self) -> bool:
+        return self._current is not None and self._current.state in (
+            RunState.STARTING,
+            RunState.RUNNING,
+            RunState.PAUSED,
+        )
 
     def worker_alive(self) -> bool:
         return self.state().worker_alive
@@ -345,6 +351,30 @@ class SessionLoop:
         """命令层原子地取走共享结果（取走后读到 None）"""
         with self._lock:
             return self._shared.pop(name, None)
+
+    def shared_publish(
+        self,
+        name: str,
+        topic: str,
+        field: str,
+        *,
+        restore: Any = None,
+        clear: bool = False,
+    ) -> None:
+        """命令层与 worker 共用的发布边界：锁内读结果并入队，不能被 finish 的新结果越过。
+
+        restore 只在空闲且没有新结果时放回；clear 供玩家明确取消。
+        Output 的 bus 操作与 worker 的锁内输出一样，只入队、不回调会话。
+        """
+        with self._lock:
+            running = self._running_locked()
+            if clear:
+                self._shared.pop(name, None)
+            elif restore is not None and not running and self._shared.get(name) is None:
+                self._shared[name] = restore
+            self._output.apply(
+                ("bus", topic, {"running": running, field: self._shared.get(name)})
+            )
 
     def lock_held_by_me(self) -> bool:
         """测试辅助：当前线程是否持有 loop 锁"""
@@ -996,6 +1026,8 @@ class SessionLoop:
         """记 observed、判过期；返回要不要自动关闭"""
         stale: list[str] = []
         idle = False
+        # idle_close 可能要读设置（采矿助手的自动关闭时间）：锁外取，锁里不做文件读写（审查 2026-11-08）
+        limit_idle = self._worker.idle_close
         with self._lock:
             cur = self._current
             if (
@@ -1016,7 +1048,6 @@ class SessionLoop:
                 if active - cur.last_seen.get(channel, active) > float(limit):
                     cur.freshness[channel] = Freshness.STALE
                     stale.append(channel)
-            limit_idle = self._worker.idle_close
             if limit_idle is not None:
                 last = max(cur.last_seen.values(), default=cur.attempt_started)
                 idle = active - last > float(limit_idle)

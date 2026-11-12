@@ -25,7 +25,7 @@ MODULES = (
     "app.overlay",
     "core.perf",
     "core.perfmon",
-    "core.capture",
+    "infrastructure.platform.capture",
     "tasks.catalog_queries.search",
     "tasks.catalog_queries.shops",
     "update.shops",
@@ -181,7 +181,7 @@ def main():
         for _ in range(2):
             screen.PANEL_CACHE.update(win=None)
             t = time.perf_counter()
-            scan, _bag = screen.analyse(img)
+            scan = screen.analyse(img)
             times.append((time.perf_counter() - t) * 1000)
         if not scan.valid:
             raise AssertionError(f"扫描面板没读全：{scan}")

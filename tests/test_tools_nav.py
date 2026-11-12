@@ -279,6 +279,7 @@ def test_status_keeps_displayinfo_place_when_reader_goes_stale():
             app.pos.reader.ok_at = 0  # 读取器已经不算「开着」
             app.pos.label = (time.time() - 20, "死局空间站")
             P.current = lambda *a, **k: {
+                "t": time.time() - 3600,
                 "label": "玛格达 附近",
                 "age": 1.0,
                 "sys": "Pyro",
@@ -286,6 +287,7 @@ def test_status_keeps_displayinfo_place_when_reader_goes_stale():
             P.from_log = lambda *a, **k: (time.time() - 3600, "死局空间站", {})
             assert t_sys.status(sources)["position"]["label"] == "死局空间站"
             P.current = lambda *a, **k: {
+                "t": time.time() - 2,
                 "label": "鼠巢空间站",
                 "age": 2.0,
                 "sys": "Pyro",
@@ -991,6 +993,8 @@ def test_nav_mode_switch(monkeypatch, tmp_path):
 def test_halo_routes_match_scminer():
     """小行星带导航：对照 SCMiner 的 Aaron Halo Flight Computer（ARC-L1 出发，第 5 带）
     SCMiner：CRU-L3 12.7 Gm/389 Mm、CRU-L4 14.3/345、Hurston 13.5/192、Crusader 33.2/177、CRU-L5 39.5/151"""
+    import math
+
     from astral_toolkit.navigation import halo
     from astral_toolkit.navigation import navigate as n
 
@@ -1022,7 +1026,11 @@ def test_halo_routes_match_scminer():
     assert "microTech" in pts and halo.route("ARC-L1", "ARC-L1", 5, 103, pts) is None
     t = halo.plan_text(rows["CRU-L4"])
     assert (
-        "14.3 Gm" in t and "按 U" in t and "14.5–14.1 Gm" in t and "秒" not in t
+        "14.3 Gm" in t
+        and "按鼠标左键" in t
+        and "按 U" not in t
+        and "14.5–14.1 Gm" in t
+        and "秒" not in t
     )  # 挖矿用：0.1 Gm、不讲反应秒数
     try:
         halo.band(11)
@@ -1036,7 +1044,28 @@ def test_halo_routes_match_scminer():
     assert "第3带" in t and "往外" in t and "230" in t
     assert "往里" in halo.where_text(halo.where((21.6e9, 0, 0)), 5)
     assert halo.where_text(halo.where((10e9, 0, 0)), 5).startswith("❌")
-    assert halo.qd_speed("Atlas (S1)") == 103 and halo.qd_speed("odyssey") == 74
+    # 量子速度用游戏数据（以前抄 SCMiner 的慢了两三倍）；老写法「Voyage (S2)」尺寸改过了，按名字认
+    assert halo.qd_speed("Atlas (S1)") == 259 and halo.qd_speed("odyssey") == 238
+    assert halo.qd_speed("Voyage (S2)") == 208 and halo.qd_speed("Goliath (S1)") == 219
+    assert "19.60–21.39 Gm" in halo.where_text(halo.where((10e9, 0, 0)), 5)
+    # 断开后核对：比方案的断开点多飞 / 少飞多少（老大实飞量滑多远）
+    p = rows["CRU-L4"]
+    B = pts["CRU-L4"]
+    A = pts["ARC-L1"]
+    L = math.dist(A, B)
+    stop = [(B[i] + (A[i] - B[i]) * (p["dropout"] - 0.17) / L) * 1e9 for i in range(3)]
+    o = halo.overshoot(p, stop, pts)
+    assert o and abs(o["over"] - 170) <= 1 and "多飞了 170 Mm" in o["text"]
+    stop = [(B[i] + (A[i] - B[i]) * (p["dropout"] + 0.05) / L) * 1e9 for i in range(3)]
+    o = halo.overshoot(p, stop, pts)
+    assert o and "少飞了 50 Mm" in o["text"]
+    assert (
+        halo.overshoot({"text": "方案", "band": 5}, stop, pts) is None
+    )  # 方案里没有目标
+    # 差得太远（还没跳、跳去了别处、到了目标）不说（审查 2026-11-08 第三轮）
+    assert halo.overshoot(p, [v * 1e9 for v in B], pts) is None
+    far = [(B[i] + (A[i] - B[i]) * (p["dropout"] + 3.5) / L) * 1e9 for i in range(3)]
+    assert halo.overshoot(p, far, pts) is None
 
 
 def test_halo_services(monkeypatch, tmp_path):
@@ -1086,7 +1115,8 @@ def test_halo_services(monkeypatch, tmp_path):
         )
         assert any(p["key"] == "ARC-L1" for p in o["points"])
         r = t_nav.halo_routes(frm="ARC-L1", band=5, qd="Odyssey (S3)")
-        assert store["halo_qd"] == "Odyssey (S3)" and r["speed"] == 74 and r["rows"]
+        # 存着老写法「Odyssey (S3)」：尺寸改过了，按名字认出游戏数据的速度
+        assert store["halo_qd"] == "Odyssey (S3)" and r["speed"] == 238 and r["rows"]
         assert "error" in t_nav.halo_routes(
             frm="ARC-L1", band=0
         ) and "error" in t_nav.halo_routes(frm="没有", band=5)
@@ -1107,6 +1137,8 @@ def test_halo_services(monkeypatch, tmp_path):
             clip["t"] = "Coordinates: x:20000000000 y:0 z:0"
             _t.sleep(0.8)
             assert "第3带" in hud["小行星带"] and "往外" in hud["小行星带"]
+            # 这份坐标不在这一趟的航线上（离方案的断开点差了好几 Gm）：不说多飞 / 少飞（审查 2026-11-08 第三轮）
+            assert "比方案的断开点" not in hud["小行星带"]
             # F9：拿到的还是这一份坐标（监听已经处理过）→ 不重复算，结果一样
             monkeypatch.setattr(
                 showloc,
@@ -1114,6 +1146,7 @@ def test_halo_services(monkeypatch, tmp_path):
                 lambda log=None: ((20.0e9, 0.0, 0.0), clip["t"]),
             )
             assert t_nav.fix_here(app.nav_deps)["band"] == 3
+            clip["t"] = "Coordinates: x:20300000001 y:0 z:0"
             monkeypatch.setattr(
                 showloc,
                 "showlocation",
@@ -1138,7 +1171,15 @@ def test_halo_services(monkeypatch, tmp_path):
 
             monkeypatch.setattr(showloc, "showlocation", slow)
             assert t_nav.fix_here(app.nav_deps) == {"error": "超时"}
-            t_nav.halo_pin(app.nav_deps, frm="ARC-L1", to="CRU-L4", band=5)
+            p = t_nav.halo_pin(app.nav_deps, frm="ARC-L1", to="CRU-L4", band=5)
+            # 断开后按 F9：在航线上、比断开点往前 50 Mm，说多飞了多少（手动定位没法测起跳，只看离起点多远）
+            A, B = halo.points()["ARC-L1"], halo.points()["CRU-L4"]
+            k = (float(p["dropout"]) - 0.05) / float(p["total"])
+            g = tuple(round((B[i] - (B[i] - A[i]) * k) * 1e9) for i in range(3))
+            on_route = f"Coordinates: x:{g[0]} y:{g[1]} z:{g[2]}"
+            clip["t"] = on_route
+            monkeypatch.setattr(showloc, "showlocation", lambda log=None: (g, on_route))
+            assert t_nav.fix_here(app.nav_deps) and "多飞了 50 Mm" in hud["小行星带"]
 
             def swap(log=None):
                 t_nav.halo_pin(app.nav_deps, frm="ARC-L1", to="CRU-L3", band=5)
@@ -1146,9 +1187,20 @@ def test_halo_services(monkeypatch, tmp_path):
 
             monkeypatch.setattr(showloc, "showlocation", swap)
             assert "error" in t_nav.fix_here(app.nav_deps)  # 换了方案：旧的这次不算
+            # 断开点离起点很近的路线（CRU-L2 本身就在带里）：离起点多近算在起点，门槛跟着缩（审查 2026-11-08）
+            q = t_nav.halo_pin(app.nav_deps, frm="CRU-L2", to="Hurston", band=8)
+            assert "error" not in q and t_nav._HALO["near"] < t_nav.LEFT_START
+            # 起点本身就在要去的带里（CRU-L2 → ARC-L3 第 9 带）：按路线算是 0，最少 NEAR_MIN（审查 2026-11-08 第三轮）
+            q = t_nav.halo_pin(app.nav_deps, frm="CRU-L2", to="ARC-L3", band=9)
+            assert "error" not in q and t_nav._HALO["near"] == t_nav.NEAR_MIN
         finally:
             t_nav.halo_unpin()
         assert "小行星带" not in hud and t_nav._HALO["plan"] is None
+        logged = (tmp_path / "nav_log.txt").read_text(encoding="utf-8").splitlines()
+        assert any(
+            "比方案的断开点" in x for x in logged
+        )  # 核对多出来的那一行记进导航日志
+        assert all(x[:4].isdigit() for x in logged)  # 而且不拆成两行：每行都以日期开头
         clip["t"] = "Coordinates: x:20100000000 y:0 z:0"
         _t.sleep(0.5)
         assert "小行星带" not in hud  # 取下后监听停了
@@ -1160,6 +1212,241 @@ def test_halo_services(monkeypatch, tmp_path):
             lambda *a, **k: type("T", (), {"start": lambda self: None})(),
         )  # 「仅用于手动定位」5 秒后清提示：别在补丁还原后建真悬浮窗
         assert "error" in t_nav.fix_here(app.nav_deps)  # 什么都没挂：只提示，不打字
+
+
+def test_halo_overshoot_after_each_jump(monkeypatch, tmp_path):
+    """「多飞 / 少飞」按每次起跳算（审查 2026-11-08）：在方案起点附近不说；每秒自动核对要挂上以后测到过起跳才说，
+    手动定位只看离起点多远；从起点跳的那一趟断开后第一次核对在导航日志标「量子后第一次」，补跳、不在起点挂的不标；
+    每次起跳悬浮窗都刷回只剩方案；跟上次一样的核对不再记；核对时不查星图库"""
+    import threading
+    import time as _t
+    from types import SimpleNamespace
+
+    from astral_toolkit.core import paths
+    from astral_toolkit.navigation import halo
+    from astral_toolkit.navigation import navigate as n
+    from astral_toolkit.tasks import navigation as t_nav
+
+    if not n.CACHE.exists():
+        pytest.skip("没有星图数据")
+    pts = halo.points()
+    if "ARC-L1" not in pts or "CRU-L4" not in pts:
+        pytest.skip("没有星图数据")
+    monkeypatch.setattr(paths, "log", lambda name: tmp_path / name)
+    huds = []
+    monkeypatch.setattr(t_nav, "_hud_set", lambda k, v, *a: huds.append(v))
+    monkeypatch.setattr(
+        halo,
+        "points",
+        lambda: (_ for _ in ()).throw(AssertionError("核对时查了星图库")),
+    )
+    r = halo.route("ARC-L1", "CRU-L4", 5, pts=pts)
+    assert r is not None
+    r["text"] = "方案"
+    A, B = pts["ARC-L1"], pts["CRU-L4"]
+
+    def at(left):  # 航线上离目标还剩 left Gm 的点（米）
+        k = left / r["total"]
+        return [(B[i] - (B[i] - A[i]) * k) * 1e9 for i in range(3)]
+
+    start, drop, past = [v * 1e9 for v in A], at(r["dropout"]), at(r["dropout"] - 0.05)
+    home = [v * 1e9 + 3e9 for v in A]  # 没在起点：离起点几 Gm
+
+    def pin():
+        sess = t_nav._HALO["sess"] + 1
+        t_nav._HALO.update(
+            plan=r,
+            sess=sess,
+            last=None,
+            seen=None,
+            ends=(A, B),
+            near=t_nav._start_near(r),
+            jumped=False,
+            first=False,
+            logged=None,
+        )
+        return sess
+
+    def log():
+        p = tmp_path / "nav_log.txt"
+        lines = p.read_text(encoding="utf-8").splitlines() if p.exists() else []
+        return [x for x in lines if "小行星带核对" in x]
+
+    def says(w):
+        return "比方案的断开点" in w["text"]
+
+    try:
+        # 在起点挂上、还没跳：断开点附近的自动核对也不说；手动定位只看离起点多远
+        sess = pin()
+        assert not says(t_nav.halo_check(start, None, sess))
+        assert not says(t_nav.halo_check(drop, None, sess))
+        assert not says(t_nav.halo_check(start, "clip-start", sess))
+        assert says(t_nav.halo_check(drop, "clip-drop", sess))
+        # 从起点跳的这一趟：断开后第一次核对标出来；一样的不再记；再往前 50 Mm 不标
+        sess = pin()
+        t_nav._halo_jump(sess, True)
+        assert huds[-1] == "方案"
+        w = t_nav.halo_check(drop, None, sess)
+        assert w and abs(w["over"]) <= 1 and says(w)
+        again = t_nav.halo_check(drop, None, sess)
+        assert again and again["over"] == w["over"]
+        w = t_nav.halo_check(past, None, sess)
+        assert w and w["over"] == 50
+        assert "多飞了 50 Mm" in huds[-1]
+        # 飞回起点准备下一趟：在起点不说；第二趟从起点跳，断开后又标
+        assert not says(t_nav.halo_check(start, None, sess))
+        t_nav._halo_jump(sess, True)
+        assert says(t_nav.halo_check(past, None, sess))
+        # 补跳（不是从起点跳的）：照样刷回只剩方案、照样说，但不标
+        t_nav._halo_jump(sess, False)
+        assert huds[-1] == "方案"
+        assert says(t_nav.halo_check(drop, None, sess))
+        # 不在起点挂上：还没跳不说；从别处跳过来断开后说，但不标
+        sess = pin()
+        assert not says(t_nav.halo_check(home, None, sess))
+        t_nav._halo_jump(sess, False)
+        assert says(t_nav.halo_check(past, None, sess))
+        marks = [x for x in log() if "（量子后第一次）" in x]
+        assert len(marks) == 2 and all("比方案的断开点" in x for x in marks), log()
+        # 从起点跳了，却停在离航线 1 Gm 的地方（到目标的距离和断开点差不多）：不说，记号留给停在航线上的那一行
+        sess = pin()
+        t_nav._halo_jump(sess, True)
+        aside = list(drop)
+        aside[2] += 1e9
+        assert halo.route_gap(A, B, aside) > t_nav.ROUTE_NEAR
+        assert not says(t_nav.halo_check(aside, None, sess))
+        assert says(t_nav.halo_check(drop, None, sess))
+        assert len([x for x in log() if "（量子后第一次）" in x]) == 3
+        # 断开距离不到 3 Gm 的路线（ARC-L5 → CRU-L4 第 5 带）：到了目标卖矿不说
+        r5 = halo.route("ARC-L5", "CRU-L4", 5, pts=pts)
+        assert r5 and r5["dropout"] * 1000 < halo.FAR_MM
+        r5["text"] = "方案"
+        t_nav._HALO.update(plan=r5, ends=(pts["ARC-L5"], B), near=t_nav._start_near(r5))
+        assert not says(t_nav.halo_check([v * 1e9 for v in B], None, sess))
+        # 去 CRU-L2 的第 8 带：安全窗口一直延到离目标不到 0.05 Gm 的地方，窗口里停下照样说；到了跟前不说
+        r8 = halo.route("HUR-L1", "CRU-L2", 8, pts=pts)
+        assert r8 and r8["late"] < t_nav.AT_TARGET
+        r8["text"] = "方案"
+        S8, T8 = pts["HUR-L1"], pts["CRU-L2"]
+        t_nav._HALO.update(plan=r8, ends=(S8, T8), near=t_nav._start_near(r8))
+
+        def on8(left):
+            k = left / r8["total"]
+            return [(T8[i] - (T8[i] - S8[i]) * k) * 1e9 for i in range(3)]
+
+        assert says(t_nav.halo_check(on8(r8["late"] + 0.002), None, sess))
+        assert not says(t_nav.halo_check(on8(r8["late"] / 2), None, sess))
+
+        # 实时坐标喂给看量子的线程（读数每 0.25 秒一份，线程每 20 毫秒看一次）：每次起跳都刷回只剩方案；
+        # 慢读数连续 3 秒才算停下，游戏卡一下不算；从起点跳的那趟停下后标出来（审查 2026-11-08 第三轮）
+        from tests.bootstrap_helpers import nav_deps
+
+        deps = nav_deps(
+            nav=SimpleNamespace(target=None, space_mode=False),
+            game_events=SimpleNamespace(arrived_at=0.0),
+        )
+        monkeypatch.setattr(n, "read_clipboard", lambda: "")
+
+        def watch(seq, arrive=None):  # arrive：喂到第几份读数时游戏日志说量子到了
+            pin()
+            before = len(log())
+            todo = [tuple(x) for x in seq]
+            t0, fed, last = _t.time(), [], []
+
+            def reading(deps):
+                if todo:
+                    last[:] = [(t0 + 0.25 * len(fed), todo.pop(0), None)]
+                    fed.append(1)
+                    if len(fed) == arrive:
+                        deps.game_events.arrived_at += 1.0
+                return last[0]
+
+            monkeypatch.setattr(t_nav, "_pos_current", reading)
+            ev = threading.Event()
+            huds.clear()
+            st = t_nav._halo_state(deps)
+
+            def run():  # halo 会话的一轮一轮（这里每 20 毫秒一轮）
+                while not ev.is_set() and not t_nav._halo_step(deps, st):
+                    ev.wait(0.02)
+
+            th = threading.Thread(target=run, daemon=True)
+            th.start()
+            deadline = _t.time() + 6
+            while todo and _t.time() < deadline:
+                _t.sleep(0.02)
+            _t.sleep(0.3)
+            ev.set()
+            th.join(2)
+            new = log()[before:]
+            said = [x for x in new if "比方案的断开点" in x]
+            return (
+                huds.count("方案"),
+                [x for x in said if "（量子后第一次）" in x],
+                said,
+            )
+
+        s1 = [start[0] + 1e9, start[1], start[2]]
+        s2 = [start[0] + 2e9, start[1], start[2]]
+        hop = [drop[0] + 1e9, drop[1], drop[2]]
+        slid = at(r["dropout"] - 0.03)  # 断开以后又往前滑了 30 Mm
+        # 正常一趟 + 补跳：两次起跳各刷一次；从起点跳的那趟停下后标一行，补跳停下后照样说、不标
+        got = watch([start, s1, s2] + [drop] * 18 + [hop] + [past] * 18)
+        assert got[0] == 2 and len(got[1]) == 1 and len(got[2]) == 2, got
+        # 跳到一半游戏卡了两下（同一帧读两遍，两下隔了一秒多）：不算停下、不核对，还是这一跳，标在真正停下那行
+        s3, s4 = (
+            [start[0] + 3e9, start[1], start[2]],
+            [start[0] + 4e9, start[1], start[2]],
+        )
+        got = watch([start, s1, s1, s2, s3, s4, s4] + [drop] * 18)
+        assert got[0] == 1 and len(got[2]) == 1 and got[1] == got[2], got
+        # 按断开那一刻卡住，之后又滑了 30 Mm 才停：标的是停下那行（多飞 30 Mm），不是卡住那一下
+        # （卡住那一下游戏日志恰好说「到了」：也只是让核对提前，还是等停下）
+        got = watch([start, s1, drop, drop, drop] + [slid] * 18, arrive=4)
+        assert got[0] == 1 and len(got[1]) == 1 and "多飞了 30 Mm" in got[1][0], got
+        # 按断开那一刻卡了 2 秒（掉进带里加载石头）再滑 30 Mm：照样标在停下那行
+        got = watch([start, s1] + [drop] * 9 + [slid] * 18)
+        assert got[0] == 1 and len(got[1]) == 1 and "多飞了 30 Mm" in got[1][0], got
+    finally:
+        t_nav._HALO.update(
+            plan=None,
+            last=None,
+            seen=None,
+            ends=None,
+            jumped=False,
+            first=False,
+            logged=None,
+        )
+
+
+def test_nav_log_appends_from_threads_do_not_clobber(monkeypatch, tmp_path):
+    """导航日志几个线程一起追加（看量子的线程、接口线程）：一行都不丢、不互相盖掉（审查 2026-11-08 第三轮）"""
+    import threading
+
+    from astral_toolkit.core import paths
+    from astral_toolkit.tasks import navigation as t_nav
+
+    monkeypatch.setattr(paths, "log", lambda name: tmp_path / name)
+
+    def write(k):
+        for i in range(200):
+            t_nav._wp_log(f"线程{k} 第{i}行 " + "x" * 80)
+
+    def trace(k):  # 导航线程每算出一个位置记一行，写的也是这个文件
+        here = {"x": 1.0, "y": 2.0, "z": 3.0, "src": f"线程{k}"}
+        for _ in range(200):
+            t_nav.nav_log(here, {}, {})
+
+    ths = [threading.Thread(target=write, args=(k,)) for k in range(2)]
+    ths += [threading.Thread(target=trace, args=(k,)) for k in range(2)]
+    for th in ths:
+        th.start()
+    for th in ths:
+        th.join()
+    lines = (tmp_path / "nav_log.txt").read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 800 and all(
+        x.endswith("x" * 80) or x.endswith("距离=0.00km") for x in lines
+    )
 
 
 def test_halo_where_edges():
@@ -1633,7 +1920,7 @@ def test_displayinfo_yields_to_mining(monkeypatch):
         "_full_read",
         lambda piece, h: calls.append(1) or {**D.parse([]), "global": (1e7, 1e7, 1e7)},
     )
-    import astral_toolkit.core.capture as Cap
+    import astral_toolkit.infrastructure.platform.capture as Cap
     from PIL import Image
 
     monkeypatch.setattr(Cap, "grab_region", lambda r: Image.new("RGB", (400, 300)))
@@ -2121,3 +2408,45 @@ def test_rotation_phase_calibration(tmp_path, monkeypatch):
         math.dist(n.to_local(b, g2, when), p) < 0.01
     )  # 校准后推算的位置和游戏给的一致
     n._calib.update(stamp=None, data={}, pending={})
+
+
+def test_nav_hud_missing_does_not_break_halo_and_fix(monkeypatch, tmp_path):
+    """悬浮窗建不起来（_hud() 是 None）：小行星带核对、取下方案、一键定位照常返回，不抛 AttributeError
+    （以前 tasks/navigation 里 7 处直接 _hud().set / .clear；待做原第 342 行）"""
+    import threading
+    import types
+    from pathlib import Path
+
+    from astral_toolkit.app import hud_state
+    from astral_toolkit.core import paths
+    from astral_toolkit.navigation import halo
+    from astral_toolkit.tasks import navigation as t_nav
+
+    src = Path(t_nav.__file__).read_text(encoding="utf-8")
+    assert "_hud().set(" not in src and "_hud().clear(" not in src
+    monkeypatch.setattr(paths, "log", lambda name: tmp_path / name)
+    monkeypatch.setattr(t_nav, "_hud", lambda: None)
+    monkeypatch.setattr(hud_state, "_hud", lambda: None)
+    monkeypatch.setattr(halo, "where", lambda g: {"band": 3})
+    monkeypatch.setattr(halo, "where_text", lambda w, band: "在第3带")
+    published = []
+    monkeypatch.setattr(t_nav.bus, "publish", lambda kind, data: published.append(kind))
+    ran = []
+    monkeypatch.setattr(
+        threading,
+        "Timer",
+        lambda secs, fn: types.SimpleNamespace(start=lambda: ran.append(fn())),
+    )  # 「仅用于手动定位」那条 5 秒后清提示：马上跑，看清提示那一步也不抛
+    t_nav._HALO.update(plan={"text": "方案", "band": 5}, last=None, seen=None)
+    try:
+        w = t_nav.halo_check(
+            (1.0, 2.0, 3.0), "Coordinates: x:1 y:2 z:3", t_nav._HALO["sess"]
+        )
+        assert w and w["text"] == "在第3带" and published == ["halo"]
+    finally:
+        assert t_nav.halo_unpin() == {"ok": True}
+    deps = types.SimpleNamespace(
+        nav=types.SimpleNamespace(target=None, space_mode=False)
+    )
+    got = t_nav.fix_here(deps)  # type: ignore[arg-type]  # 只用到 deps.nav，给个假的
+    assert got == {"error": "当前未导航到太空路标"} and ran == [None]

@@ -128,3 +128,58 @@ def test_empty_facts_keys_in_order_and_fresh_lists():
         and d2["wikelo"] == []
         and d2["aka"] == []
     )
+
+
+# ---------------------------------------------------------------- dev 拆分①（2026-11-09）从 tasks/catalog_queries/acquire 搬来的规则
+def test_buy_rows_rules():
+    inf = float("inf")
+    assert A.nearest_usable([(1200.0, 10, "店", "地")]) is True
+    assert (
+        A.nearest_usable([(inf, 10, "店", "地")]) is False
+    )  # 不在一个星系：算不出距离
+    assert A.nearest_usable([]) is False
+    assert A.near_rows([(1200.0, 10, "店", "地")]) == [
+        {"dist_m": 1200.0, "price": 10, "shop": "店", "place": "地"}
+    ]
+    buy = [(5, "甲", "A"), (6, "乙", "B"), (7, "丙", "C"), (8, "丁", "D")]
+    rows = A.cheapest_rows(buy, 3)
+    assert [r["shop"] for r in rows] == ["甲", "乙", "丙"]
+    assert all(r["dist_m"] is None for r in rows)
+
+
+def test_exact_ids_folds_case_space_and_l_for_i():
+    hits = [
+        (1, "Ignite II Missile", "M"),
+        (2, "Ignite III Missile", "M"),
+        (3, "Ignite II Missile", "M"),
+    ]
+    assert A.exact_ids(hits, "ignite ii missile") == [1, 3]
+    assert A.exact_ids(hits, "IgniteIl Missile") == [1, 3]  # l 当 I
+    assert A.exact_ids(hits, "Ignite IV Missile") == []
+    assert A.exact_ids([], "x") == []
+
+
+def test_material_facts():
+    assert A.ore_base("Quantainium (Raw)") == "Quantainium"
+    assert A.ore_base("Gold") == "Gold"
+    assert A.mine_fact(0.4, "大熊星", "Carinite (Pure)") == {
+        "where": "大熊星",
+        "pct": 0.4,
+        "pure": True,
+    }
+    assert A.loot_fact(None) is None
+    assert A.loot_fact({"groups": []}) is None
+    d = {
+        "groups": [{"regions": ["甲"], "box": "箱", "p": 0.1}],
+        "more": 1,
+        "note": "说明",
+    }
+    assert A.loot_fact(d) == {
+        "regions": ["甲"],
+        "more": True,
+        "mine": False,
+        "note": "说明",
+        "box": "箱",
+        "placed": False,
+        "p": 0.1,
+    }

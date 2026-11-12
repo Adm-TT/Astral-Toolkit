@@ -273,12 +273,9 @@ def _write_dump(
         root = paths.shots("debug") / task
         _prune(root, KEEP)
     except Exception as e:
-        try:
-            from ..app import bus
+        from ..core import day_logs
 
-            bus.runtime_log(f"调试截图写入失败：{e!r}", tag="HOVER", level="WARN")
-        except Exception:
-            pass
+        day_logs.write("debug", f"[WARN] [识别] 调试截图写入失败：{e!r}")
 
 
 def flush(

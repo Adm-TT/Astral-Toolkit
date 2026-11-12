@@ -47,6 +47,7 @@ def present_browse(f):
             for tag in (
                 part_of(bp),
                 SUB_ZH.get(bp["s"] or "", bp["s"] or ""),
+                *item.get("spec", ()),
                 item["note"],
             )
             if tag

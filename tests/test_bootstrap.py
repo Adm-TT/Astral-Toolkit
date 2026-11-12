@@ -139,8 +139,16 @@ def test_build_desktop_binds_everything_to_this_app(monkeypatch):
             assert not hasattr(mining_tasks, "_live")
             assert not hasattr(nav_tasks, "_nav")
             assert app.nav_deps == nav_tasks.NavDeps(
-                app.nav, app.pos, app.game_events, app.results
+                app.nav,
+                app.pos,
+                app.game_events,
+                app.results,
+                app.nav_deps.halo,
+                app.nav_deps.here,
             )
+            # 导航的两个小后台会话由 lifecycle 管着：退出时停（2026-11-09）
+            names = [s.name for s, _ in app.lifecycle._services]
+            assert "halo" in names and "here-watch" in names
             assert app.hotkey_commands._nav is app.nav_deps
             assert count_tasks._count is app.count
             assert not hasattr(hover_tasks, "_links")
@@ -207,7 +215,8 @@ def test_nav_marker_is_wired_by_bootstrap():
 
 def test_bind_all_wires_core_to_ui(monkeypatch):
     """bind_all 顺带把 core 的截图涂黑悬浮窗、运行记录推面板接上（CL-C5）；test 模式只 build 不接"""
-    from astral_toolkit.core import capture, run_records
+    from astral_toolkit.core import run_records
+    from astral_toolkit.infrastructure.platform import capture
     from tests.bootstrap_helpers import app_for_test
 
     monkeypatch.setattr(capture, "_overlay_state", None)  # 测完还原
@@ -219,6 +228,77 @@ def test_bind_all_wires_core_to_ui(monkeypatch):
         bootstrap.shutdown(app, budget=0.2)
     with app_for_test():
         assert capture._overlay_state is not None and run_records._ui_sink is not None
+
+
+def test_bind_all_wires_platform_to_hud(monkeypatch):
+    """目录迁移收尾：悬浮窗状态（app/hud_state）读光标、读键用平台层那一份，bind_all 接上；test 模式只 build 不接"""
+    from astral_toolkit.app import hud_state
+    from astral_toolkit.infrastructure.platform import cursor, keys
+    from tests.bootstrap_helpers import app_for_test
+
+    monkeypatch.setattr(hud_state, "_cursor_reader", None)  # 测完还原
+    monkeypatch.setattr(hud_state, "_key_reader", None)
+    app = bootstrap.build("test")
+    try:
+        assert hud_state._cursor_reader is None and hud_state._key_reader is None
+    finally:
+        bootstrap.shutdown(app, budget=0.2)
+    with app_for_test():
+        assert (
+            hud_state._cursor_reader is cursor.pos
+            and hud_state._key_reader is keys.down
+        )
+
+
+def test_hud_state_reads_through_what_bootstrap_gave(monkeypatch):
+    """hud_state 的读光标、读键：没接当不知道、没按；接了就用接进来的；读不了吞掉（光标 None、键当没按）——
+    和以前自己调 Win32 时一样，不往外抛（平台层 keys.down 会抛，热键线程要知道）。按 F8 那一刻记 Shift 和光标"""
+    from astral_toolkit.app import hud_state
+
+    monkeypatch.setattr(hud_state, "_cursor_reader", None)
+    monkeypatch.setattr(hud_state, "_key_reader", None)
+    assert hud_state._cursor() is None and hud_state._key_down(0x10) is False
+    pressed = {0x10}
+    hud_state.set_platform(lambda: (12, 34), lambda vk: vk in pressed)
+    assert hud_state._cursor() == (12, 34)
+    assert hud_state._key_down(0x10) is True and hud_state._key_down(0x11) is False
+    monkeypatch.setattr(hud_state, "_ITEM_MODE", dict(hud_state._ITEM_MODE))
+    hud_state.item_key_pressed()
+    assert hud_state._ITEM_MODE["pinned"] is True and hud_state._ITEM_MODE[
+        "origin"
+    ] == (12, 34)
+
+    def boom(*a):
+        raise OSError("读不了")
+
+    hud_state.set_platform(boom, boom)
+    assert hud_state._cursor() is None and hud_state._key_down(0x10) is False
+
+
+def test_one_cursor_read_for_platform_and_capture(monkeypatch):
+    """读光标全项目一份（infrastructure/platform/capture.cursor_pos）：平台层 cursor.pos 转过去，截图换算 cursor_on_image 也用它"""
+    from astral_toolkit.infrastructure.platform import capture
+    from astral_toolkit.infrastructure.platform import cursor
+
+    monkeypatch.setattr(capture, "cursor_pos", lambda: (1500, 300))
+    assert cursor.pos() == (1500, 300)
+    monkeypatch.setattr(
+        capture,
+        "game_area",
+        lambda: {"left": 100, "top": 50, "width": 2000, "height": 1000},
+    )
+    monkeypatch.setattr(capture, "_scale", lambda mon: 1.0)
+    monkeypatch.setattr(
+        capture, "_sct", lambda: type("S", (), {"monitors": [None, {}]})()
+    )
+
+    class Img:
+        width, height = 1000, 500
+
+    assert capture.cursor_on_image(Img()) == (
+        (1500 - 100) * 1000 // 2000,
+        (300 - 50) * 500 // 1000,
+    )
 
 
 def test_debug_mode_gates_nav_diagnostics(monkeypatch, tmp_path):
@@ -365,9 +445,7 @@ def _quiet_mining(monkeypatch):
     monkeypatch.setattr(mining_screen, "grab", fail_grab)
     # 识别换成「画面里什么都没有」：这里只测会话循环用的是注入的截屏 / 前台 / 时钟；
     # 真识别第一次要加载模型（几秒），单独跑这个文件时会拖过收尾预算
-    monkeypatch.setattr(
-        mining_screen, "analyse", lambda img: (Scan(), ({}, None, None))
-    )
+    monkeypatch.setattr(mining_screen, "analyse", lambda img: Scan())
     monkeypatch.setattr(mining_signals, "find_signatures", lambda img: [])
     # 会话循环开 / 停时会写设置里的 live_on：换成只记录、不落盘的 RunFlag，别动真设置
     flag_writes = []
@@ -515,6 +593,7 @@ def test_routes_table_static_plus_bound(monkeypatch):
             "live_stop",
             "set_mining_gear",
             "set_mining_gadgets",
+            "set_mining_focus",
             "hover_trigger",
             "status",
             "feedback_report",
@@ -692,6 +771,7 @@ def test_count_analysis_views_and_links_are_wired_by_bootstrap(monkeypatch):
         (hud_state, "_note_hud"),
         (gate, "closing_error"),
         (present_count, "hud_text"),
+        (present_count, "item_line"),
         (inspector, "_cursor_on_image"),
         (count_tasks, "_read_item"),
         (count_tasks, "_count_review"),
@@ -727,6 +807,7 @@ def test_count_analysis_views_and_links_are_wired_by_bootstrap(monkeypatch):
             gate, "closing_error", fake("refuse", {"error": "正在退出"})
         )
         monkeypatch.setattr(present_count, "hud_text", fake("hud", "文字"))
+        monkeypatch.setattr(present_count, "item_line", fake("line", "一行"))
         monkeypatch.setattr(hover_tasks, "qty_text", "数量写法")
         monkeypatch.setattr(inspector, "_cursor_on_image", fake("on_image", (1, 2)))
         monkeypatch.setattr(count_tasks, "_read_item", fake("read", "物品"))
@@ -741,6 +822,7 @@ def test_count_analysis_views_and_links_are_wired_by_bootstrap(monkeypatch):
         links.note("盘点", "一句话")
         assert links.refuse() == {"error": "正在退出"}
         assert worker._views.hud_text("站", {"k": 1}) == "文字"
+        assert worker._views.item_line({"zh": "铁矿"}) == "一行"
         assert worker._an.cursor_on_image("img") == (1, 2)
         assert worker._an.read_item("img", (1, 2)) == "物品"
         assert worker._an.review("站", {}) == "对账"
@@ -755,6 +837,7 @@ def test_count_analysis_views_and_links_are_wired_by_bootstrap(monkeypatch):
             ("note", ("盘点", "一句话")),
             ("refuse", ()),
             ("hud", ("站", {"k": 1}, "数量写法")),
+            ("line", ({"zh": "铁矿"}, "数量写法")),
             ("on_image", ("img",)),
             ("read", ("img", (1, 2))),
             ("review", ("站", {})),
@@ -773,13 +856,13 @@ def test_count_analysis_views_and_links_are_wired_by_bootstrap(monkeypatch):
             ),
         )
         assert links.place_now() == "新巴贝奇"
-        # 实时对不上 → 再退到上次入库位置
+        # 实时对不上 → 仍未知（不退回上次入库位置，由盘点入口提示玩家手选）
         app.pos.label = (0.0, "附近")
         monkeypatch.setattr(
             trade_tasks, "trade", lambda: SimpleNamespace(db={"last_location": "某处"})
         )
         monkeypatch.setattr(stock_tasks, "_place_of", lambda loc: (f"地点:{loc}", None))
-        assert links.place_now() == "地点:某处"
+        assert links.place_now() == ""
     finally:
         bootstrap.shutdown(app, budget=0.2)
     cp, fg = (lambda: (1, 1)), (lambda: True)

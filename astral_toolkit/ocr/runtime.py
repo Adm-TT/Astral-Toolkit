@@ -13,12 +13,10 @@ import time
 OCR_THREADS = max(2, min(6, (os.cpu_count() or 4)))
 USE_GPU = (
     os.environ.get("DUBHE_OCR_CPU") != "1"
-)  # 能用显卡（DirectML）就用；用不了自动用 CPU。环境变量 DUBHE_OCR_CPU=1 强制 CPU（对比测速用）
-# 哪几步放显卡：det 找字（整块大图，显卡快 4 倍）、rec 认字（很多小块、每块尺寸不同，显卡反而慢一倍）。
-# 环境变量 DUBHE_OCR_DML=det,rec 可以改（对比测速用）
-GPU_PARTS = [
-    p for p in os.environ.get("DUBHE_OCR_DML", "det").split(",") if p in ("det", "rec")
-]
+)  # 设置里选了显卡、电脑也能用显卡（DirectML）才用，用不了自动用 CPU。环境变量 DUBHE_OCR_CPU=1 强制 CPU（对比测速用）
+# PP-OCRv6 档位：主路径 tiny；样本对比不达标时按方案 §7 改为 small（det+rec 一致）
+OCR_VERSION = "PP-OCRv6"
+MODEL_TYPE = "tiny"
 _engine = None
 _lock = threading.RLock()
 _last_error = ""
@@ -51,21 +49,30 @@ def is_gpu_preferred():
         dev = cfg.get("ocr_device")
         if dev is not None:
             return str(dev).lower() == "gpu"
-        return bool(cfg.get("always_use_gpu", True))
+        return bool(cfg.get("always_use_gpu", False))
     except Exception:
-        return True
+        return False  # 默认处理器（2026-11-08 老大定）
+
+
+def _ort_session(eng):
+    """从 RapidOCR 取出底层 InferenceSession（text_det.session.session；懒加载未就绪则 None）"""
+    td = getattr(eng, "text_det", None)
+    if td is None:
+        return None
+    wrap = getattr(td, "session", None)
+    if wrap is None:
+        return None
+    return getattr(wrap, "session", wrap)
 
 
 def ocr_device():
     """识别现在实际在哪算：「显卡」/「CPU」"""
     try:
-        eng = rapidocr().eng
-        sess = (
-            eng.text_det.infer.session
-            if hasattr(eng.text_det, "infer")
-            else eng.text_det.session
-        )
-        return "显卡" if "DmlExecutionProvider" in sess.get_providers() else "CPU"
+        locked = rapidocr()
+        sess = _ort_session(locked.eng)
+        if sess is not None and hasattr(sess, "get_providers"):
+            return "显卡" if "DmlExecutionProvider" in sess.get_providers() else "CPU"
+        return "显卡" if locked.gpu else "CPU"
     except Exception:
         return "CPU"
 
@@ -106,14 +113,28 @@ class _Locked:
         with self.lock:
             self.eng, self.kind, self.gpu = eng, type(eng).__module__, gpu
 
+    def _call_eng(self, a, kw):
+        # rapidocr 3.x 的 use_det/use_cls/use_rec 会写进引擎状态、调用结束不还原；
+        # 每次都显式带默认，调用方要关检测（read_line）再覆盖，避免认完一行后整段识别永远空结果
+        call_kw = {"use_det": True, "use_cls": False, "use_rec": True, **kw}
+        return self.eng(*a, **call_kw)
+
     def _infer(self, a, kw, native):
         td = getattr(self.eng, "text_det", None)
+        if native and td is None:
+            load = getattr(self.eng, "_load_det_model", None)
+            if callable(load):
+                try:
+                    load()
+                except Exception:
+                    pass
+            td = getattr(self.eng, "text_det", None)
         if not native or td is None or not hasattr(td, "limit_side_len") or not a:
-            return self.eng(*a, **kw)
+            return self._call_eng(a, kw)
         old = (td.limit_side_len, td.limit_type)
         try:
             td.limit_type, td.limit_side_len = "max", max(a[0].shape[:2])
-            return self.eng(*a, **kw)
+            return self._call_eng(a, kw)
         finally:
             td.limit_side_len, td.limit_type = old
 
@@ -157,35 +178,37 @@ class _Locked:
         return getattr(self.eng, name)
 
 
-def _new_engine(gpu):
-    """新建一个 RapidOCR 引擎；gpu=True 时 GPU_PARTS 那几步放显卡（DirectML）。
-    返回 (引擎, 是否显卡版, 出错原因)；显卡版建不起来就退回 CPU 版"""
-    try:
-        from rapidocr_onnxruntime import RapidOCR
-    except ImportError:
-        from rapidocr import RapidOCR
-    opts = {
-        "intra_op_num_threads": OCR_THREADS,
-        "inter_op_num_threads": 1,
-        "use_cls": False,
+def _engine_params(gpu: bool) -> dict:
+    """新版 rapidocr 构造参数：PP-OCRv6 tiny（或 MODEL_TYPE）+ 线程 + 关 cls；显卡时整引擎 use_dml。"""
+    from rapidocr import EngineType, ModelType, OCRVersion
+
+    params = {
+        "Global.use_cls": False,
+        "EngineConfig.onnxruntime.intra_op_num_threads": OCR_THREADS,
+        "EngineConfig.onnxruntime.inter_op_num_threads": 1,
+        "Det.engine_type": EngineType.ONNXRUNTIME,
+        "Det.ocr_version": OCRVersion(OCR_VERSION),
+        "Det.model_type": ModelType(MODEL_TYPE),
+        "Rec.engine_type": EngineType.ONNXRUNTIME,
+        "Rec.ocr_version": OCRVersion(OCR_VERSION),
+        "Rec.model_type": ModelType(MODEL_TYPE),
     }
     if gpu:
-        opts.update({f"{part}_use_dml": True for part in GPU_PARTS})
+        params["EngineConfig.onnxruntime.use_dml"] = True
+    return params
+
+
+def _new_engine(gpu):
+    """新建一个 RapidOCR 引擎；gpu=True 时整引擎开 DirectML（use_dml）。
+    返回 (引擎, 是否显卡版, 出错原因)；显卡版建不起来就退回 CPU 版"""
+    from rapidocr import RapidOCR
+
     try:
-        return RapidOCR(**opts), bool(gpu), ""
+        return RapidOCR(params=_engine_params(gpu)), bool(gpu), ""
     except Exception as e:
-        try:
-            return (
-                RapidOCR(
-                    intra_op_num_threads=OCR_THREADS,
-                    inter_op_num_threads=1,
-                    use_cls=False,
-                ),
-                False,
-                str(e),
-            )
-        except Exception:
-            return RapidOCR(), False, str(e)
+        if not gpu:
+            raise
+        return RapidOCR(params=_engine_params(False)), False, str(e)
 
 
 def rapidocr():
@@ -210,9 +233,92 @@ def rapidocr():
     return _engine
 
 
+# 模型下载：底层 DownloadFile 单次请求已有 timeout；外层再有限重试，避免 CDN 抖一下就整条安装失败
+_MODEL_DL_ATTEMPTS = 3
+_MODEL_DL_BACKOFF_CAP_S = 30.0  # 退避等待合计封顶（不含单次下载本身）
+
+
+def _download_with_retry(run, *, log, what: str) -> None:
+    """run() 失败则指数退避重试，最多 _MODEL_DL_ATTEMPTS 次；退避合计不超过约 30 秒。"""
+    last: Exception | None = None
+    waited = 0.0
+    for attempt in range(1, _MODEL_DL_ATTEMPTS + 1):
+        try:
+            run()
+            return
+        except Exception as e:
+            last = e
+            if attempt >= _MODEL_DL_ATTEMPTS:
+                break
+            delay = min(2**attempt, max(0.0, _MODEL_DL_BACKOFF_CAP_S - waited))
+            if delay <= 0:
+                break
+            log.warning(
+                "%s失败（第 %s/%s 次）：%s；%.0f 秒后重试",
+                what,
+                attempt,
+                _MODEL_DL_ATTEMPTS,
+                e,
+                delay,
+            )
+            time.sleep(delay)
+            waited += delay
+    raise RuntimeError(f"{what}失败（已试 {_MODEL_DL_ATTEMPTS} 次）：{last}") from last
+
+
+def ensure_models() -> None:
+    """把 PP-OCRv6 tiny 的 det/rec onnx 下进 rapidocr/models（已存在则校验跳过）。
+    打包和源码安装都要调，避免玩家第一次认字时联网。"""
+    from pathlib import Path
+
+    from rapidocr import ModelType, OCRVersion, RapidOCR
+    from rapidocr.inference_engine.base import FileInfo, InferSession
+    from rapidocr.utils.download_file import DownloadFile, DownloadFileInput
+    from rapidocr.utils.log import logger
+    from rapidocr.utils.typings import EngineType, TaskType
+
+    eng = RapidOCR(params=_engine_params(False))
+    root = Path(eng.cfg.Global.model_root_dir)
+    root.mkdir(parents=True, exist_ok=True)
+    for task, lang in (
+        (TaskType.DET, eng.cfg.Det.lang_type),
+        (TaskType.REC, eng.cfg.Rec.lang_type),
+    ):
+        info = InferSession.get_model_url(
+            FileInfo(
+                EngineType.ONNXRUNTIME,
+                OCRVersion(OCR_VERSION),
+                task,
+                lang,
+                ModelType(MODEL_TYPE),
+            )
+        )
+        url = info["model_dir"]
+        dest = root / Path(url).name
+        name = dest.name
+
+        def _one(url=url, dest=dest, sha=info.get("SHA256")):
+            DownloadFile.run(
+                DownloadFileInput(
+                    file_url=url,
+                    save_path=dest,
+                    logger=logger,
+                    sha256=sha,
+                )
+            )
+            if not dest.is_file():
+                raise FileNotFoundError(f"OCR 模型未就绪：{dest}")
+
+        _download_with_retry(_one, log=logger, what=f"下载 OCR 模型 {name}")
+
+
 def warmup() -> None:
-    """启动时预加载识别引擎。不返回引擎对象。"""
-    rapidocr()
+    """启动时预加载识别引擎和 det/rec 模型。不返回引擎对象。"""
+    locked = rapidocr()
+    for name in ("_load_det_model", "_load_rec_model"):
+        load = getattr(locked.eng, name, None)
+        if callable(load):
+            load()
 
 
 def set_ocr_device(target):
@@ -220,7 +326,7 @@ def set_ocr_device(target):
     采矿读屏、交易识别各自缓存了旧对象，切了不生效）"""
     global _engine, _last_error, _cpu_fallback
     with _lock:
-        target = (target or "gpu").lower()
+        target = (target or "cpu").lower()
         from ..core import settings
 
         settings.update(ocr_device=target, always_use_gpu=(target == "gpu"))

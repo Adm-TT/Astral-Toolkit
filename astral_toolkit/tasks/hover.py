@@ -144,7 +144,7 @@ def _hover_lines(links: HoverLinks, info, en, zh):
 
 def _hover_more(links: HoverLinks, seq, at, zh, en, info, quality=None, canon=True):
     """后台：对上玩家市场里的物品、查价、查掉落，查到一样补一样（悬浮窗和窗口都更新）"""
-    from ..trade.matching import _fold
+    from ..trade.matching import _fold, alias_ok
     from ..trade.names import has_chinese  # 只拿名字小工具，不碰 Trade
 
     out = {"at": at, "seq": seq}
@@ -156,8 +156,8 @@ def _hover_more(links: HoverLinks, seq, at, zh, en, info, quality=None, canon=Tr
     if _last_hover.get("seq") != seq:  # 已经又按了一次 F8：这次的结果不要了
         return
     if (
-        item is not None and zh and has_chinese(zh) and canon
-    ):  # 只记汉化包里的标准名（认错的字不记，免得库存里显示错名）
+        item is not None and zh and has_chinese(zh) and canon and alias_ok(item, zh, en)
+    ):  # 只记汉化包里的标准名（认错的字不记，免得库存里显示错名）；配上的得是同一件（模糊、前缀配上的变体不记，待做 61）
         try:
             m.remember_alias(item.id, zh)
         except Exception:

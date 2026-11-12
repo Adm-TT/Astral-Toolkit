@@ -2,6 +2,8 @@
 
 悬浮窗短提示、物品分区自动收起、读鼠标位置和按键。
 tasks 和引擎直接用这里的 _note_hud 等名字。
+读光标、读键由 bootstrap.bind_all 接进来（infrastructure/platform 的 cursor.pos、keys.down；目录迁移收尾，
+以前这里自己调 Win32，和平台层是两份）；没接（测试、test 模式）就当不知道光标在哪、没按。
 """
 
 import math
@@ -46,23 +48,35 @@ ITEM_AWAY_AFTER = 1.5
 _ITEM_MODE = {"pinned": False, "origin": None, "shown_at": 0.0}
 
 
-def _cursor():
-    try:
-        import ctypes
-        from ctypes import wintypes
+_cursor_reader = None  # () -> (x, y)：bootstrap.bind_all 接平台层的 cursor.pos
+_key_reader = None  # (键码) -> 按着没有：bootstrap.bind_all 接平台层的 keys.down
 
-        pt = wintypes.POINT()
-        ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
-        return pt.x, pt.y
+
+def set_platform(cursor_pos, key_down):
+    """装配时接读光标、读键（bootstrap.bind_all；app 层不直接 import infrastructure）"""
+    global _cursor_reader, _key_reader
+    _cursor_reader, _key_reader = cursor_pos, key_down
+
+
+def _cursor():
+    """鼠标在哪 (x, y)；没接、读不了给 None（出错在这里吞掉，和以前一样）"""
+    read = _cursor_reader
+    if read is None:
+        return None
+    try:
+        x, y = read()
+        return x, y
     except Exception:
         return None
 
 
 def _key_down(vk):
+    """这个键按着没有；没接、读不了当没按（平台层 keys.down 读不了会抛，热键线程要知道；这里照旧吞掉）"""
+    read = _key_reader
+    if read is None:
+        return False
     try:
-        import ctypes
-
-        return bool(ctypes.windll.user32.GetAsyncKeyState(vk) & 0x8000)
+        return bool(read(vk))
     except Exception:
         return False
 

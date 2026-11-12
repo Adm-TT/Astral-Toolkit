@@ -192,3 +192,75 @@ def slot_zh(slot):
 def clean_title(t: str) -> str:
     """蓝图来源任务标题里的 ~mission(…) 换成「[地点]」（原 crafting._clean_title）"""
     return re.sub(r"~mission\([^)]*\)", "[地点]", t)
+
+
+# ---------------------------------------------------------------- 船零件的尺寸 / 等级 / 类别，护甲的轻 / 中 / 重（CR-D1）
+
+# 物品属性里的类别（cls）；游戏汉化包的物品说明多数写「类别：民用」，冷却器写「分类：民用」；
+# Competition 说明里写「竞赛」（名字括号里多写「竞速」，汉化包自己不统一）
+CLS_ZH = {
+    "Civilian": "民用",
+    "Military": "军用",
+    "Industrial": "工业",
+    "Stealth": "隐形",
+    "Competition": "竞赛",
+}
+# 护甲的子类型（物品属性里的 sub）；游戏汉化包写「物品类型：重型护甲」
+WEIGHT_ZH = {"Light": "轻型", "LightArmor": "轻型", "Medium": "中型", "Heavy": "重型"}
+# 背包的子类型大多是 Personal：按物品尺寸 1 / 2 / 3 写（游戏汉化包写「轻型背包 / 中型背包 / 重型背包」，审查 2026-11-08）
+BACKPACK_ZH = {1: "轻型", 2: "中型", 3: "重型"}
+# 类名带 superheavy 的一套：BUL-H4 头盔、护甲物品属性的子类型写 Heavy，游戏写「物品类型：超重型护甲」；
+# 同一套的弹药携具（H4-PBF，类名 …superheavy_backpack…）游戏写「物品类型：弹药携具」，不写轻重（审查 2026-11-08）
+SUPERHEAVY = "superheavy"
+# 船零件里游戏说明写等级、类别的只有这五类；舰船武器、采矿激光器这些不写（审查 2026-11-08）。
+# 物品属性里的等级照英文说明的 Grade 行取（和类别一样），写「定制」（Bespoke）、N/A 或者没写的是空（2026-11-08 生成工具改的，
+# 老大定直接做好）：以前取原始数据的 Grade 字段，有 17 份蓝图（16 件）和游戏说明对不上（Idris、Reclaimer、890 Jump、Polaris 的 S4 舰船
+# 专用件写「定制」或不写等级；Draug、Elsen、Pelerous 写 C / B / C），这里都写成了「A 级」；不写等级的类原始字段也都是 A
+GRADED = frozenset({"cooler", "powerplant", "quantumdrive", "radar", "shield"})
+# 物品属性里尺寸都是默认的 1、游戏说明里也不写尺寸的船零件（采矿模组、矿石吊舱、燃料喷嘴、刮削模块）
+UNSIZED = frozenset({"miningmodule", "orepod", "refuelling", "salvage"})
+
+
+def spec_parts(t, sub="", kind=None):
+    """物品属性里的（尺寸, 等级, 类别）。t 是 itemstats.tags() 那样的字典，sub 是蓝图子类。
+    尺寸：属性里的值，没有时从子类「sizeN」推，都没有是 None；等级只认 A～D，别的当没有（""）；类别是英文（Military…）或 ""。
+    kind 是船零件的蓝图类型（bp["t"]）：给了就只留游戏说明里有的——GRADED 才有等级、类别，UNSIZED 没有尺寸"""
+    size = t.get("size")
+    if size is None and sub.startswith("size") and sub[4:].isdigit():
+        size = int(sub[4:])
+    grade = t.get("grade")
+    grade = str(grade) if grade and str(grade).upper() in "ABCD" else ""
+    cls = t.get("cls") or ""
+    if kind is not None:
+        if kind in UNSIZED:
+            size = None
+        if kind not in GRADED:
+            grade = cls = ""
+    return size, grade, cls
+
+
+def spec_tags(t, sub="", size=True, kind=None):
+    """「S2」「A 级」「军用」这几枚标签（制造页标题、蓝图列表用）；size=False 不写尺寸（列表里子类已经写了 S2）；
+    kind 见 spec_parts"""
+    n, grade, cls = spec_parts(t, sub, kind)
+    out = []
+    if size and n is not None:
+        out.append(f"S{n}")
+    if grade:
+        out.append(f"{grade} 级")
+    if cls:
+        out.append(CLS_ZH.get(cls, cls))
+    return out
+
+
+def weight_zh(t, name=""):
+    """护甲的「轻型」「中型」「重型」「超重型」；t 是 itemstats.tags() 那样的字典（cn 是物品类名），name 是英文名。
+    类名带 superheavy 的写超重型，其中的弹药携具不写；背包的子类型是 Personal 时按尺寸写；
+    没有类名的老数据，弹药携具按英文名（Ammo Carrier）认、不写；别的没有或是 UNDEFINED… 返回空串"""
+    bag = t.get("type") == "Char_Armor_Backpack"
+    if SUPERHEAVY in (t.get("cn") or "").lower():
+        return "" if bag else "超重型"
+    w = WEIGHT_ZH.get(t.get("sub") or "", "")
+    if not w and bag and "Ammo Carrier" not in name:
+        w = BACKPACK_ZH.get(t.get("size"), "")
+    return w

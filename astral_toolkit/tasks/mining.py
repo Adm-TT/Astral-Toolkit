@@ -135,11 +135,16 @@ def collect_inputs(scan):
     )
 
 
-def scan_view(scan, bag, cut=False):
+def scan_view(scan, cut=False):
     """一块石头的读屏结果（窗口用）。cut=True：面板被屏幕右边挡住，品质和总 SCU 读不到，只有破碎方案和成分占比"""
-    result = _analysis.analyze(scan, bag, collect_inputs(scan), cut=cut)
+    result = _analysis.analyze(scan, collect_inputs(scan), cut=cut)
     out = _present.to_view(result)
-    out["hud"], out["hud_rich"] = _present.to_hud(result)
+    from ..core import settings
+    from ..mining.data import focus_keys, focus_ores
+
+    out["hud"], out["hud_rich"] = _present.to_hud(
+        result, focus=focus_ores(focus_keys(settings.load().get("mining_focus")))
+    )
     return out
 
 
@@ -355,10 +360,58 @@ def _gear(ship=None):
 
 
 def mining_gear():
-    return _gear()
+    from ..core import settings
+    from ..core.i18n import mineral_zh
+    from ..mining.data import FOCUS_SIGNALS, SIGNATURES, focus_keys
+
+    out = _gear()
+    focus = focus_keys(settings.load().get("mining_focus"))
+    out["focus"] = [
+        {"key": key, "name": mineral_zh(key), "on": focus is None or key in focus}
+        for key in SIGNATURES
+    ] + [
+        {"key": key, "name": name, "on": focus is None or key in focus, "signal": True}
+        for key, name in FOCUS_SIGNALS.items()
+    ]  # 两类雷达信号排在矿后面，页面上另起一行（signal）
+    return out
 
 
-def set_mining_gear(live: _LiveLike, /, ship="mole", loadout=None, reset=False):
+def _save_settings(**kw):
+    """存采矿的设置：没存上（设置文件暂时读不到、写不进去）返回给窗口的那句话，存上了返回 None。
+    以前不看存没存上：页面说「已保存」，悬浮窗和下次读到的却还是旧的（审查 2026-11-08）"""
+    from ..core import settings
+
+    try:
+        settings.update_checked(**kw)
+    except settings.NotSaved as e:
+        return str(e)
+    except OSError:
+        return settings.NOT_WRITTEN
+    return None
+
+
+def set_mining_focus(live: _LiveLike, /, keys=None) -> dict[str, Any]:
+    """关注列表只过滤悬浮窗；None 恢复全部，空列表矿和信号都不显示。能选的是矿和两类雷达信号（地面信号、太空残骸）"""
+    from ..mining.data import FOCUS_SIGNALS, SIGNATURES, focus_keys
+
+    if keys is not None:
+        if not isinstance(keys, list) or any(
+            not isinstance(key, str)
+            or (key not in SIGNATURES and key not in FOCUS_SIGNALS)
+            for key in keys
+        ):
+            raise ValueError("关注的矿和信号要从列表中选择")
+        keys = focus_keys(keys)
+    err = _save_settings(mining_focus=keys)
+    if err:
+        return {"error": err}
+    live.config_changed()
+    return mining_gear()
+
+
+def set_mining_gear(
+    live: _LiveLike, /, ship="mole", loadout=None, reset=False
+) -> dict[str, Any]:
     """选船 / 保存这条船的配置（reset=True 恢复出厂配置）"""
     from ..core import settings
     from ..mining.data import SHIPS
@@ -371,14 +424,15 @@ def set_mining_gear(live: _LiveLike, /, ship="mole", loadout=None, reset=False):
         saved.pop(ship, None)
     elif loadout is not None:
         saved[ship] = clean_loadout(ship, loadout)
-    settings.update(mining_ship=ship, mining_loadouts=saved)
+    err = _save_settings(mining_ship=ship, mining_loadouts=saved)
+    if err:
+        return {"error": err}
     live.config_changed()
-    return _gear()
+    return mining_gear()
 
 
-def set_mining_gadgets(live: _LiveLike, /, keys=None):
+def set_mining_gadgets(live: _LiveLike, /, keys=None) -> dict[str, Any]:
     """带了哪些手持工具（列表；空列表 = 一样都不带，破碎方案只给不贴的）"""
-    from ..core import settings
     from ..mining.data import GADGETS
 
     if not isinstance(keys, list):
@@ -387,9 +441,11 @@ def set_mining_gadgets(live: _LiveLike, /, keys=None):
     bad = want - set(GADGETS)
     if bad:
         raise ValueError(f"没有这种手持工具：{'、'.join(sorted(bad))}")
-    settings.update(mining_gadgets=[k for k in GADGETS if k in want])
+    err = _save_settings(mining_gadgets=[k for k in GADGETS if k in want])
+    if err:
+        return {"error": err}
     live.config_changed()
-    return _gear()
+    return mining_gear()
 
 
 def manual_scan(mass=0, resistance=0, instability=0):

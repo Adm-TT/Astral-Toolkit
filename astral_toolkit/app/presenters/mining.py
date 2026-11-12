@@ -84,12 +84,14 @@ def lot_rows(lots, amounts):
     return rows
 
 
-def lots_hud(r: MiningResult):
+def lots_hud(r: MiningResult, names=None):
     """悬浮窗一行：「惰性 31%｜钨 662 那份 3.07 SCU」（同一种矿有高低两种品质时写高品质那份）；没什么可说返回空"""
     parts = []
-    if r.inert_pct is not None:
+    if names is None and r.inert_pct is not None:
         parts.append(f"惰性 {r.inert_pct:.0f}%")
     for h in r.high_lots:
+        if names is not None and h.zh not in names:
+            continue
         parts.append(
             f"{h.zh} 品质 {h.q}：{h.scu:.2f} SCU"
             if h.scu is not None
@@ -125,20 +127,6 @@ def _refine_view(o):
     }
 
 
-def _bag_view(bag):
-    if bag is None:
-        return None, ""
-    view = {
-        "used": bag.used,
-        "cap": bag.cap,
-        "items": [{"name": zh, "scu": v} for zh, v in bag.items],
-    }
-    text = f"{bag.used:g}/{bag.cap:g} SCU\n" + "，".join(
-        f"{zh} {v:g}" for zh, v in bag.items
-    )
-    return view, text
-
-
 def to_view(r: MiningResult) -> dict:
     """窗口 JSON（不含 hud、hud_rich，见 to_hud）"""
     lots = lot_rows(r.lots, r.lot_refined)
@@ -149,7 +137,6 @@ def to_view(r: MiningResult) -> dict:
             for x in lots
             if not x["inert"] and x["refined"]
         ]
-    bag, bag_text = _bag_view(r.bag)
     return {
         "rock": r.rock,
         "mass": r.mass,
@@ -174,8 +161,6 @@ def to_view(r: MiningResult) -> dict:
         if r.cut
         else "",
         "at": r.at,
-        "bag": bag,
-        "bag_text": bag_text,
     }
 
 
@@ -199,21 +184,50 @@ def _comp(groups):
     ]
 
 
-def to_hud(r: MiningResult):
+def to_hud(r: MiningResult, focus=None):
     """(文字版 hud（窗口右侧用）, 悬浮窗结构化内容)。
     1.6.64：悬浮窗按层次排（审查意见）：矿名 → 关键读数 → 怎么碎 → 收益 → 次要详情；
     1.6.65 照用户给的样图：矿名、三格读数、矿物组成（每种矿下面列各品质、占整石）、开采建议、精炼产量和净值、次要"""
+    from ...core.i18n import mineral_zh
+
+    names = None if focus is None else {mineral_zh(key) for key in focus}
+    composition = (
+        r.composition
+        if names is None
+        else tuple(g for g in r.composition if not g.inert and g.zh in names)
+    )
+    if names is not None and not composition:
+        # 关注的矿这块石头里一样都没有：只留标题这一行（老大 2026-11-08 批注验收单：只留标题）
+        title = "未发现关注的矿"
+        return title, {
+            "title": title,
+            "stats": [],
+            "comp": [],
+            "advice": None,
+            "gain": [],
+            "minor": [],
+            "foot": "",
+        }
+    title = r.rock if names is None else "、".join(g.zh for g in composition)
+    if names is None:
+        goal_lines = r.goal_lines
+    elif r.goal_lines:
+        # 目标查全了才写。开了关注：先按关注的矿挑、再取前两条，别让没关注的矿把它挤掉；
+        # 按英文键挑，不靠两套中文名正好一样（审查 2026-11-08）
+        goal_lines = tuple(g["text"] for g in r.goals if g["en"] in focus)[:2]
+    else:
+        goal_lines = ()
     hud = [
-        f"{r.rock}｜{r.mass:,.0f} kg｜抗性 {r.resistance:g}%｜不稳定 {r.instability:g}"
+        f"{title}｜{r.mass:,.0f} kg｜抗性 {r.resistance:g}%｜不稳定 {r.instability:g}"
     ]
     rich = {
-        "title": r.rock,
+        "title": title,
         "stats": [
             ["质量", f"{r.mass:,.0f}", "kg"],
             ["抗性", f"{r.resistance:g}", "%"],
             ["不稳定性", f"{r.instability:g}", ""],
         ],
-        "comp": _comp(r.composition),
+        "comp": _comp(composition),
         "advice": None,
         "gain": [],
         "minor": [],
@@ -224,7 +238,7 @@ def to_hud(r: MiningResult):
         rich["minor"].append("面板被遮挡：仅计算破碎方案")
     if r.refine:
         o = r.refine[0]
-        bonus = f" {o.bonus}" if o.bonus else ""
+        bonus = f" {o.bonus}" if o.bonus and names is None else ""
         hud.append(
             f"精炼后 {scu_text(o.scu)}，价值 {o.value:,.0f} aUEC（建议：{o.method_zh}，{o.station_zh}精炼{bonus}）"
         )
@@ -234,11 +248,15 @@ def to_hud(r: MiningResult):
         ]
         rich["minor"].append(f"{o.method_zh} · {o.station_zh}{bonus}")
         rich["foot"] = "精炼结果为估算"
-    line = lots_hud(r)
+    if names is not None:
+        note = "仅显示关注的矿；产量和收益按整石估算"
+        hud.append(note)
+        rich["minor"].append(note)
+    line = lots_hud(r, names)
     if line:
         hud.append(line)
-    hud += r.goal_lines
-    rich["minor"] += r.goal_lines
+    hud += goal_lines
+    rich["minor"] += goal_lines
     if r.plans:
         p0 = r.plans[0]
         hud.insert(1, p0.short)

@@ -59,6 +59,18 @@ def test_craft_blueprint_dictionary():
     assert more["rows"] and more["rows"][0]["key"] != a["rows"][0]["key"]
     s2 = craft_browse(cat="vehiclegear/powerplant", sub="size2")
     assert s2["total"] and all("S2" in x["tags"].split(" · ") for x in s2["rows"])
+    # CR-D1：船零件的尺寸 / 等级 / 类别筛选（窗口走 app.api），筛出来的份数和下拉里写的一样
+    from astral_toolkit.app.api.crafting import craft_browse as api_browse
+
+    for cat, group, arg in (
+        ("vehiclegear/weapons", "sizes", "size"),
+        ("vehiclegear/powerplant", "grades", "grade"),
+        ("vehiclegear/powerplant", "clss", "cls"),
+    ):
+        got = api_browse(cat=cat)[group]
+        assert got, (cat, group)
+        for f in got:
+            assert api_browse(cat=cat, **{arg: f["key"]})["total"] == f["count"]
     # 点一份能看详情
     assert "text" in craft_detail(h["rows"][0]["key"])
 
@@ -208,6 +220,12 @@ def test_goal_shortage_marked_everywhere(monkeypatch):
     assert t_goals._gkey("Gold (Ore)") == t_goals._gkey("gold") and t_goals._gkey(
         "钨矿石"
     ) == t_goals._gkey("钨")
+    # 原矿的英文名带后缀或「Raw 」开头：「目标还缺」照旧按矿名对上，掉落那栏照旧给开采点（原矿和精炼分开认以后，2026-11-08）
+    from astral_toolkit.tasks.catalog_queries.loot import ship_mineral
+
+    assert t_goals._gkey("Raw Ouratite") == t_goals._gkey("Ouratite")
+    assert ship_mineral("Raw Ouratite") == "Ouratite"
+    assert ship_mineral("Taranite (Raw)") == "Taranite"
     assert (
         t_goals._goal_for("钨矿石")["en"] == "Tungsten"
         and t_goals._goal_for("Iron") is None
@@ -226,7 +244,7 @@ def test_goal_shortage_marked_everywhere(monkeypatch):
             "31.07% 情性物质 。",
         ]
     )
-    v = t_mining.scan_view(s, ({"Inert Materials": 0.3}, 0.3, 96.0))
+    v = t_mining.scan_view(s)
     assert [g["en"] for g in v["goal"]] == ["Tungsten"] and v["goal"][0]["ok"]
     assert "🎯 目标缺少 钨 0.5 SCU" in v["hud"]
     assert "aUEC" in v["hud"] and "净值" not in v["hud"]  # 用户：净值就是 aUEC，写价格

@@ -24,30 +24,80 @@ def _similar(a, b):
     )
 
 
+def _extends(name, en):
+    """name 是不是在 en 后面多接了一截：折叠后以 en 开头、多出来至少 3 个字（变体、配件、颜色款都这么起名：
+    Demeco LMG Battery (100 cap)、Arclight Pistol Gold）；只多一两个字母的当错字"""
+    a, b = _fold(name), _fold(en)
+    return bool(b) and a.startswith(b) and len(a) - len(b) >= 3
+
+
+def alias_ok(item, zh, en):
+    """目录里的这件物品和说明框认出的 (中文, 英文) 算不算同一件：F8 只在算同一件时把中文名记成它的别名，查本机目录时
+    按中文别名找到的也要算同一件才用；盘点、目标按中文名带出来的条目也要算同一件才并账；F8 名字认准了时配上的也得是同一件。
+    依次看：
+    1. 英文名一样（_fold 后）→ 算；
+    2. 它自己的英文名在汉化包里有中文名 → 汉化包说了算：就是这个中文名才算，别的中文名不算；
+    3. 汉化包里没有它（市场上的叫法和游戏里不一样）→ 在认出的英文名后面多接了一截的不算（_extends），别的照旧算
+       （错一两个字母、写法不同的同一件）。
+    原矿和精炼是两样东西（老大 2026-11-08 定分开）：市场上的「Taranite (Raw)」和认出的「Taranite」不算同一件（第 2 条：
+    它在汉化包里是「塔兰导电石原矿」；汉化包还没按新规则重建时第 3 条也拦）。以前这里去掉 (Raw) 后缀算同一件。
+    以前模糊、前缀配上就记：前缀那档会把本体配成变体（Demeco LMG 配成 Demeco LMG Battery (100 cap)），中文名一记，
+    以后盘点会把变体的库存并进本体、库存页显示成本体的名字（待做 61、125、126，老大 2026-11-08 定直接修）"""
+    from .names import zh_for
+
+    name = getattr(item, "name", "") or ""
+    if en and _fold(name) == _fold(en):
+        return True
+    own = zh_for(name)
+    if own is not None:
+        return bool(zh) and own == zh
+    return not _extends(name, en)
+
+
+def name_score(name, target):
+    """折叠后的物品名 name 和要找的名字 target 有多像：一样 1.0；name 以 target 开头且 target 至少 8 个字 0.95；
+    别的按 difflib 比。≥ 0.85 算配上（F8 配物品用；盘点不拿它并条目——前缀那档会把变体当成本体，审查 2026-11-08 第三轮）。
+    F8 名字认准了的，配上的还得是同一件（match_tooltip）"""
+    import difflib
+
+    if name == target:
+        return 1.0
+    if name.startswith(target) and len(target) >= 8:
+        return 0.95
+    return difflib.SequenceMatcher(None, name, target).ratio()
+
+
 def match_tooltip(t, zh, en, online=True):
     """说明框里的名字 → 物品。顺序：中文名查汉化包对照表 → 英文名（容忍 OCR 丢空格、II/ll、截断）。
     先查本机目录（以前查到过的物品、记下的中文名），查到就不联网；本机没有才去 UEX/SCM 搜（每次搜要零点几秒到几秒）。
-    返回 (物品或 None, 候选列表)"""
+    名字在汉化包里精确对得上（F8 认准了的都是）时，配上的得是同一件（alias_ok）：英文名是全名，前缀档配上的是变体
+    （只有轻机枪的电池），不配，本机没有就接着去网上找本体，网上也只有变体就不配、列候选（老大 2026-11-08 定直接修）；
+    名字没认准的（OCR 截断、错字）照旧按前缀档配。返回 (物品或 None, 候选列表)"""
+    from .names import canonical_exact
+
+    sure = canonical_exact(zh or "", en or "")
+    same = (lambda i: alias_ok(i, sure[0], sure[1])) if sure else None
     if zh and hasattr(t.catalog, "by_alias"):
         hit = t.catalog.by_alias(zh)
-        if hit:
+        if hit and alias_ok(
+            hit, zh, en
+        ):  # 以前模糊配上时记错的别名（记到了变体上）不用，接着按名字找
             return hit, [hit]
     want = []
     if zh:
         want += to_english(zh)[:1] if len(to_english(zh)) == 1 else []
     if en:
         want.append(en)
-    best, local = _match_names(t.catalog.search, want)
+    best, local = _match_names(t.catalog.search, want, same)
     if best is not None or not online:
         return best, local
-    best, remote = _match_names(lambda q: t.lookup(q)[0], want)
+    best, remote = _match_names(lambda q: t.lookup(q)[0], want, same)
     merged = {i.id: i for i in local + remote}
     return best, list(merged.values())
 
 
-def _match_names(search, want):
-    import difflib
-
+def _match_names(search, want, same=None):
+    """same：给了就只配它认是同一件的（名字认准了时，match_tooltip）"""
     candidates = {}
     for name in want:
         target = _fold(name)
@@ -66,16 +116,10 @@ def _match_names(search, want):
                 break
         scored = []
         for i in candidates.values():
-            f = _fold(i.name)
-            score = (
-                1.0
-                if f == target
-                else 0.95
-                if f.startswith(target) and len(target) >= 8
-                else difflib.SequenceMatcher(None, f, target).ratio()
-            )
+            score = name_score(_fold(i.name), target)
             scored.append((score, not i.id.startswith("scm:"), i))
         scored.sort(key=lambda x: (x[0], x[1]), reverse=True)
-        if scored and scored[0][0] >= 0.85:
-            return scored[0][2], [x[2] for x in scored]
+        ok = [x for x in scored if x[0] >= 0.85 and (same is None or same(x[2]))]
+        if ok:
+            return ok[0][2], [x[2] for x in scored]
     return None, list(candidates.values())

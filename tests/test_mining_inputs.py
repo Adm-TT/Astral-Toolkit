@@ -164,9 +164,8 @@ def test_analyze_reads_snapshot_not_later_changes(monkeypatch):
     """取好输入之后全局表和设置变了，这一轮不受影响"""
     monkeypatch.setattr(gamedata, "ensure", lambda: None)
     scan = _gold_scan()
-    bag = ({}, None, None)
     monkeypatch.setattr(goals, "goal_short", lambda force=False: {})
-    want = analyze(scan, bag, mining.collect_inputs(scan))
+    want = analyze(scan, mining.collect_inputs(scan))
     ins = mining.collect_inputs(scan)
     monkeypatch.setattr(data, "CITY_PRICES", {})
     monkeypatch.setattr(laser, "ship_loadout", lambda ship=None: 1 / 0)
@@ -175,7 +174,7 @@ def test_analyze_reads_snapshot_not_later_changes(monkeypatch):
     try:
         for k in saved:
             data.REFINERIES[k] = ("星系", {"Gold": 90})
-        got = analyze(scan, bag, ins)
+        got = analyze(scan, ins)
     finally:
         data.REFINERIES.update(saved)
     assert got.refine == want.refine and got.sell == want.sell

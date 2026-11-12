@@ -195,7 +195,8 @@ class _Sandbox:
 
     def __enter__(self):
         from astral_toolkit.app import hud_state, nav_marker
-        from astral_toolkit.core import capture, paths, settings as settings_mod
+        from astral_toolkit.core import paths, settings as settings_mod
+        from astral_toolkit.infrastructure.platform import capture
         from astral_toolkit.navigation import displayinfo
         from astral_toolkit.system import showloc
         from astral_toolkit.tasks import navigation as navigation_tasks

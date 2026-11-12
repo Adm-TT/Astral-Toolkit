@@ -90,11 +90,11 @@ def one(path, ans):
             None  # 每张图都从头找（冷启动）；下面再量一次「记住面板位置后」的速度
         )
     t = time.perf_counter()
-    scan, _bag = screen.analyse(img)
+    scan = screen.analyse(img)
     r["ms"]["scan"] = round((time.perf_counter() - t) * 1000)
     if cache is not None and cache.get("win"):
         t = time.perf_counter()
-        warm, _ = screen.analyse(img)
+        warm = screen.analyse(img)
         r["ms"]["warm"] = round((time.perf_counter() - t) * 1000)
         r["warm_same"] = (
             warm.mass,

@@ -90,7 +90,7 @@ def test_bus_output_is_silent_without_hud(monkeypatch):
     monkeypatch.setattr(hud_state, "_hud", lambda: None)
     out = BusOutput()
     out.apply(("hud.set", "扫描", "读数"))
-    out.apply(("hud.clear", "信号", "扫描", "矿袋"))
+    out.apply(("hud.clear", "信号", "扫描"))
     out.apply(("note", "采矿助手", "已关闭"))
 
 

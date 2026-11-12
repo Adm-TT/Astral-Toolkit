@@ -77,6 +77,9 @@ def set_settings(sources: StatusSources, /, **kw):
     if "nav_fps" in kw:
         kw["nav_fps"] = settings.nav_fps(kw["nav_fps"])
     allowed.add("nav_fps")
+    if "mining_idle_close" in kw:
+        kw["mining_idle_close"] = settings.mining_idle_seconds(kw["mining_idle_close"])
+    allowed.add("mining_idle_close")
     clear_train = (
         kw.get("train_upload") is False
     )  # 关掉「帮助改进识别」：先存「关」，再删本地攒着没发的
@@ -96,12 +99,22 @@ def set_settings(sources: StatusSources, /, **kw):
             continue
         if not re.fullmatch(r"F([1-9]|1[0-2])", k):
             return {"error": "热键仅支持 F1–F12"}
-        cur = cur or settings.load()
+        if cur is None:
+            # 设置文件暂时读不到时拿到的不一定是文件里现在的：拿它查撞键会误报「已用于…」，直接说没存上
+            try:
+                cur = settings.load_checked()
+            except settings.NotSaved as e:
+                return {"error": str(e)}
         taken = {key: lab for key, lab, n in _hotkey_values(cur) if n != name and key}
         if k in taken:
             return {"error": f"{k} 已用于「{taken[k]}」，需更换按键"}
         kw[name] = k
-    cfg = settings.update(**{k: v for k, v in kw.items() if k in allowed})
+    try:
+        cfg = settings.update_checked(**{k: v for k, v in kw.items() if k in allowed})
+    except OSError as e:  # 没存上：告诉玩家再点一次，别装作存好了（后面跟着改的悬浮窗、识别设备也不动）
+        if isinstance(e, settings.NotSaved):
+            return {"error": str(e)}
+        return {"error": settings.NOT_WRITTEN}
     if clear_train:
         try:
             from ...system import train_data

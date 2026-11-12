@@ -938,3 +938,198 @@ def test_start_ops_emits_starting_activity(monkeypatch):
     ops = worker.start_ops(Session(3, threading.Event(), payload))
     assert ops == [("ui", "ui.activity", ("活动", 3, payload, view))]
     assert worker.start_ops(Session(4, threading.Event(), object())) == []
+
+
+# ---------------------------------------------------------------- 导航的小后台会话（halo / here-watch，2026-11-09）
+def _watch(step, *, wait=0.01, closing=lambda: False, setup=lambda payload: {"n": 0}):
+    from astral_toolkit.app.output import BusOutput
+    from astral_toolkit.runtime.results import ResultStore
+    from astral_toolkit.runtime.workers.nav_watch import NavWatch, WatchSteps
+
+    return NavWatch(
+        "t-watch",
+        "测试",
+        WatchSteps(setup=setup, step=step, wait=wait),
+        results=ResultStore(),
+        output=BusOutput(),
+        closing=closing,
+        join_timeout=2.0,
+    )
+
+
+def _until(cond, secs=3.0):
+    end = time.time() + secs
+    while time.time() < end and not cond():
+        time.sleep(0.01)
+    return cond()
+
+
+def test_nav_watch_step_done_ends_session_and_start_is_idempotent():
+    """step 说做完了：会话自己结束；在跑时再 start 不重开（以前「线程活着就不再起」）"""
+    go = threading.Event()
+    seen = []
+
+    def step(payload, st):
+        st["n"] += 1
+        seen.append(payload)
+        return go.is_set()
+
+    w = _watch(step)
+    sid = w.start()
+    assert sid and w.start() == sid and w.running()
+    assert _until(lambda: len(seen) >= 3)
+    go.set()
+    assert _until(lambda: not w.running())
+    assert w.loop.join(2, session_id=sid)
+    assert w.loop.state().state is RunState.STOPPED
+    # 做完了能再开新的一份
+    go.clear()
+    sid2 = w.start()
+    assert sid2 and sid2 != sid and w.running()
+    w.loop.request_shutdown()
+    assert w.loop.join_all(2) == []
+
+
+def test_nav_watch_start_during_done_round_keeps_session():
+    """这一轮刚说做完，同时又被叫开（取下方案马上又挂一份）：不停，接着跑（DeepSeek 审查 2026-11-09）"""
+    in_step, release = threading.Event(), threading.Event()
+    rounds = []
+
+    def step(payload, st):
+        rounds.append(1)
+        if len(rounds) == 2:  # 第二轮：说做完了，但卡在这儿等外面又叫开一次
+            in_step.set()
+            release.wait(2)
+            return True
+        return len(rounds) > 4
+
+    w = _watch(step)
+    sid = w.start()
+    assert in_step.wait(2)
+    assert w.start() == sid  # 正在跑：就是它
+    release.set()
+    assert _until(lambda: len(rounds) >= 3)  # 第二轮说做完也没停
+    assert _until(lambda: not w.running())  # 第五轮做完才停
+    assert len(rounds) == 5
+    w.loop.request_shutdown()
+    assert w.loop.join_all(2) == []
+
+
+def test_nav_watch_refuses_while_closing_and_shutdown_joins():
+    """正在退出：不再开；退出时（lifecycle 的 request_shutdown + join_all）在跑的会话会停、线程会退"""
+    closing = {"on": False}
+    w = _watch(lambda payload, st: False, closing=lambda: closing["on"])
+    assert w.start()
+    w.loop.request_shutdown()
+    assert w.loop.join_all(2) == [] and not w.running()
+    closing["on"] = True
+    assert w.start() is None
+
+
+def test_nav_watch_step_error_ends_session():
+    """一轮出错：不重来，会话按出错结束（和以前线程出错就退一样），running() 马上不算"""
+
+    def step(payload, st):
+        raise RuntimeError("剪贴板打不开")
+
+    w = _watch(step)
+    sid = w.start()
+    assert sid and w.loop.join(2, session_id=sid) and not w.running()
+    assert w.loop.state().state is RunState.FAILED
+    assert w.start()  # 出错结束后照样能再开
+    w.loop.request_shutdown()
+    w.loop.join_all(2)
+
+
+def test_halo_step_follows_plan_and_ends_when_removed(monkeypatch):
+    """核对会话跟着当前方案：换了方案从头记（不重开会话），取下方案下一轮就自己结束"""
+    from astral_toolkit.navigation import navigate as n
+
+    monkeypatch.setattr(n, "read_clipboard", lambda: "")
+    monkeypatch.setattr(
+        navigation_tasks, "_pos_current", lambda deps: (0.0, None, None)
+    )
+    events = SimpleNamespace(arrived_at=1.0)
+    deps = nav_deps(
+        nav=SimpleNamespace(target=None, space_mode=False), game_events=events
+    )
+    H = navigation_tasks._HALO
+    saved = dict(H)
+    try:
+        H.update(plan={"text": "方案"}, sess=H["sess"] + 1)
+        st = navigation_tasks._halo_state(deps)
+        assert navigation_tasks._halo_step(deps, st) is False and st.sess == H["sess"]
+        st.in_qt, st.prev = True, (1.0, (0, 0, 0))
+        events.arrived_at = 2.0
+        H["sess"] += 1  # 换了一份方案
+        assert navigation_tasks._halo_step(deps, st) is False
+        assert (
+            st.sess == H["sess"] and not st.in_qt and st.prev is None and st.arr == 2.0
+        )
+        H["plan"] = None  # 取下
+        assert navigation_tasks._halo_step(deps, st) is True
+    finally:
+        H.update(saved)
+
+
+def test_halo_check_from_old_plan_is_dropped(monkeypatch):
+    """核对会话拿着旧方案的代次去核对（这一轮做到一半玩家换了方案）：丢掉，不写悬浮窗、不发总线、不记日志"""
+    calls = []
+    monkeypatch.setattr(
+        navigation_tasks, "_hud_set", lambda *a: calls.append(("hud", a))
+    )
+    monkeypatch.setattr(
+        navigation_tasks, "_wp_log", lambda *a: calls.append(("log", a))
+    )
+    monkeypatch.setattr(
+        navigation_tasks.bus, "publish", lambda *a, **k: calls.append(("bus", a))
+    )
+    H = navigation_tasks._HALO
+    saved = dict(H)
+    try:
+        H.update(plan={"text": "新方案", "band": 5}, sess=H["sess"] + 1)
+        old = H["sess"] - 1
+        assert navigation_tasks.halo_check((2.0e10, 0.0, 0.0), None, old) is None
+        assert navigation_tasks.halo_check((2.0e10, 0.0, 0.0), "clip", old) is None
+        assert calls == []
+    finally:
+        H.update(saved)
+
+
+def test_here_step_timeout_and_name_taken(monkeypatch):
+    """here 会话：超时提示一次就结束；拿到坐标时名字已经被热键记路标取走：结束、不存、不提示"""
+    from astral_toolkit.system import showloc
+
+    notes, logs, saved = [], [], []
+    monkeypatch.setattr(navigation_tasks, "_note_hud", lambda *a: notes.append(a))
+    monkeypatch.setattr(navigation_tasks, "_wp_log", logs.append)
+    monkeypatch.setattr(navigation_tasks, "_save_here", lambda *a: saved.append(a))
+    got = {"g": None}
+    monkeypatch.setattr(
+        showloc, "wait_new_coords", lambda old, timeout: (got["g"], "clip")
+    )
+    monkeypatch.setattr(
+        navigation_tasks, "_HERE", {"name": "矿点", "until": time.time() + 30}
+    )
+    st = {"old": ""}
+    deps = nav_deps()
+    assert navigation_tasks._here_step(deps, st) is False  # 还在等
+    navigation_tasks._HERE["until"] = time.time() - 1
+    assert navigation_tasks._here_step(deps, st) is True
+    assert navigation_tasks._HERE["name"] is None and "未获取到" in notes[-1][1]
+    assert logs == ["等 /showlocation 超时"]
+    notes.clear()
+    assert navigation_tasks._here_step(deps, st) is True and not notes
+    # 拿到坐标那一刻名字被取走了（_take_here_name 拿到 None）
+    navigation_tasks._HERE.update(name="矿点", until=time.time() + 30)
+
+    def taken(old, timeout):
+        navigation_tasks._HERE["name"] = None
+        return (1.0, 2.0, 3.0), "clip"
+
+    monkeypatch.setattr(showloc, "wait_new_coords", taken)
+    assert (
+        navigation_tasks._here_step(deps, st) is False
+    )  # 这一轮没存；下一轮看到没名字就结束
+    assert navigation_tasks._here_step(deps, st) is True
+    assert not saved and not notes

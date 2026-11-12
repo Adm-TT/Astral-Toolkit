@@ -20,7 +20,7 @@ class TestOcrDeviceSwitch(unittest.TestCase):
 
     def test_settings_default(self):
         self.assertIn("ocr_device", settings.DEFAULTS)
-        self.assertEqual(settings.DEFAULTS["ocr_device"], "gpu")
+        self.assertEqual(settings.DEFAULTS["ocr_device"], "cpu")
 
     def test_is_gpu_preferred(self):
         # 环境变量 DUBHE_OCR_CPU=1 会强制 CPU：前两条先把它设成别的值，在哪台电脑上跑都一样
@@ -29,6 +29,10 @@ class TestOcrDeviceSwitch(unittest.TestCase):
                 self.assertTrue(OR.is_gpu_preferred())
 
             with patch.object(settings, "load", return_value={"ocr_device": "cpu"}):
+                self.assertFalse(OR.is_gpu_preferred())
+
+            # 都没写：按默认处理器
+            with patch.object(settings, "load", return_value={}):
                 self.assertFalse(OR.is_gpu_preferred())
 
         with patch.dict(os.environ, {"DUBHE_OCR_CPU": "1"}):
@@ -40,11 +44,17 @@ class TestOcrDeviceSwitch(unittest.TestCase):
         mock_eng.text_det.session.get_providers.return_value = ["CPUExecutionProvider"]
         mock_mod = MagicMock()
         mock_mod.RapidOCR.return_value = mock_eng
+        mock_mod.EngineType = MagicMock()
+        mock_mod.ModelType = MagicMock(side_effect=lambda x: x)
+        mock_mod.OCRVersion = MagicMock(side_effect=lambda x: x)
 
         with (
-            patch.dict(sys.modules, {"rapidocr_onnxruntime": mock_mod}),
+            patch.dict(sys.modules, {"rapidocr": mock_mod}),
+            patch.object(OR, "_engine_params", return_value={}),
             patch.object(settings, "update") as mock_update,
         ):
+            # 新版探测路径：text_det.session.session.get_providers()
+            mock_eng.text_det.session.session = mock_eng.text_det.session
             dev = OR.set_ocr_device("cpu")
             self.assertEqual(dev, "CPU")
             mock_update.assert_called_with(ocr_device="cpu", always_use_gpu=False)
@@ -52,16 +62,22 @@ class TestOcrDeviceSwitch(unittest.TestCase):
     def test_set_ocr_device_gpu(self):
         mock_eng = MagicMock(spec=["text_det"])
         mock_eng.text_det = MagicMock(spec=["session"])
-        mock_eng.text_det.session.get_providers.return_value = [
+        mock_ort = MagicMock()
+        mock_ort.get_providers.return_value = [
             "DmlExecutionProvider",
             "CPUExecutionProvider",
         ]
+        mock_eng.text_det.session.session = mock_ort
         mock_mod = MagicMock()
         mock_mod.RapidOCR.return_value = mock_eng
+        mock_mod.EngineType = MagicMock()
+        mock_mod.ModelType = MagicMock(side_effect=lambda x: x)
+        mock_mod.OCRVersion = MagicMock(side_effect=lambda x: x)
 
         # 不受环境变量 DUBHE_OCR_CPU 和本机设置影响
         with (
-            patch.dict(sys.modules, {"rapidocr_onnxruntime": mock_mod}),
+            patch.dict(sys.modules, {"rapidocr": mock_mod}),
+            patch.object(OR, "_engine_params", return_value={}),
             patch.dict(os.environ, {"DUBHE_OCR_CPU": "0"}),
             patch.object(OR, "USE_GPU", True),
             patch.object(OR, "gpu_available", return_value=True),
@@ -293,8 +309,6 @@ def test_switch_device_reaches_every_caller(monkeypatch):
 
     made = _fake_engines(monkeypatch)
     monkeypatch.setattr(OE, "_engine", None)
-    monkeypatch.setattr(S, "_engine", None)
-    monkeypatch.setattr(S, "_rec", None)
     img, arr = Image.new("RGB", (16, 16)), np.zeros((16, 16, 3), dtype=np.uint8)
 
     def use_all():
@@ -313,6 +327,52 @@ def test_switch_device_reaches_every_caller(monkeypatch):
     assert OR.rapidocr() is shared and len(made) == 2 and not made[1].gpu
     use_all()
     assert made[0].calls == 5 and made[1].calls == 5  # 切换后旧引擎一次都没再用
+
+
+def test_old_settings_switch_ocr_to_cpu_once(monkeypatch, tmp_path):
+    """识别默认改处理器（显卡认过一次字 AT 就多占两三百 MB 内存，2026-11-08 老大定）。老版本存的设置文件里
+    「显卡」分不出是不是自己选的：打开时改一次处理器，文件里记下改过了；之后切回显卡就一直是显卡。
+    新装的第一次存设置就带着这一项，选了显卡也不改"""
+    import json
+
+    f = tmp_path / "settings.json"
+    monkeypatch.setattr(settings, "FILE", f)
+    old = {"agreed": True, "keys_v5": True, "ocr_device": "gpu", "always_use_gpu": True}
+    f.write_text(json.dumps(old), encoding="utf-8")
+    cfg = settings.load()
+    assert cfg["ocr_device"] == "cpu" and cfg["always_use_gpu"] is False
+    on_disk = json.loads(f.read_text(encoding="utf-8"))
+    assert on_disk["ocr_device"] == "cpu" and on_disk["ocr_v2"] is True
+    assert on_disk["agreed"] is True  # 别的设置照旧
+    settings.update(ocr_device="gpu", always_use_gpu=True)  # 玩家在设置页切回显卡
+    assert settings.load()["ocr_device"] == "gpu"
+    assert json.loads(f.read_text(encoding="utf-8"))["ocr_device"] == "gpu"
+    f.unlink()  # 新装的：还没有设置文件，按默认处理器，也不急着写文件
+    assert settings.load()["ocr_device"] == "cpu" and not f.exists()
+    settings.update(ocr_device="gpu")
+    assert settings.load()["ocr_device"] == "gpu"
+
+
+def test_migration_save_failure_not_retried_every_load(monkeypatch, tmp_path):
+    """老格式设置文件一直写不进去（比如带了只读）：迁移只在内存里做，这个进程里不再每次读都重试写盘
+    （每次要卡约 0.25 秒，读设置的地方很多）；读到的照样是处理器（s1 第二轮复查）"""
+    import json
+
+    f = tmp_path / "settings.json"
+    old = {"agreed": True, "keys_v5": True, "ocr_device": "gpu", "always_use_gpu": True}
+    f.write_text(json.dumps(old), encoding="utf-8")
+    monkeypatch.setattr(settings, "FILE", f)
+    tries = []
+
+    def read_only(cfg):
+        tries.append(1)
+        raise PermissionError("设置文件只读")
+
+    monkeypatch.setattr(settings, "save", read_only)
+    assert settings.load()["ocr_device"] == "cpu"
+    assert settings.load()["ocr_device"] == "cpu"
+    assert len(tries) == 1
+    assert json.loads(f.read_text(encoding="utf-8")) == old  # 文件没动
 
 
 if __name__ == "__main__":

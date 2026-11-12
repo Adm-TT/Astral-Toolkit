@@ -237,6 +237,8 @@ def test_commit_rejects_wrong_session_state_and_old_epoch():
     loop, worker, out = make_loop()
     try:
         _started(loop, worker)
+        # worker.session 在第一次 tick 才记下：没等到就拿是 None，stamp 也是 None（11-06 全量偶发红过一次）
+        assert worker.ticked.wait(WAIT), "第一次 tick 还没记下会话"
         session = worker.session
         old = loop.stamp(session, 1.0)
         assert old is not None

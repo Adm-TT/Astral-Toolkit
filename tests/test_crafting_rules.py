@@ -5,6 +5,7 @@
 """
 
 from types import SimpleNamespace
+from typing import Any
 
 from astral_toolkit.crafting import (
     classify,
@@ -143,7 +144,7 @@ def _mat_zh(name):
 
 def _block_io(monkeypatch):
     from astral_toolkit.core import i18n
-    from astral_toolkit.crafting import itemstats
+    from astral_toolkit.crafting import crafting as craft_data
     from astral_toolkit.gamedata import crafting as gd_crafting
     from astral_toolkit.mining import quality as mining_quality
 
@@ -156,7 +157,7 @@ def _block_io(monkeypatch):
             ("catalog", "cached", "for_item", "containing", "using_material"),
         ),
         (mining_quality, ("tier_values",)),
-        (itemstats, ("base_value", "tags", "version")),
+        (craft_data, ("_stat_item", "_stats_version", "item_tags")),
         (i18n, ("mineral_zh",)),
     ):
         for name in names:
@@ -493,6 +494,123 @@ def test_solve_slots_signs():
     # 算出来不到 0.005 的也不算：0 档 -0.004（说明框上是 0.00）、500 档 +0.003、1000 档 +0.01
     near = ("Barrel", a, [("Fire Rate", 0, 1000, 0.99996, 1.0001, False)])
     assert solve(bp(near), ("射速", 0.01, True, "Fire Rate")) == ([1000], True)
+
+
+def test_spec_tags_and_browse_spec_facets():
+    """CR-D1：船零件的尺寸 / 等级 / 类别标签、护甲的轻 / 中 / 重；蓝图字典选了船零件类时按物品属性多给等级、类别
+    （子类里没有尺寸时还有尺寸）三组筛选；别的类、没给 spec 时没有这三组，传了也不筛"""
+    assert labels.spec_tags({"size": 2, "grade": "A", "cls": "Military"}) == [
+        "S2",
+        "A 级",
+        "军用",
+    ]
+    assert labels.spec_tags({"grade": "E", "cls": "Stealth"}, "size3") == ["S3", "隐形"]
+    assert labels.spec_tags({"size": 2, "grade": "B"}, size=False) == ["B 级"]
+    assert labels.spec_tags({"cls": "Odd"}) == ["Odd"]
+    assert labels.spec_tags({}) == []
+    assert labels.weight_zh({"sub": "Heavy"}) == "重型"
+    assert labels.weight_zh({"sub": "LightArmor"}) == "轻型"
+    assert labels.weight_zh({"sub": "Personal"}) == labels.weight_zh({}) == ""
+    # 只写游戏说明里有的：舰船武器的等级 A、刮削模块的 S1 都是数据默认值（审查 2026-11-08）
+    assert labels.spec_tags(
+        {"size": 2, "grade": "A", "cls": "Military"}, kind="weapons"
+    ) == ["S2"]
+    assert labels.spec_tags({"size": 1, "grade": "A"}, "medium", kind="salvage") == []
+    assert labels.spec_tags(
+        {"size": 1, "grade": "C", "cls": "Competition"}, "size1", kind="cooler"
+    ) == ["S1", "C 级", "竞赛"]
+    bag = {"sub": "Personal", "type": "Char_Armor_Backpack", "size": 3}
+    assert labels.weight_zh(bag) == "重型"
+    assert labels.weight_zh({**bag, "size": 1}) == "轻型"
+    assert labels.weight_zh(bag, "H4-PBF Ammo Carrier") == ""  # 能配中型、重型护甲
+    assert labels.weight_zh({"sub": "Personal", "size": 3}) == ""  # 不是背包
+    # 超重型按类名认（BUL-H4 的子类型写的是 Heavy）；同一套的弹药携具按类名认出来，不写，不靠英文名（审查 2026-11-08）
+    h4 = {"sub": "Heavy", "type": "Char_Armor_Helmet", "cn": "cds_superheavy_helmet"}
+    assert labels.weight_zh(h4) == "超重型"
+    assert labels.weight_zh({**bag, "cn": "cds_combat_superheavy_backpack_01"}) == ""
+    assert labels.weight_zh({**bag, "cn": "cds_heavy_backpack_01"}) == "重型"
+
+    def bp(n, t, s, u):
+        return _bp(n, n, "vehiclegear", t, s, u, "M", 1, True, [])
+
+    bps = [
+        bp("PP One", "powerplant", "size1", "u1"),
+        bp("PP Two", "powerplant", "size2", "u2"),
+        bp("PP Three", "powerplant", "size2", "u3"),
+        bp("Gun A", "weapons", "laser", "g1"),
+        bp("Gun B", "weapons", "ballistic", "g2"),
+        bp("Gun C", "weapons", "laser", "g3"),
+        bp("CL One", "cooler", "size1", "c1"),
+        bp("CL Odd", "cooler", None, "c2"),
+        _bp("Helmet", "头盔", "fpsgear", "armour", "combat", "h1", "M", 1, True, []),
+    ]
+    stats = {
+        "u1": {"size": 1, "grade": "C", "cls": "Military"},
+        "u2": {"size": 2, "grade": "A", "cls": "Civilian"},
+        "u3": {"size": 2, "grade": "C", "cls": "Military"},
+        "g1": {"size": 10, "grade": "A", "cls": None},
+        "g2": {"size": 2, "grade": "B", "cls": None},
+        "c1": {"size": 1, "grade": "B", "cls": "Civilian"},
+        "c2": {"size": 3, "grade": "B", "cls": "Civilian"},
+        "h1": {"size": 1, "grade": "A", "cls": None},
+    }
+
+    def spec(b):
+        return stats.get(b["u"], {})
+
+    def names(**kw: Any):
+        return [b["n"] for b in listing.browse(lambda: bps, spec=spec, **kw)["rows"]]
+
+    pp = listing.browse(lambda: bps, cat="vehiclegear/powerplant", spec=spec)
+    assert pp["sizes"] == []  # 子类就是 S1 / S2，不另给尺寸
+    assert pp["grades"] == [  # 等级按字母排，不按份数；类别按份数
+        {"key": "A", "label": "A 级", "count": 1},
+        {"key": "C", "label": "C 级", "count": 2},
+    ]
+    assert pp["clss"] == [
+        {"key": "Military", "label": "军用", "count": 2},
+        {"key": "Civilian", "label": "民用", "count": 1},
+    ]
+    assert list(pp)[-3:] == ["sizes", "grades", "clss"]
+    assert names(cat="vehiclegear/powerplant", grade="C") == ["PP One", "PP Three"]
+    assert names(cat="vehiclegear/powerplant", cls="Civilian") == ["PP Two"]
+    assert names(cat="vehiclegear/powerplant", grade="C", cls="Civilian") == []
+    # 子类就是尺寸时 size 不筛；有一份子类是尺寸（冷却器里有一份子类空着）也算
+    assert names(cat="vehiclegear/powerplant", size="1") == [
+        "PP One",
+        "PP Three",
+        "PP Two",
+    ]
+    cl = listing.browse(lambda: bps, cat="vehiclegear/cooler", size="3", spec=spec)
+    assert cl["sizes"] == [] and cl["total"] == 2
+    gun = listing.browse(lambda: bps, cat="vehiclegear/weapons", spec=spec)
+    assert gun["sizes"] == [  # 按数字排；Gun C 没有属性数据，不进尺寸、等级
+        {"key": "2", "label": "S2", "count": 1},
+        {"key": "10", "label": "S10", "count": 1},
+    ]
+    # 舰船武器游戏里没有等级、分类（数据里的等级是默认值）：不给这两组
+    assert gun["grades"] == [] and gun["clss"] == []
+    assert names(cat="vehiclegear/weapons", size="10") == ["Gun A"]
+    assert names(cat="vehiclegear/weapons", size=2) == ["Gun B"]
+    # 后面的筛选跟着前面的算：选了 C 级，类别里就没有民用；选了激光，尺寸里就没有 S2
+    assert listing.browse(
+        lambda: bps, cat="vehiclegear/powerplant", grade="C", spec=spec
+    )["clss"] == [{"key": "Military", "label": "军用", "count": 2}]
+    assert listing.browse(
+        lambda: bps, cat="vehiclegear/weapons", sub="laser", spec=spec
+    )["sizes"] == [{"key": "10", "label": "S10", "count": 1}]
+    cases: list[dict[str, Any]] = [
+        {"spec": spec},
+        {"cat": "fpsgear/armour", "spec": spec},
+        {"cat": "vehiclegear/powerplant"},
+    ]
+    for kw in cases:
+        r = listing.browse(lambda: bps, grade="C", cls="Civilian", size="1", **kw)
+        assert not {"sizes", "grades", "clss"} & set(r), kw
+        want = [
+            b for b in bps if not kw.get("cat") or classify.category(b) == kw["cat"]
+        ]
+        assert r["total"] == len(want), kw
 
 
 def test_old_names_are_aliases():

@@ -2,7 +2,7 @@
 
 - AT 自己的进程（窗口和后台辅助）都降成「低于正常」优先级：游戏要用 CPU 时让着游戏
 - 你按 F8 这种「等着看结果」的识别可临时用 boost() 抬到正常优先级；文字识别引擎在 astral_toolkit.ocr
-- 截图在 core/capture.py
+- 截图在 infrastructure/platform/capture.py
 """
 
 import contextlib

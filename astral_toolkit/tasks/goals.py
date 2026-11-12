@@ -59,9 +59,15 @@ except Exception:
 
 # ---------------------------------------------------------------- 目标：库存联动维科洛兑换 / 制造 / 交易
 def _gkey(name):
-    """目标材料和矿 / 物品对名字用：忽略大小写、空格和「(Ore)」「(Raw)」「原矿」这类后缀"""
+    """目标材料和矿 / 物品对名字用：忽略大小写、空格和「(Ore)」「(Raw)」「原矿」这类后缀，开头的「Raw 」（原冰 Raw Ice）也去掉
+    （挖的是原矿、精炼了才用：采矿、F8 上的「目标还缺」提示按矿名对，原矿和精炼分开认以后照旧，2026-11-08）"""
+    from ..trade.names import raw_base
+
     n = re.sub(
-        r"\s*[\(（](ore|raw|原矿|矿石)[\)）]\s*$", "", (name or "").strip(), flags=re.I
+        r"\s*[\(（](ore|raw|原矿|矿石)[\)）]\s*$",
+        "",
+        raw_base(name) or (name or "").strip(),
+        flags=re.I,
     )
     n = re.sub(r"(原矿|矿石)$", "", n)
     return re.sub(r"\s+", "", n.lower())
@@ -146,12 +152,15 @@ def _goals_view():
     t = trade()
     p = G.plan(t)
     p["last_location"] = t.db.get("last_location", "")
+    # 「去哪弄」那句由维科洛的展示层写（目录迁移收尾 2026-11-07）：用例层调展示层是目标冻结期留的例外，
+    # 门禁 test_only_goals_shell_imports_crafting_presenters 里单独放着；目标换新实现时把 tip 挪进目标页的展示层，
+    # 门禁再收紧成 tasks 一个都不许 import 排版（待做里记着）
     for g in p["goals"]:
         for r in g["rows"]:
             if r["short"] > 0:
-                r["tip"] = G.where_to_get(r["en"])
+                r["tip"] = _present_wikelo.source_text(G.where_to_get(r["en"]))
     for t_item in p["shortfall"]:
-        t_item["tip"] = G.where_to_get(t_item["en"])
+        t_item["tip"] = _present_wikelo.source_text(G.where_to_get(t_item["en"]))
     for g in p["goals"]:
         if g.get("kind") != "craft" or g.get("missing"):
             continue

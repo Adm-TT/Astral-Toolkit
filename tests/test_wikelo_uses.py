@@ -1,4 +1,5 @@
-"""维科洛用途（IQ-C1）：汉化包里对得上的全名不放宽成包含（极地 Polar ≠ Polaris 点数），只认矿石 / 原矿后缀；OCR 截断的半截名字照旧放宽。"""
+"""维科洛用途（IQ-C1）：汉化包里对得上的全名不放宽成包含（极地 Polar ≠ Polaris 点数），矿石 / 原矿后缀也不放宽（原矿和精炼分开，
+2026-11-08）；OCR 截断的半截名字照旧放宽。"""
 
 from astral_toolkit.crafting import wikelo
 from astral_toolkit.gamedata import wikelo as gd_wikelo
@@ -41,11 +42,13 @@ def test_full_name_is_not_loosened_to_contains(monkeypatch):
     assert wikelo.uses("Strata Arms Amber", "岩层 臂甲 琥珀") == []
 
 
-def test_full_name_matches_ore_suffix(monkeypatch):
-    """全名只认矿石 / 原矿后缀这一种差别：杰金 = 杰金矿石。"""
+def test_full_name_does_not_match_the_ore(monkeypatch):
+    """全名只认一样的：精炼的「杰金」不对维科洛要的「杰金矿石」（原矿和精炼分开，老大 2026-11-08 定）；原矿名一样就对上。"""
     _setup(monkeypatch)
-    assert wikelo.uses("Jaclium", "杰金") == [(_ORE, 20, "个")]
-    assert wikelo.uses("", "杰金") == [(_ORE, 20, "个")]
+    assert wikelo.uses("Jaclium", "杰金") == []
+    assert wikelo.uses("", "杰金") == []
+    _setup(monkeypatch, exact=[(_ORE, _ORE["req"][0])])
+    assert wikelo.uses("Jaclium (Ore)", "杰金矿石") == [(_ORE, 20, "个")]
 
 
 def test_truncated_name_is_still_loosened(monkeypatch):

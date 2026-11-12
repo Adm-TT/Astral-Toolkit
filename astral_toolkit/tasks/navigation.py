@@ -59,6 +59,14 @@ class _ResultsLike(Protocol):
     def get(self, slot: str) -> Any: ...
 
 
+class _WatchLike(Protocol):
+    """导航的小后台会话（runtime/workers/nav_watch.NavWatch）：halo 核对、here 等坐标"""
+
+    def start(self, payload: Any = None) -> Any: ...
+
+    def running(self) -> bool: ...
+
+
 # ---------------------------------------------------------------- 基础状态与常量
 _places = {}
 
@@ -78,7 +86,8 @@ AREA_MAX_AGE = (
 )
 
 HERE_WAIT = 90  # 点「用当前位置新建」后等 /showlocation 坐标多少秒
-_HERE = {"name": None, "until": 0.0, "thread": None}
+# 等着的路标名和期限；盯剪贴板等坐标的是 deps.here 会话（2026-11-09 起不再自己起线程）
+_HERE = {"name": None, "until": 0.0}
 _MARKING = {
     "on": False
 }  # 热键记路标正在等 /showlocation（只有它会用「新建」填的名字；一键定位、原矿记录不会）
@@ -88,29 +97,62 @@ _HALO = {
     "sess": 0,
     "seen": None,
     "last": None,
-    "ev": threading.Event(),
+    "ends": None,  # 方案起点、目标的坐标（Gm）：挂上时查好，每秒核对不再碰星图库
+    "near": 0.1,  # 离起点多近（Gm）算还在起点：挂上时按路线算
+    "jumped": False,  # 挂上以后测到过起跳
+    "first": False,  # 这一跳是从起点跳的、断开后还没核对过：下一次带「多飞 / 少飞」的核对在导航日志里标出来
+    "logged": None,  # 导航日志上一次记的核对：一样的不再记
     "lock": threading.Lock(),
 }
+HALO_WAIT = 0.3  # 秒：挂着方案时 halo 会话每轮之间等多久
 
 QT_SPEED = 50_000  # 米/秒：比这快就是在量子跳跃（普通飞行最快一千多米每秒）
+LEFT_START = (
+    0.1  # Gm：离方案起点这么近算还在起点（普通飞行一千多米每秒，飞 0.1 Gm 要一天多）
+)
+NEAR_MIN = 0.01  # Gm：离起点多近算在起点，最少这么多（起点本身就在要去的带里时，按路线算出来是 0）
+STOP_S = 3.0  # 秒：一跳里读数慢下来连续这么久才算断开停下；游戏卡一下、掉进带里加载石头卡一两秒都不算（审查 2026-11-08）
+ROUTE_NEAR = 0.2  # Gm：离方案「起点→目标」那条直线超过这么远，就是跳去了别处，不说多飞 / 少飞（审查 2026-11-08）
+AT_TARGET = 0.05  # Gm：离目标这么近就是到了目标（比如挖完去卖矿），不说；安全窗口一直延到目标跟前的路线
+# （去 CRU-L2 的第 8、9 带）按窗口出口离目标多远算，窗口里照样说（审查 2026-11-08）
 
 
 # ---------------------------------------------------------------- 依赖与辅助
 # 2026-10-30 重构阶段 2：悬浮窗从 app.hud_state 拿，引擎和最近结果（ResultStore）由 bootstrap 造好的 NavDeps 当参数传进来（F 段 B5），
 # 不再经 services 转发、出错也不再回头找 services 兜底。接口由 app/api/navigation.py 的 ROUTES 注册，不再用 api 装饰器。
 from ..app.hud_state import _hud, _note_hud  # noqa: E402
+
+
+def _hud_set(section, text):
+    """悬浮窗写一段字；悬浮窗建不起来（_hud() 是 None）就不写，小行星带、一键定位照常跑（以前直接
+    _hud().set 会抛 AttributeError，待做原第 342 行）"""
+    h = _hud()
+    if h is not None:
+        h.set(section, text)
+
+
+def _hud_clear(section):
+    """悬浮窗收起一段字；悬浮窗建不起来就不管"""
+    h = _hud()
+    if h is not None:
+        h.clear(section)
+
+
 from ..runtime.results import MINING_SCAN  # noqa: E402
 
 
 @dataclass(frozen=True)
 class NavDeps:
-    """导航任务要的后台对象（F 段 B5）：导航引擎、位置服务、游戏事件、最近结果。
+    """导航任务要的后台对象（F 段 B5）：导航引擎、位置服务、游戏事件、最近结果，
+    还有两个小后台会话（2026-11-09）：halo（挂着小行星带方案时核对）、here（「用当前位置新建」等坐标）。
     bootstrap 造一份，交给接口层（routes）和热键 / 采矿读屏，不经模块级绑定"""
 
     nav: _NavLike
     pos: _PosLike
     game_events: _GameEventsLike
     results: _ResultsLike
+    halo: _WatchLike
+    here: _WatchLike
 
 
 def _start_error(result: Any) -> dict[str, str] | None:
@@ -499,6 +541,9 @@ def waypoint_add(
     if not name.strip():
         return {"error": "需填写路标名称"}
     if here:
+        refused = _rt_b6_closing_error()
+        if refused:
+            return refused
         # 只用 /showlocation 的坐标（不读右上角）：等你在游戏聊天框自己输入 /showlocation（AT 不替你输入）
         _HERE.update(name=name.strip(), until=time.time() + HERE_WAIT)
         if not _MARKING[
@@ -718,11 +763,14 @@ def _no_home(msg):
     return _HOME_RE.sub("~", str(msg))
 
 
+_WP_LOCK = threading.Lock()  # 导航日志：看量子的线程和接口线程会同时追加，不锁会互相盖掉（审查 2026-11-08 第三轮）
+
+
 def _wp_log(msg):
     try:
         from ..core import paths
 
-        with open(paths.log("nav_log.txt"), "a", encoding="utf-8") as f:
+        with _WP_LOCK, open(paths.log("nav_log.txt"), "a", encoding="utf-8") as f:
             f.write(f"{time.strftime('%F %T')} 路标 {_no_home(msg)}\n")
     except OSError:
         pass
@@ -735,11 +783,6 @@ def nav_log(here, info, view):
         from ..core import paths
 
         p = paths.log("nav_log.txt")
-        if p.exists() and p.stat().st_size > 300_000:
-            p.write_text(
-                "\n".join(p.read_text(encoding="utf-8").splitlines()[-1000:]) + "\n",
-                encoding="utf-8",
-            )
         loc = info.get("local")
         line = (
             f"{time.strftime('%H:%M:%S')} 来源={here.get('src', '?')} 核对={info.get('local_ok')} "
@@ -747,8 +790,16 @@ def nav_log(here, info, view):
             f"用的=({here['x']:.4f}, {here['y']:.4f}, {here['z']:.4f}) "
             f"方位={view.get('raw_bearing', 0):.1f}° 显示={view.get('bearing', 0):.0f}° 距离={view.get('surface', 0):.2f}km"
         )
-        with open(p, "a", encoding="utf-8") as f:
-            f.write(line + "\n")
+        # 和 _wp_log 写同一个文件：截短、追加都拿同一把锁（审查 2026-11-08）
+        with _WP_LOCK:
+            if p.exists() and p.stat().st_size > 300_000:
+                p.write_text(
+                    "\n".join(p.read_text(encoding="utf-8").splitlines()[-1000:])
+                    + "\n",
+                    encoding="utf-8",
+                )
+            with open(p, "a", encoding="utf-8") as f:
+                f.write(line + "\n")
     except Exception:
         pass
 
@@ -809,34 +860,41 @@ def _saved(name, desc):
 
 
 def _start_here_watch(deps: NavDeps):
-    """点了「用当前位置新建」：盯剪贴板，你自己打 /showlocation 也能接住"""
-    if _HERE["thread"] and _HERE["thread"].is_alive():
-        return
+    """点了「用当前位置新建」：开 here 会话盯剪贴板，你自己打 /showlocation 也能接住（已经在等就不重开）。
+    2026-11-09 起会话由 SessionLoop 跑（deps.here），退出时会停、会等它退"""
+    deps.here.start()
 
-    def run():
-        from ..navigation.navigate import read_clipboard
-        from ..system.showloc import wait_new_coords
 
-        old = read_clipboard()
-        while _HERE["name"] and time.time() < _HERE["until"]:
-            g, clip = wait_new_coords(old, 1.0)
-            if g and _HERE["name"]:
-                name = _take_here_name()
-                if name:
-                    _wp_log(f"剪贴板读到 {clip!r}")
-                    try:
-                        _saved(name, _save_here(deps, name, g))
-                    except Exception as e:  # 路标文件读不到 / 坏了：和 mark_here 一样提示，不让线程悄悄退出（审查 2026-10-31）
-                        _note_hud("路标", f"未保存：{e}", 8)
-                        _wp_log(f"失败：{e}")
-                return
+def _here_state():
+    """here 会话开始时：记下剪贴板里原来的内容（开始等之前的旧坐标不算）"""
+    from ..navigation.navigate import read_clipboard
+
+    return {"old": read_clipboard()}
+
+
+def _here_step(deps: NavDeps, st) -> bool:
+    """here 会话的一轮：最多等 1 秒剪贴板出现新坐标，拿到就存成等着的那个名字；
+    存完、名字被取走（热键记路标用了）、超时都返回 True，会话自己结束"""
+    from ..system.showloc import wait_new_coords
+
+    if not (_HERE["name"] and time.time() < _HERE["until"]):
         if _HERE["name"]:
             _HERE["name"] = None
             _note_hud("路标", "未获取到 /showlocation 坐标，路标未保存", 6)
             _wp_log("等 /showlocation 超时")
-
-    _HERE["thread"] = threading.Thread(target=run, daemon=True, name="here-watch")
-    _HERE["thread"].start()
+        return True
+    g, clip = wait_new_coords(st["old"], 1.0)
+    if g and _HERE["name"]:
+        name = _take_here_name()
+        if name:
+            _wp_log(f"剪贴板读到 {clip!r}")
+            try:
+                _saved(name, _save_here(deps, name, g))
+            except Exception as e:  # 路标文件读不到 / 坏了：和 mark_here 一样提示，不悄悄结束（审查 2026-10-31）
+                _note_hud("路标", f"未保存：{e}", 8)
+                _wp_log(f"失败：{e}")
+        return True
+    return False
 
 
 def _wait_showloc():
@@ -865,12 +923,7 @@ def mark_here(deps: NavDeps, /):
         return refused
     """游戏里按热键：等你在聊天框输入 /showlocation，读剪贴板里的坐标记成路标（AT 不替你输入）。
     点过「用当前位置新建」就用那里填的名字，否则按时间和地点起名"""
-    if (
-        _HERE["name"]
-        and time.time() < _HERE["until"]
-        and _HERE["thread"]
-        and _HERE["thread"].is_alive()
-    ):
+    if _HERE["name"] and time.time() < _HERE["until"] and deps.here.running():
         # 「用当前位置新建」已经在盯剪贴板：这里再等一份，输一次 /showlocation 会记成两个路标（第 4 批审查）
         _note_hud(
             "路标",
@@ -1055,82 +1108,169 @@ def halo_routes(frm="ARC-L1", band=5, qd=""):
 
 def halo_pin(deps: NavDeps, /, frm="", to="", band=5, qd=""):
     """把这条路线挂到悬浮窗：游戏里看着 HUD 剩余距离断开；断开后按一键定位键（或自己输 /showlocation）核对在不在带里"""
+    refused = _rt_b6_closing_error()
+    if refused:
+        return refused
     from ..navigation import halo
     from ..navigation import navigate as n
 
+    pts: dict = {}
     try:
+        pts = halo.points()
         r = halo.route(
-            frm, to, band, halo.qd_speed(qd or settings_key("halo_qd", "Atlas (S1)"))
+            frm,
+            to,
+            band,
+            halo.qd_speed(qd or settings_key("halo_qd", "Atlas (S1)")),
+            pts=pts,
         )
     except (TypeError, ValueError):
         r = None
     if not r:
         return {"error": "此航线不穿过该带"}
     r["text"] = halo.plan_text(r) + "\n退出量子后自动核对是否在带内"
-    ev = threading.Event()
     with _HALO["lock"]:
-        _HALO["ev"].set()  # 旧方案的剪贴板监听停掉
+        # 代次加一：核对会话下一轮看到换了方案就从头记；旧方案还没出完的核对结果按代次作废
         _HALO["sess"] += 1
-        sess = _HALO["sess"]
-        _HALO.update(plan=r, last=None, ev=ev)
+        _HALO.update(
+            plan=r,
+            last=None,
+            ends=(pts[frm], pts[to]),
+            near=_start_near(r),
+            jumped=False,
+            first=False,
+            logged=None,
+        )
         try:
             _HALO["seen"] = n.read_clipboard()  # 挂上之前剪贴板里的旧坐标不算
         except Exception:
             _HALO["seen"] = None
-        _hud().set("小行星带", r["text"])
-    threading.Thread(
-        target=_halo_watch, args=(deps, sess, ev), daemon=True, name="halo"
-    ).start()
+        _hud_set("小行星带", r["text"])
+    # 先记方案那行再开核对会话：会话一起来就会核对、记日志（审查 2026-11-08 第三轮）
     _wp_log(f"小行星带方案：{frm} → {to} 第{band}带，剩 {r['dropout']} Gm 断开")
+    # 核对会话（2026-11-09 起由 SessionLoop 跑，deps.halo）：已经在跑就是它，跟上新方案；退出时会停、会等它退
+    deps.halo.start()
     return r
 
 
 def halo_unpin():
+    """取下方案：核对会话下一轮（HALO_WAIT 秒内）看到没有方案了就自己结束"""
     with _HALO["lock"]:
-        _HALO["ev"].set()
         _HALO["sess"] += 1
-        _HALO.update(plan=None, last=None)
-        _hud().clear("小行星带")
+        _HALO.update(
+            plan=None, last=None, ends=None, jumped=False, first=False, logged=None
+        )
+        _hud_clear("小行星带")
     return {"ok": True}
 
 
-def _halo_watch(deps: NavDeps, sess, ev):
-    """挂着方案时：读右上角的实时坐标自动核对（每秒一次）；读不到时玩家自己在聊天框输 /showlocation 也能核对
-    （/showlocation 只在必要时用，2026-10-27 用户定；太空导航进行中时剪贴板归导航管）"""
+@dataclass
+class _HaloSeen:
+    """halo 会话里要记着的几样：跟着哪一份方案（代次），换了方案就从头记（以前是换一条新线程）"""
+
+    sess: int | None  # 跟着的方案代次；None = 还没开始跟
+    arr: float  # 游戏日志上次说量子到了的时刻
+    seen_live: float | None = None  # 上一份处理过的实时读数的读数时间
+    live_at: float = 0.0  # 上次按实时坐标核对的时刻
+    prev: tuple | None = None  # 上一份实时读数 (读数时间, 坐标)
+    in_qt: bool = False  # 在一跳里：测到起跳、还没确认停下
+    slow_since: float | None = None  # 一跳里读数慢下来的那一刻（读数时间）
+
+    def follow(self, sess: int, arr: float) -> None:
+        """换成跟新的一份方案：其余从头记"""
+        self.sess, self.arr = sess, arr
+        self.seen_live, self.live_at, self.prev = None, 0.0, None
+        self.in_qt, self.slow_since = False, None
+
+
+def _halo_state(deps: NavDeps) -> _HaloSeen:
+    """halo 会话开始时：还没跟哪份方案，第一轮跟上当前的"""
+    return _HaloSeen(sess=None, arr=deps.game_events.arrived_at)
+
+
+def _halo_step(deps: NavDeps, st: _HaloSeen) -> bool:
+    """挂着方案时的一轮（halo 会话每 HALO_WAIT 秒一次）：读右上角的实时坐标自动核对（每秒一次）；读不到时
+    玩家自己在聊天框输 /showlocation 也能核对（/showlocation 只在必要时用，2026-10-27 用户定；太空导航进行中时
+    剪贴板归导航管）。2026-11-09 由 _halo_watch 的循环体改来：一个会话跟着当前方案，换了方案（代次变了）从头记、
+    不重开会话；方案取下了返回 True，会话自己结束"""
     from ..navigation import navigate as n
 
+    with _HALO["lock"]:
+        cur, pinned = _HALO["sess"], _HALO["plan"] is not None
+    if not pinned:
+        return True
+    if st.sess != cur:
+        st.follow(cur, deps.game_events.arrived_at)
+    sess = cur
     nav = deps.nav
     events = deps.game_events
-    seen_live, live_at, prev, arr = None, 0.0, None, events.arrived_at
-    while not ev.is_set():
-        try:
+    try:
+        if events.arrived_at != st.arr:
+            # 游戏日志说量子到了：下一次核对提前，不用等每秒那一下；跳没跳完照旧按读数算——手动断开时船还在滑，
+            # 这会儿就当停下，量出来的滑行距离会少一截（审查 2026-11-08 第三轮）
+            st.arr, st.live_at = events.arrived_at, 0.0
+        t, g_live, _ = _pos_current(
+            deps
+        )  # 每次读到都更新（停着不动也有新的一份），latest 只在坐标变了才换（审查 2026-10-27）
+        if g_live and t != st.seen_live and time.time() - t < 3:
+            st.seen_live = t
+            prev = st.prev
+            fast = bool(
+                prev
+                and t > prev[0]
+                and math.dist(g_live, prev[1]) / (t - prev[0]) > QT_SPEED
+            )
+            if fast:
+                # 从慢变快就是起跳了，每次起跳都算：起跳前最后一次读数在方案起点附近，就是从起点跳的那一趟
+                if not st.in_qt:
+                    _halo_jump(sess, prev is not None and _near_start(prev[1]))
+                st.in_qt, st.slow_since = True, None
+            elif st.in_qt:
+                # 一跳里慢下来：连续 STOP_S 秒都慢才算断开停下，中间又快起来还是这一跳（游戏卡一下、
+                # 按断开那一刻卡住，都会连着读到一样的坐标）；停下了马上核对
+                if st.slow_since is None:
+                    st.slow_since = t
+                if t - st.slow_since >= STOP_S:
+                    st.in_qt, st.slow_since, st.live_at = False, None, 0.0
+            st.prev = (t, g_live)
             if (
-                events.arrived_at != arr
-            ):  # 游戏日志说量子到了：马上核对，不用等测速（2026-10-27）
-                arr, prev, live_at = events.arrived_at, None, 0.0
-            t, g_live, _ = _pos_current(
-                deps
-            )  # 每次读到都更新（停着不动也有新的一份），latest 只在坐标变了才换（审查 2026-10-27）
-            if g_live and t != seen_live and time.time() - t < 3:
-                seen_live = t
-                fast = (
-                    prev
-                    and t > prev[0]
-                    and math.dist(g_live, prev[1]) / (t - prev[0]) > QT_SPEED
-                )
-                prev = (t, g_live)
-                if (
-                    not fast and time.time() - live_at >= 1.0
-                ):  # 量子途中（每秒几万公里）不核对，等断开
-                    live_at = time.time()
-                    halo_check(g_live, None, sess)
-            clip = n.read_clipboard()
-            g = n.parse_clip(clip)
-            if g and clip != _HALO["seen"] and not (nav.target and nav.space_mode):
-                halo_check(g, clip, sess)
-        except Exception:
-            pass
-        ev.wait(0.3)
+                not st.in_qt and time.time() - st.live_at >= 1.0
+            ):  # 量子途中（每秒几万公里）不核对，等确认停下
+                st.live_at = time.time()
+                halo_check(g_live, None, sess)
+        clip = n.read_clipboard()
+        g = n.parse_clip(clip)
+        if g and clip != _HALO["seen"] and not (nav.target and nav.space_mode):
+            halo_check(g, clip, sess)
+    except Exception:
+        pass
+    return False
+
+
+def _halo_jump(sess, from_start):
+    """挂着方案时测到一次起跳（每次起跳都算）：悬浮窗刷回只剩方案那几行，起跳前、上一跳的核对别冻在上面；
+    记下挂上以后跳过了（每秒自动核对这才说「多飞 / 少飞」）；从方案起点跳的这一趟，
+    断开后第一次说那句的核对在导航日志里标出来（审查 2026-11-08）"""
+    with _HALO["lock"]:
+        p = _HALO["plan"]
+        if not p or sess != _HALO["sess"]:
+            return
+        _HALO.update(jumped=True, first=bool(from_start))
+        _hud_set("小行星带", p["text"])
+
+
+def _start_near(r):
+    """离方案起点多近算还在起点（Gm）：一般 LEFT_START；断开点离起点很近的路线（CRU-L2 本身就在带里）缩到起点到
+    安全窗口那段的一半，最少 NEAR_MIN（审查 2026-11-08）"""
+    return max(NEAR_MIN, min(LEFT_START, (r["total"] - r["early"]) / 2))
+
+
+def _near_start(g):
+    """坐标（米）离方案起点不超过 near（挂方案时按路线算好）"""
+    ends = _HALO["ends"]
+    return (
+        bool(ends) and math.dist(ends[0], [float(v) / 1e9 for v in g]) <= _HALO["near"]
+    )
 
 
 def halo_check(g, clip=None, sess=None):
@@ -1148,12 +1288,36 @@ def halo_check(g, clip=None, sess=None):
             _HALO["seen"] = clip
         w = halo.where(g)
         w["text"] = halo.where_text(w, p["band"])
+        # 比方案的断开点多飞 / 少飞多少：老大实飞量断开后船滑多远（2026-11-08）。在方案起点附近、差得太远都不说；
+        # 每秒自动核对还要挂上以后测到过起跳才说（还没跳就说「少飞了」像是玩家错了）；
+        # 手动定位（剪贴板、F9）没有实时坐标测起跳，只看离起点多远（审查 2026-11-08）
+        # 离航线远（跳去了别处）、到了目标跟前也不说（审查 2026-11-08）
+        ends = _HALO["ends"]
+        over, first = None, False
+        if (
+            ends
+            and not _near_start(g)
+            and (clip is not None or _HALO["jumped"])
+            and halo.route_gap(ends[0], ends[1], g) <= ROUTE_NEAR
+        ):
+            over = halo.overshoot(p, g, {p.get("to"): ends[1]})
+            if over and over["left"] < min(AT_TARGET, p.get("late", AT_TARGET)):
+                over = None
+        if over:
+            w["left"], w["over"] = over["left"], over["over"]
+            w["text"] += "\n" + over["text"]
+            first, _HALO["first"] = _HALO["first"], False
         _HALO["last"] = w
-        _hud().set(
+        _hud_set(
             "小行星带", p["text"] + "\n" + w["text"]
         )  # 退出距离、安全区间一直留着（审查 2026-10-27：自动核对不能把它盖掉）
         bus.publish("halo", w)
-    _wp_log(f"小行星带核对：{w['text']}")
+        # 每秒自动核对：跟上次一样就不再记（审查 2026-11-08）
+        log_it = w["text"] != _HALO["logged"]
+        _HALO["logged"] = w["text"]
+    if log_it:
+        mark = "（量子后第一次）" if first else ""
+        _wp_log(f"小行星带核对{mark}：{w['text']}".replace("\n", "｜"))
     return w
 
 
@@ -1169,23 +1333,23 @@ def fix_here(deps: NavDeps, /):
         with _HALO["lock"]:
             plan = _HALO["plan"] if _HALO["sess"] == sess else None
             if not g and plan:
-                _hud().set("小行星带", plan["text"] + f"\n本次定位失败：{clip}")
+                _hud_set("小行星带", plan["text"] + f"\n本次定位失败：{clip}")
         if not g:
             return {"error": clip}
         return halo_check(g, clip, sess) or {
             "error": "小行星带方案已移除或更换，本次定位无效"
         }
     if not nav.target or not nav.space_mode:
-        _hud().set("导航", "一键定位仅用于手动定位（可在导航页切换）")
+        _hud_set("导航", "一键定位仅用于手动定位（可在导航页切换）")
         threading.Timer(
-            5, lambda: _hud().clear("导航") if not nav.target else None
+            5, lambda: _hud_clear("导航") if not nav.target else None
         ).start()
         return {"error": "当前未导航到太空路标"}
     sess = nav.session  # 等坐标期间导航结束或换了目标，这次结果就作废
     g, clip = _wait_showloc()
     if not g:
         if nav.session == sess and nav.target:
-            _hud().set("导航", f"→ {n.label(nav.target)}\n这次没定位成功：{clip}")
+            _hud_set("导航", f"→ {n.label(nav.target)}\n这次没定位成功：{clip}")
         return {"error": clip}
     return nav.add_fix(g, clip, session=sess) or {
         "error": "导航已结束或目标已更换，本次定位无效"
@@ -1229,6 +1393,8 @@ __all__ = [
     "_take_here_name",
     "_saved",
     "_start_here_watch",
+    "_here_state",
+    "_here_step",
     "mark_here",
     "_coord_desc",
     "ore_record",
@@ -1240,7 +1406,9 @@ __all__ = [
     "halo_routes",
     "halo_pin",
     "halo_unpin",
-    "_halo_watch",
+    "_halo_state",
+    "_halo_step",
+    "HALO_WAIT",
     "halo_check",
     "fix_here",
     "_surface_limit",

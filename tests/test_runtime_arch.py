@@ -411,13 +411,13 @@ _RUNTIME_FORBIDDEN = (
     "astral_toolkit.system",
     "astral_toolkit.ocr",
     "astral_toolkit.infrastructure",
-    "astral_toolkit.core.capture",
+    "astral_toolkit.infrastructure.platform.capture",
     "astral_toolkit.core.settings",
 )
 
 
 # 允许清单（R1 审查）：runtime 里绑到名字上的本项目模块只许 runtime 自己、contracts、core.run_records（lifecycle 写退出记录）；
-# 先拿包再取属性（from ... import core → core.capture）、没列进上面禁止清单的包（update、run……）也挡得住
+# 先拿包再取属性（from ... import infrastructure → infrastructure.platform.capture、from ... import core → core.settings）、没列进上面禁止清单的包（update、run……）也挡得住
 _RUNTIME_ALLOWED = (
     "astral_toolkit.runtime",
     "astral_toolkit.contracts",
@@ -467,13 +467,14 @@ def test_runtime_layer_stays_below_app():
         "from ...navigation import navigate",
         "def f():\n    from ...navigation.displayinfo import Reader\n",
         "from ...system.showloc import game_foreground",
-        "from ...core.capture import game_area",
+        "from ...infrastructure.platform.capture import game_area",
         "from ...mining import screen",
         "from ...trade import console",
         "from ...tasks import position",
         "from ...app import bus",
         "from ... import bootstrap",
-        "from ... import core\ncore.capture.game_area()\n",
+        "from ... import infrastructure\ninfrastructure.platform.capture.game_area()\n",
+        "from ... import core\ncore.settings.load()\n",
         "import astral_toolkit.core as core\n",
         "import astral_toolkit\n",
         "from ...update import data_pack",
@@ -719,12 +720,18 @@ def test_mining_analysis_stays_in_its_layer():
         assert _mining_analysis_violations(ok) == [], ok
 
 
-# 盘点分析（目录迁移 R5）照采矿那条的写法：本项目模块只许 trade/inspector、tasks/count 和它们里面的名字
-_COUNT_ANALYSIS_ONLY = ("astral_toolkit.trade.inspector", "astral_toolkit.tasks.count")
+# 盘点分析（目录迁移 R5）照采矿那条的写法：本项目模块只许 trade/inspector、tasks/count 和它们里面的名字；
+# 11-09 加 trade/cell_grid（找鼠标所在格的框，盘点判断同一格用）
+_COUNT_ANALYSIS_ONLY = (
+    "astral_toolkit.trade.inspector",
+    "astral_toolkit.tasks.count",
+    "astral_toolkit.trade.cell_grid",
+    "astral_toolkit.trade.count_view",  # 11-09：盘点看仓库（页、列、滚动、占几格、锁格），和 cell_grid 同一层
+)
 
 
 def test_count_analysis_and_presenter_stay_in_their_layers():
-    """目录迁移 R5 拆出来的两块：盘点分析（tasks/count_analysis）只往下转给 trade/inspector、tasks/count（界面、runtime、
+    """目录迁移 R5 拆出来的两块：盘点分析（tasks/count_analysis）只往下转给 trade/inspector、tasks/count、trade/cell_grid、trade/count_view（界面、runtime、
     装配、别的 tasks、trade 别的模块都不许，拿整个包再走属性也不许），文件顶上只 import typing（调用时才取）；
     盘点的悬浮窗文字（app/presenters/count）只排版：不导入本项目任何模块（数量写法由 bootstrap 传进来），不用字符串导入"""
     path = _ROOT / "tasks" / "count_analysis.py"
@@ -842,6 +849,102 @@ def test_infrastructure_adapters_stay_below_domain():
     assert _thread_makers_in_source(
         "from concurrent.futures import ThreadPoolExecutor\nThreadPoolExecutor(4)\n"
     )
+
+
+def _non_doc_strings(source):
+    """一个文件里不算说明文字（模块、类、函数开头那段）的字符串常量，f-string 里的字面部分也算"""
+    tree = ast.parse(source)
+    docs = set()
+    for node in ast.walk(tree):
+        body = getattr(node, "body", None)
+        if (
+            isinstance(
+                node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+            )
+            and body
+        ):
+            first = body[0]
+            if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant):
+                docs.add(id(first.value))
+    return [
+        n.value
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Constant)
+        and isinstance(n.value, str)
+        and id(n) not in docs
+    ]
+
+
+_ACQUIRE_WORDS = (
+    "就在附近",
+    "要跳星系",
+    "千公里",
+    "可买：",
+    "挖矿：",
+    "开箱：",
+    "只能开采：",
+    "场景里刷出",
+    "单箱最高约",
+    "要精炼成纯净的",
+)
+
+
+def test_catalog_queries_hand_facts_not_sentences():
+    """目录迁移收尾：获取途径的距离写成文字、维科洛材料去哪弄那一句挪到展示层（app/presenters/catalog.distance_text、
+    app/presenters/wikelo.source_text），查询内部实现只交事实——这些字不许回到 tasks/catalog_queries（说明文字里提到不算）；
+    navigation/position 也不再管距离写成文字"""
+    # 整个目录都查（词表里是带冒号的「只能开采：」；掉落查询自己的说明「…只能开采」不带冒号，是掉落数据的说明，不算）
+    for f in sorted((_ROOT / "tasks" / "catalog_queries").glob("*.py")):
+        said = _non_doc_strings(f.read_text(encoding="utf-8"))
+        assert [w for w in _ACQUIRE_WORDS if any(w in s for s in said)] == [], f.name
+    assert "def fmt_distance" not in (_ROOT / "navigation" / "position.py").read_text(
+        encoding="utf-8"
+    )
+    # 换个名字留在导航里也不行（「就在附近」导航自己的城里提示也用，不查这个）
+    for f in sorted((_ROOT / "navigation").rglob("*.py")):
+        said = _non_doc_strings(f.read_text(encoding="utf-8"))
+        assert [w for w in ("要跳星系", "千公里") if any(w in s for s in said)] == [], (
+            f.name
+        )
+    pres = _ROOT / "app" / "presenters"
+    assert "def distance_text" in (pres / "catalog.py").read_text(encoding="utf-8")
+    assert "def source_text" in (pres / "wikelo.py").read_text(encoding="utf-8")
+    bad = 'def f(m):\n    """说明里写「就在附近」不算"""\n    return f"挖矿：{m}"\n'
+    assert [
+        w for w in _ACQUIRE_WORDS if any(w in s for s in _non_doc_strings(bad))
+    ] == ["挖矿："]
+
+
+def test_cursor_and_key_reads_have_one_home():
+    """目录迁移收尾：读光标（GetCursorPos）只在 infrastructure/platform/capture（托盘弹菜单定位置那句是界面自己的，另算），
+    读键（GetAsyncKeyState）只在 infrastructure/platform/keys；悬浮窗状态（app/hud_state）的由 bootstrap 接进来"""
+    where: dict[str, set[str]] = {"GetCursorPos": set(), "GetAsyncKeyState": set()}
+    for f in _ROOT.rglob("*.py"):
+        text = f.read_text(encoding="utf-8")
+        for k, seen in where.items():
+            if k in text:
+                seen.add(f.relative_to(_ROOT).as_posix())
+    assert where["GetCursorPos"] == {
+        "infrastructure/platform/capture.py",
+        "app/tray.py",
+    }, where
+    assert where["GetAsyncKeyState"] == {"infrastructure/platform/keys.py"}, where
+    other = ("GetPhysicalCursorPos", "GetCursorInfo", "GetKeyState", "GetKeyboardState")
+    found = [
+        f.relative_to(_ROOT).as_posix()
+        for f in _ROOT.rglob("*.py")
+        if any(k in f.read_text(encoding="utf-8") for k in other)
+    ]
+    assert found == [], found  # 别的读光标 / 读键的写法也不许另开一份
+    hud = (_ROOT / "app" / "hud_state.py").read_text(encoding="utf-8")
+    mods = list(_imports_in_source(hud, "astral_toolkit.app"))
+    banned = (
+        "astral_toolkit.infrastructure",
+        "astral_toolkit.infrastructure.platform.capture",
+    )
+    assert _forbidden(mods, banned) == []
+    bad = "def f():\n    from ..infrastructure.platform.capture import cursor_pos\n"
+    assert _forbidden(list(_imports_in_source(bad, "astral_toolkit.app")), banned)
 
 
 def test_core_stays_below_app():
@@ -1299,7 +1402,7 @@ _NAV_PURE_FORBIDDEN = (
     "astral_toolkit.bootstrap",
     "astral_toolkit.infrastructure",
     "astral_toolkit.core.settings",
-    "astral_toolkit.core.capture",
+    "astral_toolkit.infrastructure.platform.capture",
     "astral_toolkit.core.paths",
     "astral_toolkit.system",
 )
@@ -1311,7 +1414,7 @@ _NAV_PRESENTER_FORBIDDEN = (
     "astral_toolkit.app.overlay",
     "astral_toolkit.app.hud_state",
     "astral_toolkit.core.settings",
-    "astral_toolkit.core.capture",
+    "astral_toolkit.infrastructure.platform.capture",
     "astral_toolkit.system",
 )
 
@@ -1839,7 +1942,9 @@ def _crafting_presenter_imports(source, pkg):
 
 
 def test_only_goals_shell_imports_crafting_presenters():
-    """CR-B4 过渡：tasks 里只有 tasks/goals.py 旧壳能 import 制造 / 维科洛排版；B5、B6 删壳后收紧成一个都不许。"""
+    """CR-B4 过渡：tasks 里只有 tasks/goals.py 能 import 制造 / 维科洛排版——旧壳（B5、B6 删）和目标页「去哪弄」那句
+    （_goals_view 调 wikelo.source_text，目录迁移收尾起；目标冻结期的例外，目标换新实现时挪进目标页的展示层）。
+    两样都没了再收紧成一个都不许。"""
     pkg = "astral_toolkit.tasks"
     assert _crafting_presenter_imports(
         "from ..app.presenters import crafting as p", pkg
@@ -2657,6 +2762,7 @@ _FS_B5_FIRST_ARG = {
         "live_stop": "live*",
         "set_mining_gear": "live*",
         "set_mining_gadgets": "live*",
+        "set_mining_focus": "live*",
     },
     "hover.py": {
         "hover_once": "links*",
@@ -2691,8 +2797,10 @@ _FS_B5_FIRST_ARG = {
         "_hints_near": "deps",
         "_save_here": "deps",
         "_start_here_watch": "deps",
+        "_here_step": "deps",
         "_coord_desc": "deps",
-        "_halo_watch": "deps",
+        "_halo_state": "deps",
+        "_halo_step": "deps",
     },
     "trade.py": {"nav_shop": "deps*"},
 }
@@ -2702,6 +2810,7 @@ _FS_B5_BOUND = {
         "live_stop",
         "set_mining_gear",
         "set_mining_gadgets",
+        "set_mining_focus",
     },
     "vision.py": {"hover_trigger"},
     "system.py": {"status", "feedback_report", "set_settings", "agree"},

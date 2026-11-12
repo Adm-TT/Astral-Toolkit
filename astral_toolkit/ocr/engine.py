@@ -1,10 +1,10 @@
 """OCR 核心识别与推理管道"""
 
-from typing import Any, Callable, List, Sequence, Tuple, Union
+from typing import Any, Callable, List, Tuple, Union
 import numpy as np
 from PIL import Image
 
-from .models import OcrToken
+from .models import OcrQuad, OcrToken
 
 _engine = None
 
@@ -18,38 +18,41 @@ def _get_engine():
     return _engine
 
 
-def raw_detector() -> Callable[[np.ndarray], Sequence[Tuple[Any, str, float]]]:
-    """返回底层四点检测识别函数：func(arr) -> [(quad, text, conf), ...]
+def _as_rows(result: Any) -> Sequence[Tuple[Any, str, float]]:
+    """把 RapidOCR 返回值收成 [(quad, text, conf), ...]。空结果为 []。"""
+    if result is None:
+        return []
+    boxes = getattr(result, "boxes", None)
+    if boxes is None:
+        return []
+    txts = getattr(result, "txts", None) or ()
+    scores = getattr(result, "scores", None) or ()
+    return list(
+        zip(boxes.tolist() if hasattr(boxes, "tolist") else boxes, txts, scores)
+    )
 
-    兼容 rapidocr_onnxruntime 和 rapidocr (支持 Python 3.13) 两种实现。
-    """
+
+def raw_detector() -> Callable[[np.ndarray], Sequence[Tuple[Any, str, float]]]:
+    """返回底层四点检测识别函数：func(arr) -> [(quad, text, conf), ...]"""
     eng: Any = _get_engine()
-    if eng.kind.startswith("rapidocr_onnxruntime"):
-        return lambda arr: eng(arr)[0] or []
 
     def run(arr: np.ndarray):
-        r = eng(arr)
-        if r.boxes is None:
-            return []
-        return list(zip(r.boxes.tolist(), r.txts, r.scores))
+        return _as_rows(eng(arr))
 
     return run
 
 
-def raw_recognizer() -> Callable[[np.ndarray], Tuple[str, float]]:
-    """返回底层单行识别函数：func(arr) -> (text, conf)"""
+def _line_reader() -> Callable[[np.ndarray], Tuple[str, float]]:
+    """单行识别（跳过检测）：func(arr) -> (text, conf 0~1)。两种引擎的写法不一样，这里分开（原 raw_recognizer，11-09 收成内部的）"""
     eng: Any = _get_engine()
-    if eng.kind.startswith("rapidocr_onnxruntime"):
-
-        def run(arr: np.ndarray) -> Tuple[str, float]:
-            res, _ = eng(arr, use_det=False, use_cls=False, use_rec=True)
-            return (res[0][0], float(res[0][1])) if res else ("", 0.0)
-
-        return run
 
     def run(arr: np.ndarray) -> Tuple[str, float]:
         r = eng(arr, use_det=False, use_cls=False, use_rec=True)
-        return (r.txts[0], float(r.scores[0])) if r.txts else ("", 0.0)
+        txts = getattr(r, "txts", None)
+        scores = getattr(r, "scores", None)
+        if not txts:
+            return ("", 0.0)
+        return (txts[0], float(scores[0]) if scores is not None else 0.0)
 
     return run
 
@@ -83,11 +86,7 @@ def recognize(
     else:
         result = eng(arr, **kw)
 
-    rows = (
-        result[0]
-        if isinstance(result, tuple)
-        else list(zip(result.boxes, result.txts, result.scores))
-    )
+    rows = _as_rows(result)
     ox, oy = offset
     tokens: List[OcrToken] = []
     for box, text, score in rows or []:
@@ -107,7 +106,7 @@ def recognize(
 
 def read_line(image: Union[Image.Image, np.ndarray]) -> Tuple[str, float]:
     """只认一行字（跳过检测）：输入 PIL 单行文字图或 ndarray → (文字, 置信度)。比整块识别快很多"""
-    rec = raw_recognizer()
+    rec = _line_reader()
     if isinstance(image, np.ndarray):
         arr = image
     else:

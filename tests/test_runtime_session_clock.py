@@ -96,6 +96,38 @@ def test_pause_freezes_idle_and_stale_timers():
         loop.join(session_id=_current_id(loop))
 
 
+def test_idle_close_is_read_outside_the_loop_lock():
+    """采矿助手的 idle_close 是读设置的属性：会话循环在锁外取，锁里不读文件（审查 2026-11-08）"""
+    held = []
+
+    class Worker(FakeWorker):
+        @property
+        def idle_close(self):
+            held.append(bool(self.loop is not None and self.loop.lock_held_by_me()))
+            return 10.0
+
+        @idle_close.setter
+        def idle_close(self, value):  # pyright: ignore[reportIncompatibleVariableOverride]
+            pass
+
+    clock = FakeClock()
+    worker = Worker(wait=0.01)
+    gate = TickGate()
+    worker.gate = gate
+    loop, _, _ = make_loop(worker, clock=clock)
+    worker.loop = loop
+    try:
+        _start(loop, worker)
+        gate.wait()
+        for _ in range(3):
+            assert not _step_or_finish(worker, gate, clock, 1.0)
+        assert held and not any(held), held
+    finally:
+        loop.request_stop_current(StopInfo("user"))
+        gate.step()
+        loop.join(session_id=_current_id(loop))
+
+
 def test_idle_close_uses_the_latest_of_all_channels(monkeypatch):
     """只有雷达信号、没有扫描面板时，120 秒也不该自动关闭（dev 是 max(面板, 信号)）"""
     clock = FakeClock()
