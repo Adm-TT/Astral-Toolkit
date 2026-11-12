@@ -764,13 +764,53 @@ def parse_count(text):
     return int(m.group(1)) if m else None
 
 
-def cell_labels(img, cursor, tokens=None, size=None):
+def cell_labels(img, cursor, tokens=None, size=None, cell=None):
     """鼠标指着的那个物品格子：左上角的品质（575Q）和右上角的数量（200x）。没有返回 None。
-    只认鼠标上方一个格子高度以内的标签；同一排里品质取鼠标左边最近的、数量取鼠标右边最近的。
-    size：格子大小 (宽, 高)，默认按整屏比例估（1440p 下约 150×140）"""
+    优先：有 cell 框（或现找 cell_box）时按 inventory.cell.* 相对子 ROI（可贴角越界）分裁 OCR；
+    否则：只认鼠标上方一个格子高度以内的标签（旧逻辑）。
+    size：旧路径格子大小 (宽, 高)，默认按整屏比例估（1440p 下约 150×140）"""
     W, H = img.size
-    cw, ch = size or (int(W * 0.065), int(H * 0.11))
     cx, cy = cursor
+    if tokens is None and cell is None:
+        try:
+            from .cell_grid import cell_box as _cell_box
+
+            cell = _cell_box(img, (int(cx), int(cy)))
+        except Exception:
+            cell = None
+    if tokens is None and cell is not None:
+        from ..ocr import recognize
+        from . import debug_shots, inventory_panel
+
+        q_box = inventory_panel.map_cell_roi(
+            cell, inventory_panel.cell_badge_frac("quality"), img.size
+        )
+        n_box = inventory_panel.map_cell_roi(
+            cell, inventory_panel.cell_badge_frac("stack"), img.size
+        )
+        shot = debug_shots.current()
+        best_q = best_n = None
+        for kind, box in (("quality", q_box), ("stack", n_box)):
+            if box[2] - box[0] < 2 or box[3] - box[1] < 2:
+                continue
+            crop = img.crop(box)
+            if shot is not None:
+                try:
+                    shot.add_extra(f"cell_{kind}", kind, box, crop, kind="cell")
+                except Exception:
+                    pass
+            for t in recognize(crop, urgent=True, offset=box[:2], native=True) or []:
+                if kind == "quality":
+                    q = parse_qlabel(t.text)
+                    if q is not None and (best_q is None or q > best_q):
+                        best_q = q
+                else:
+                    n = parse_count(t.text)
+                    if n is not None and (best_n is None or n > best_n):
+                        best_n = n
+        return best_q, best_n
+
+    cw, ch = size or (int(W * 0.065), int(H * 0.11))
     if tokens is None:
         from ..ocr import recognize
         from . import debug_shots
@@ -786,7 +826,7 @@ def cell_labels(img, cursor, tokens=None, size=None):
         # native=True 避免小裁剪图被 RapidOCR 强行放大至 736px，提速 2~3 倍
         tokens = recognize(crop, urgent=True, offset=box[:2], native=True)
     best_q = best_n = None
-    for t in tokens:
+    for t in tokens or []:
         x, y, w, h = t.box
         if not cy - ch < y < cy:
             continue

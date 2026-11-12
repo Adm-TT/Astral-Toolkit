@@ -1,5 +1,5 @@
 {
-  "version": 7,
+  "version": 8,
   "regions": {
     "hover.band_30_50": [
       {
@@ -115,7 +115,7 @@
           0.8345
         ],
         "kind": "read",
-        "note": "盘点：鼠标指着仓库物品时的说明框（初版，按 11-09 样本量；老大在工作台里微调）"
+        "note": "盘点：鼠标指着仓库物品时的说明框（初版，按 11-09 样本量；老大在工作台里微调）；与 inventory.tooltip 镜像"
       }
     ],
     "count.grid": [
@@ -128,7 +128,7 @@
           0.8327
         ],
         "kind": "read",
-        "note": "盘点：右边仓库（本地 / 本地）的格子区，不含上面的筛选按钮和右边滚动条（初版）"
+        "note": "盘点：右边仓库（本地 / 本地）的格子区，不含上面的筛选按钮和右边滚动条（初版）；与 inventory.right.grid 镜像"
       }
     ],
     "count.scrollbar": [
@@ -141,7 +141,7 @@
           0.8354
         ],
         "kind": "read",
-        "note": "盘点：仓库右边的滚动条（绿色滑块在里面上下走，用来算滚了多少；初版）"
+        "note": "盘点：仓库右边的滚动条（绿色滑块在里面上下走，用来算滚了多少；初版）；与 inventory.right.scrollbar 镜像"
       }
     ],
     "count.page": [
@@ -154,7 +154,263 @@
           0.8718
         ],
         "kind": "read",
-        "note": "盘点：仓库底下的页码「9/51」（初版）"
+        "note": "盘点：仓库底下的页码「9/51」（初版）；与 inventory.right.page 镜像"
+      }
+    ],
+    "inventory.right.grid": [
+      {
+        "aspect": "16:9",
+        "box": [
+          0.7336,
+          0.2309,
+          0.9683,
+          0.8327
+        ],
+        "kind": "read",
+        "note": "右仓格子区；与 count.grid 镜像",
+        "panel": "right",
+        "role": "grid",
+        "scrollable": true,
+        "cols_hint": 4,
+        "used_by": [
+          "f6",
+          "f8"
+        ],
+        "coord_space": "screen"
+      }
+    ],
+    "inventory.right.scrollbar": [
+      {
+        "aspect": "16:9",
+        "box": [
+          0.9688,
+          0.2167,
+          0.9766,
+          0.8354
+        ],
+        "kind": "read",
+        "note": "右仓滚动条；与 count.scrollbar 镜像",
+        "panel": "right",
+        "role": "scrollbar",
+        "used_by": [
+          "f6"
+        ],
+        "coord_space": "screen"
+      }
+    ],
+    "inventory.right.page": [
+      {
+        "aspect": "16:9",
+        "box": [
+          0.8369,
+          0.8464,
+          0.8676,
+          0.8718
+        ],
+        "kind": "read",
+        "note": "右仓页码；与 count.page 镜像",
+        "panel": "right",
+        "role": "page",
+        "used_by": [
+          "f6"
+        ],
+        "coord_space": "screen"
+      }
+    ],
+    "inventory.tooltip": [
+      {
+        "aspect": "16:9",
+        "box": [
+          0.5,
+          0.1191,
+          0.7132,
+          0.8345
+        ],
+        "kind": "read",
+        "note": "说明框参考；与 count.tooltip 镜像；F8 仍竖带",
+        "panel": "center",
+        "role": "tooltip",
+        "used_by": [
+          "f6",
+          "f8"
+        ],
+        "coord_space": "screen"
+      }
+    ],
+    "inventory.left.grid": [
+      {
+        "aspect": "16:9",
+        "box": [
+          0.025,
+          0.2309,
+          0.265,
+          0.65
+        ],
+        "kind": "read",
+        "note": "左仓格子区（2K 初值，待校准）",
+        "panel": "left",
+        "role": "grid",
+        "scrollable": true,
+        "cols_hint": 4,
+        "used_by": [
+          "f6",
+          "f8"
+        ],
+        "coord_space": "screen"
+      }
+    ],
+    "inventory.left.header": [
+      {
+        "aspect": "16:9",
+        "box": [
+          0.025,
+          0.12,
+          0.265,
+          0.23
+        ],
+        "kind": "read",
+        "note": "左仓顶栏（预留）",
+        "panel": "left",
+        "role": "header",
+        "used_by": [
+          "reserve"
+        ],
+        "coord_space": "screen"
+      }
+    ],
+    "inventory.left.capacity": [
+      {
+        "aspect": "16:9",
+        "box": [
+          0.025,
+          0.18,
+          0.265,
+          0.23
+        ],
+        "kind": "read",
+        "note": "左仓容量条（预留）",
+        "panel": "left",
+        "role": "capacity",
+        "used_by": [
+          "reserve"
+        ],
+        "coord_space": "screen"
+      }
+    ],
+    "inventory.left.equipment": [
+      {
+        "aspect": "16:9",
+        "box": [
+          0.025,
+          0.66,
+          0.265,
+          0.83
+        ],
+        "kind": "read",
+        "note": "左仓下方装备栏（预留）",
+        "panel": "left",
+        "role": "equipment",
+        "used_by": [
+          "reserve"
+        ],
+        "coord_space": "screen"
+      }
+    ],
+    "inventory.right.header": [
+      {
+        "aspect": "16:9",
+        "box": [
+          0.7336,
+          0.12,
+          0.9683,
+          0.23
+        ],
+        "kind": "read",
+        "note": "右仓顶栏（预留）",
+        "panel": "right",
+        "role": "header",
+        "used_by": [
+          "reserve"
+        ],
+        "coord_space": "screen"
+      }
+    ],
+    "inventory.right.capacity": [
+      {
+        "aspect": "16:9",
+        "box": [
+          0.7336,
+          0.18,
+          0.9683,
+          0.23
+        ],
+        "kind": "read",
+        "note": "右仓容量条（预留）",
+        "panel": "right",
+        "role": "capacity",
+        "used_by": [
+          "reserve"
+        ],
+        "coord_space": "screen"
+      }
+    ],
+    "inventory.character.nodes": [
+      {
+        "aspect": "16:9",
+        "box": [
+          0.28,
+          0.18,
+          0.46,
+          0.8
+        ],
+        "kind": "read",
+        "note": "角色挂点区（预留）",
+        "panel": "center",
+        "role": "nodes",
+        "used_by": [
+          "reserve"
+        ],
+        "coord_space": "screen"
+      }
+    ],
+    "inventory.cell.quality": [
+      {
+        "aspect": "16:9",
+        "box": [
+          -0.1,
+          -0.12,
+          0.48,
+          0.28
+        ],
+        "kind": "read",
+        "note": "格内品质角标，相对 cell_box，可越界",
+        "panel": "shared",
+        "role": "cell_badge",
+        "used_by": [
+          "f6",
+          "f8"
+        ],
+        "coord_space": "cell"
+      }
+    ],
+    "inventory.cell.stack": [
+      {
+        "aspect": "16:9",
+        "box": [
+          0.52,
+          -0.12,
+          1.1,
+          0.28
+        ],
+        "kind": "read",
+        "note": "格内数量角标，相对 cell_box，可越界",
+        "panel": "shared",
+        "role": "cell_badge",
+        "used_by": [
+          "f6",
+          "f8"
+        ],
+        "coord_space": "cell"
       }
     ]
   }

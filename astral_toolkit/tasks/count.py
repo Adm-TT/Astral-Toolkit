@@ -84,7 +84,7 @@ def _tooltip_boxes(size):
     from ..core import screen_regions
 
     W, H = size
-    box = screen_regions.px("count.tooltip", TOOLTIP, size)
+    box = screen_regions.px_first(("inventory.tooltip", "count.tooltip"), TOOLTIP, size)
     title = (
         box[0],
         max(box[1], int(H * TITLE_ROWS[0])),

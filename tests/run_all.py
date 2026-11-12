@@ -154,6 +154,7 @@ MODULES = [
     "tests.test_count_session",
     "tests.test_count_read",
     "tests.test_count_view",
+    "tests.test_inventory_panel",
     "tests.test_cell_grid",
     "tests.test_screen_regions",
     "tests.test_readlab",

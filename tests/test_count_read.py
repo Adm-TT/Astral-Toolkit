@@ -94,19 +94,23 @@ def test_region_follows_screen_regions(monkeypatch):
     from astral_toolkit.core import screen_regions
     from astral_toolkit.tasks import count
 
+    tip = (0.1, 0.3, 0.2, 0.5)
+
+    def _frac(key, default, size=None):
+        if key in ("inventory.tooltip", "count.tooltip"):
+            return tip
+        return default
+
+    monkeypatch.setattr(screen_regions, "frac", _frac)
     monkeypatch.setattr(
         screen_regions,
-        "frac",
-        lambda key, default, size=None: (
-            (0.1, 0.3, 0.2, 0.5) if key == "count.tooltip" else default
-        ),
+        "has_read",
+        lambda key: key in ("inventory.tooltip", "count.tooltip"),
     )
     box, title = count._tooltip_boxes((1000, 1000))
     assert box == (100, 300, 200, 500)
     assert title == (100, 300, 200, 360)
-    monkeypatch.setattr(
-        screen_regions, "frac", lambda key, default, size=None: (0.1, 0.5, 0.2, 0.9)
-    )
+    tip = (0.1, 0.5, 0.2, 0.9)
     assert count._tooltip_boxes((1000, 1000))[1] is None  # 区域在标题那截下面：只认整块
 
 

@@ -111,6 +111,42 @@ def test_save_validates_boxes(tmp_path, monkeypatch):
     assert p.read_text(encoding="utf-8") == before
 
 
+def test_cell_coord_space_allows_out_of_range(tmp_path, monkeypatch):
+    """coord_space=cell 时 box 可越出 [0,1]（角标贴角）"""
+    _use(
+        tmp_path,
+        monkeypatch,
+        {
+            "version": 1,
+            "regions": {
+                "inventory.cell.quality": [
+                    {
+                        "aspect": "16:9",
+                        "box": [-0.1, -0.12, 0.48, 0.28],
+                        "kind": "read",
+                        "coord_space": "cell",
+                    }
+                ]
+            },
+        },
+    )
+    assert sr.frac("inventory.cell.quality", D) == (-0.1, -0.12, 0.48, 0.28)
+    # 无 cell 标记仍拒绝越界
+    with raises(ValueError):
+        sr.save(
+            {
+                "bad": [
+                    {
+                        "aspect": "16:9",
+                        "box": [-0.1, 0.0, 0.5, 0.5],
+                        "kind": "read",
+                    }
+                ]
+            },
+            1,
+        )
+
+
 # 读屏开发工作台第 2 步：原来写死在代码里的区域原样搬进区域文件（老大 11-09；值逐位不变）
 SHIPPED = {
     "hover.band_30_50": (0.30, 0.0, 0.50, 1.0),

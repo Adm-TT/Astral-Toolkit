@@ -40,14 +40,20 @@ class Spot(NamedTuple):
     y: float
 
 
-def _px(key: str, default, size) -> tuple[int, int, int, int]:
-    return screen_regions.px(key, default, size)
+def _grid_box(img: Any, panel: Any = None) -> tuple[int, int, int, int]:
+    """格子区像素框：有 Panel 用它的 grid，否则右仓 inventory/count 别名"""
+    if panel is not None:
+        return panel.grid
+    return screen_regions.px_first(
+        ("inventory.right.grid", "count.grid"), GRID, img.size
+    )
 
 
-def columns(img: Any) -> list[tuple[int, int]] | None:
-    """count.grid 里四列的 (左边, 右边)，截图横坐标；量不全四列返回 None"""
+def columns(img: Any, panel: Any = None) -> list[tuple[int, int]] | None:
+    """格子区里四列的 (左边, 右边)，截图横坐标；量不全四列返回 None。
+    panel：inventory_panel.Panel，左右仓各用各的 grid。"""
     W, H = img.size
-    g = _px("count.grid", GRID, img.size)
+    g = _grid_box(img, panel)
     if g[2] - g[0] < 10 or g[3] - g[1] < 10:
         return None
     pitch = H * PITCH
@@ -98,10 +104,18 @@ def column_of(cols: list[tuple[int, int]] | None, x: float) -> int | None:
     return i if d <= (cols[0][1] - cols[0][0]) * SEAM else None
 
 
-def scroll(img: Any) -> float | None:
+def scroll(img: Any, panel: Any = None) -> float | None:
     """内容往下滚了多少像素（滑块在最顶上是 0 左右）；找不到滑块返回 None"""
-    b = _px("count.scrollbar", SCROLLBAR, img.size)
-    g = _px("count.grid", GRID, img.size)
+    if panel is not None:
+        if panel.scrollbar is None:
+            return None
+        b = panel.scrollbar
+        g = panel.grid
+    else:
+        b = screen_regions.px_first(
+            ("inventory.right.scrollbar", "count.scrollbar"), SCROLLBAR, img.size
+        )
+        g = _grid_box(img, None)
     if b[2] - b[0] < 2 or b[3] - b[1] < 20:
         return None
     a = np.asarray(img.crop(b).convert("RGB"), dtype=np.float32)
@@ -122,11 +136,18 @@ def scroll(img: Any) -> float | None:
 _PAGE = re.compile(r"(\d{1,3})\s*[/／]\s*(\d{1,3})")
 
 
-def page(img: Any) -> int | None:
+def page(img: Any, panel: Any = None) -> int | None:
     """仓库底下页码「2/51」的当前页；认不出、或者数不对（0 页、比总页数大）返回 None，不猜"""
     from ..ocr import recognize
 
-    b = _px("count.page", PAGE, img.size)
+    if panel is not None:
+        if panel.page is None:
+            return None
+        b = panel.page
+    else:
+        b = screen_regions.px_first(
+            ("inventory.right.page", "count.page"), PAGE, img.size
+        )
     if b[2] - b[0] < 4 or b[3] - b[1] < 4:
         return None
     text = " ".join(
@@ -222,10 +243,23 @@ def spot(
     cursor: tuple[int, int],
     width: int | None,
     cols: list[tuple[int, int]] | None = None,
+    panel: Any = None,
 ) -> Spot | None:
     """鼠标指的那一格的身份；列量不出、行找不到、占几格看不清 → None（调用方退回格子框比较）。
-    这张图量不全四列（一整列都被大物品盖住、半透明背景太亮）时用同样尺寸截图上次量到的：列的横向位置不会变"""
-    cols = cols or columns(img)
+    这张图量不全四列（一整列都被大物品盖住、半透明背景太亮）时用同样尺寸截图上次量到的：列的横向位置不会变。
+    panel：有则用该侧格子区；没有则按光标 resolve，仍没有则按右仓（兼容旧调用）。"""
+    if panel is None:
+        try:
+            from . import inventory_panel
+
+            panel = inventory_panel.resolve(cursor, img.size)
+        except Exception:
+            panel = None
+    if cols is None:
+        try:
+            cols = columns(img, panel)
+        except TypeError:
+            cols = columns(img)  # 测试替身只收 img
     if cols:
         _cols_seen[tuple(img.size)] = cols
     else:
@@ -238,12 +272,20 @@ def spot(
     sp = span(img, cursor, cols, rows, width)
     if sp is None:
         return None
-    off = scroll(img)
-    if off is None:
-        return (
-            None  # 滑块看不到（只有一屏不用滚、或被挡住）：分不清滚没滚，交给格子框比较
-        )
-    return Spot(page(img), sp[0], sp[1], rows[0] + off)
+    if panel is not None and panel.scrollbar is None:
+        off = 0.0  # 该侧未标定滚动条（如左仓）：不当失败，按未滚动算
+    else:
+        try:
+            off = scroll(img, panel)
+        except TypeError:
+            off = scroll(img)  # 测试替身只收 img
+        if off is None:
+            return None  # 滑块看不到（只有一屏不用滚、或被挡住）：分不清滚没滚，交给格子框比较
+    try:
+        pg = page(img, panel)
+    except TypeError:
+        pg = page(img)
+    return Spot(pg, sp[0], sp[1], rows[0] + off)
 
 
 def same_spot(a: Spot, b: Spot, pitch: float) -> bool | None:

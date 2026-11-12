@@ -46,11 +46,14 @@ def test_columns_match_real_layout():
 
 
 def test_scroll_from_thumb():
+    from astral_toolkit.core import screen_regions
     from astral_toolkit.trade import count_view as V
 
     # 滑块离轨道顶 288 像素、长 411：内容滚了 288 × 格子区高 / 411
     img = _inventory(thumb=(600, 1010))
-    g = V._px("count.grid", V.GRID, img.size)
+    g = screen_regions.px_first(
+        ("inventory.right.grid", "count.grid"), V.GRID, img.size
+    )
     off = V.scroll(img)
     assert off is not None and abs(off - (600 - 312) * (g[3] - g[1]) / 411) < 4
     assert V.scroll(_inventory(thumb=None)) is None  # 没滑块：不知道滚没滚
