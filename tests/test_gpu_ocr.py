@@ -326,7 +326,8 @@ def test_switch_device_reaches_every_caller(monkeypatch):
     assert OR.set_ocr_device("cpu") == "CPU"
     assert OR.rapidocr() is shared and len(made) == 2 and not made[1].gpu
     use_all()
-    assert made[0].calls == 5 and made[1].calls == 5  # 切换后旧引擎一次都没再用
+    # 切换后旧引擎一次都没再用；新引擎多的那 1 次是换进去之前的预热（_prime，11-12）
+    assert made[0].calls == 5 and made[1].calls == 5 + 1
 
 
 def test_old_settings_switch_ocr_to_cpu_once(monkeypatch, tmp_path):
