@@ -15,6 +15,7 @@
 | 2026-11-12 | 锁定别名读写与 cell 越界校验约定 | 自审去掉「实施再定」歧义 |
 | 2026-11-12 | debug_mode 叠图与 readlab 盘点试跑画出 inventory ROI | 直观核对左右仓/角标/说明框是否套准 |
 | 2026-11-13 | `hover.title_rows` / `TITLE_Y1` / `TITLE_ROWS` 底边 0.36→0.30 | 2K 实样：类型/挂点在 ~0.32+，标题带只需名+体积/制造商锚点 |
+| 2026-11-13 | ROI 比例门面收口到 `inventory_panel`（band/stage/tooltip/右仓默认） | 去掉 inspector/count/count_view 双写；JSON 键名与竖带级联规则不变 |
 
 ---
 

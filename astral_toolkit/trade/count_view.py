@@ -18,12 +18,12 @@ from typing import Any, NamedTuple
 import cv2
 import numpy as np
 
-from ..core import screen_regions
+from . import inventory_panel
 from .cell_grid import EDGE, PITCH, _runs
 
-GRID = (0.7336, 0.2309, 0.9683, 0.8327)
-SCROLLBAR = (0.9688, 0.2167, 0.9766, 0.8354)
-PAGE = (0.8369, 0.8464, 0.8676, 0.8718)
+GRID = inventory_panel.RIGHT_GRID
+SCROLLBAR = inventory_panel.RIGHT_SCROLLBAR
+PAGE = inventory_panel.RIGHT_PAGE
 N_COLS = 4
 COL_W = (0.8, 1.2)  # 一列宽 0.8~1.2 格距（137~152 像素 / 格距 140）
 SEAM = 0.1  # 缝两边的两条竖边相隔不到 0.1 格距（样本 6~7 像素）
@@ -44,9 +44,7 @@ def _grid_box(img: Any, panel: Any = None) -> tuple[int, int, int, int]:
     """格子区像素框：有 Panel 用它的 grid，否则右仓 inventory/count 别名"""
     if panel is not None:
         return panel.grid
-    return screen_regions.px_first(
-        ("inventory.right.grid", "count.grid"), GRID, img.size
-    )
+    return inventory_panel.right_grid_px(img.size)
 
 
 def columns(img: Any, panel: Any = None) -> list[tuple[int, int]] | None:
@@ -112,9 +110,7 @@ def scroll(img: Any, panel: Any = None) -> float | None:
         b = panel.scrollbar
         g = panel.grid
     else:
-        b = screen_regions.px_first(
-            ("inventory.right.scrollbar", "count.scrollbar"), SCROLLBAR, img.size
-        )
+        b = inventory_panel.right_scrollbar_px(img.size)
         g = _grid_box(img, None)
     if b[2] - b[0] < 2 or b[3] - b[1] < 20:
         return None
@@ -145,9 +141,7 @@ def page(img: Any, panel: Any = None) -> int | None:
             return None
         b = panel.page
     else:
-        b = screen_regions.px_first(
-            ("inventory.right.page", "count.page"), PAGE, img.size
-        )
+        b = inventory_panel.right_page_px(img.size)
     if b[2] - b[0] < 4 or b[3] - b[1] < 4:
         return None
     text = " ".join(

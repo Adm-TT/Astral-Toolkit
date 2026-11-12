@@ -174,13 +174,17 @@ def test_shipped_regions_equal_code_defaults():
         (entry,) = regions[key]
         assert tuple(entry["box"]) == box, key
         assert entry["aspect"] == "16:9" and entry["kind"] == "read" and entry["note"]
-    # 代码里原来的常数还在、值没变（区域文件缺了就用它们）
-    assert inspector.HOVER_REGIONS["30-50%"] == SHIPPED["hover.band_30_50"]
-    assert inspector.HOVER_REGIONS["50-70%"] == SHIPPED["hover.band_50_70"]
-    assert inspector.HOVER_REGIONS["30-70%"] == SHIPPED["hover.band_30_70"]
-    assert inspector.HOVER_REGIONS["中间"] == SHIPPED["hover.band_30_70"]
-    assert (inspector.TITLE_Y0, inspector.TITLE_Y1) == (0.24, 0.30)
-    assert (inspector.BODY_Y0, inspector.BODY_Y1) == (0.24, 0.70)
+    # 默认比例只在 inventory_panel；inspector 别名同源（区域文件缺了就用它们）
+    from astral_toolkit.trade import inventory_panel as inv
+
+    assert inv.HOVER_BANDS["30-50%"] == SHIPPED["hover.band_30_50"]
+    assert inv.HOVER_BANDS["50-70%"] == SHIPPED["hover.band_50_70"]
+    assert inv.HOVER_BANDS["30-70%"] == SHIPPED["hover.band_30_70"]
+    assert inv.HOVER_BANDS["中间"] == SHIPPED["hover.band_30_70"]
+    assert inv.TITLE_ROWS == (0.24, 0.30) and inv.BODY_ROWS == (0.24, 0.70)
+    assert inspector.HOVER_REGIONS is inv.HOVER_BANDS
+    assert (inspector.TITLE_Y0, inspector.TITLE_Y1) == inv.TITLE_ROWS
+    assert (inspector.BODY_Y0, inspector.BODY_Y1) == inv.BODY_ROWS
     assert screen.SEARCH == SHIPPED["mining.search"]
     assert signals.CENTER_TAG == SHIPPED["mining.center_tag"]
     assert displayinfo.REGION == SHIPPED["nav.displayinfo"]

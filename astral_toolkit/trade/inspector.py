@@ -13,19 +13,19 @@ import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-from ..core import screen_regions
+from . import inventory_panel
 from .names import canonical, has_chinese, split_bilingual  # noqa: F401
 
-# 物品说明框识别区域配置：按鼠标横向位置自适应分级识别
-# 只管左右；上下由 HEIGHT_STAGES 的高度阶段决定（旧行为 = 每个宽度条带都取全高 0.0 ~ 1.0）
-HOVER_REGIONS: Dict[str, Tuple[float, float, float, float]] = {
-    "30-50%": (0.30, 0.0, 0.50, 1.0),
-    "50-70%": (0.50, 0.0, 0.70, 1.0),
-    "30-70%": (0.30, 0.0, 0.70, 1.0),
-    "中间": (0.30, 0.0, 0.70, 1.0),
-    "整屏": (0.0, 0.0, 1.0, 1.0),
-}
+# 竖带默认与高度行：只在 inventory_panel；此处别名给旧测试 / bench
+HOVER_REGIONS = inventory_panel.HOVER_BANDS
 HOVER_REGION = HOVER_REGIONS["中间"]
+TITLE_Y0, TITLE_Y1 = inventory_panel.TITLE_ROWS
+BODY_Y0, BODY_Y1 = inventory_panel.BODY_ROWS
+# (顶, 底, 阶段名, native)。native=True：小块图不放大到 736，快 2~3 倍
+HEIGHT_STAGES: Tuple[Tuple[float, float, str, bool], ...] = (
+    (TITLE_Y0, TITLE_Y1, "title", True),
+    (BODY_Y0, BODY_Y1, "body", False),
+)
 
 _AMOUNT = re.compile(r"^(\d+(?:[.,]\d+)?)\s*[S5]\s*C\s*U$", re.I)
 
@@ -69,53 +69,6 @@ def get_hover_regions(
         return [(l, t, r, b, "50-70%"), fallback_region]
 
 
-# ---------------------------------------------------------------- 高度阶段级联（2026-11-04 F8 标题带方案）
-# 说明框主体大致落在屏高 24%~70%，标题中文行贴近 24%（观察值，见
-# docs/superpowers/specs/2026-11-04-f8-title-band-ocr.md §1、§3）。认物只要标题那一行，
-# 标题带专责认名；说明框带专责品质/加成与结构锚点。不再全高竖条、不再整屏 OCR（信息过多易误认）。
-# 初值，可以用样本调；改这里只用改这几行。
-TITLE_Y0 = 0.24  # 标题带顶（相对截图高）
-TITLE_Y1 = 0.30  # 标题带底（2026-11-13：按 2K 实样收紧，留名+体积/制造商锚点）
-BODY_Y0 = 0.24  # 说明框带顶
-BODY_Y1 = 0.70  # 说明框带底
-# (顶, 底, 阶段名, native)。native=True：小块图不放大到 736，快 2~3 倍
-HEIGHT_STAGES: Tuple[Tuple[float, float, str, bool], ...] = (
-    (TITLE_Y0, TITLE_Y1, "title", True),
-    (BODY_Y0, BODY_Y1, "body", False),
-)
-
-
-# 读屏开发工作台（2026-11-09）：上面这些区域可以在工作台里画，存进区域文件 screen_regions.json；
-# 运行时按截图尺寸从那里取，取不到用上面写死的值（两边初值逐位相同）。「鼠标在哪就挑哪条带」的规则还在 get_hover_regions
-_BAND_KEYS = {
-    "30-50%": "hover.band_30_50",
-    "50-70%": "hover.band_50_70",
-    "30-70%": "hover.band_30_70",
-    "中间": "hover.band_30_70",
-}
-_ROW_KEYS = {"title": "hover.title_rows", "body": "hover.body_rows"}
-
-
-def _band_lr(band: str, size: Tuple[int, int]) -> Tuple[float, float]:
-    """竖带的左右（比例）：区域文件里有就用它，没有用 HOVER_REGIONS"""
-    l, t, r, b = HOVER_REGIONS[band]  # noqa: E741
-    key = _BAND_KEYS.get(band)
-    if key:
-        l, _t, r, _b = screen_regions.frac(key, (l, t, r, b), size)  # noqa: E741
-    return l, r
-
-
-def _stage_rows(
-    stage: str, top: float, bottom: float, size: Tuple[int, int]
-) -> Tuple[float, float]:
-    """高度阶段的上下（比例）：标题带、说明框带从区域文件取，全高不变"""
-    key = _ROW_KEYS.get(stage)
-    if not key:
-        return top, bottom
-    _l, t, _r, b = screen_regions.frac(key, (0.0, top, 1.0, bottom), size)
-    return t, b
-
-
 def get_stage_regions(
     regions: List[Tuple[float, float, float, float, str]], width: int, height: int
 ) -> List[Tuple[Tuple[int, int, int, int], str, str, bool]]:
@@ -129,11 +82,11 @@ def get_stage_regions(
     """
     size = (width, height)
     out = []
-    for top, bottom, stage, native in HEIGHT_STAGES:
-        top, bottom = _stage_rows(stage, top, bottom, size)
+    for _top, _bottom, stage, native in HEIGHT_STAGES:
+        top, bottom = inventory_panel.stage_rows(stage, size)
         for left, _band_top, right, _band_bottom, band in regions:
             if band in HOVER_REGIONS:
-                left, right = _band_lr(band, size)
+                left, right = inventory_panel.band_frac(band, size)
             box = (
                 int(width * left),
                 int(height * top),
@@ -165,8 +118,12 @@ def region_box(
         y_range = (0.0, 1.0)  # 旧标签「整屏」/「@full」兼容
     if band not in HOVER_REGIONS or y_range is None:
         return None
-    left, right = _band_lr(band, (width, height))
-    y0, y1 = _stage_rows(stage_name, y_range[0], y_range[1], (width, height))
+    size = (width, height)
+    left, right = inventory_panel.band_frac(band, size)
+    if stage_name in ("title", "body"):
+        y0, y1 = inventory_panel.stage_rows(stage_name, size)
+    else:
+        y0, y1 = y_range
     return (
         int(width * left),
         int(height * y0),
