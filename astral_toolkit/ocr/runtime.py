@@ -313,13 +313,38 @@ def ensure_models() -> None:
         _download_with_retry(_one, log=logger, what=f"下载 OCR 模型 {name}")
 
 
+def _prime(eng) -> None:
+    """让刚建好的引擎先认一张画好字的小图：模型加载完，头一次真认字还要再慢一截——显卡版（DirectML）要编译，
+    实测头一次 1.1 秒、之后 0.13 秒；CPU 版头一次也多 0.15 秒左右（11-12 量的）。启动预热、切显卡 / CPU 时先做掉，
+    玩家第一次按 F8、第一次扫描就不用等。出错不管（预热不能拖垮启动）"""
+    try:
+        import numpy as np
+        from PIL import Image, ImageDraw
+
+        im = Image.new("RGB", (160, 24), (16, 16, 16))
+        ImageDraw.Draw(im).text((6, 6), "AT 1234 Quantainium", fill=(235, 235, 235))
+        im = im.resize((480, 72))  # 放大到 HUD 字的大小，找字、认字两步都真跑一遍
+        eng(
+            np.ascontiguousarray(np.asarray(im)[:, :, ::-1]),
+            use_det=True,
+            use_cls=False,
+            use_rec=True,
+        )
+    except Exception:
+        pass
+
+
 def warmup() -> None:
-    """启动时预加载识别引擎和 det/rec 模型。不返回引擎对象。"""
+    """启动时预加载识别引擎和 det/rec 模型，再认一张小图把头一次的慢做掉（_prime）。不返回引擎对象。"""
     locked = rapidocr()
     for name in ("_load_det_model", "_load_rec_model"):
         load = getattr(locked.eng, name, None)
         if callable(load):
             load()
+    with (
+        locked.lock
+    ):  # 和真识别排同一个队：预热这一下没做完，F8 等它（反正头一次都要等这么久）
+        _prime(locked.eng)
 
 
 def set_ocr_device(target):
@@ -341,6 +366,7 @@ def set_ocr_device(target):
             )
             if err:
                 _last_error = err
+            _prime(eng)  # 换进去之前先认一下：切到显卡后第一次识别不卡那一秒
             _engine.swap(eng, gpu)
             _cpu_fallback = False  # 玩家自己切过：以前显卡出错改用 CPU 的那次不算了
         return ocr_device()

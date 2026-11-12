@@ -233,3 +233,41 @@ def test_read_line_does_not_disable_detect(monkeypatch):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_warmup_primes_engine_once(monkeypatch):
+    """启动预热：模型加载完再真认一张小图（找字 + 认字都开），把头一次的慢做掉（11-12）"""
+    from astral_toolkit.ocr import runtime as R
+
+    calls = []
+
+    class FakeEng:
+        def __init__(self):
+            self.loaded = []
+
+        def _load_det_model(self):
+            self.loaded.append("det")
+
+        def _load_rec_model(self):
+            self.loaded.append("rec")
+
+        def __call__(self, arr, **kw):
+            calls.append((arr.shape, kw))
+            return None
+
+    eng = FakeEng()
+    monkeypatch.setattr(R, "_engine", R._Locked(eng))
+    R.warmup()
+    assert eng.loaded == ["det", "rec"]
+    assert len(calls) == 1 and calls[0][1]["use_det"] and calls[0][1]["use_rec"]
+    assert calls[0][0][2] == 3  # 三通道图
+
+
+def test_prime_never_raises():
+    """预热出错不管：不能拖垮启动 / 切显卡"""
+    from astral_toolkit.ocr import runtime as R
+
+    def boom(*a, **k):
+        raise RuntimeError("显卡驱动坏了")
+
+    R._prime(boom)
