@@ -370,7 +370,7 @@ def _tiny_names(monkeypatch):
     en_map = {names._fold_en(en): (zh, en) for zh, en in t.items()}
     monkeypatch.setattr(names, "table", lambda: t)
     monkeypatch.setattr(names, "_index", lambda: (zh_map, en_map))
-    monkeypatch.setattr(names, "_from_items", lambda en: None)
+    monkeypatch.setattr(names, "_from_items", lambda en, strict=False: None)
     return names
 
 
@@ -472,7 +472,9 @@ def test_strong_canonical_hits_item_catalog_english(monkeypatch):
     monkeypatch.setattr(
         names,
         "_from_items",
-        lambda en: ("", "JS-500") if (en or "").strip().upper() == "JS-500" else None,
+        lambda en, strict=False: (
+            ("", "JS-500") if (en or "").strip().upper() == "JS-500" else None
+        ),
     )
 
     assert inspector._strong_canonical(("", "JS-500")) == ("", "JS-500")
@@ -489,7 +491,9 @@ def test_title_band_stops_on_item_catalog_english(monkeypatch):
     monkeypatch.setattr(
         names,
         "_from_items",
-        lambda en: ("", "JS-500") if (en or "").strip().upper() == "JS-500" else None,
+        lambda en, strict=False: (
+            ("", "JS-500") if (en or "").strip().upper() == "JS-500" else None
+        ),
     )
 
     calls = []

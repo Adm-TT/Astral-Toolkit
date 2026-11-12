@@ -219,9 +219,11 @@ def _closest(keys, target, floor):
     return scored[0][1]
 
 
-def _from_items(en: str):
-    """物品目录英文名精确（gamedata.items.by_name）：汉化包没有中文名的型号（JS-500）也能算命中。
-    库不可用 / 查不到返回 None。顶层不 import gamedata，避免建库时循环。"""
+def _from_items(en: str, strict: bool = False):
+    """物品目录英文名（gamedata.items.by_name）：汉化包没有中文名的型号（JS-500）也能算命中。
+    库不可用 / 查不到返回 None。顶层不 import gamedata，避免建库时循环。
+    by_name 按 en_key 比，l 和 I 折在一起（ArresterIll 也对上 Arrester III）；strict=True（canonical_exact）时
+    还要英文名不折 l / I 也一样，罗马数字认混的不算精确（11-12 合 PR #18 后补）"""
     if not (en or "").strip():
         return None
     try:
@@ -231,6 +233,8 @@ def _from_items(en: str):
     except Exception:
         return None
     if row is None:
+        return None
+    if strict and _fold_en(row.en or "") != _fold_en(en):
         return None
     return (row.zh or "", row.en or en)
 
@@ -295,7 +299,7 @@ def canonical_exact(zh="", en=""):
         return zh_map[_norm_zh(zh)]
     if en and _fold_en(en) in en_map:
         return en_map[_fold_en(en)]
-    return _from_items(en)
+    return _from_items(en, strict=True)
 
 
 def _size_tail(en: str):
