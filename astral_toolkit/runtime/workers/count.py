@@ -263,9 +263,15 @@ class _CountWorker:
         v["cells"] += 1
         if off:
             v["disabled"] = v.get("disabled", 0) + 1
+        # activity=False：保留旧调用约定；现无空闲隐藏，有文案即显
         self.loop.commit(
             session,
-            ("hud.set", "盘点", self._views.hud_text(session.payload, ctx.items)),
+            (
+                "hud.set",
+                "盘点",
+                self._views.hud_text(session.payload, ctx.items),
+                False,
+            ),
             (
                 "log",
                 self._views.item_line({**r, "disabled": True} if off else r),

@@ -784,7 +784,7 @@ def test_worker_uses_analysis_views_and_links():
     worker.tick(session, ctx, 0.4)
     assert reads == [(650, 1100)]
     assert [op for op in loop.ops if op[0] == "hud.set"] == [
-        ("hud.set", "盘点", "测试站:1")
+        ("hud.set", "盘点", "测试站:1", False)
     ]
     # 每认出一格运行日志记一行（老大 11-08 定平时也记）
     assert [op for op in loop.ops if op[0] == "log"] == [

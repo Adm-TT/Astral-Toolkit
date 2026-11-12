@@ -429,12 +429,36 @@ def _count_views() -> CountViews:
     return CountViews(hud_text=hud_text, item_line=item_line)
 
 
-def _count_links(options: Mapping[str, Any]) -> CountLinks:
+def _count_live_place(pos: Any) -> tuple[str, str] | None:
+    """右上角最后认出的地点 → (中文名, 星系)；没有名字返回 None。"""
+    try:
+        _t, lab = pos.label
+    except Exception:
+        return None
+    if not lab:
+        return None
+    sysname = ""
+    try:
+        _st, sysname = pos.system
+    except Exception:
+        pass
+    return str(lab), str(sysname or "")
+
+
+def _count_links(
+    options: Mapping[str, Any],
+    *,
+    live_place_src: list[Any] | None = None,
+) -> CountLinks:
     """盘点线程要的外面的东西（目录迁移 R5：以前盘点线程在构造器里自己造、或经 `_T` / `_H` 动态去 tasks、app 取）。
     读光标（infrastructure/platform/cursor）、抓图（mining/screen）、游戏在不在前台（tasks/mining）、热键名（tasks/navigation
-    读设置，读不了就是 F6）、调试图目录（trade/debug_shots）、开始时在哪个库存地点（crafting/stockplaces；未知返回空，
-    由盘点入口提示玩家手选）、悬浮窗短提示（app/hud_state）、正在退出时不让开始（app/lifecycle_gate）都是用的时候才取；
-    overrides 给了 cursor_pos / foreground 就用给的（测试用）"""
+    读设置，读不了就是 F6）、调试图目录（trade/debug_shots）、开始时在哪个库存地点（crafting/stockplaces；没有日志地点
+    时用右上角实时地点——须对得上库存列表；仍未知返回空，由盘点入口提示玩家手选）、悬浮窗短提示（app/hud_state）、
+    正在退出时不让开始（app/lifecycle_gate）都是用的时候才取；
+    overrides 给了 cursor_pos / foreground 就用给的（测试用）。
+    live_place_src：单元素列表，build 在造好 PositionWorker 后填入「() → (label, sys) | None」。"""
+
+    live_src = live_place_src if live_place_src is not None else [None]
 
     def cursor_pos() -> tuple[int, int]:
         from .infrastructure.platform import cursor
@@ -475,6 +499,19 @@ def _count_links(options: Mapping[str, Any]) -> CountLinks:
         here = stockplaces.current_place()
         if here:
             return here["label"]
+        # 右上角实时地点：必须对得上库存地点列表才算可靠
+        getter = live_src[0]
+        if callable(getter):
+            try:
+                pack = getter()
+            except Exception:
+                pack = None
+            if isinstance(pack, (tuple, list)) and len(pack) == 2:
+                lab, sysname = pack
+                hit = stockplaces.matched_place(lab, sysname or None)
+                if hit:
+                    return hit["label"]
+        # 仍未知：不读上次入库位置（可能早已不在那儿），交给盘点入口提示玩家手选
         return ""
 
     def note(section: str, text: str) -> None:
@@ -643,12 +680,13 @@ def build(
         halo=halo_watch,
         here=here_watch,
     )
+    live_place_src: list[Any] = [None]
     count = _Count(
         results,
         output=output,
         analysis=_count_analysis(),
         views=_count_views(),
-        links=_count_links(options),
+        links=_count_links(options, live_place_src=live_place_src),
         enabled=sys.platform == "win32",
         clock=options.get("clock"),
         closing=lifecycle.is_closing,
@@ -679,6 +717,7 @@ def build(
         nav_deps=nav_deps,
         state={"warmups_enabled": True},
     )
+    live_place_src[0] = lambda: _count_live_place(app.pos)
     sources = status_sources(app)
     _register(app)
     if mode == "desktop":

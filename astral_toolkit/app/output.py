@@ -13,10 +13,13 @@ from ..runtime.session import RunFlag
 from . import bus, hud_state, ui_stream
 
 
-def _hud_set(section, text, rich=None):
+def _hud_set(section, text, rich=None, activity=True):
     hud = hud_state._hud()
     if hud is not None:
-        hud.set(section, text, rich)
+        try:
+            hud.set(section, text, rich, activity=activity)
+        except TypeError:
+            hud.set(section, text, rich)
 
 
 def _note(section, text, secs=None):
@@ -64,7 +67,15 @@ class BusOutput:
         elif kind == "ui":
             ui_stream.publish_ui(args[0], args[1])
         elif kind == "hud.set":
-            _hud_set(*args)
+            # ("hud.set", section, text[, rich][, activity])；activity 为末尾 bool
+            section, text, *rest = args
+            rich = None
+            activity = True
+            if rest and isinstance(rest[-1], bool):
+                activity = rest.pop()
+            if rest:
+                rich = rest[0]
+            _hud_set(section, text, rich, activity=activity)
         elif kind == "hud.clear":
             hud = hud_state._hud()
             if hud is not None:

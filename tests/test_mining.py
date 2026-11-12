@@ -478,7 +478,7 @@ def test_overlay_paint_rules():
         next(b for b in blocks if b["key"] == "路标")["lines"][0][1] == "已记下：矿点"
     )
     assert round(O.BODY_PX * s) == 24
-    img, busy = O.paint(secs, note="盘点结束｜数量一致", scale=s)
+    img, busy, _ch = O.paint(secs, note="盘点结束｜数量一致", scale=s)
     assert (
         not busy
         and img.mode == "RGBA"
@@ -488,8 +488,11 @@ def test_overlay_paint_rules():
     assert (
         min(alphas.getdata()) == 0 and max(alphas.getdata()) == 255
     )  # 底板外透明、字和提示不透明
-    plate = img.getpixel((img.width // 2, img.height - O.MARGIN - 3))
-    assert 150 < plate[3] < 200  # 底板 72%
+    # note 固定贴视口右下：能扫到提示胶囊底色
+    assert any(
+        p[:3] == O.NOTE_BG[:3] and p[3] == 255
+        for p in (img.getpixel((x, img.height - 3)) for x in range(img.width))
+    )
     new = dict(
         secs,
         盘点="盘点｜新巴贝奇\n铁 Q800 ×4  3.200 SCU\n塔兰导电石 Q925 ×1  0.495 SCU",
@@ -498,7 +501,7 @@ def test_overlay_paint_rules():
     more = dict(new, 扫描="金｜8,000 kg\nHelix II｜功率 60%")
     fresh = O.diff_fresh(blocks, O.layout(more, s), 100.0, {})
     assert {k for k, _ in fresh} == {"扫描"}
-    _, busy = O.paint(more, scale=s, fresh=fresh, now=100.05)
+    _, busy, _ = O.paint(more, scale=s, fresh=fresh, now=100.05)
     assert busy
     h = O.Hud()
     h.note("一")
@@ -568,10 +571,10 @@ def test_overlay_paint_rules():
         "h",
         "c",
     ]  # noqa: E741
-    img, _ = O.paint({"扫描": "x"}, scale=s, rich={"扫描": rich})
-    assert img.height > 200
+    img, _, content_h = O.paint({"扫描": "x"}, scale=s, rich={"扫描": rich})
+    assert content_h > 200 and img.height <= content_h  # 视口固定，正文可更高
     # 1.6.69：采矿助手和别的分区同时显示时不能报错（开采建议那行曾覆盖底板透明度，悬浮窗整个停掉）
-    img, _ = O.paint(
+    img, _, _ = O.paint(
         {"扫描": "x", "导航": "去 ARC-L1｜12.3 km"}, scale=s, rich={"扫描": rich}
     )
     assert 150 < img.getpixel((img.width // 2, img.height - O.MARGIN - 3))[3] < 200

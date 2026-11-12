@@ -461,22 +461,21 @@ def test_hover_ignores_chat_hud_and_markers(monkeypatch):
         ("实准枪口补偿器2", "VeraCompensator2"),
         True,
     )
-    # 新识别机制：高度阶段级联（标题带 24%~36% -> 说明框带 24%~70% -> 全高）
-    # × 宽度条带（首选局部 -> 备选局部 30~70%），最后全屏兜底
-    # 什么都没见到时只认前两档（标题带、说明框带）× 2 个宽度条带，全高不认（2026-11-07 PR #17 跟进）
-    STAGE_CROPS = 4
+    # 新识别机制：标题带 24%~36% → 说明框带 24%~70% × 宽度条带；不再全高/整屏
+    STAGE_CROPS = 4  # 2 个高度阶段 × 2 个宽度条带
     calls = []
 
     def fake(img, urgent=False, offset=(0, 0), native=False):
         calls.append(offset)
-        return [] if len(calls) <= STAGE_CROPS else chat + marker + hud
+        return chat + marker + hud
 
     monkeypatch.setattr(ocr, "recognize", fake)
     img = Image.new("RGB", (1920, 1080))
     toks, name, where = t_hover._read_tooltip(img, (100, 540))
-    assert name is None and where == "整屏" and len(calls) == STAGE_CROPS + 1
+    assert name is None and len(calls) == STAGE_CROPS
+    assert "整屏" not in str(where)
     calls.clear()
-    # 标题带两个条带没认到，说明框带看到完整说明框（英文下面紧跟体积）就停，不走全高和整屏
+    # 标题带两个条带没认到，说明框带看到完整说明框（英文下面紧跟体积）就停
     monkeypatch.setattr(
         ocr,
         "recognize",
@@ -486,7 +485,7 @@ def test_hover_ignores_chat_hud_and_markers(monkeypatch):
     )
     toks, name, where = t_hover._read_tooltip(img, (100, 540))
     assert name == ("实准枪口补偿器2", "VeraCompensator2") and where == "30-50%@body"
-    # 鼠标在中间（30%~70%）、级联各档连说明框特征都没有：多半是驾驶位上按的 F8，不进整屏兜底（1.1.1 的驾驶位保护）
+    # 鼠标在中间：级联跑完仍无名字，也不整屏
     calls.clear()
 
     def fake_nothing(img, urgent=False, offset=(0, 0), native=False):

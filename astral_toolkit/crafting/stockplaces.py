@@ -217,6 +217,12 @@ def match(text, system=None):
     return hits[0] if len(hits) == 1 else None
 
 
+def matched_place(text, system=None):
+    """读屏/手打地点 → 库存列表里的已知站（public）；对不上不做 custom，返回 None"""
+    p = match(text, system)
+    return public(p) if p else None
+
+
 def by_label(label):
     return next((p for p in places() if p["label"] == label), None)
 

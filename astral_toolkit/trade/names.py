@@ -219,9 +219,25 @@ def _closest(keys, target, floor):
     return scored[0][1]
 
 
+def _from_items(en: str):
+    """物品目录英文名精确（gamedata.items.by_name）：汉化包没有中文名的型号（JS-500）也能算命中。
+    库不可用 / 查不到返回 None。顶层不 import gamedata，避免建库时循环。"""
+    if not (en or "").strip():
+        return None
+    try:
+        from ..gamedata import items as gd_items
+
+        row = gd_items.by_name(en)
+    except Exception:
+        return None
+    if row is None:
+        return None
+    return (row.zh or "", row.en or en)
+
+
 def canonical(zh="", en=""):
     """OCR 认出的名字 → 汉化包里的标准 (中文名, 英文名)；对不上返回 None。
-    顺序：拆开中英连写 → 矿物（精确）→ 英文名精确 → 中文名精确 → 英文名 l 当 i 精确 → 英文名近似 → 矿名错一个字
+    顺序：拆开中英连写 → 矿物（精确）→ 英文名精确 → 中文名精确 → 物品目录英文精确 → 英文名 l 当 i 精确 → 英文名近似 → 矿名错一个字
     → 中文名近似（错一两个字、丢一个字）。原矿 / 矿石名（塔兰导电石原矿、铁原矿）只认汉化包里精确的那条，不认成精炼的矿
     （老大 2026-11-08 定原矿、精炼分开）"""
     zh, en = (zh or "").strip(), (en or "").strip()
@@ -235,6 +251,9 @@ def canonical(zh="", en=""):
         return en_map[_fold_en(en)]
     if zh and _norm_zh(zh) in zh_map:
         return zh_map[_norm_zh(zh)]
+    hit = _from_items(en)
+    if hit:
+        return hit
     if en:  # 英文行 l 和 I 认混（导弹名里的罗马数字 III 认成 Ill，RD-B2 2026-11-06）：l 当 i 再精确比一次
         hit = _loose_en().get(_fold_en_loose(en))
         if hit:
@@ -257,13 +276,13 @@ def canonical(zh="", en=""):
 
 
 def canonical_exact(zh="", en=""):
-    """精确命中汉化包 / 矿物表的 (中文名, 英文名)；对不上返回 None。
+    """标题带「高把握库命中」：精确 + 英文高把握模糊；中文弱模糊不算。
 
-    和 canonical() 的区别是**不做模糊**：英文近似（ratio≥0.9）、矿名错一个字、中文近似（ratio≥0.75）
-    那几档都不算。F8 标题带裁切阶段用它判断「高把握库命中」——弱模糊命中不算，宁可再放大一档裁切
-    （见 docs/superpowers/specs/2026-11-04-f8-title-band-ocr.md §4）。
-    顺序：拆中英连写 → 矿物（精确）→ 中文名规整精确 → 英文名折叠精确。中文标题行在英文行上面、先看它，
-    中文没精确对上才用英文行兜（英文很少认错）。
+    和 canonical() 的区别：**不算**矿名错一个字、中文近似（ratio≥0.75）。
+    英文折叠后长度≥6、相似度≥0.9 且明显比第二名更像时，也算高把握（OCR 偶发错一两个字母；
+    见 docs/superpowers/specs/2026-11-04-f8-title-band-ocr.md §4）。
+    顺序：拆中英连写 → 矿物（精确）→ 中文名规整精确 → 英文名折叠精确 → 物品目录英文精确
+    → 英文名近似（≥0.9 且唯一）。汉化包没有中文名的短型号（JS-500）靠物品目录英文精确。
     """
     zh, en = (zh or "").strip(), (en or "").strip()
     if zh and not en:
@@ -276,6 +295,13 @@ def canonical_exact(zh="", en=""):
         return zh_map[_norm_zh(zh)]
     if en and _fold_en(en) in en_map:
         return en_map[_fold_en(en)]
+    hit = _from_items(en)
+    if hit:
+        return hit
+    if en and len(_fold_en(en)) >= 6:
+        k = _closest(en_map, _fold_en(en), 0.9)
+        if k:
+            return en_map[k]
     return None
 
 

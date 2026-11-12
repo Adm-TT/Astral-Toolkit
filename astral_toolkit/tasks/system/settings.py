@@ -46,14 +46,6 @@ def hotkey_conflicts(cfg=None):
     return out
 
 
-def overlay_move(on=False):
-    """「移动悬浮窗」：打开时悬浮窗能拖动（不穿透），关上恢复鼠标穿透"""
-    h = _hud()
-    if h and hasattr(h, "set_movable"):
-        h.set_movable(bool(on))
-    return {"on": bool(on)}
-
-
 def set_settings(sources: StatusSources, /, **kw):
     from ...core import settings
     from .status import status

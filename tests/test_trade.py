@@ -1210,6 +1210,7 @@ def test_tooltip_double_picks_bright():
         pytest.skip("没装 OCR")
     img = Image.open(d / "hover_double.jpg").convert("RGB")
     _toks, name, _where = _read_tooltip(img, (1950, 820))
+    assert name is not None
     assert canonical(*name)[1] == "Pyro RYT Multi-Tool", name
 
 

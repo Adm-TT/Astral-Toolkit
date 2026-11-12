@@ -2809,9 +2809,8 @@ PAGES.settings = () => {
     <h2>外观</h2>
     <div class="panel"><div class="set" style="border:0;padding:0"><div>主题</div>${segH("ui-theme", [["dark", "深色"], ["light", "浅色"]], c.theme === "light" ? "light" : "dark", "主题")}</div></div>
     <h2>游戏悬浮窗</h2>
-    <div class="panel"><div class="set" style="border:0;padding:0"><div>移动悬浮窗
-      <p>悬浮窗默认鼠标穿透，不影响游戏操作。开启此开关后可拖动悬浮窗，调整完成后关闭。</p></div>
-      <button class="switch ${state.overlayMove ? "on" : ""}" id="ov-move" aria-label="移动悬浮窗"></button></div>
+    <div class="panel"><div class="set" style="border:0;padding:0"><div>位置与滚动
+      <p>采矿、导航、盘点等功能开始往悬浮窗写字时显示；有文案就保持显示，全部清空或点右上角 × 才隐藏（不再空闲自动隐藏）。默认落在游戏窗口顶边偏中，宽度约画面 40%，高度跟内容、最多约画面高 20%；顶栏左手柄长按拖动（位置会记住）、右侧 × 清空并藏起。文案窗盖住的区域可点（点不到游戏）；内容超出高度上限时可在窗上滚轮查看。</p></div></div>
       <div class="set"><div>大小</div>${segH("ov-scale", [["0.5", "50%"], ["0.75", "75%"], ["1", "100%"]], String(Math.min(1, +(c.hud_scale ?? 1))), "悬浮窗大小")}</div>
       <div class="set"><div>底板</div>${segH("ov-plate", [["0.6", "浅"], ["0.72", "标准"], ["0.85", "深"]], String(+(c.hud_plate ?? 0.72)), "底板")}</div>
       <div class="set"><div>配色</div>${segH("ov-theme", [["默认", "默认"], ["蓝金", "蓝金"], ["浅色", "浅色"]], c.hud_theme || "默认", "悬浮窗配色")}</div></div>
@@ -2925,12 +2924,6 @@ PAGES.settings = () => {
     }
     try { state.status.settings = await api("set_settings", { mining_idle_close: seconds }); el.value = state.status.settings.mining_idle_close; toast("已保存"); }
     catch (err) { el.value = state.status.settings.mining_idle_close ?? 120; toast(err.message); }
-  };
-  $("#ov-move").onclick = async () => {
-    state.overlayMove = !state.overlayMove;
-    await api("overlay_move", { on: state.overlayMove });
-    toast(state.overlayMove ? "可拖动悬浮窗，调整完成后关闭开关" : "悬浮窗已恢复鼠标穿透");
-    renderPage();
   };
   const upgList = (r) => {
     const el = $("#upg-found");

@@ -39,10 +39,6 @@ def feedback_clear(**kw):
     return _t.feedback_clear(**kw)
 
 
-def overlay_move(**kw):
-    return _t.overlay_move(**kw)
-
-
 def update_data(**kw):
     return _t.update_data(**kw)
 
@@ -120,7 +116,6 @@ ROUTES = {
     "feedback_list": feedback_list,
     "feedback_export": feedback_export,
     "feedback_clear": feedback_clear,
-    "overlay_move": overlay_move,
     "update_data": update_data,
     "about_info": about_info,
     "open_source_site": open_source_site,

@@ -845,6 +845,19 @@ def test_count_analysis_views_and_links_are_wired_by_bootstrap(monkeypatch):
         monkeypatch.setattr(nav_tasks, "settings_key", boom)
         assert links.hotkey() == "F6"
         monkeypatch.setattr(stockplaces, "current_place", lambda: None)
+        # 实时地点对得上库存列表 → 直接用（不必开过库存）
+        app.pos.label = (0.0, "新巴贝奇")
+        app.pos.system = (0.0, "Stanton")
+        monkeypatch.setattr(
+            stockplaces,
+            "matched_place",
+            lambda text, system=None: (
+                {"label": "新巴贝奇"} if text == "新巴贝奇" else None
+            ),
+        )
+        assert links.place_now() == "新巴贝奇"
+        # 实时对不上 → 仍未知（不退回上次入库位置，由盘点入口提示玩家手选）
+        app.pos.label = (0.0, "附近")
         monkeypatch.setattr(
             trade_tasks, "trade", lambda: SimpleNamespace(db={"last_location": "某处"})
         )
