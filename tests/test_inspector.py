@@ -374,23 +374,31 @@ def _tiny_names(monkeypatch):
     return names
 
 
-def test_canonical_exact_english_fuzzy_unique(monkeypatch):
-    """标题带库精确：英文≥0.9 且唯一算高把握；中文弱模糊仍不算；英文太糊也不算"""
+def test_canonical_title_english_fuzzy_unique(monkeypatch):
+    """F8 标题带停不停（canonical_title）：英文≥0.9 且唯一算高把握；中文弱模糊不算；英文太糊不算；
+    canonical_exact 不做模糊（配物品、盘点用，11-12 合 PR #18 后收窄）"""
     names = _tiny_names(monkeypatch)
-    monkeypatch.setattr(
-        names, "_from_items", lambda en: None
-    )  # 不走物品目录，专测汉化表
+    t = {
+        "实准枪口补偿器2": "VeraCompensator2",
+        "高精度瞄准镜": "PrecisionScopeAdvanced",
+    }
+    zh_map = {names._norm_zh(zh): (zh, en) for zh, en in t.items()}
+    en_map = {names._fold_en(en): (zh, en) for zh, en in t.items()}
+    monkeypatch.setattr(names, "_index", lambda: (zh_map, en_map))
     assert names.canonical_exact("实准枪口补偿器2") == (
         "实准枪口补偿器2",
         "VeraCompensator2",
     )  # 中文规整精确
-    # 英文 OCR 少两三个字母、仍≥0.9 且库里唯一 → 标题带可停
-    assert names.canonical_exact("实准枪口补偿器", "VeraCompensato") == (
-        "实准枪口补偿器2",
-        "VeraCompensator2",
+    # 英文 OCR 错两个字母、末尾没有尺寸：标题带可停，但 canonical_exact 不算
+    assert names.canonical_title("", "PrecisionScopeAdvancad") == (
+        "高精度瞄准镜",
+        "PrecisionScopeAdvanced",
     )
+    assert names.canonical_exact("", "PrecisionScopeAdvancad") is None
+    # 丢了末尾的尺寸「2」：差的正是尺寸，标题带也不停（接着放大认）
+    assert names.canonical_title("实准枪口补偿器", "VeraCompensato") is None
     # 中文弱模糊（缺「2」）且英文太糊：不算高把握
-    assert names.canonical_exact("实准枪口补偿器", "VeraCompens") is None
+    assert names.canonical_title("实准枪口补偿器", "VeraCompens") is None
     assert names.canonical("实准枪口补偿器") == (
         "实准枪口补偿器2",
         "VeraCompensator2",
@@ -403,7 +411,25 @@ def test_canonical_exact_english_fuzzy_unique(monkeypatch):
         "塔兰导电石",
         "Taranite",
     )  # 矿物精确
-    assert names.canonical_exact() is None
+    assert names.canonical_exact() is None and names.canonical_title() is None
+
+
+def test_canonical_title_keeps_roman_size(monkeypatch):
+    """只差罗马数字的两件（Ignite I / II）：Ignite Il（l 当 I 是 II）不能模糊成 Ignite I；
+    末尾罗马数字一样才走模糊档（老大 11-09：尺寸是关键数据，不许认错）"""
+    names = _tiny_names(monkeypatch)
+    t = {"点火I": "Ignite I", "点火II": "Ignite II", "抑制器III": "Suppressor III"}
+    zh_map = {names._norm_zh(zh): (zh, en) for zh, en in t.items()}
+    en_map = {names._fold_en(en): (zh, en) for zh, en in t.items()}
+    monkeypatch.setattr(names, "_index", lambda: (zh_map, en_map))
+    assert names._size_tail("Ignite Il") == ("r", "II")
+    assert names._size_tail("VeraCompensator2") == ("d", "2")
+    assert names._size_tail("Ignite") is None
+    for ocr in ("Ignit I", "Ignitr II", "Igmite Il"):
+        hit = names.canonical_title("", ocr)
+        assert hit is None or names._size_tail(hit[1]) == names._size_tail(ocr), ocr
+    assert names.canonical_title("", "Supressor III") == ("抑制器III", "Suppressor III")
+    assert names.canonical_title("", "Supressor II") is None
 
 
 def test_js500_english_code_is_en_name():

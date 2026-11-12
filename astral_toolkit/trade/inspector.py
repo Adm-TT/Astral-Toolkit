@@ -564,14 +564,14 @@ def _hover_log(crop, tokens, name, note=""):
 def _strong_canonical(name):
     """这次认出的名字是不是「高把握库命中」：是就返回标准 (中文名, 英文名)，否则 None。
 
-    走 names.canonical_exact：汉化/矿物/物品目录精确，以及英文≥0.9 且唯一的高把握模糊。
+    走 names.canonical_title：汉化/矿物/物品目录精确，以及英文≥0.9 且唯一、末尾尺寸 / 罗马数字一样的高把握模糊。
     中文弱模糊（ratio≥0.75）不算，避免标题带误停（docs/superpowers/specs/2026-11-04-f8-title-band-ocr.md §4）。
     """
     if not name:
         return None
-    from .names import canonical_exact
+    from .names import canonical_title
 
-    return canonical_exact(*name)
+    return canonical_title(*name)
 
 
 def _debug_on() -> bool:

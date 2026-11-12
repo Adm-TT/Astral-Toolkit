@@ -276,13 +276,13 @@ def canonical(zh="", en=""):
 
 
 def canonical_exact(zh="", en=""):
-    """标题带「高把握库命中」：精确 + 英文高把握模糊；中文弱模糊不算。
+    """精确命中汉化包 / 矿物表 / 物品目录的 (中文名, 英文名)；对不上返回 None。**不做模糊**。
 
-    和 canonical() 的区别：**不算**矿名错一个字、中文近似（ratio≥0.75）。
-    英文折叠后长度≥6、相似度≥0.9 且明显比第二名更像时，也算高把握（OCR 偶发错一两个字母；
-    见 docs/superpowers/specs/2026-11-04-f8-title-band-ocr.md §4）。
+    F8 配物品（matching 的「认准了」）、盘点（库里有没有这件）、维科洛都用它判断「名字认准了」：
+    只差一个罗马数字 / 尺寸数字的两件（Ignite I / II）模糊比起来超过 0.9，放进来会配成另一件
+    （老大 11-09 定：尺寸是关键数据，不许认错）。F8 标题带「停不停」要宽一点，用 canonical_title。
     顺序：拆中英连写 → 矿物（精确）→ 中文名规整精确 → 英文名折叠精确 → 物品目录英文精确
-    → 英文名近似（≥0.9 且唯一）。汉化包没有中文名的短型号（JS-500）靠物品目录英文精确。
+    （汉化包没有中文名的短型号 JS-500 靠物品目录，PR #18 加）。
     """
     zh, en = (zh or "").strip(), (en or "").strip()
     if zh and not en:
@@ -295,14 +295,42 @@ def canonical_exact(zh="", en=""):
         return zh_map[_norm_zh(zh)]
     if en and _fold_en(en) in en_map:
         return en_map[_fold_en(en)]
-    hit = _from_items(en)
+    return _from_items(en)
+
+
+def _size_tail(en: str):
+    """英文名末尾的尺寸 / 型号：数字（Compensator2、S3 的 3）或单独一截罗马数字（Ignite II，l 当 I）；没有是 None"""
+    s = (en or "").strip()
+    m = re.search(r"(\d+)$", s)
+    if m:
+        return ("d", m.group(1))
+    m = re.search(r"[\s\-]([IVXl]{1,4})$", s)
+    if m:
+        return ("r", m.group(1).upper().replace("L", "I"))
+    return None
+
+
+def canonical_title(zh="", en=""):
+    """F8 标题带「高把握、可以停」：canonical_exact，加英文高把握模糊——折叠后长度≥6、相似度≥0.9 且明显比
+    第二名像（OCR 偶发错一两个字母；PR #18，docs/superpowers/specs/2026-11-04-f8-title-band-ocr.md §4）。
+    模糊这一档末尾的尺寸 / 罗马数字两边得一样（都没有也行）：Ignite I 认成 Ignite Il、Compensator2 丢了 2，
+    都不算可以停，接着放大认（11-12 合 PR #18 后收窄）。只给标题带判断停不停用，配物品、盘点用 canonical_exact。"""
+    hit = canonical_exact(zh, en)
     if hit:
         return hit
-    if en and len(_fold_en(en)) >= 6:
-        k = _closest(en_map, _fold_en(en), 0.9)
-        if k:
-            return en_map[k]
-    return None
+    zh, en = (zh or "").strip(), (en or "").strip()
+    if zh and not en:
+        zh, en = split_bilingual(zh)
+    if not en or len(_fold_en(en)) < 6:
+        return None
+    _zh_map, en_map = _index()
+    k = _closest(en_map, _fold_en(en), 0.9)
+    if not k:
+        return None
+    hit = en_map[k]
+    if _size_tail(en) != _size_tail(hit[1]):
+        return None
+    return hit
 
 
 # 原矿 / 矿石名的写法：末尾「(Raw)」「(Ore)」「(R)」（市场上的中文名也有「（原矿）」「（矿石）」），或开头「Raw 」（原冰 Raw Ice）
