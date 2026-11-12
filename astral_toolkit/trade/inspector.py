@@ -2,7 +2,7 @@
 
 专职负责游戏内鼠标悬停时物品格与说明框（Tooltip）的视觉特征提取与结构化解析：
 1. 鼠标横向位置自适应分级识别区域划分 (get_hover_regions)；
-2. 物品说明框 OCR 与名称提取 (_read_tooltip：标题带 → 说明框带 → 全高的裁切级联)；
+2. 物品说明框 OCR 与名称提取 (_read_tooltip：标题带 → 说明框带)；
 3. 品质提取 (tooltip_quality, tooltip_row, cell_labels, parse_qlabel)；
 4. 数量与 SCU 容积解析 (parse_count, tooltip_row)；
 5. 蓝图制造品各槽位品质逆向反推；
@@ -867,6 +867,7 @@ def inspect_item(
     body_box=None,
 ) -> Optional[Dict[str, Any]]:
     """识别鼠标悬停的物品格与说明框，返回结构化字典或 None。
+    矿物在标题带停下且品质或 SCU 行缺失时，会补扫说明框带再解析。
     whole_screen=False（F8 第一遍）：说明框条带都没认出时不整屏兜底，由调用方等一下再截一次。
     craft_override=True（F6 盘点用）：制造品的加成和蓝图完全对上时，用倒推出的品质和各槽品质，
     读到的品质数字也让位（和 1.1.1 盘点一样）；F8 默认只在没读到品质数字时才倒推。
@@ -922,18 +923,22 @@ def inspect_item(
         if row_q is None:
             row_q = tooltip_quality(tokens)
             q_from_row_label = row_q is not None
-        # 标题带停下：品质/加成多在说明框正文，缺品质时补扫 body（制造品加成也走这里）
-        if (
+        # 标题带停下：品质/加成多在说明框正文；非矿物缺品质、矿物缺品质或 SCU 时补扫 body
+        need_body_metrics = (
             isinstance(where, str)
             and where.endswith("@title")
-            and not mineral
-            and row_q is None
-        ):
+            and (
+                (not mineral and row_q is None)
+                or (mineral and (row_q is None or row_amt is None))
+            )
+        )
+        if need_body_metrics:
             body = _tooltip_body_tokens(img, cursor, where, body_box)
             if body:
                 tokens = body
                 body_rescanned = True
                 row_q, row_amt = tooltip_row(tokens)
+                q_from_row_label = False
                 if row_q is None:
                     row_q = tooltip_quality(tokens)
                     q_from_row_label = row_q is not None

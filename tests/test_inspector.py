@@ -626,6 +626,74 @@ def test_no_extra_scan_when_no_blueprint_or_bonus_in_tokens(monkeypatch):
         assert res["tokens"] is title, where  # 没用补认的那份，还是原来识别到的
 
 
+def test_mineral_title_hit_rescans_body_for_quality_and_scu(monkeypatch):
+    """矿物标题带库命中：标题 tokens 无品质/SCU 时仍补扫 body（契约 2026-11-11 §4.3）"""
+    from astral_toolkit import ocr
+    from astral_toolkit.trade import inspector
+
+    title = [
+        OcrToken("塔兰导电石", 90, (350, 40, 100, 18)),
+        OcrToken("Taranite", 90, (350, 64, 100, 18)),
+    ]
+    body = title + [
+        OcrToken("体积：1000000uSCU", 90, (350, 120, 100, 18)),
+        OcrToken("925", 90, (500, 400, 30, 16)),
+        OcrToken("0.495SCU", 90, (540, 400, 60, 16)),
+    ]
+    calls = []
+    monkeypatch.setattr(
+        ocr,
+        "recognize",
+        lambda img, urgent=False, offset=(0, 0), native=False: calls.append(1) or body,
+    )
+    monkeypatch.setattr(
+        inspector,
+        "_read_tooltip",
+        lambda img, cur: (title, ("塔兰导电石", "Taranite"), "30-50%@title"),
+    )
+    monkeypatch.setattr(inspector, "cell_labels", lambda *a, **k: (None, None))
+    monkeypatch.setattr(inspector, "_is_mineral", lambda zh, en, fuzzy=True: True)
+    res = inspector.inspect_item(MockImage(), (400, 500))
+    assert res is not None
+    assert calls == [1], "矿物标题停名后应补扫 body 一次"
+    assert res["quality"] == 925
+    assert res["qty"] == 0.495 and res["unit"] == "SCU"
+    assert res["where"].endswith("@title")
+
+
+def test_mineral_title_hit_skips_body_rescan_when_quality_and_scu_present(
+    monkeypatch,
+):
+    """矿物标题带库命中且标题 tokens 已有品质/SCU：不补扫 body"""
+    from astral_toolkit import ocr
+    from astral_toolkit.trade import inspector
+
+    title = [
+        OcrToken("塔兰导电石", 90, (350, 40, 100, 18)),
+        OcrToken("Taranite", 90, (350, 64, 100, 18)),
+        OcrToken("925", 90, (500, 400, 30, 16)),
+        OcrToken("0.495SCU", 90, (540, 400, 60, 16)),
+    ]
+    calls = []
+    monkeypatch.setattr(
+        ocr,
+        "recognize",
+        lambda img, urgent=False, offset=(0, 0), native=False: calls.append(1) or title,
+    )
+    monkeypatch.setattr(
+        inspector,
+        "_read_tooltip",
+        lambda img, cur: (title, ("塔兰导电石", "Taranite"), "30-50%@title"),
+    )
+    monkeypatch.setattr(inspector, "cell_labels", lambda *a, **k: (None, None))
+    monkeypatch.setattr(inspector, "_is_mineral", lambda zh, en, fuzzy=True: True)
+    res = inspector.inspect_item(MockImage(), (400, 500))
+    assert res is not None
+    assert calls == []
+    assert res["quality"] == 925
+    assert res["qty"] == 0.495 and res["unit"] == "SCU"
+
+
 def test_debug_mode_logs_read_tooltip_path(monkeypatch):
     """调试模式开着：_read_tooltip 每档裁切与停因记进调试日志文件（logs/debug_日期.log）；关着不记。
     细节只进文件、不进窗口运行日志（2026-11-08 老大定）"""
