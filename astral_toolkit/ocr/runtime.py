@@ -14,9 +14,10 @@ OCR_THREADS = max(2, min(6, (os.cpu_count() or 4)))
 USE_GPU = (
     os.environ.get("DUBHE_OCR_CPU") != "1"
 )  # 设置里选了显卡、电脑也能用显卡（DirectML）才用，用不了自动用 CPU。环境变量 DUBHE_OCR_CPU=1 强制 CPU（对比测速用）
-# PP-OCRv6 档位：主路径 tiny；样本对比不达标时按方案 §7 改为 small（det+rec 一致）
+# PP-OCRv6 档位：small（det+rec 一致）。11-12 老大定：tiny 样本对比不达标（右上角 Stanton 的 S 认成 5、雷达少读、
+# 中文名更糊、扫描面板抗性 0 认成 9），按方案 §7 改 small；small 295 张样本不比旧引擎差、还快
 OCR_VERSION = "PP-OCRv6"
-MODEL_TYPE = "tiny"
+MODEL_TYPE = "small"
 _engine = None
 _lock = threading.RLock()
 _last_error = ""
@@ -179,7 +180,7 @@ class _Locked:
 
 
 def _engine_params(gpu: bool) -> dict:
-    """新版 rapidocr 构造参数：PP-OCRv6 tiny（或 MODEL_TYPE）+ 线程 + 关 cls；显卡时整引擎 use_dml。"""
+    """新版 rapidocr 构造参数：PP-OCRv6 MODEL_TYPE（small）+ 线程 + 关 cls；显卡时整引擎 use_dml。"""
     from rapidocr import EngineType, ModelType, OCRVersion
 
     params = {
@@ -267,7 +268,7 @@ def _download_with_retry(run, *, log, what: str) -> None:
 
 
 def ensure_models() -> None:
-    """把 PP-OCRv6 tiny 的 det/rec onnx 下进 rapidocr/models（已存在则校验跳过）。
+    """把 PP-OCRv6 MODEL_TYPE 档的 det/rec onnx 下进 rapidocr/models（已存在则校验跳过）。
     打包和源码安装都要调，避免玩家第一次认字时联网。"""
     from pathlib import Path
 

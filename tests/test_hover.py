@@ -119,7 +119,9 @@ def _names(monkeypatch, pairs):
     en_map = {names._fold_en(en): (zh, en) for zh, en in t.items()}
     monkeypatch.setattr(names, "table", lambda: t)
     monkeypatch.setattr(names, "_index", lambda: (zh_map, en_map))
-    monkeypatch.setattr(names, "_from_items", lambda en: None)  # 不走本机物品目录
+    monkeypatch.setattr(
+        names, "_from_items", lambda en, strict=False: None
+    )  # 不走本机物品目录
 
 
 class TestReadTooltipExecution(unittest.TestCase):
@@ -240,13 +242,13 @@ def test_title_stage_falls_back_to_english_line(monkeypatch):
     assert name == ("实准枪口补偿器", "VeraCompensator2")
 
 
-def test_title_stage_stops_on_english_fuzzy_unique(monkeypatch):
-    """中文弱模糊但英文≥0.9 且唯一：标题带算库精确，第一次就停"""
+def test_title_stage_does_not_stop_when_size_lost(monkeypatch):
+    """中文弱模糊、英文≥0.9 但丢的正好是末尾的尺寸「2」：标题带不算高把握，不停（11-12 合 PR #18 后收窄：
+    尺寸 / 罗马数字是关键数据）；英文≥0.9 且尺寸一样才停，见 test_inspector 的 canonical_title"""
     _names(monkeypatch, {"实准枪口补偿器2": "VeraCompensator2"})
     calls = _fake_ocr(monkeypatch, [_WEAK_EN_OK])
     toks, name, where = _read_tooltip(MockImage(1000, 1000), (100, 500))
-    assert where == "30-50%@title" and len(calls) == 1
-    assert name == ("实准枪口补偿器", "VeraCompensato")
+    assert not str(where).endswith("@title") and len(calls) > 1
 
 
 def test_title_stage_does_not_stop_on_weak_fuzzy(monkeypatch):
@@ -269,7 +271,9 @@ def test_weak_fuzzy_still_resolved_later(monkeypatch):
     assert res["raw"] == ("实准枪口补偿器", "VeraCompensato")
     assert (res["zh"], res["en"]) == ("实准枪口补偿器2", "VeraCompensator2")
     assert res["sure"]
-    assert str(res["where"]).endswith("@title")
+    assert not str(res["where"]).endswith(
+        "@title"
+    )  # 丢了尺寸：标题带不停，放大后再纠正
 
 
 def test_body_stage_stops_on_anchor_without_library_hit(monkeypatch):

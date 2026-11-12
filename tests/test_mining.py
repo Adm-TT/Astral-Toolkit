@@ -572,7 +572,8 @@ def test_overlay_paint_rules():
         "c",
     ]  # noqa: E741
     img, _, content_h = O.paint({"扫描": "x"}, scale=s, rich={"扫描": rich})
-    assert content_h > 200 and img.height <= content_h  # 视口固定，正文可更高
+    # 视口固定，正文可更高；图上面另有顶栏（手柄 + 关闭，PR #18 后加的，这条断言当时没跟着改）
+    assert content_h > 200 and img.height <= content_h + O.chrome_height(s)
     # 1.6.69：采矿助手和别的分区同时显示时不能报错（开采建议那行曾覆盖底板透明度，悬浮窗整个停掉）
     img, _, _ = O.paint(
         {"扫描": "x", "导航": "去 ARC-L1｜12.3 km"}, scale=s, rich={"扫描": rich}
