@@ -1,5 +1,5 @@
 {
-  "version": 8,
+  "version": 9,
   "regions": {
     "hover.band_30_50": [
       {
@@ -47,10 +47,10 @@
           0,
           0.24,
           1,
-          0.36
+          0.3
         ],
         "kind": "read",
-        "note": "说明框标题那几行的上下（原 inspector.TITLE_Y0 / TITLE_Y1）；左右不用"
+        "note": "说明框标题上下（2026-11-13 收紧到 0.24~0.30：中英文名+体积/制造商锚点；左右不用）"
       }
     ],
     "hover.body_rows": [

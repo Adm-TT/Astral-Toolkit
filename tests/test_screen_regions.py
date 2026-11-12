@@ -152,7 +152,7 @@ SHIPPED = {
     "hover.band_30_50": (0.30, 0.0, 0.50, 1.0),
     "hover.band_50_70": (0.50, 0.0, 0.70, 1.0),
     "hover.band_30_70": (0.30, 0.0, 0.70, 1.0),
-    "hover.title_rows": (0.0, 0.24, 1.0, 0.36),
+    "hover.title_rows": (0.0, 0.24, 1.0, 0.3),
     "hover.body_rows": (0.0, 0.24, 1.0, 0.70),
     "mining.search": (0.55, 0.33, 1.0, 0.80),
     "mining.center_tag": (0.42, 0.30, 0.58, 0.47),
@@ -179,7 +179,7 @@ def test_shipped_regions_equal_code_defaults():
     assert inspector.HOVER_REGIONS["50-70%"] == SHIPPED["hover.band_50_70"]
     assert inspector.HOVER_REGIONS["30-70%"] == SHIPPED["hover.band_30_70"]
     assert inspector.HOVER_REGIONS["中间"] == SHIPPED["hover.band_30_70"]
-    assert (inspector.TITLE_Y0, inspector.TITLE_Y1) == (0.24, 0.36)
+    assert (inspector.TITLE_Y0, inspector.TITLE_Y1) == (0.24, 0.30)
     assert (inspector.BODY_Y0, inspector.BODY_Y1) == (0.24, 0.70)
     assert screen.SEARCH == SHIPPED["mining.search"]
     assert signals.CENTER_TAG == SHIPPED["mining.center_tag"]
@@ -199,7 +199,7 @@ def test_readers_follow_the_region_file(tmp_path, monkeypatch):
         (int(W * 0.8), H // 2), W
     )  # 鼠标在右边：先找 50-70% 带
     before = inspector.get_stage_regions(regs, W, H)
-    assert before[0][0] == (int(W * 0.5), int(H * 0.24), int(W * 0.7), int(H * 0.36))
+    assert before[0][0] == (int(W * 0.5), int(H * 0.24), int(W * 0.7), int(H * 0.30))
 
     entry = lambda box: [{"aspect": "16:9", "box": box, "kind": "read", "note": "测试"}]  # noqa: E731
     _use(

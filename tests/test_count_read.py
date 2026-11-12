@@ -54,9 +54,9 @@ def test_title_hit_reads_only_title_strip(monkeypatch):
     )
     assert calls["inspect"]["where"] == "盘点说明框@title"
     assert calls["inspect"]["body_box"] == box and calls["inspect"]["craft"] is True
-    # 标题那截在 count.tooltip 里面、高度是屏高 24%~36%
+    # 标题那截在 count.tooltip 里面、高度是屏高 24%~30%
     assert box[0] == title[0] and box[2] == title[2]
-    assert title[1] == int(1440 * 0.24) and title[3] == int(1440 * 0.36)
+    assert title[1] == int(1440 * 0.24) and title[3] == int(1440 * 0.30)
 
 
 def test_title_hit_accepts_l_for_i_but_not_near_names(monkeypatch):
@@ -94,7 +94,7 @@ def test_region_follows_screen_regions(monkeypatch):
     from astral_toolkit.core import screen_regions
     from astral_toolkit.tasks import count
 
-    tip = (0.1, 0.3, 0.2, 0.5)
+    tip = (0.1, 0.2, 0.2, 0.5)  # 上沿低于标题带底 0.30，才能裁出标题截
 
     def _frac(key, default, size=None):
         if key in ("inventory.tooltip", "count.tooltip"):
@@ -108,8 +108,8 @@ def test_region_follows_screen_regions(monkeypatch):
         lambda key: key in ("inventory.tooltip", "count.tooltip"),
     )
     box, title = count._tooltip_boxes((1000, 1000))
-    assert box == (100, 300, 200, 500)
-    assert title == (100, 300, 200, 360)
+    assert box == (100, 200, 200, 500)
+    assert title == (100, 240, 200, 300)
     tip = (0.1, 0.5, 0.2, 0.9)
     assert count._tooltip_boxes((1000, 1000))[1] is None  # 区域在标题那截下面：只认整块
 
