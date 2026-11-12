@@ -385,21 +385,30 @@ def test_market_sources_are_queried_at_the_same_time(tmp_path):
     from astral_toolkit.trade.models import Item, ProviderResult
     from astral_toolkit.trade.storage import Database
 
+    import threading
+
+    # 两个数据源同时查：每个查的时候等另一个也开始了才返回。挨个查的话第一个等不到（2 秒后放弃），断言就过不了。
+    # 以前按墙钟判断（两个各睡 0.4 秒、总共 < 0.7 秒），电脑忙时会误报（待做里记过两次，11-09 改）
+    started, both, lock, overlapped = [], threading.Event(), threading.Lock(), {}
+
     class Slow:
         def __init__(self, source):
             self.source = source
 
         def fetch(self, *a):
-            time.sleep(0.4)
+            with lock:
+                started.append(self.source)
+                if len(started) == 2:
+                    both.set()
+            overlapped[self.source] = both.wait(2)
             return ProviderResult(self.source, "empty")
 
     s = MarketService(Database(tmp_path / "m.db"), [Slow("uex"), Slow("scm")])
-    t = time.time()
     r = s.refresh(
         Item("a", "A"), "q0", "sell", datetime(2026, 10, 20, tzinfo=timezone.utc)
     )
     assert [x.source for x in r] == ["uex", "scm"]
-    assert time.time() - t < 0.7  # 两个各 0.4 秒，同时查
+    assert overlapped == {"uex": True, "scm": True}
 
 
 def test_tooltip_anchor_tolerates_missing_char():

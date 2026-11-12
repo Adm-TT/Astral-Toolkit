@@ -411,13 +411,13 @@ _RUNTIME_FORBIDDEN = (
     "astral_toolkit.system",
     "astral_toolkit.ocr",
     "astral_toolkit.infrastructure",
-    "astral_toolkit.core.capture",
+    "astral_toolkit.infrastructure.platform.capture",
     "astral_toolkit.core.settings",
 )
 
 
 # 允许清单（R1 审查）：runtime 里绑到名字上的本项目模块只许 runtime 自己、contracts、core.run_records（lifecycle 写退出记录）；
-# 先拿包再取属性（from ... import core → core.capture）、没列进上面禁止清单的包（update、run……）也挡得住
+# 先拿包再取属性（from ... import infrastructure → infrastructure.platform.capture、from ... import core → core.settings）、没列进上面禁止清单的包（update、run……）也挡得住
 _RUNTIME_ALLOWED = (
     "astral_toolkit.runtime",
     "astral_toolkit.contracts",
@@ -467,13 +467,14 @@ def test_runtime_layer_stays_below_app():
         "from ...navigation import navigate",
         "def f():\n    from ...navigation.displayinfo import Reader\n",
         "from ...system.showloc import game_foreground",
-        "from ...core.capture import game_area",
+        "from ...infrastructure.platform.capture import game_area",
         "from ...mining import screen",
         "from ...trade import console",
         "from ...tasks import position",
         "from ...app import bus",
         "from ... import bootstrap",
-        "from ... import core\ncore.capture.game_area()\n",
+        "from ... import infrastructure\ninfrastructure.platform.capture.game_area()\n",
+        "from ... import core\ncore.settings.load()\n",
         "import astral_toolkit.core as core\n",
         "import astral_toolkit\n",
         "from ...update import data_pack",
@@ -725,11 +726,12 @@ _COUNT_ANALYSIS_ONLY = (
     "astral_toolkit.trade.inspector",
     "astral_toolkit.tasks.count",
     "astral_toolkit.trade.cell_grid",
+    "astral_toolkit.trade.count_view",  # 11-09：盘点看仓库（页、列、滚动、占几格、锁格），和 cell_grid 同一层
 )
 
 
 def test_count_analysis_and_presenter_stay_in_their_layers():
-    """目录迁移 R5 拆出来的两块：盘点分析（tasks/count_analysis）只往下转给 trade/inspector、tasks/count、trade/cell_grid（界面、runtime、
+    """目录迁移 R5 拆出来的两块：盘点分析（tasks/count_analysis）只往下转给 trade/inspector、tasks/count、trade/cell_grid、trade/count_view（界面、runtime、
     装配、别的 tasks、trade 别的模块都不许，拿整个包再走属性也不许），文件顶上只 import typing（调用时才取）；
     盘点的悬浮窗文字（app/presenters/count）只排版：不导入本项目任何模块（数量写法由 bootstrap 传进来），不用字符串导入"""
     path = _ROOT / "tasks" / "count_analysis.py"
@@ -914,7 +916,7 @@ def test_catalog_queries_hand_facts_not_sentences():
 
 
 def test_cursor_and_key_reads_have_one_home():
-    """目录迁移收尾：读光标（GetCursorPos）只在 core/capture（托盘弹菜单定位置那句是界面自己的，另算），
+    """目录迁移收尾：读光标（GetCursorPos）只在 infrastructure/platform/capture（托盘弹菜单定位置那句是界面自己的，另算），
     读键（GetAsyncKeyState）只在 infrastructure/platform/keys；悬浮窗状态（app/hud_state）的由 bootstrap 接进来"""
     where: dict[str, set[str]] = {"GetCursorPos": set(), "GetAsyncKeyState": set()}
     for f in _ROOT.rglob("*.py"):
@@ -922,7 +924,10 @@ def test_cursor_and_key_reads_have_one_home():
         for k, seen in where.items():
             if k in text:
                 seen.add(f.relative_to(_ROOT).as_posix())
-    assert where["GetCursorPos"] == {"core/capture.py", "app/tray.py"}, where
+    assert where["GetCursorPos"] == {
+        "infrastructure/platform/capture.py",
+        "app/tray.py",
+    }, where
     assert where["GetAsyncKeyState"] == {"infrastructure/platform/keys.py"}, where
     other = ("GetPhysicalCursorPos", "GetCursorInfo", "GetKeyState", "GetKeyboardState")
     found = [
@@ -933,9 +938,12 @@ def test_cursor_and_key_reads_have_one_home():
     assert found == [], found  # 别的读光标 / 读键的写法也不许另开一份
     hud = (_ROOT / "app" / "hud_state.py").read_text(encoding="utf-8")
     mods = list(_imports_in_source(hud, "astral_toolkit.app"))
-    banned = ("astral_toolkit.infrastructure", "astral_toolkit.core.capture")
+    banned = (
+        "astral_toolkit.infrastructure",
+        "astral_toolkit.infrastructure.platform.capture",
+    )
     assert _forbidden(mods, banned) == []
-    bad = "def f():\n    from ..core.capture import cursor_pos\n"
+    bad = "def f():\n    from ..infrastructure.platform.capture import cursor_pos\n"
     assert _forbidden(list(_imports_in_source(bad, "astral_toolkit.app")), banned)
 
 
@@ -1394,7 +1402,7 @@ _NAV_PURE_FORBIDDEN = (
     "astral_toolkit.bootstrap",
     "astral_toolkit.infrastructure",
     "astral_toolkit.core.settings",
-    "astral_toolkit.core.capture",
+    "astral_toolkit.infrastructure.platform.capture",
     "astral_toolkit.core.paths",
     "astral_toolkit.system",
 )
@@ -1406,7 +1414,7 @@ _NAV_PRESENTER_FORBIDDEN = (
     "astral_toolkit.app.overlay",
     "astral_toolkit.app.hud_state",
     "astral_toolkit.core.settings",
-    "astral_toolkit.core.capture",
+    "astral_toolkit.infrastructure.platform.capture",
     "astral_toolkit.system",
 )
 
@@ -2789,8 +2797,10 @@ _FS_B5_FIRST_ARG = {
         "_hints_near": "deps",
         "_save_here": "deps",
         "_start_here_watch": "deps",
+        "_here_step": "deps",
         "_coord_desc": "deps",
-        "_halo_watch": "deps",
+        "_halo_state": "deps",
+        "_halo_step": "deps",
     },
     "trade.py": {"nav_shop": "deps*"},
 }

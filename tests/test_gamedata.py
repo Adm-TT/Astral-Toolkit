@@ -183,8 +183,8 @@ def test_ddl_creates_all_tables(tmp_path):
     from astral_toolkit.gamedata._schema import DDL, SCHEMA_VERSION
 
     assert (
-        SCHEMA_VERSION == 6
-    )  # 2 = 批 2 导航表（见 test_gamedata_nav）；3 = shop_items；4 = 制造 / 维科洛 / 物品属性（见 test_gamedata_craft）；5 = 可空列存 NULL、q 保留类型；6 = 采矿（见 test_gamedata_mining）
+        SCHEMA_VERSION == 7
+    )  # 2 = 批 2 导航表（见 test_gamedata_nav）；3 = shop_items；4 = 制造 / 维科洛 / 物品属性（见 test_gamedata_craft）；5 = 可空列存 NULL、q 保留类型；6 = 采矿（见 test_gamedata_mining）；7 = wiki_items.g 占格（见 test_grid_width_from_wiki_items）
     c = sqlite3.connect(tmp_path / "x.db")
     for s in DDL:
         c.execute(s)
@@ -423,6 +423,40 @@ def test_build_publish_roundtrip(monkeypatch, tmp_path):
         assert s.execute("select price from mineral_prices where city='Lorville'") == [
             (3000.0,)
         ]
+
+
+def test_grid_width_from_wiki_items(monkeypatch, tmp_path):
+    """盘点认大物品：wiki_items.json 里 g=2 的占两格；没写 g 的（含旧数据包）是 1；库里没这个名字是 None"""
+    from astral_toolkit.gamedata import items
+    from astral_toolkit.gamedata._build import rebuild_if_needed
+
+    _data_root(monkeypatch, tmp_path)
+    wiki = {
+        "items": [
+            {"n": "Medpen", "t": "Consumable", "s": 1, "cls": "medpen_01", "d": ""},
+            {
+                "n": "Omnisky VI Laser Cannon",
+                "t": "WeaponGun",
+                "s": 2,
+                "cls": "amrs_lasercannon_s2",
+                "g": 2,
+            },
+            {"n": "Odd Value", "cls": "odd_01", "g": "2"},
+        ]
+    }
+    _write_min_sources(tmp_path, **{"wiki_items.json": wiki})
+    rebuild_if_needed()
+    assert items.grid_width("Omnisky VI Laser Cannon") == 2
+    assert items.grid_width("omnisky vi laser cannon ") == 2
+    assert items.grid_width("Medpen") == 1
+    assert items.grid_width("Odd Value") == 1  # 只认数字 2
+    assert items.grid_width("Nope") is None
+    assert items.grid_width("") is None
+    assert items.has_grid() is True
+    # 旧数据包：一件 g=2 都没有 → 盘点不能信「占 1 格」
+    _write_min_sources(tmp_path)
+    rebuild_if_needed()
+    assert items.has_grid() is False
 
 
 def test_rebuild_skips_when_unchanged(monkeypatch, tmp_path):

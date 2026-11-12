@@ -131,7 +131,9 @@ def test_shipped_regions_equal_code_defaults():
 
     data = json.loads(sr.PATH.read_text(encoding="utf-8"))
     regions = data["regions"]
-    assert set(regions) == set(SHIPPED)
+    assert set(SHIPPED) <= set(
+        regions
+    )  # 盘点等新区域（count.*）是后来画的，不在这张表里
     for key, box in SHIPPED.items():
         (entry,) = regions[key]
         assert tuple(entry["box"]) == box, key

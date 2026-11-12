@@ -152,7 +152,7 @@ def game_area():
     try:
         import ctypes
         from ctypes import wintypes
-        from ..system import showloc
+        from ...system import showloc
 
         u32 = ctypes.windll.user32
         hwnd = showloc.find_game_window()

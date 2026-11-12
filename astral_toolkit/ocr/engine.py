@@ -1,10 +1,10 @@
 """OCR 核心识别与推理管道"""
 
-from typing import Any, Callable, List, Sequence, Tuple, Union
+from typing import Any, Callable, List, Tuple, Union
 import numpy as np
 from PIL import Image
 
-from .models import OcrToken
+from .models import OcrQuad, OcrToken
 
 _engine = None
 
@@ -42,8 +42,8 @@ def raw_detector() -> Callable[[np.ndarray], Sequence[Tuple[Any, str, float]]]:
     return run
 
 
-def raw_recognizer() -> Callable[[np.ndarray], Tuple[str, float]]:
-    """返回底层单行识别函数：func(arr) -> (text, conf)"""
+def _line_reader() -> Callable[[np.ndarray], Tuple[str, float]]:
+    """单行识别（跳过检测）：func(arr) -> (text, conf 0~1)。两种引擎的写法不一样，这里分开（原 raw_recognizer，11-09 收成内部的）"""
     eng: Any = _get_engine()
 
     def run(arr: np.ndarray) -> Tuple[str, float]:
@@ -106,7 +106,7 @@ def recognize(
 
 def read_line(image: Union[Image.Image, np.ndarray]) -> Tuple[str, float]:
     """只认一行字（跳过检测）：输入 PIL 单行文字图或 ndarray → (文字, 置信度)。比整块识别快很多"""
-    rec = raw_recognizer()
+    rec = _line_reader()
     if isinstance(image, np.ndarray):
         arr = image
     else:

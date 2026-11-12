@@ -595,20 +595,27 @@ _STATS = {
 
 def test_itemstats_item_shapes(monkeypatch, tmp_path):
     """item(uuid) 与源同形（s 里 {min,max} / 数值 / 嵌套都原样）；base_value / tags 照旧"""
-    from astral_toolkit.crafting import itemstats
+    from astral_toolkit.catalog import itemstats as S
+    from astral_toolkit.crafting import crafting as C
 
     _setup(monkeypatch, tmp_path, **{"item_stats.json": copy.deepcopy(_STATS)})
-    a = itemstats.item("uuid-a")
+    a = C._stat_item("uuid-a")
     assert a is not None
     assert (
         a == _STATS["items"]["uuid-a"] and type(a["s"]["durability"]["health"]) is int
     )
-    assert itemstats.item("uuid-b") == _STATS["items"]["uuid-b"]
-    assert itemstats.base_value("uuid-a", "armor_temperaturemin") == (-75.0, " ºC")
-    assert itemstats.base_value("uuid-a", "health_maxhealth") == (55, "")
-    assert itemstats.base_value("uuid-a", "armor_damagemitigation") == (0.85, "")
-    assert itemstats.base_value("uuid-b", "health_maxhealth") == (None, "")
-    assert itemstats.tags("uuid-b") == {
+    assert C._stat_item("uuid-b") == _STATS["items"]["uuid-b"]
+    assert S.base_value_of(C._stat_item("uuid-a"), "armor_temperaturemin") == (
+        -75.0,
+        " ºC",
+    )
+    assert S.base_value_of(C._stat_item("uuid-a"), "health_maxhealth") == (55, "")
+    assert S.base_value_of(C._stat_item("uuid-a"), "armor_damagemitigation") == (
+        0.85,
+        "",
+    )
+    assert S.base_value_of(C._stat_item("uuid-b"), "health_maxhealth") == (None, "")
+    assert C.item_tags("uuid-b") == {
         "size": 2,
         "grade": "C",
         "cls": "Military",
@@ -617,11 +624,12 @@ def test_itemstats_item_shapes(monkeypatch, tmp_path):
         "sub": "",
         "cn": "cool",
     }
-    assert itemstats.tags("uuid-a")["sub"] == "Heavy"
+    assert C.item_tags("uuid-a")["sub"] == "Heavy"
 
 
 def test_itemstats_none_for_unknown(monkeypatch, tmp_path):
-    from astral_toolkit.crafting import itemstats
+    from astral_toolkit.catalog import itemstats as S
+    from astral_toolkit.crafting import crafting as C
 
     src = copy.deepcopy(_STATS)
     src["items"][
@@ -629,25 +637,25 @@ def test_itemstats_none_for_unknown(monkeypatch, tmp_path):
     ] = {}  # 源里的空条目：以前 .get(uuid) or None 是 None，现在也不入库（收口 2）
     _setup(monkeypatch, tmp_path, **{"item_stats.json": src})
     for u in ("", None, "不存在", "uuid-empty"):
-        assert itemstats.item(u) is None and itemstats.tags(u) == {}
-        assert itemstats.base_value(u, "health_maxhealth") == (None, "")
+        assert C._stat_item(u) is None and C.item_tags(u) == {}
+        assert S.base_value_of(C._stat_item(u), "health_maxhealth") == (None, "")
 
 
 def test_itemstats_version(monkeypatch, tmp_path):
     import astral_toolkit.gamedata as G
-    from astral_toolkit.crafting import itemstats
+    from astral_toolkit.crafting import crafting as C
 
     _setup(monkeypatch, tmp_path, **{"item_stats.json": copy.deepcopy(_STATS)})
-    assert itemstats.version() == "s2"
+    assert C._stats_version() == "s2"
     _rewrite(tmp_path, "item_stats.json", {"items": {}})  # 没有 version 键
-    assert itemstats.version() == "" and itemstats.item("uuid-a") is None
+    assert C._stats_version() == "" and C._stat_item("uuid-a") is None
 
     def boom(*a, **k):
         raise G.GamedataUnavailable("坏了")
 
     monkeypatch.setattr(G.itemstats, "item", boom)
     monkeypatch.setattr(G.itemstats, "version", boom)
-    assert itemstats.item("uuid-a") is None and itemstats.version() == ""
+    assert C._stat_item("uuid-a") is None and C._stats_version() == ""
 
 
 def test_ships_with(monkeypatch, tmp_path):

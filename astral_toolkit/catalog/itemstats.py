@@ -1,29 +1,10 @@
-"""成品的基础数值（item_stats.json，来自 star-citizen.wiki 整理的游戏数据，tools/build_item_stats.py 生成；读取走游戏数据层 gamedata.itemstats）
+"""成品属性的取值规则（dev 拆分②，2026-11-09 从 crafting/itemstats.py 搬来）：一件成品的数据（item_stats.json 的
+items[uuid]，形如 {n, size, grade, cls, type, sub, mass, ver, mfr, s{各属性段}}）里，制造蓝图各槽「品质影响」用的
+property_key（health_maxhealth、weapon_damage …）对应哪个数、什么单位，以及分类标签挑哪几个字段。
 
-制造页的「属性统计」：基础值 → 按材料品质强化后的值 → 变化。按 uuid 和 scmdb 蓝图对上（bp["u"]）。
-property_key 是 scmdb 蓝图里各槽「品质影响」用的键（health_maxhealth、weapon_damage …），这里把它对到 wiki 数据的字段。
-数据里没有的属性返回 None：页面上只显示倍率，不显示绝对值。
+纯规则：吃一件成品的字典、给值，不读库（取数据在 crafting/itemstats.item / version，走 gamedata.itemstats）。
+数据里没有的属性给 None：页面上只显示倍率，不显示绝对值。
 """
-
-
-def item(uuid):
-    """一件成品的数据（与 item_stats.json 的 items[uuid] 同形）；没有或库不可用 → None"""
-    from .. import gamedata
-
-    try:
-        return gamedata.itemstats.item(uuid or "")
-    except gamedata.GamedataError:
-        return None
-
-
-def version():
-    """属性数据的版本；没有或库不可用 → ''"""
-    from .. import gamedata
-
-    try:
-        return gamedata.itemstats.version()
-    except gamedata.GamedataError:
-        return ""
 
 
 def _get(d, *path):
@@ -54,9 +35,9 @@ def _firerate(s):
 def _dmgmit(s):
     """护甲的伤害减免：各伤害类型的 multiplier（0.85 = 挡掉 15%），取平均；impact 是另一回事，不算"""
     dr = (s.get("suit_armor") or s.get("clothing") or {}).get("damage_resistance") or {}
-    vals = [
-        v.get("multiplier")
-        for k, v in dr.items()
+    vals: list[float] = [
+        v["multiplier"]
+        for v in dr.values()
         if isinstance(v, dict) and isinstance(v.get("multiplier"), (int, float))
     ]
     return round(sum(vals) / len(vals), 4) if vals else None
@@ -131,9 +112,8 @@ PROPS = {
 }
 
 
-def base_value(uuid, prop_key):
-    """成品这项属性的基础值（数据里没有 → None）。返回 (数值, 单位)"""
-    it = item(uuid)
+def base_value_of(it, prop_key):
+    """这件成品（数据字典，没有是 None）这项属性的基础值 → (数值, 单位)；数据里没有 → (None, "")"""
     if not it:
         return None, ""
     fn, unit = PROPS.get(prop_key, (None, ""))
@@ -146,10 +126,9 @@ def base_value(uuid, prop_key):
     return (round(v, 4) if isinstance(v, (int, float)) else None), unit
 
 
-def tags(uuid):
+def tags_of(it):
     """分类标签：尺寸 / 等级 / 类别 / 厂商 / 类型 / 子类型（护甲是 Light / Medium / Heavy）/ 物品类名。
     返回 {size, grade, cls, mfr, type, sub, cn}，没有数据返回 {}"""
-    it = item(uuid)
     if not it:
         return {}
     return {

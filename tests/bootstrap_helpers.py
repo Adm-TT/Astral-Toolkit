@@ -7,7 +7,8 @@ from typing import Any
 
 from astral_toolkit import bootstrap
 from astral_toolkit.app import hud_state, lifecycle_gate, ui_stream
-from astral_toolkit.core import capture, run_records
+from astral_toolkit.core import run_records
+from astral_toolkit.infrastructure.platform import capture
 from astral_toolkit.navigation import navigate
 from astral_toolkit.tasks import count
 from astral_toolkit.tasks.navigation import NavDeps
@@ -71,7 +72,28 @@ def app_for_test(**overrides):
 
 
 def nav_deps(
-    nav: Any = None, pos: Any = None, game_events: Any = None, results: Any = None
+    nav: Any = None,
+    pos: Any = None,
+    game_events: Any = None,
+    results: Any = None,
+    halo: Any = None,
+    here: Any = None,
 ) -> NavDeps:
-    """测试用的导航后台对象（F 段 B5）：只给用得到的那几样，其余是 None；假对象、None 都能塞，类型检查不拦"""
-    return NavDeps(nav=nav, pos=pos, game_events=game_events, results=results)
+    """测试用的导航后台对象（F 段 B5）：只给用得到的那几样，其余是 None；假对象、None 都能塞，类型检查不拦。
+    halo / here 没给就造真的小后台会话（和 bootstrap 一样接 tasks/navigation，2026-11-09）"""
+    from astral_toolkit.app.output import BusOutput
+    from astral_toolkit.runtime.results import ResultStore
+
+    box: dict[str, NavDeps] = {}
+    real_halo, real_here = bootstrap.nav_watches(
+        ResultStore(), BusOutput(), lambda: False, lambda: box["deps"]
+    )
+    box["deps"] = NavDeps(
+        nav=nav,
+        pos=pos,
+        game_events=game_events,
+        results=results,
+        halo=halo if halo is not None else real_halo,
+        here=here if here is not None else real_here,
+    )
+    return box["deps"]

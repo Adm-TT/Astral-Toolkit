@@ -460,8 +460,8 @@ def test_bootstrap_wires_position_analysis_and_bus(monkeypatch):
 
 
 def test_tasks_position_forwards_to_navigation(monkeypatch):
-    """tasks/position 的几样分析原样转给 navigation / core.capture（参数一个不丢）"""
-    from astral_toolkit.core import capture
+    """tasks/position 的几样分析原样转给 navigation / infrastructure.platform.capture（参数一个不丢）"""
+    from astral_toolkit.infrastructure.platform import capture
     from astral_toolkit.navigation import gridtext, navigate
     from astral_toolkit.navigation import position as nav_position
     from astral_toolkit.tasks import position as T

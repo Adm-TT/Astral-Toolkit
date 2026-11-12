@@ -798,7 +798,7 @@ def test_worker_uses_analysis_views_and_links():
         {**_item(), "quality": 750}, lambda q, u: ""
     )
     # 记下认到时的格子框（这里找不到是 None）和光标在截图上的位置
-    assert [cell[2:] for cell in ctx.cells] == [(None, 650, 1100)]
+    assert [cell[2:5] for cell in ctx.cells] == [(None, 650, 1100)]
     ops = worker.finish(session, None, StopInfo("idle"))
     assert ("note", "盘点", "盘点结束｜未识别到物品｜按 F9 重新开始", 8) in ops
     worker.teardown(session, ctx)
@@ -997,3 +997,142 @@ def test_start_refused_while_closing_or_not_windows():
     on = count_helpers.count(links=links, _loop_factory=factory)
     assert on.start() == {"running": True, "place": "测试站"}
     assert starts == ["测试站"] and on.place == "测试站"
+
+
+def test_worker_same_cell_after_scroll_and_page():
+    """滚动、翻页后指回同一件不重复算：按仓库里的身份（页、列、内容纵向位置）比，不看屏幕坐标（老大 11-09 实测重复算）；
+    页码认不出时退回框和距离"""
+    from astral_toolkit.trade.count_view import Spot
+
+    pos = [(100, 100)]
+    cur = [(0, 0)]
+    sp = [None]
+    links, _ = _fake_links(
+        cursor_pos=lambda: pos[0], grab=lambda: SimpleNamespace(size=(2560, 1440))
+    )
+    from astral_toolkit.tasks import count_analysis
+
+    analysis: Any = SimpleNamespace(
+        cursor_on_image=lambda img: cur[0],
+        read_item=lambda img, cursor: _item(),
+        cell_box=lambda img, cursor: None,
+        same_cell=lambda a, b: False,
+        in_cell=lambda box, point: False,
+        in_gap=lambda img, cursor: False,
+        spot=lambda img, cursor, item: sp[0],
+        same_spot=count_analysis.same_spot,
+        review=lambda place, items: None,
+    )
+    views = count_mod.CountViews(
+        hud_text=lambda place, items: "", item_line=lambda r: ""
+    )
+    worker = count_mod._CountWorker(analysis, views, links)
+    worker.loop = _CommitRecorder()
+    session = SimpleNamespace(payload="测试站")
+    ctx = worker.setup(session)
+    clock = [0.0]
+
+    def rest_at(screen, on_image, spot):
+        pos[0], cur[0], sp[0] = screen, on_image, spot
+        worker.tick(session, ctx, clock[0])
+        clock[0] += 0.4
+        worker.tick(session, ctx, clock[0])
+        clock[0] += 0.1
+
+    rest_at((100, 100), (2100, 700), Spot(1, 1, 1, 700.0))
+    # 往下滚了两行：同一件在屏幕上高了 290 像素，内容位置一样 → 同一格
+    rest_at((300, 300), (2100, 410), Spot(1, 1, 1, 704.0))
+    assert len(ctx.cells) == 1
+    # 翻到第 2 页，同一个位置的同样东西 → 新的一格
+    rest_at((500, 500), (2100, 410), Spot(2, 1, 1, 704.0))
+    assert len(ctx.cells) == 2
+    # 两格宽的同一件：指左半边、右半边身份一样（最左那列都是 1）→ 不重复算
+    rest_at((700, 700), (2100, 900), Spot(2, 1, 2, 1000.0))
+    rest_at((900, 900), (2250, 900), Spot(2, 1, 2, 1001.0))
+    assert len(ctx.cells) == 3
+    # 页码认不出：退回距离（离上一个停点很远 → 新的一格）
+    rest_at((1100, 1100), (1900, 400), Spot(None, 0, 1, 50.0))
+    assert len(ctx.cells) == 4
+    worker.teardown(session, ctx)
+
+
+def test_worker_spot_error_falls_back(monkeypatch):
+    """算身份出错不让盘点停：退回框和距离，日志里同一种错只记一次"""
+    pos = [(100, 100)]
+    links, _ = _fake_links(
+        cursor_pos=lambda: pos[0], grab=lambda: SimpleNamespace(size=(2560, 1440))
+    )
+
+    def boom(img, cursor, item):
+        raise ValueError("坏了")
+
+    analysis: Any = SimpleNamespace(
+        cursor_on_image=lambda img: (2100, 700),
+        read_item=lambda img, cursor: _item(),
+        cell_box=lambda img, cursor: None,
+        same_cell=lambda a, b: False,
+        in_cell=lambda box, point: False,
+        in_gap=lambda img, cursor: False,
+        spot=boom,
+        same_spot=lambda a, b, h: True,
+        review=lambda place, items: None,
+    )
+    views = count_mod.CountViews(
+        hud_text=lambda place, items: "", item_line=lambda r: ""
+    )
+    worker = count_mod._CountWorker(analysis, views, links)
+    rec = worker.loop = _CommitRecorder()
+    session = SimpleNamespace(payload="测试站")
+    ctx = worker.setup(session)
+    worker.tick(session, ctx, 0.0)
+    worker.tick(session, ctx, 0.4)
+    pos[0] = (110, 110)
+    worker.tick(session, ctx, 0.5)
+    worker.tick(session, ctx, 0.9)
+    assert len(ctx.cells) == 1 and ctx.cells[0].spot is None
+    logs = [op for op in rec.ops if op[0] == "log" and "身份出错" in op[1]]
+    assert len(logs) == 1
+    worker.teardown(session, ctx)
+
+
+def test_worker_counts_locked_cells_and_marks_them():
+    """带锁的格子照算，记下几格是已停用（老大 11-09）"""
+    pos = [(100, 100)]
+    cur = [(2100, 700)]
+    lock = [True]
+    links, _ = _fake_links(
+        cursor_pos=lambda: pos[0], grab=lambda: SimpleNamespace(size=(2560, 1440))
+    )
+    analysis: Any = SimpleNamespace(
+        cursor_on_image=lambda img: cur[0],
+        read_item=lambda img, cursor: _item(),
+        cell_box=lambda img, cursor: None,
+        same_cell=lambda a, b: False,
+        in_cell=lambda box, point: False,
+        in_gap=lambda img, cursor: False,
+        locked=lambda img, cursor: lock[0],
+        review=lambda place, items: None,
+    )
+    lines = []
+    views = count_mod.CountViews(
+        hud_text=lambda place, items: "", item_line=lambda r: lines.append(r) or ""
+    )
+    worker = count_mod._CountWorker(analysis, views, links)
+    worker.loop = _CommitRecorder()
+    session = SimpleNamespace(payload="测试站")
+    ctx = worker.setup(session)
+    clock = [0.0]
+
+    def rest_at(screen, on_image, locked):
+        pos[0], cur[0], lock[0] = screen, on_image, locked
+        worker.tick(session, ctx, clock[0])
+        clock[0] += 0.4
+        worker.tick(session, ctx, clock[0])
+        clock[0] += 0.1
+
+    rest_at((100, 100), (1950, 400), True)
+    rest_at((500, 500), (2400, 900), False)
+    v = next(iter(ctx.items.values()))
+    assert v["cells"] == 2 and v["disabled"] == 1
+    assert [bool(r.get("disabled")) for r in lines] == [True, False]
+    worker.teardown(session, ctx)

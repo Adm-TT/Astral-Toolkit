@@ -20,7 +20,7 @@ from ..crafting.crafting import (
     uses_report,
     variant_note,
 )
-from ..crafting import itemstats
+from ..crafting.crafting import item_tags
 from ..crafting.labels import spec_tags, weight_zh
 from ..crafting.listing import named
 from ..crafting.mix import mix_plan
@@ -80,9 +80,9 @@ def _row_spec(bp):
     护甲写轻 / 中 / 重，别的没有"""
     if bp["g"] == "vehiclegear":
         sized = (bp["s"] or "").startswith("size")
-        return spec_tags(itemstats.tags(bp.get("u")), size=not sized, kind=bp["t"])
+        return spec_tags(item_tags(bp.get("u")), size=not sized, kind=bp["t"])
     if bp["t"] == "armour":
-        weight = weight_zh(itemstats.tags(bp.get("u")), bp["n"])
+        weight = weight_zh(item_tags(bp.get("u")), bp["n"])
         return [weight] if weight else []
     return []
 

@@ -31,16 +31,45 @@ def stats(bp, qualities):
     同一属性几个槽都影响时，倍率类各槽的百分比相加，加法类各槽相加（和游戏制造终端的算法一致）。
     qualities：{槽序号或槽名: 品质}；没填的槽按 500（商店货）算，并在 missing 里列出。
     返回 [{prop, name, key, base, unit, now, delta(倍率类是百分比，加法类是加的数), add, best, worst, lower, slots:[{slot, q, part}]}]"""
-    from . import itemstats
+    from ..catalog import itemstats as _rules
 
-    return _quality.stats(bp, qualities, itemstats.base_value)
+    return _quality.stats(
+        bp, qualities, lambda uuid, key: _rules.base_value_of(_stat_item(uuid), key)
+    )
+
+
+# ---------------------------------------------------------------- 成品属性（取数据；取值规则在 catalog/itemstats）
+# 11-09 dev 收尾：原来中间还有一层 crafting/itemstats.py 转调，删了；制造页直接在这里取数据、调 catalog 的规则
+def _stat_item(uuid):
+    """一件成品的属性数据（item_stats.json 的 items[uuid]，走游戏数据库 gamedata.itemstats）；没有或库不可用 → None"""
+    from .. import gamedata
+
+    try:
+        return gamedata.itemstats.item(uuid or "")
+    except gamedata.GamedataError:
+        return None
+
+
+def _stats_version():
+    """属性数据的版本；没有或库不可用 → ''"""
+    from .. import gamedata
+
+    try:
+        return gamedata.itemstats.version()
+    except gamedata.GamedataError:
+        return ""
+
+
+def item_tags(uuid):
+    """成品的分类标签 {size, grade, cls, mfr, type, sub, cn}；没有数据 {}（规则 catalog/itemstats.tags_of）"""
+    from ..catalog import itemstats as _rules
+
+    return _rules.tags_of(_stat_item(uuid))
 
 
 def header(bp):
     """制造页的标题信息：中文名、英文名、类别、标签（船零件写尺寸 / 等级 / 类别，护甲写轻 / 中 / 重）、厂商、制造时间"""
-    from . import itemstats
-
-    t = itemstats.tags(bp.get("u"))
+    t = item_tags(bp.get("u"))
     # 尺寸 / 等级 / 类别只写船零件的，而且只写游戏说明里有的；个人武器、护甲的游戏说明里不写尺寸、等级
     # （物品属性里有值，其中等级 A 是默认值）（审查 2026-11-08）
     tags = (
@@ -59,7 +88,7 @@ def header(bp):
         "maker": bp["m"] or "",
         "sec": bp["sec"],
         "unlocked": bool(bp["d"]),
-        "stats_version": itemstats.version() if t else "",
+        "stats_version": _stats_version() if t else "",
     }
 
 
@@ -219,8 +248,6 @@ def browse(
     """蓝图字典：按条件筛，按名字排（同一系列排在一起）。返回 {rows, total, cats, subs, parts, makers}，
     选了船零件类时再加 sizes / grades / clss（按物品属性，见 crafting.listing.browse）。
     mat：只看用到这种矿的蓝图（从扫描结果、矿物页点过来）"""
-    from . import itemstats
-
     return _listing.browse(
         blueprints,
         cat=cat,
@@ -235,7 +262,7 @@ def browse(
         size=size,
         grade=grade,
         cls=cls,
-        spec=lambda bp: itemstats.tags(bp.get("u")),
+        spec=lambda bp: item_tags(bp.get("u")),
     )
 
 
