@@ -71,7 +71,7 @@ def _size(p):
 
 
 def _ensure_ppocrv6_tiny_models():
-    """打包前把 PP-OCRv6 tiny 下进 rapidocr/models，再靠 --collect-data rapidocr 打进安装包。"""
+    """打包前把 PP-OCRv6 识别模型（ocr.runtime.MODEL_TYPE 那一档）下进 rapidocr/models，再靠 --collect-data rapidocr 打进安装包。"""
     from astral_toolkit.ocr import runtime as OR
 
     try:
@@ -135,7 +135,7 @@ def main():
     os.environ["PYTHONPATH"] = str(
         ROOT
     )  # PyInstaller 在单独的进程里找包，要让它也找得到 astral_toolkit
-    _ensure_ppocrv6_tiny_models()  # wheel 默认只带 small；tiny 必须事先下好再 --collect-data，玩家断网也能认字
+    _ensure_ppocrv6_tiny_models()  # wheel 默认只带 small；换别的档要事先下好再 --collect-data，玩家断网也能认字
     # astral_toolkit 自带的数据文件（网页界面、汉化对照、图标、字体……）和全部模块：逐个列出，不依赖 PyInstaller 自己去找
     # （第一次构建时 --collect-data astral_toolkit 报「not a package」，数据文件全漏了，2026-10-26）
     pkg = ROOT / "astral_toolkit"

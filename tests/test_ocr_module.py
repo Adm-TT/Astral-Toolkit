@@ -144,13 +144,13 @@ class TestOcrModule(unittest.TestCase):
 
 
 def test_engine_params_keys():
-    """不 mock _engine_params：核对 PP-OCRv6 tiny 与 use_dml 键名"""
+    """不 mock _engine_params：核对 PP-OCRv6 small（11-12 由 tiny 改）与 use_dml 键名"""
     from astral_toolkit.ocr import runtime as OR
 
     cpu = OR._engine_params(False)
     assert cpu["Global.use_cls"] is False
-    assert cpu["Det.model_type"].value == "tiny"
-    assert cpu["Rec.model_type"].value == "tiny"
+    assert cpu["Det.model_type"].value == "small"
+    assert cpu["Rec.model_type"].value == "small"
     assert cpu["Det.ocr_version"].value == "PP-OCRv6"
     assert "EngineConfig.onnxruntime.use_dml" not in cpu
     gpu = OR._engine_params(True)

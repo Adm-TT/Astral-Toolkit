@@ -166,7 +166,7 @@ def install():
         try:
             from .ocr.runtime import ensure_models
 
-            print("下载 PP-OCRv6 tiny 识别模型（离线打包用；已存在则跳过）…")
+            print("下载 PP-OCRv6 识别模型（离线打包用；已存在则跳过）…")
             ensure_models()
         except Exception as e:
             print(f"❌ 识别模型没下好：{e}")
