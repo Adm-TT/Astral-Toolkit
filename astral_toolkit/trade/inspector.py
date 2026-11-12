@@ -608,13 +608,24 @@ def _dbg_texts(tokens, n: int = 8) -> str:
     return " / ".join(texts)
 
 
-def _read_tooltip(img, cursor, whole_screen=True):
+def _aborted(should_abort) -> bool:
+    """再按 F8 等：调用方给的取消检查；出错当没取消，别拖垮识别。"""
+    if should_abort is None:
+        return False
+    try:
+        return bool(should_abort())
+    except Exception:
+        return False
+
+
+def _read_tooltip(img, cursor, whole_screen=True, should_abort=None):
     """→ (文字, (中文名, 英文名) 或 None, 认的范围)
     识别机制（2026-11-09：标题认名 / Body 品质，见 docs/superpowers/specs/2026-11-04-f8-title-band-ocr.md）：
     1. 标题带（屏高 24%~36%，native）：高把握库命中（汉化/矿物/物品目录精确，或英文≥0.9 且唯一）就停。
     2. 说明框带（24%~70%）：库精确或锚点 sure（体积/类型…）就停；这一档也带品质行。
     3. 不再全高竖条、不再整屏 OCR（信息过多易误认）。
     whole_screen 参数保留兼容：True/False 行为相同（都不整屏）；F8 第一遍认不出仍由调用方再截一次。
+    should_abort：每档 OCR 后若为真，马上停（再按 F8 作废）。
     """
     from ..ocr import recognize
     from . import debug_shots
@@ -644,10 +655,16 @@ def _read_tooltip(img, cursor, whole_screen=True):
     for box, label, stage, native in get_stage_regions(
         get_hover_regions(cursor, W), W, H
     ):
+        if _aborted(should_abort):
+            _shot_stop("作废")
+            return [], None, label
         t0 = time.perf_counter()
         crop = img.crop(box)
         _shot_attempt(box, label, stage, crop)
         tokens = recognize(crop, urgent=True, offset=box[:2], native=native)
+        if _aborted(should_abort):
+            _shot_stop("作废")
+            return [], None, label
         ms = (time.perf_counter() - t0) * 1000
         name, sure = tooltip_pick(tokens, cursor, img)
         strong = _strong_canonical(name)
@@ -678,6 +695,9 @@ def _read_tooltip(img, cursor, whole_screen=True):
             )
         last = (tokens, None, label)
 
+    if _aborted(should_abort):
+        _shot_stop("作废")
+        return [], None, last[2]
     cand = best_candidate
     if cand is not None:
         if dbg:
@@ -865,12 +885,16 @@ def inspect_item(
     craft_override=False,
     whole_screen=True,
     body_box=None,
+    on_identified=None,
+    should_abort=None,
 ) -> Optional[Dict[str, Any]]:
     """识别鼠标悬停的物品格与说明框，返回结构化字典或 None。
     whole_screen=False（F8 第一遍）：说明框条带都没认出时不整屏兜底，由调用方等一下再截一次。
     craft_override=True（F6 盘点用）：制造品的加成和蓝图完全对上时，用倒推出的品质和各槽品质，
     读到的品质数字也让位（和 1.1.1 盘点一样）；F8 默认只在没读到品质数字时才倒推。
-    body_box（F6 盘点用）：标题那截命中的制造品补认加成行时认这一块（count.tooltip），不按 F8 的竖带：
+    body_box（F6 盘点用）：标题那截命中的制造品补认加成行时认这一块（count.tooltip），不按 F8 的竖带。
+    on_identified（F8）：认准名字（sure）后、品质相关 OCR 前回调一次，便于先刷悬浮窗介绍。
+    should_abort（F8）：再按 F8 时尽快停；检查点返回 True 则整次返回 None。
     {
         "zh": 中文名,
         "en": 英文名,
@@ -897,14 +921,25 @@ def inspect_item(
     result = None
     try:
         if tokens is None or where is None:
-            tokens, name, where = (
-                _read_tooltip(img, (cx, cy))
-                if whole_screen
-                else _read_tooltip(img, (cx, cy), whole_screen=False)
-            )
+            # should_abort 未传时保持旧调用形态（测试替身常只收 img, cursor）
+            if should_abort is None:
+                tokens, name, where = (
+                    _read_tooltip(img, (cx, cy))
+                    if whole_screen
+                    else _read_tooltip(img, (cx, cy), whole_screen=False)
+                )
+            else:
+                tokens, name, where = _read_tooltip(
+                    img,
+                    (cx, cy),
+                    whole_screen=whole_screen,
+                    should_abort=should_abort,
+                )
         else:
             name, _sure = tooltip_pick(tokens, (cx, cy), img)
 
+        if _aborted(should_abort):
+            return None
         if not name:
             _dbg(f"inspect｜未认出名字｜where={where}", "INFO")
             return None
@@ -916,6 +951,23 @@ def inspect_item(
             zh, en = canon
 
         mineral = _is_mineral(zh, en, fuzzy=not canon)  # 汉化包对上了就不模糊配矿名
+        if canon and on_identified is not None and not _aborted(should_abort):
+            try:
+                on_identified(
+                    {
+                        "zh": zh,
+                        "en": en,
+                        "sure": True,
+                        "raw": raw,
+                        "canon": tuple(canon),
+                        "where": where,
+                    }
+                )
+            except Exception:
+                pass
+        if _aborted(should_abort):
+            return None
+
         body_rescanned = False
         row_q, row_amt = tooltip_row(tokens)
         q_from_row_label = False
@@ -929,6 +981,8 @@ def inspect_item(
             and not mineral
             and row_q is None
         ):
+            if _aborted(should_abort):
+                return None
             body = _tooltip_body_tokens(img, cursor, where, body_box)
             if body:
                 tokens = body
@@ -941,6 +995,8 @@ def inspect_item(
         cell_q, cell_n = None, None
         cell_reuse = False
         if not mineral:
+            if _aborted(should_abort):
+                return None
             # 鼠标那一格在认过的区域里：角标可以在同一次识别的 tokens 里找，不用再认一块图。
             # 区域标签带高度阶段（"30-50%@title"）：窄带只认了标题那几条，一般不含鼠标所在的格子，就不复用
             can_reuse = where == "整屏"
@@ -961,6 +1017,8 @@ def inspect_item(
             except Exception:
                 cell_q, cell_n = None, None
 
+        if _aborted(should_abort):
+            return None
         quality = (
             row_q
             if row_q is not None
@@ -978,6 +1036,8 @@ def inspect_item(
 
                 mods = parse_mods(tokens)
                 if not mods and for_item(en, zh) and not body_rescanned:
+                    if _aborted(should_abort):
+                        return None
                     # 标题带命中且上面没为品质补扫过：再补一次拿加成行（F6 盘点按 body_box 认区域文件那一块）
                     body = _tooltip_body_tokens(img, cursor, where, body_box)
                     if body:
@@ -994,6 +1054,8 @@ def inspect_item(
             except Exception:
                 craft = None
 
+        if _aborted(should_abort):
+            return None
         if _debug_on():
             if craft:
                 q_src = "制造倒推"
