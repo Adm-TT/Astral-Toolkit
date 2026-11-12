@@ -263,7 +263,7 @@ class _CountWorker:
         v["cells"] += 1
         if off:
             v["disabled"] = v.get("disabled", 0) + 1
-        # activity=False：轮询改字不刷新悬浮窗 30 秒空闲计时，也不把已隐藏的再弹出来
+        # activity=False：保留旧调用约定；现无空闲隐藏，有文案即显
         self.loop.commit(
             session,
             (

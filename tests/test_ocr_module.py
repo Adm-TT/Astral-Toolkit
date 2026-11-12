@@ -124,7 +124,8 @@ class TestOcrModule(unittest.TestCase):
         def _side_effect(*args, **kwargs):
             if kwargs.get("use_det") is False:
                 return _Out(None, ["123"], [0.99])
-            return _Out([[[0, 0], [10, 0], [10, 10], [0, 10]]], ["123"], [0.99])
+            # 第二角点用浮点，确认 detect 不把四点 round 成整数
+            return _Out([[[0, 0], [10, 0.5], [10, 10], [0, 10]]], ["123"], [0.99])
 
         mock_eng.side_effect = _side_effect
 

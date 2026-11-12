@@ -1,6 +1,6 @@
 """OCR 核心识别与推理管道"""
 
-from typing import Any, Callable, List, Tuple, Union
+from typing import Any, Callable, List, Sequence, Tuple, Union
 import numpy as np
 from PIL import Image
 
@@ -32,18 +32,16 @@ def _as_rows(result: Any) -> Sequence[Tuple[Any, str, float]]:
     )
 
 
-def raw_detector() -> Callable[[np.ndarray], Sequence[Tuple[Any, str, float]]]:
-    """返回底层四点检测识别函数：func(arr) -> [(quad, text, conf), ...]"""
+def detect(arr: np.ndarray) -> List[OcrQuad]:
+    """检测 + 识别一块图（numpy 数组，原样送引擎，不换通道）→ [OcrQuad(四点, 文字, 把握 0~1)]。
+    给要看斜度的读屏用（采矿扫描面板）；只要文字和正框的用 recognize。
+    2026-11-09 取代 raw_detector()：别处不再拿引擎的原始格式，统一从这里拿（以后换引擎只改 ocr 包）"""
     eng: Any = _get_engine()
-
-    def run(arr: np.ndarray):
-        return _as_rows(eng(arr))
-
-    return run
+    return [OcrQuad(q, t, c) for q, t, c in _as_rows(eng(arr))]
 
 
 def _line_reader() -> Callable[[np.ndarray], Tuple[str, float]]:
-    """单行识别（跳过检测）：func(arr) -> (text, conf 0~1)。两种引擎的写法不一样，这里分开（原 raw_recognizer，11-09 收成内部的）"""
+    """单行识别（跳过检测）：func(arr) -> (text, conf 0~1)。rapidocr 3.x 对象返回值。"""
     eng: Any = _get_engine()
 
     def run(arr: np.ndarray) -> Tuple[str, float]:

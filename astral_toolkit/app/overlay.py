@@ -1375,7 +1375,7 @@ class Hud:
     def _game_wh(self) -> tuple[int, int]:
         """游戏客户区宽高；找不到则用主屏估算"""
         try:
-            from ..core.capture import game_area
+            from ..infrastructure.platform.capture import game_area
 
             a = game_area()
             return int(a["width"]), int(a["height"])
@@ -1518,7 +1518,7 @@ class Hud:
             return int(p["x"]), int(p["y"])
         except Exception:
             try:
-                from ..core.capture import game_area
+                from ..infrastructure.platform.capture import game_area
 
                 return band_origin(game_area())
             except Exception:
