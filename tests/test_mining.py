@@ -340,7 +340,7 @@ def test_crafting_dataset_and_links():
     from astral_toolkit.crafting import quality
 
     bps = C.blueprints()
-    assert len(bps) == 1618
+    assert len(bps) == 1634  # 4.10.3（2026-11-13 换新数据；4.10.2 是 1618）
     helix = C.search("螺旋 II")[0]
     assert helix["n"] == "Helix II Mining Laser"
     mats = {o[1] for s in helix["slots"] for o in s[1]}
