@@ -128,12 +128,12 @@ def test_unreachable_returns_none_and_run_falls_back(monkeypatch, tmp_path):
             mod, fn, (lambda n: lambda *a, **k: called.append(n))(mod.__name__)
         )
     r = run.update()
-    # 数据包连不上：只更新汉化包和行情（矿价、商店）；制造、掉落不去别的网站下（2026-11-13），数据包那项记成没成功
+    # 数据包连不上：只更新汉化包和行情（矿价、商店）；制造、掉落不去别的网站下（2026-11-13）；数据包那项不算失败、不出现在结果里（老大定）
     assert sorted(called) == sorted(
         [localization.__name__, uex.__name__, shops.__name__]
     )
-    assert r["total"] == 4 and r["ok"] == 3
-    assert [x["title"] for x in r["results"] if not x["ok"]] == ["数据包"]
+    assert r["total"] == 3 and r["ok"] == 3
+    assert "数据包" not in [x["title"] for x in r["results"]]
     called.clear()
     r = run.update(
         direct=True

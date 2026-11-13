@@ -267,10 +267,7 @@ def update(direct=False):
         except Exception as e:
             if (
                 fn is from_pack_fn and pack["ok"] is None
-            ):  # 数据包下不到：下面只更新行情，这一项照样记成没成功
-                print(
-                    "❌ 数据包连不上：星图、制造蓝图、掉落这次没更新（不影响使用，继续用现有的）"
-                )
+            ):  # 数据包下不到：不算失败、不报错（2026-11-13 老大定），下面只更新行情
                 return {"title": title, "ok": False, "error": str(e)}
             print(f"❌ {title} 更新失败：{e}（不影响使用，继续用旧数据）")
             return {"title": title, "ok": False, "error": str(e)}
@@ -284,6 +281,7 @@ def update(direct=False):
         not direct and pack["ok"] is None
     ):  # 数据包连不上：行情（玩家上报的价格，游戏文件里没有）还是从 UEX 更新；别的数据等数据包
         print("—— 先只更新矿价和商店行情 ——")
+        results = [r for r in results if r["title"] != "数据包"]
         with ThreadPoolExecutor(len(market)) as ex:
             results += list(ex.map(run, market))
     print("全部更新完成")
