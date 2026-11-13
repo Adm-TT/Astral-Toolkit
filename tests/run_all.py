@@ -101,6 +101,7 @@ MODULES = [
     "tests.test_gamedata",
     "tests.test_gamedata_nav",
     "tests.test_place_registry",
+    "tests.test_capture_pad",
     "tests.test_feedback_guard",
     "tests.test_gamedata_b1",
     "tests.test_gamedata_b2",
