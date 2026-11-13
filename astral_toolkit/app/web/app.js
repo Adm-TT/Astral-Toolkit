@@ -268,7 +268,7 @@ function connect() {
           appendRuntimeLog({ time: new Date().toTimeString().slice(0, 8), tag: "HOVER", level: "INFO", line: `已认出: ${data.zh || data.en}（品质识别中）` });
         }
         if (!sameHover) state.sel++;
-        data.info.marketId = data.market?.id || state.item?.marketId || "";
+        data.info.marketId = data.market?.id || (sameHover && state.item?.marketId) || "";   // 只在同一次 F8 的补包里沿用；换了物品不能带着上一件的市场编号
         state.item = data.info; state.itemFrom = "F8";
         state.market = data.market; state.candidates = data.candidates;
         if (!data.pending_quality) {
