@@ -120,18 +120,6 @@ def resolve(cursor: tuple[float, float] | None, size: tuple[int, int]) -> Panel 
     return Panel(side=side, grid=grid, scrollbar=sb, page=pg, tooltip=tip)
 
 
-def right_grid_px(size: tuple[int, int]) -> Box:
-    return _px_side("right", "grid", RIGHT_GRID, size)
-
-
-def right_scrollbar_px(size: tuple[int, int]) -> Box:
-    return _px_side("right", "scrollbar", RIGHT_SCROLLBAR, size)
-
-
-def right_page_px(size: tuple[int, int]) -> Box:
-    return _px_side("right", "page", RIGHT_PAGE, size)
-
-
 def band_frac(band: str, size: tuple[int, int]) -> tuple[float, float]:
     """竖带左右比例：区域文件有则用，否则 HOVER_BANDS 默认。"""
     default = HOVER_BANDS[band]
