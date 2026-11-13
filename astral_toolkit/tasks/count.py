@@ -22,6 +22,7 @@ from ..trade.inspector import (  # noqa: E402
     cell_labels,  # noqa: F401
     _is_mineral,  # noqa: F401
 )  # noqa: E402, F401
+from ..trade import inventory_panel as _inv_panel  # noqa: E402
 from . import stock as _t_stock  # noqa: E402
 from . import trade as _t_trade  # noqa: E402
 
@@ -73,25 +74,15 @@ def _need_count() -> Any:
 
 # ================================================================ 盘点（F6）核心识别与对账
 # 盘点只在区域文件的 count.tooltip 里认说明框（老大 11-09 定）：不走 F8 按鼠标挑的竖带，也不整屏兜底（以前认不出时
-# 整屏一次约 2.8 秒）。先认标题那一截（和 F8 标题带同高：屏高 24%~36%，按原尺寸认字），名字在汉化包里精确对上就停；
-# 对不上再认整块。区域文件读不了用下面的默认值（和区域文件第 7 版一样）
-TOOLTIP = (0.5, 0.1191, 0.7132, 0.8345)
-TITLE_ROWS = (0.24, 0.36)
+# 整屏一次约 2.8 秒）。先认标题那一截（和 F8 标题带同高，比例见 inventory_panel），名字在汉化包里精确对上就停；
+# 对不上再认整块。默认值与读文件统一在 inventory_panel。
+TOOLTIP = _inv_panel.TOOLTIP
+TITLE_ROWS = _inv_panel.TITLE_ROWS
 
 
 def _tooltip_boxes(size):
     """→ (整块说明框区域, 标题那一截或 None)，像素"""
-    from ..core import screen_regions
-
-    W, H = size
-    box = screen_regions.px("count.tooltip", TOOLTIP, size)
-    title = (
-        box[0],
-        max(box[1], int(H * TITLE_ROWS[0])),
-        box[2],
-        min(box[3], int(H * TITLE_ROWS[1])),
-    )
-    return box, (title if title[3] - title[1] >= H * 0.03 else None)
+    return _inv_panel.tooltip_boxes(size)
 
 
 def _title_hit(name):

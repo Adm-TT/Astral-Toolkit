@@ -69,16 +69,60 @@ def _tooltip(img: Any, point: "tuple[int, int] | None") -> Result:
     return r
 
 
-# ---------------------------------------------------------------- 盘点：格子框 + 说明框
+# ---------------------------------------------------------------- 盘点：物品栏 ROI + 格子框 + 说明框
 def _count_try(img: Any, point: "tuple[int, int] | None") -> Result:
-    from astral_toolkit.trade import cell_grid
+    from astral_toolkit.trade import cell_grid, inventory_panel
 
     r = Result()
+    # 左右仓 / 说明框参考（始终叠上，方便对照标定）
+    r.shapes.append(
+        _region("inventory.left.grid", inventory_panel.LEFT_GRID, img, "左仓格子")
+    )
+    r.shapes.append(
+        Shape(
+            screen_regions.px_first(
+                ("inventory.right.grid", "count.grid"),
+                inventory_panel.RIGHT_GRID,
+                img.size,
+            ),
+            "右仓格子",
+            "read",
+        )
+    )
+    r.shapes.append(
+        Shape(
+            screen_regions.px_first(
+                ("inventory.tooltip", "count.tooltip"),
+                inventory_panel.TOOLTIP,
+                img.size,
+            ),
+            "说明框参考",
+            "read",
+        )
+    )
     if point:
+        panel = inventory_panel.resolve(point, img.size)
+        if panel is None:
+            r.lines.append("光标不在左/右仓格子区")
+        else:
+            r.shapes.append(Shape(panel.grid, f"命中{panel.side}仓", "hit"))
+            r.lines.append(f"面板：{panel.side}")
+            if panel.scrollbar is not None:
+                r.shapes.append(Shape(panel.scrollbar, "滚动条", "read"))
+            if panel.page is not None:
+                r.shapes.append(Shape(panel.page, "页码", "read"))
         box = cell_grid.cell_box(img, point)
         if box:
             r.shapes.append(Shape(box, "格子框", "hit"))
             r.lines.append(f"格子框：{box}（{box[2] - box[0]}×{box[3] - box[1]}）")
+            q = inventory_panel.map_cell_roi(
+                box, inventory_panel.cell_badge_frac("quality"), img.size
+            )
+            n = inventory_panel.map_cell_roi(
+                box, inventory_panel.cell_badge_frac("stack"), img.size
+            )
+            r.shapes.append(Shape(q, "品质角标", "hit"))
+            r.shapes.append(Shape(n, "数量角标", "hit"))
         else:
             gap = cell_grid.in_gap(img, point)
             r.shapes.append(
@@ -158,8 +202,20 @@ _HOVER_KEYS = [
     "hover.body_rows",
 ]
 
-# 盘点自己的区域（2026-11-09 画的初版）；说明框暂时还按 F8 那几条竖带认，接上 count.tooltip 后改
-_COUNT_KEYS = ["count.tooltip", "count.grid", "count.scrollbar", "count.page"]
+# 盘点 / 物品栏 ROI（inventory.* 为主，count.* 为右仓别名）
+_COUNT_KEYS = [
+    "inventory.left.grid",
+    "inventory.right.grid",
+    "inventory.right.scrollbar",
+    "inventory.right.page",
+    "inventory.tooltip",
+    "inventory.cell.quality",
+    "inventory.cell.stack",
+    "count.tooltip",
+    "count.grid",
+    "count.scrollbar",
+    "count.page",
+]
 
 FEATURES: dict[str, Feature] = {
     f.key: f

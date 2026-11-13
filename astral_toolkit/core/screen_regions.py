@@ -6,9 +6,10 @@
 文件格式：
     {"version": 3, "regions": {"hover.band_50_70": [
         {"aspect": "16:9", "box": [0.5, 0.0, 0.7, 1.0], "kind": "read", "note": "…"}]}}
-- box：左、上、右、下，占截图宽高的比例（0~1）；
+- box：左、上、右、下。默认占截图宽高的比例（0~1）；`coord_space` 为 `cell` 时相对格子框，允许超出 [0,1]（角标贴角）；
 - aspect：画的时候截图的宽高比（"16:9" "16:10" "21:9"…），同一区域可以按不同比例各存一条，用时挑最接近的；
 - kind：read 要认的区域 / exclude 不要认的区域（游戏调试字、悬浮窗之类）；
+- coord_space：`screen`（默认）或 `cell`（相对当前格子）；
 - version：每存一次加 1，工作台存的时候带上读到的版本号，对不上就拒存（两个页面同时改不会悄悄覆盖）。
 """
 
@@ -65,19 +66,28 @@ def _ratio(aspect: Any) -> float | None:
     return int(m.group(1)) / int(m.group(2))
 
 
-def _box_ok(box: Any) -> bool:
+def _box_ok(box: Any, *, cell: bool = False) -> bool:
     if not isinstance(box, (list, tuple)) or len(box) != 4:
         return False
-    if not all(isinstance(v, (int, float)) and 0.0 <= v <= 1.0 for v in box):
+    if not all(isinstance(v, (int, float)) for v in box):
         return False
-    return box[2] - box[0] >= MIN_SIDE and box[3] - box[1] >= MIN_SIDE
+    if not cell and not all(0.0 <= float(v) <= 1.0 for v in box):
+        return False
+    return (
+        float(box[2]) - float(box[0]) >= MIN_SIDE
+        and float(box[3]) - float(box[1]) >= MIN_SIDE
+    )
 
 
 def _entry_ok(e: Any) -> bool:
+    if not isinstance(e, dict):
+        return False
+    space = e.get("coord_space", "screen")
+    if space not in ("screen", "cell"):
+        return False
     return (
-        isinstance(e, dict)
-        and _ratio(e.get("aspect", "")) is not None
-        and _box_ok(e.get("box"))
+        _ratio(e.get("aspect", "")) is not None
+        and _box_ok(e.get("box"), cell=(space == "cell"))
         and e.get("kind", "read") in KINDS
     )
 
@@ -133,9 +143,43 @@ def frac(key: str, default: Frac, size: tuple[int, int] | None = None) -> Frac:
         return default
 
 
+def has_read(key: str) -> bool:
+    """区域文件里有没有可用的 read 条目"""
+    try:
+        entries = load()["regions"].get(key)
+        return isinstance(entries, list) and any(
+            _entry_ok(e) and e.get("kind", "read") == "read" for e in entries
+        )
+    except Exception:
+        return False
+
+
+def frac_first(
+    keys: list[str] | tuple[str, ...],
+    default: Frac,
+    size: tuple[int, int] | None = None,
+) -> Frac:
+    """按 keys 顺序取第一条有有效条目的区域；都没有用 default（别名：inventory.* → count.*）"""
+    for key in keys:
+        if has_read(key):
+            return frac(key, default, size)
+    return default
+
+
 def px(key: str, default: Frac, size: tuple[int, int]) -> tuple[int, int, int, int]:
     """区域（像素）：同 frac，再按截图尺寸换成 (左, 上, 右, 下)"""
     l, t, r, b = frac(key, default, size)  # noqa: E741
+    w, h = size
+    return (int(w * l), int(h * t), int(w * r), int(h * b))
+
+
+def px_first(
+    keys: list[str] | tuple[str, ...],
+    default: Frac,
+    size: tuple[int, int],
+) -> tuple[int, int, int, int]:
+    """同 frac_first，再换成像素"""
+    l, t, r, b = frac_first(keys, default, size)  # noqa: E741
     w, h = size
     return (int(w * l), int(h * t), int(w * r), int(h * b))
 
