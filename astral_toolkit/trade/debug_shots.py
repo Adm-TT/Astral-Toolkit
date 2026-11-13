@@ -160,7 +160,90 @@ def _prune(root: Path, keep: int = KEEP) -> None:
             pass
 
 
-def _draw_overlay(img: Any, attempts: List[RegionRec], extras: List[RegionRec]) -> Any:
+def inventory_guides(img: Any, cursor: Optional[Tuple[int, int]]) -> List[RegionRec]:
+    """物品栏 ROI 示意框（左右仓、命中侧、角标、说明框），供调试图叠画。失败返回空。"""
+    try:
+        from . import inventory_panel
+        from .cell_grid import cell_box
+    except Exception:
+        return []
+    W, H = img.size
+    size = (W, H)
+    out: List[RegionRec] = []
+
+    def add(label: str, box: Sequence[int], *, kind: str, used: bool = False) -> None:
+        if box[2] - box[0] < 2 or box[3] - box[1] < 2:
+            return
+        out.append(
+            RegionRec(
+                label=label,
+                stage="inventory",
+                box=(int(box[0]), int(box[1]), int(box[2]), int(box[3])),
+                used=used,
+                kind=kind,
+            )
+        )
+
+    try:
+        from ..core import screen_regions
+
+        lg = screen_regions.px("inventory.left.grid", inventory_panel.LEFT_GRID, size)
+        rg = screen_regions.px_first(
+            ("inventory.right.grid", "count.grid"),
+            inventory_panel.RIGHT_GRID,
+            size,
+        )
+        add("inventory.left.grid", lg, kind="guide")
+        add("inventory.right.grid", rg, kind="guide")
+        tip = screen_regions.px_first(
+            ("inventory.tooltip", "count.tooltip"),
+            inventory_panel.TOOLTIP,
+            size,
+        )
+        add("inventory.tooltip", tip, kind="guide")
+    except Exception:
+        pass
+
+    panel = None
+    if cursor is not None:
+        try:
+            panel = inventory_panel.resolve(cursor, size)
+        except Exception:
+            panel = None
+    if panel is not None:
+        add(f"panel.{panel.side}.grid", panel.grid, kind="panel", used=True)
+        if panel.scrollbar is not None:
+            add(f"panel.{panel.side}.scrollbar", panel.scrollbar, kind="panel")
+        if panel.page is not None:
+            add(f"panel.{panel.side}.page", panel.page, kind="panel")
+
+    if cursor is not None:
+        try:
+            cell = cell_box(img, (int(cursor[0]), int(cursor[1])))
+        except Exception:
+            cell = None
+        if cell is not None:
+            add("cell_box", cell, kind="cell", used=True)
+            try:
+                q = inventory_panel.map_cell_roi(
+                    cell, inventory_panel.cell_badge_frac("quality"), size
+                )
+                n = inventory_panel.map_cell_roi(
+                    cell, inventory_panel.cell_badge_frac("stack"), size
+                )
+                add("cell.quality", q, kind="badge")
+                add("cell.stack", n, kind="badge")
+            except Exception:
+                pass
+    return out
+
+
+def _draw_overlay(
+    img: Any,
+    attempts: List[RegionRec],
+    extras: List[RegionRec],
+    guides: Optional[List[RegionRec]] = None,
+) -> Any:
     from PIL import ImageDraw, ImageFont
 
     rgb = img.convert("RGB")
@@ -173,6 +256,29 @@ def _draw_overlay(img: Any, attempts: List[RegionRec], extras: List[RegionRec]) 
 
     def _box(b: Tuple[int, int, int, int]) -> Tuple[int, int, int, int]:
         return (b[0] // 2, b[1] // 2, b[2] // 2, b[3] // 2)
+
+    def _tag(
+        bb: Tuple[int, int, int, int], text: str, color: Tuple[int, int, int]
+    ) -> None:
+        if font is not None:
+            draw.text((bb[0] + 2, max(0, bb[1] - 10)), text, fill=color, font=font)
+        else:
+            draw.text((bb[0] + 2, max(0, bb[1] - 10)), text, fill=color)
+
+    # 先画 inventory 示意（底层），再画 OCR 尝试框
+    for g in guides or []:
+        kind = g.kind or ""
+        if kind == "panel":
+            color = (255, 200, 40)  # 黄：光标命中的仓
+        elif kind == "badge":
+            color = (255, 80, 80) if "quality" in g.label else (40, 220, 100)
+        elif kind == "cell":
+            color = (255, 255, 255)
+        else:
+            color = (200, 140, 40)  # 橙：左右仓/说明框参考
+        bb = _box(g.box)
+        draw.rectangle(bb, outline=color, width=2)
+        _tag(bb, g.label, color)
 
     for a in attempts:
         color = (0, 200, 0) if a.used else (140, 140, 140)
@@ -187,11 +293,7 @@ def _draw_overlay(img: Any, attempts: List[RegionRec], extras: List[RegionRec]) 
         color = (80, 160, 255)
         bb = _box(e.box)
         draw.rectangle(bb, outline=color, width=2)
-        tag = e.kind or e.label
-        if font is not None:
-            draw.text((bb[0] + 2, max(0, bb[1] - 10)), tag, fill=color, font=font)
-        else:
-            draw.text((bb[0] + 2, max(0, bb[1] - 10)), tag, fill=color)
+        _tag(bb, e.kind or e.label, color)
     return half
 
 
@@ -208,6 +310,7 @@ def _write_dump(
     note: str,
     attempts: List[RegionRec],
     extras: List[RegionRec],
+    guides: Optional[List[RegionRec]] = None,
 ) -> None:
     from ..core import paths
 
@@ -230,8 +333,9 @@ def _write_dump(
                 e.crop.save(fn)
             except Exception:
                 pass
+        guides = list(guides or [])
         try:
-            overlay = _draw_overlay(img, attempts, extras)
+            overlay = _draw_overlay(img, attempts, extras, guides)
             overlay.save(out_dir / "final_overlay.jpg", quality=80)
         except Exception:
             pass
@@ -261,6 +365,15 @@ def _write_dump(
                     "kind": e.kind,
                 }
                 for e in extras
+            ],
+            "inventory": [
+                {
+                    "label": g.label,
+                    "box": list(g.box),
+                    "kind": g.kind,
+                    "used": bool(g.used),
+                }
+                for g in guides
             ],
         }
         if name is not None:
@@ -331,6 +444,10 @@ def flush(
     attempts = list(sess.attempts)
     extras = list(sess.extras)
     reason = sess.stop_reason
+    try:
+        guides = inventory_guides(img_copy, cursor)
+    except Exception:
+        guides = []
 
     def _run() -> None:
         _write_dump(
@@ -345,6 +462,7 @@ def flush(
             note=note,
             attempts=attempts,
             extras=extras,
+            guides=guides,
         )
 
     if _SYNC:

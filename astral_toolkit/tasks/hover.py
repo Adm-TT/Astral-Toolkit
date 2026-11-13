@@ -225,15 +225,38 @@ def _hover_more(links: HoverLinks, seq, at, zh, en, info, quality=None, canon=Tr
 RETRY_WAIT = 0.5
 
 
+def begin():
+    """新一轮 F8：作废上一轮（含后台补价），返回本轮 seq。热键再按可先调一次。"""
+    seq = next(_seq)
+    _last_hover.clear()
+    _last_hover["seq"] = seq
+    return seq
+
+
+def _alive(seq) -> bool:
+    return _last_hover.get("seq") == seq
+
+
+def _sleep_retry(seq) -> bool:
+    """等说明框：短睡并看是否被再按 F8 作废；还活着返回 True。"""
+    deadline = time.time() + RETRY_WAIT
+    while time.time() < deadline:
+        if not _alive(seq):
+            return False
+        time.sleep(min(0.05, max(0.0, deadline - time.time())))
+    return _alive(seq)
+
+
 def hover_once(links: HoverLinks, /, img=None):
-    """F8：认出鼠标指着的物品，马上把名字和本机数据（哪里买、维科洛、制造）显示到悬浮窗；
-    要联网的（玩家市场价、掉落）放到后台，查到了再补上。以前要等联网全查完才显示，慢好几秒"""
+    """F8：认准名字后先刷本机介绍，品质/数量认完立刻补；联网价后台再补。
+    再按 F8 会 begin() 作废本轮，检查点静默退出。"""
     from ..mining.screen import grab
     from ..trade import inspector as _insp
+    from .system.about import data_names_ready
 
     t0 = time.time()
-    _last_hover.clear()
-    _last_hover["seq"] = None  # 上一次 F8 后台还没查完的价格，不再往悬浮窗上写
+    seq = begin()
+    at = time.strftime("%H:%M:%S")
     from ..core import run_records
 
     run_records.record("HOVER", "触发 F8 物品识别", ui_tag="HOVER")
@@ -241,6 +264,8 @@ def hover_once(links: HoverLinks, /, img=None):
     t_grab_0 = time.time()
     img = img or grab()
     t_grab = time.time()
+    if not _alive(seq):
+        return {"aborted": True}
     # 异步更新右下角截图预览，避免在关键路径上阻塞 50~150ms 的双重 JPEG 压缩与缩放
     threading.Thread(
         target=preview.update_preview,
@@ -249,30 +274,83 @@ def hover_once(links: HoverLinks, /, img=None):
         daemon=True,
     ).start()
     t1 = time.time()
-    bus.publish("hover", {"state": "working"})
+    bus.publish("hover", {"state": "working", "seq": seq, "at": at})
     _item_hud("识别中…", 30)  # 按下就有反应
+    early = {"info": None, "painted": False}
+
+    def should_abort():
+        return not _alive(seq)
+
+    def on_identified(partial):
+        if not _alive(seq) or early["painted"]:
+            return
+        zh, en = partial["zh"], partial["en"]
+        info = item_info(links, en, zh, loot=False)
+        early["info"] = info
+        lines = [zh or en] + _hover_lines(links, info, en, zh)
+        if not _alive(seq):
+            return
+        _last_hover.update(at=at, seq=seq, id=None, lines=lines)
+        _item_hud("\n".join(lines))
+        bus.publish(
+            "hover",
+            {
+                "state": "ok",
+                "zh": zh,
+                "en": en,
+                "info": info,
+                "market": None,
+                "candidates": [],
+                "pending": True,
+                "pending_quality": True,
+                "at": at,
+                "seq": seq,
+                "quality": None,
+                "qty": None,
+                "unit": None,
+                "tier": _tier(None),
+                "craft": None,
+                "sure": True,
+                "library_ready": bool(data_names_ready()),
+            },
+        )
+        early["painted"] = True
+
     cx, cy = _insp._cursor_on_image(img) if WIN else (img.width // 2, img.height // 2)
+    inspect_kw = {
+        "on_identified": on_identified,
+        "should_abort": should_abort,
+    }
     res = (
-        inspect_item(img, (cx, cy), whole_screen=False)
+        inspect_item(img, (cx, cy), whole_screen=False, **inspect_kw)
         if own
-        else inspect_item(img, (cx, cy))
+        else inspect_item(img, (cx, cy), **inspect_kw)
     )
+    if not _alive(seq):
+        return {"aborted": True}
     if own and not (res and res["sure"]):
-        # 第一遍没认准：多半按早了，说明框还没出来 / 没出完（截到半透明的）。等一下再截一次，这一遍照旧可以整屏；
-        # 第二遍什么都没认出来就还用第一遍的（2026-11-06 老大验收：一次没认出、一次 8 秒认成制造商）
+        # 第一遍没认准：多半按早了，说明框还没出来 / 没出完（截到半透明的）。等一下再截一次；
+        # 第二遍什么都没认出来就还用第一遍的（2026-11-06 老大验收）
         got = f"认成「{res['zh'] or res['en']}」没对上汉化包" if res else "没找到说明框"
         bus.runtime_log(
             f"F8 第一遍{got}，等 {RETRY_WAIT} 秒再截一次", tag="HOVER", level="INFO"
         )
-        time.sleep(RETRY_WAIT)
+        if not _sleep_retry(seq):
+            return {"aborted": True}
         img2 = grab()
+        if not _alive(seq):
+            return {"aborted": True}
         cur2 = (
             _insp._cursor_on_image(img2) if WIN else (img2.width // 2, img2.height // 2)
         )
-        res2 = inspect_item(img2, cur2)
+        res2 = inspect_item(img2, cur2, **inspect_kw)
+        if not _alive(seq):
+            return {"aborted": True}
         if res2 is not None or res is None:
             img, (cx, cy), res = img2, cur2, res2
     t2 = time.time()
+    if not _alive(seq):
+        return {"aborted": True}
     if not res:
         msg = "未找到物品说明框。鼠标停在物品上，等说明框出现后再按"
         ms_grab = (t_grab - t_grab_0) * 1000
@@ -282,7 +360,7 @@ def hover_once(links: HoverLinks, /, img=None):
             tag="HOVER",
             level="WARN",
         )
-        bus.publish("hover", {"state": "miss", "msg": msg})
+        bus.publish("hover", {"state": "miss", "msg": msg, "seq": seq, "at": at})
         _item_hud("未识别到物品\n鼠标停在物品上，等说明框出现后再按", 10)
         threading.Thread(
             target=_insp._hover_log,
@@ -297,11 +375,7 @@ def hover_once(links: HoverLinks, /, img=None):
     tokens = res["tokens"]
     where = res["where"]
     name = res.get("raw") or (zh, en)  # 记日志、收错题用纠正前照字认出的名字
-    at = time.strftime("%H:%M:%S")  # 给人看的时间
-    seq = next(_seq)  # 区分每一次 F8（同一秒按两次 at 一样）
-    info = item_info(links, en, zh, loot=False)  # 只用本机数据，很快
-    from .system.about import data_names_ready
-
+    info = early["info"] or item_info(links, en, zh, loot=False)
     library_ready = data_names_ready()
     head = (
         (zh or en)
@@ -325,9 +399,10 @@ def hover_once(links: HoverLinks, /, img=None):
         + ([f"材料品质：{craft_text(craft)}"] if craft else [])
         + _hover_lines(links, info, en, zh)
     )
-    _last_hover.clear()
+    if not _alive(seq):
+        return {"aborted": True}
     _last_hover.update(at=at, seq=seq, id=None, lines=lines)
-    _item_hud("\n".join(lines))  # 没数据的行不显示；市场价查到了再补上
+    _item_hud("\n".join(lines))  # 补品质/数量；市场价查到了再补上
     t3 = time.time()
     ms_total = (t3 - t0) * 1000
     ms_grab = (t_grab - t_grab_0) * 1000
@@ -351,6 +426,7 @@ def hover_once(links: HoverLinks, /, img=None):
             "market": None,
             "candidates": [],
             "pending": True,
+            "pending_quality": False,
             "at": at,
             "seq": seq,
             "quality": quality,

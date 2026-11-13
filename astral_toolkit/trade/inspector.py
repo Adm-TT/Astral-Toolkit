@@ -13,19 +13,19 @@ import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-from ..core import screen_regions
+from . import inventory_panel
 from .names import canonical, has_chinese, split_bilingual  # noqa: F401
 
-# 物品说明框识别区域配置：按鼠标横向位置自适应分级识别
-# 只管左右；上下由 HEIGHT_STAGES 的高度阶段决定（旧行为 = 每个宽度条带都取全高 0.0 ~ 1.0）
-HOVER_REGIONS: Dict[str, Tuple[float, float, float, float]] = {
-    "30-50%": (0.30, 0.0, 0.50, 1.0),
-    "50-70%": (0.50, 0.0, 0.70, 1.0),
-    "30-70%": (0.30, 0.0, 0.70, 1.0),
-    "中间": (0.30, 0.0, 0.70, 1.0),
-    "整屏": (0.0, 0.0, 1.0, 1.0),
-}
+# 竖带默认与高度行：只在 inventory_panel；此处别名给旧测试 / bench
+HOVER_REGIONS = inventory_panel.HOVER_BANDS
 HOVER_REGION = HOVER_REGIONS["中间"]
+TITLE_Y0, TITLE_Y1 = inventory_panel.TITLE_ROWS
+BODY_Y0, BODY_Y1 = inventory_panel.BODY_ROWS
+# (顶, 底, 阶段名, native)。native=True：小块图不放大到 736，快 2~3 倍
+HEIGHT_STAGES: Tuple[Tuple[float, float, str, bool], ...] = (
+    (TITLE_Y0, TITLE_Y1, "title", True),
+    (BODY_Y0, BODY_Y1, "body", False),
+)
 
 _AMOUNT = re.compile(r"^(\d+(?:[.,]\d+)?)\s*[S5]\s*C\s*U$", re.I)
 
@@ -69,53 +69,6 @@ def get_hover_regions(
         return [(l, t, r, b, "50-70%"), fallback_region]
 
 
-# ---------------------------------------------------------------- 高度阶段级联（2026-11-04 F8 标题带方案）
-# 说明框主体大致落在屏高 24%~70%，标题中文行贴近 24%（观察值，见
-# docs/superpowers/specs/2026-11-04-f8-title-band-ocr.md §1、§3）。认物只要标题那一行，
-# 标题带专责认名；说明框带专责品质/加成与结构锚点。不再全高竖条、不再整屏 OCR（信息过多易误认）。
-# 初值，可以用样本调；改这里只用改这几行。
-TITLE_Y0 = 0.24  # 标题带顶（相对截图高）
-TITLE_Y1 = 0.36  # 标题带底
-BODY_Y0 = 0.24  # 说明框带顶
-BODY_Y1 = 0.70  # 说明框带底
-# (顶, 底, 阶段名, native)。native=True：小块图不放大到 736，快 2~3 倍
-HEIGHT_STAGES: Tuple[Tuple[float, float, str, bool], ...] = (
-    (TITLE_Y0, TITLE_Y1, "title", True),
-    (BODY_Y0, BODY_Y1, "body", False),
-)
-
-
-# 读屏开发工作台（2026-11-09）：上面这些区域可以在工作台里画，存进区域文件 screen_regions.json；
-# 运行时按截图尺寸从那里取，取不到用上面写死的值（两边初值逐位相同）。「鼠标在哪就挑哪条带」的规则还在 get_hover_regions
-_BAND_KEYS = {
-    "30-50%": "hover.band_30_50",
-    "50-70%": "hover.band_50_70",
-    "30-70%": "hover.band_30_70",
-    "中间": "hover.band_30_70",
-}
-_ROW_KEYS = {"title": "hover.title_rows", "body": "hover.body_rows"}
-
-
-def _band_lr(band: str, size: Tuple[int, int]) -> Tuple[float, float]:
-    """竖带的左右（比例）：区域文件里有就用它，没有用 HOVER_REGIONS"""
-    l, t, r, b = HOVER_REGIONS[band]  # noqa: E741
-    key = _BAND_KEYS.get(band)
-    if key:
-        l, _t, r, _b = screen_regions.frac(key, (l, t, r, b), size)  # noqa: E741
-    return l, r
-
-
-def _stage_rows(
-    stage: str, top: float, bottom: float, size: Tuple[int, int]
-) -> Tuple[float, float]:
-    """高度阶段的上下（比例）：标题带、说明框带从区域文件取，全高不变"""
-    key = _ROW_KEYS.get(stage)
-    if not key:
-        return top, bottom
-    _l, t, _r, b = screen_regions.frac(key, (0.0, top, 1.0, bottom), size)
-    return t, b
-
-
 def get_stage_regions(
     regions: List[Tuple[float, float, float, float, str]], width: int, height: int
 ) -> List[Tuple[Tuple[int, int, int, int], str, str, bool]]:
@@ -129,11 +82,11 @@ def get_stage_regions(
     """
     size = (width, height)
     out = []
-    for top, bottom, stage, native in HEIGHT_STAGES:
-        top, bottom = _stage_rows(stage, top, bottom, size)
+    for _top, _bottom, stage, native in HEIGHT_STAGES:
+        top, bottom = inventory_panel.stage_rows(stage, size)
         for left, _band_top, right, _band_bottom, band in regions:
             if band in HOVER_REGIONS:
-                left, right = _band_lr(band, size)
+                left, right = inventory_panel.band_frac(band, size)
             box = (
                 int(width * left),
                 int(height * top),
@@ -165,8 +118,12 @@ def region_box(
         y_range = (0.0, 1.0)  # 旧标签「整屏」/「@full」兼容
     if band not in HOVER_REGIONS or y_range is None:
         return None
-    left, right = _band_lr(band, (width, height))
-    y0, y1 = _stage_rows(stage_name, y_range[0], y_range[1], (width, height))
+    size = (width, height)
+    left, right = inventory_panel.band_frac(band, size)
+    if stage_name in ("title", "body"):
+        y0, y1 = inventory_panel.stage_rows(stage_name, size)
+    else:
+        y0, y1 = y_range
     return (
         int(width * left),
         int(height * y0),
@@ -608,13 +565,24 @@ def _dbg_texts(tokens, n: int = 8) -> str:
     return " / ".join(texts)
 
 
-def _read_tooltip(img, cursor, whole_screen=True):
+def _aborted(should_abort) -> bool:
+    """再按 F8 等：调用方给的取消检查；出错当没取消，别拖垮识别。"""
+    if should_abort is None:
+        return False
+    try:
+        return bool(should_abort())
+    except Exception:
+        return False
+
+
+def _read_tooltip(img, cursor, whole_screen=True, should_abort=None):
     """→ (文字, (中文名, 英文名) 或 None, 认的范围)
     识别机制（2026-11-09：标题认名 / Body 品质，见 docs/superpowers/specs/2026-11-04-f8-title-band-ocr.md）：
     1. 标题带（屏高 24%~36%，native）：高把握库命中（汉化/矿物/物品目录精确，或英文≥0.9 且唯一）就停。
     2. 说明框带（24%~70%）：库精确或锚点 sure（体积/类型…）就停；这一档也带品质行。
     3. 不再全高竖条、不再整屏 OCR（信息过多易误认）。
     whole_screen 参数保留兼容：True/False 行为相同（都不整屏）；F8 第一遍认不出仍由调用方再截一次。
+    should_abort：每档 OCR 后若为真，马上停（再按 F8 作废）。
     """
     from ..ocr import recognize
     from . import debug_shots
@@ -644,10 +612,16 @@ def _read_tooltip(img, cursor, whole_screen=True):
     for box, label, stage, native in get_stage_regions(
         get_hover_regions(cursor, W), W, H
     ):
+        if _aborted(should_abort):
+            _shot_stop("作废")
+            return [], None, label
         t0 = time.perf_counter()
         crop = img.crop(box)
         _shot_attempt(box, label, stage, crop)
         tokens = recognize(crop, urgent=True, offset=box[:2], native=native)
+        if _aborted(should_abort):
+            _shot_stop("作废")
+            return [], None, label
         ms = (time.perf_counter() - t0) * 1000
         name, sure = tooltip_pick(tokens, cursor, img)
         strong = _strong_canonical(name)
@@ -678,6 +652,9 @@ def _read_tooltip(img, cursor, whole_screen=True):
             )
         last = (tokens, None, label)
 
+    if _aborted(should_abort):
+        _shot_stop("作废")
+        return [], None, last[2]
     cand = best_candidate
     if cand is not None:
         if dbg:
@@ -764,13 +741,53 @@ def parse_count(text):
     return int(m.group(1)) if m else None
 
 
-def cell_labels(img, cursor, tokens=None, size=None):
+def cell_labels(img, cursor, tokens=None, size=None, cell=None):
     """鼠标指着的那个物品格子：左上角的品质（575Q）和右上角的数量（200x）。没有返回 None。
-    只认鼠标上方一个格子高度以内的标签；同一排里品质取鼠标左边最近的、数量取鼠标右边最近的。
-    size：格子大小 (宽, 高)，默认按整屏比例估（1440p 下约 150×140）"""
+    优先：有 cell 框（或现找 cell_box）时按 inventory.cell.* 相对子 ROI（可贴角越界）分裁 OCR；
+    否则：只认鼠标上方一个格子高度以内的标签（旧逻辑）。
+    size：旧路径格子大小 (宽, 高)，默认按整屏比例估（1440p 下约 150×140）"""
     W, H = img.size
-    cw, ch = size or (int(W * 0.065), int(H * 0.11))
     cx, cy = cursor
+    if tokens is None and cell is None:
+        try:
+            from .cell_grid import cell_box as _cell_box
+
+            cell = _cell_box(img, (int(cx), int(cy)))
+        except Exception:
+            cell = None
+    if tokens is None and cell is not None:
+        from ..ocr import recognize
+        from . import debug_shots, inventory_panel
+
+        q_box = inventory_panel.map_cell_roi(
+            cell, inventory_panel.cell_badge_frac("quality"), img.size
+        )
+        n_box = inventory_panel.map_cell_roi(
+            cell, inventory_panel.cell_badge_frac("stack"), img.size
+        )
+        shot = debug_shots.current()
+        best_q = best_n = None
+        for kind, box in (("quality", q_box), ("stack", n_box)):
+            if box[2] - box[0] < 2 or box[3] - box[1] < 2:
+                continue
+            crop = img.crop(box)
+            if shot is not None:
+                try:
+                    shot.add_extra(f"cell_{kind}", kind, box, crop, kind="cell")
+                except Exception:
+                    pass
+            for t in recognize(crop, urgent=True, offset=box[:2], native=True) or []:
+                if kind == "quality":
+                    q = parse_qlabel(t.text)
+                    if q is not None and (best_q is None or q > best_q):
+                        best_q = q
+                else:
+                    n = parse_count(t.text)
+                    if n is not None and (best_n is None or n > best_n):
+                        best_n = n
+        return best_q, best_n
+
+    cw, ch = size or (int(W * 0.065), int(H * 0.11))
     if tokens is None:
         from ..ocr import recognize
         from . import debug_shots
@@ -786,7 +803,7 @@ def cell_labels(img, cursor, tokens=None, size=None):
         # native=True 避免小裁剪图被 RapidOCR 强行放大至 736px，提速 2~3 倍
         tokens = recognize(crop, urgent=True, offset=box[:2], native=True)
     best_q = best_n = None
-    for t in tokens:
+    for t in tokens or []:
         x, y, w, h = t.box
         if not cy - ch < y < cy:
             continue
@@ -865,12 +882,16 @@ def inspect_item(
     craft_override=False,
     whole_screen=True,
     body_box=None,
+    on_identified=None,
+    should_abort=None,
 ) -> Optional[Dict[str, Any]]:
     """识别鼠标悬停的物品格与说明框，返回结构化字典或 None。
     whole_screen=False（F8 第一遍）：说明框条带都没认出时不整屏兜底，由调用方等一下再截一次。
     craft_override=True（F6 盘点用）：制造品的加成和蓝图完全对上时，用倒推出的品质和各槽品质，
     读到的品质数字也让位（和 1.1.1 盘点一样）；F8 默认只在没读到品质数字时才倒推。
-    body_box（F6 盘点用）：标题那截命中的制造品补认加成行时认这一块（count.tooltip），不按 F8 的竖带：
+    body_box（F6 盘点用）：标题那截命中的制造品补认加成行时认这一块（count.tooltip），不按 F8 的竖带。
+    on_identified（F8）：认准名字（sure）后、品质相关 OCR 前回调一次，便于先刷悬浮窗介绍。
+    should_abort（F8）：再按 F8 时尽快停；检查点返回 True 则整次返回 None。
     {
         "zh": 中文名,
         "en": 英文名,
@@ -897,14 +918,25 @@ def inspect_item(
     result = None
     try:
         if tokens is None or where is None:
-            tokens, name, where = (
-                _read_tooltip(img, (cx, cy))
-                if whole_screen
-                else _read_tooltip(img, (cx, cy), whole_screen=False)
-            )
+            # should_abort 未传时保持旧调用形态（测试替身常只收 img, cursor）
+            if should_abort is None:
+                tokens, name, where = (
+                    _read_tooltip(img, (cx, cy))
+                    if whole_screen
+                    else _read_tooltip(img, (cx, cy), whole_screen=False)
+                )
+            else:
+                tokens, name, where = _read_tooltip(
+                    img,
+                    (cx, cy),
+                    whole_screen=whole_screen,
+                    should_abort=should_abort,
+                )
         else:
             name, _sure = tooltip_pick(tokens, (cx, cy), img)
 
+        if _aborted(should_abort):
+            return None
         if not name:
             _dbg(f"inspect｜未认出名字｜where={where}", "INFO")
             return None
@@ -916,6 +948,23 @@ def inspect_item(
             zh, en = canon
 
         mineral = _is_mineral(zh, en, fuzzy=not canon)  # 汉化包对上了就不模糊配矿名
+        if canon and on_identified is not None and not _aborted(should_abort):
+            try:
+                on_identified(
+                    {
+                        "zh": zh,
+                        "en": en,
+                        "sure": True,
+                        "raw": raw,
+                        "canon": tuple(canon),
+                        "where": where,
+                    }
+                )
+            except Exception:
+                pass
+        if _aborted(should_abort):
+            return None
+
         body_rescanned = False
         row_q, row_amt = tooltip_row(tokens)
         q_from_row_label = False
@@ -929,6 +978,8 @@ def inspect_item(
             and not mineral
             and row_q is None
         ):
+            if _aborted(should_abort):
+                return None
             body = _tooltip_body_tokens(img, cursor, where, body_box)
             if body:
                 tokens = body
@@ -941,6 +992,8 @@ def inspect_item(
         cell_q, cell_n = None, None
         cell_reuse = False
         if not mineral:
+            if _aborted(should_abort):
+                return None
             # 鼠标那一格在认过的区域里：角标可以在同一次识别的 tokens 里找，不用再认一块图。
             # 区域标签带高度阶段（"30-50%@title"）：窄带只认了标题那几条，一般不含鼠标所在的格子，就不复用
             can_reuse = where == "整屏"
@@ -961,6 +1014,8 @@ def inspect_item(
             except Exception:
                 cell_q, cell_n = None, None
 
+        if _aborted(should_abort):
+            return None
         quality = (
             row_q
             if row_q is not None
@@ -978,6 +1033,8 @@ def inspect_item(
 
                 mods = parse_mods(tokens)
                 if not mods and for_item(en, zh) and not body_rescanned:
+                    if _aborted(should_abort):
+                        return None
                     # 标题带命中且上面没为品质补扫过：再补一次拿加成行（F6 盘点按 body_box 认区域文件那一块）
                     body = _tooltip_body_tokens(img, cursor, where, body_box)
                     if body:
@@ -994,6 +1051,8 @@ def inspect_item(
             except Exception:
                 craft = None
 
+        if _aborted(should_abort):
+            return None
         if _debug_on():
             if craft:
                 q_src = "制造倒推"

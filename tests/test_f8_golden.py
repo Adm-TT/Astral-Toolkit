@@ -208,11 +208,26 @@ def _install(
     monkeypatch.setattr(Hv, "_seq", itertools.count(1))
     monkeypatch.setattr(Hv, "_last_hover", {})
     monkeypatch.setattr(Hv, "WIN", False)
-    monkeypatch.setattr(
-        Hv,
-        "inspect_item",
-        lambda img, cur: copy.deepcopy(res) if res is not None else None,
-    )
+
+    def fake_inspect(img, cur, **kw):
+        out = copy.deepcopy(res) if res is not None else None
+        cb = kw.get("on_identified")
+        if out and out.get("sure") and cb:
+            cb(
+                {
+                    "zh": out["zh"],
+                    "en": out["en"],
+                    "sure": True,
+                    "raw": out.get("raw") or (out["zh"], out["en"]),
+                    "canon": out.get("canon"),
+                    "where": out.get("where"),
+                }
+            )
+        if kw.get("should_abort") and kw["should_abort"]():
+            return None
+        return out
+
+    monkeypatch.setattr(Hv, "inspect_item", fake_inspect)
     monkeypatch.setattr(Hv, "item_info", fake_item_info)
     monkeypatch.setattr(T, "trade", lambda: fake_trade)
     monkeypatch.setattr(T, "_market_rows", fake_market_rows)
@@ -263,7 +278,7 @@ def test_hover_miss(monkeypatch):
     assert Hv.hover_once(env.links, _Image()) == {"miss": True}
     assert env.calls == [
         ["thread", "update_preview"],
-        ["publish", "hover", {"state": "working"}],
+        ["publish", "hover", {"state": "working", "seq": 1, "at": "12:00:00"}],
         ["hud", "识别中…", 30],
         [
             "log",
@@ -277,6 +292,8 @@ def test_hover_miss(monkeypatch):
             {
                 "state": "miss",
                 "msg": "未找到物品说明框。鼠标停在物品上，等说明框出现后再按",
+                "seq": 1,
+                "at": "12:00:00",
             },
         ],
         [
@@ -287,7 +304,7 @@ def test_hover_miss(monkeypatch):
         ["thread", "_hover_log"],
     ]
     assert env.aliases == []
-    assert Hv._last_hover == {"seq": None}
+    assert Hv._last_hover == {"seq": 1}
 
 
 def test_hover_normal_with_market(monkeypatch):
@@ -329,6 +346,26 @@ def test_hover_normal_with_market(monkeypatch):
         "可用于维科洛兑换：奖励甲",
         "可制造：有蓝图（材料见物品查询）",
     ]
+    early_lines = ["医疗笔"] + lines[1:]
+    early_payload = {
+        "state": "ok",
+        "zh": "医疗笔",
+        "en": "MedPen",
+        "info": info,
+        "market": None,
+        "candidates": [],
+        "pending": True,
+        "pending_quality": True,
+        "at": "12:00:00",
+        "seq": 1,
+        "quality": None,
+        "qty": None,
+        "unit": None,
+        "tier": "q0",
+        "craft": None,
+        "sure": True,
+        "library_ready": True,
+    }
     ok_payload = {
         "state": "ok",
         "zh": "医疗笔",
@@ -337,6 +374,7 @@ def test_hover_normal_with_market(monkeypatch):
         "market": None,
         "candidates": [],
         "pending": True,
+        "pending_quality": False,
         "at": "12:00:00",
         "seq": 1,
         "quality": 650,
@@ -370,8 +408,10 @@ def test_hover_normal_with_market(monkeypatch):
     assert Hv.hover_once(env.links, _Image()) == {"ok": True, "ms": 0}
     assert env.calls == [
         ["thread", "update_preview"],
-        ["publish", "hover", {"state": "working"}],
+        ["publish", "hover", {"state": "working", "seq": 1, "at": "12:00:00"}],
         ["hud", "识别中…", 30],
+        ["hud", "\n".join(early_lines), None],
+        ["publish", "hover", early_payload],
         ["hud", "\n".join(lines), None],
         [
             "log",
@@ -435,6 +475,7 @@ def test_hover_unsure_missing_library(monkeypatch):
         "market": None,
         "candidates": [],
         "pending": True,
+        "pending_quality": False,
         "at": "12:00:00",
         "seq": 1,
         "quality": None,
@@ -463,7 +504,7 @@ def test_hover_unsure_missing_library(monkeypatch):
     assert Hv.hover_once(env.links, _Image()) == {"ok": True, "ms": 0}
     assert env.calls == [
         ["thread", "update_preview"],
-        ["publish", "hover", {"state": "working"}],
+        ["publish", "hover", {"state": "working", "seq": 1, "at": "12:00:00"}],
         ["hud", "识别中…", 30],
         ["hud", head, None],
         [
@@ -525,6 +566,7 @@ def test_hover_unsure_library_ready(monkeypatch):
         "market": None,
         "candidates": [],
         "pending": True,
+        "pending_quality": False,
         "at": "12:00:00",
         "seq": 1,
         "quality": None,
@@ -553,7 +595,7 @@ def test_hover_unsure_library_ready(monkeypatch):
     assert Hv.hover_once(env.links, _Image()) == {"ok": True, "ms": 0}
     assert env.calls == [
         ["thread", "update_preview"],
-        ["publish", "hover", {"state": "working"}],
+        ["publish", "hover", {"state": "working", "seq": 1, "at": "12:00:00"}],
         ["hud", "识别中…", 30],
         ["hud", head, None],
         [
@@ -584,6 +626,25 @@ def test_hover_canon_records_training_thread(monkeypatch):
     env = _install(monkeypatch, res, info=info)
 
     head = "医疗笔｜品质 650｜2 个"
+    early_payload = {
+        "state": "ok",
+        "zh": "医疗笔",
+        "en": "MedPen",
+        "info": info,
+        "market": None,
+        "candidates": [],
+        "pending": True,
+        "pending_quality": True,
+        "at": "12:00:00",
+        "seq": 1,
+        "quality": None,
+        "qty": None,
+        "unit": None,
+        "tier": "q0",
+        "craft": None,
+        "sure": True,
+        "library_ready": True,
+    }
     ok_payload = {
         "state": "ok",
         "zh": "医疗笔",
@@ -592,6 +653,7 @@ def test_hover_canon_records_training_thread(monkeypatch):
         "market": None,
         "candidates": [],
         "pending": True,
+        "pending_quality": False,
         "at": "12:00:00",
         "seq": 1,
         "quality": 650,
@@ -613,8 +675,10 @@ def test_hover_canon_records_training_thread(monkeypatch):
     assert Hv.hover_once(env.links, _Image()) == {"ok": True, "ms": 0}
     assert env.calls == [
         ["thread", "update_preview"],
-        ["publish", "hover", {"state": "working"}],
+        ["publish", "hover", {"state": "working", "seq": 1, "at": "12:00:00"}],
         ["hud", "识别中…", 30],
+        ["hud", "医疗笔", None],
+        ["publish", "hover", early_payload],
         ["hud", head, None],
         [
             "log",
@@ -651,6 +715,25 @@ def test_hover_craft_line(monkeypatch):
 
     head = "医疗笔｜品质 650｜2 个"
     lines = [head, "材料品质：CRAFT"]
+    early_payload = {
+        "state": "ok",
+        "zh": "医疗笔",
+        "en": "MedPen",
+        "info": info,
+        "market": None,
+        "candidates": [],
+        "pending": True,
+        "pending_quality": True,
+        "at": "12:00:00",
+        "seq": 1,
+        "quality": None,
+        "qty": None,
+        "unit": None,
+        "tier": "q0",
+        "craft": None,
+        "sure": True,
+        "library_ready": True,
+    }
     ok_payload = {
         "state": "ok",
         "zh": "医疗笔",
@@ -659,6 +742,7 @@ def test_hover_craft_line(monkeypatch):
         "market": None,
         "candidates": [],
         "pending": True,
+        "pending_quality": False,
         "at": "12:00:00",
         "seq": 1,
         "quality": 650,
@@ -680,8 +764,10 @@ def test_hover_craft_line(monkeypatch):
     assert Hv.hover_once(env.links, _Image()) == {"ok": True, "ms": 0}
     assert env.calls == [
         ["thread", "update_preview"],
-        ["publish", "hover", {"state": "working"}],
+        ["publish", "hover", {"state": "working", "seq": 1, "at": "12:00:00"}],
         ["hud", "识别中…", 30],
+        ["hud", "医疗笔", None],
+        ["publish", "hover", early_payload],
         ["hud", "\n".join(lines), None],
         [
             "log",
@@ -729,6 +815,25 @@ def test_hover_market_candidates_only_final_publish(monkeypatch):
         },
     )
 
+    early_payload = {
+        "state": "ok",
+        "zh": "医疗笔",
+        "en": "MedPen",
+        "info": info,
+        "market": None,
+        "candidates": [],
+        "pending": True,
+        "pending_quality": True,
+        "at": "12:00:00",
+        "seq": 1,
+        "quality": None,
+        "qty": None,
+        "unit": None,
+        "tier": "q0",
+        "craft": None,
+        "sure": True,
+        "library_ready": True,
+    }
     ok_payload = {
         "state": "ok",
         "zh": "医疗笔",
@@ -737,6 +842,7 @@ def test_hover_market_candidates_only_final_publish(monkeypatch):
         "market": None,
         "candidates": [],
         "pending": True,
+        "pending_quality": False,
         "at": "12:00:00",
         "seq": 1,
         "quality": 650,
@@ -762,8 +868,10 @@ def test_hover_market_candidates_only_final_publish(monkeypatch):
     assert Hv.hover_once(env.links, _Image()) == {"ok": True, "ms": 0}
     assert env.calls == [
         ["thread", "update_preview"],
-        ["publish", "hover", {"state": "working"}],
+        ["publish", "hover", {"state": "working", "seq": 1, "at": "12:00:00"}],
         ["hud", "识别中…", 30],
+        ["hud", "医疗笔", None],
+        ["publish", "hover", early_payload],
         ["hud", head, None],
         [
             "log",
@@ -836,6 +944,25 @@ def test_hover_typo_name_corrected(monkeypatch):
 
     head = "医疗笔｜品质 650｜2 个"
     lines_after = [head, "购买：1,234｜商店甲"]
+    early_payload = {
+        "state": "ok",
+        "zh": "医疗笔",
+        "en": "MedPenn",
+        "info": info_before,
+        "market": None,
+        "candidates": [],
+        "pending": True,
+        "pending_quality": True,
+        "at": "12:00:00",
+        "seq": 1,
+        "quality": None,
+        "qty": None,
+        "unit": None,
+        "tier": "q0",
+        "craft": None,
+        "sure": True,
+        "library_ready": True,
+    }
     ok_payload = {
         "state": "ok",
         "zh": "医疗笔",
@@ -844,6 +971,7 @@ def test_hover_typo_name_corrected(monkeypatch):
         "market": None,
         "candidates": [],
         "pending": True,
+        "pending_quality": False,
         "at": "12:00:00",
         "seq": 1,
         "quality": 650,
@@ -874,8 +1002,10 @@ def test_hover_typo_name_corrected(monkeypatch):
     assert Hv.hover_once(env.links, _Image()) == {"ok": True, "ms": 0}
     assert env.calls == [
         ["thread", "update_preview"],
-        ["publish", "hover", {"state": "working"}],
+        ["publish", "hover", {"state": "working", "seq": 1, "at": "12:00:00"}],
         ["hud", "识别中…", 30],
+        ["hud", "医疗笔", None],
+        ["publish", "hover", early_payload],
         ["hud", head, None],
         [
             "log",
@@ -932,6 +1062,25 @@ def test_hover_price_and_loot_errors(monkeypatch):
     )
 
     head = "医疗笔｜品质 650｜2 个"
+    early_payload = {
+        "state": "ok",
+        "zh": "医疗笔",
+        "en": "MedPen",
+        "info": info,
+        "market": None,
+        "candidates": [],
+        "pending": True,
+        "pending_quality": True,
+        "at": "12:00:00",
+        "seq": 1,
+        "quality": None,
+        "qty": None,
+        "unit": None,
+        "tier": "q0",
+        "craft": None,
+        "sure": True,
+        "library_ready": True,
+    }
     ok_payload = {
         "state": "ok",
         "zh": "医疗笔",
@@ -940,6 +1089,7 @@ def test_hover_price_and_loot_errors(monkeypatch):
         "market": None,
         "candidates": [],
         "pending": True,
+        "pending_quality": False,
         "at": "12:00:00",
         "seq": 1,
         "quality": 650,
@@ -972,8 +1122,10 @@ def test_hover_price_and_loot_errors(monkeypatch):
     assert Hv.hover_once(env.links, _Image()) == {"ok": True, "ms": 0}
     assert env.calls == [
         ["thread", "update_preview"],
-        ["publish", "hover", {"state": "working"}],
+        ["publish", "hover", {"state": "working", "seq": 1, "at": "12:00:00"}],
         ["hud", "识别中…", 30],
+        ["hud", "医疗笔", None],
+        ["publish", "hover", early_payload],
         ["hud", head, None],
         [
             "log",

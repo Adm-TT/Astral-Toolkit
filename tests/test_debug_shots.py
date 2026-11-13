@@ -74,6 +74,11 @@ def test_hover_dump_writes_attempts_overlay_meta(monkeypatch, tmp_path):
     assert meta["attempts"][0]["used"] is True
     assert meta["attempts"][1]["used"] is False
     assert meta["name"] == ["塔兰导电石", "Taranite"]
+    # 物品栏 ROI 示意：左右仓 + 说明框至少进 meta / 叠图
+    labels = {g["label"] for g in meta.get("inventory") or []}
+    assert "inventory.left.grid" in labels
+    assert "inventory.right.grid" in labels
+    assert "inventory.tooltip" in labels
 
 
 def test_count_run_cells_share_stamp(monkeypatch, tmp_path):

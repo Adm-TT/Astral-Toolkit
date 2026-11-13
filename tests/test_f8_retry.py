@@ -46,7 +46,22 @@ def _setup(monkeypatch, results):
 
     def inspect(img, cur, **kw):
         calls.append((getattr(img, "n", "给的"), kw.get("whole_screen", True)))
-        return results[len(calls) - 1]
+        res = results[len(calls) - 1]
+        cb = kw.get("on_identified")
+        if res and res.get("sure") and cb:
+            cb(
+                {
+                    "zh": res["zh"],
+                    "en": res["en"],
+                    "sure": True,
+                    "raw": res["raw"],
+                    "canon": res["canon"],
+                    "where": res["where"],
+                }
+            )
+        if kw.get("should_abort") and kw["should_abort"]():
+            return None
+        return res
 
     from astral_toolkit.core import run_records
     from astral_toolkit.tasks.system import about
@@ -159,3 +174,66 @@ def test_inspect_item_passes_first_pass_down(monkeypatch):
     assert I.inspect_item(_Img(), (100, 100), whole_screen=False) is None
     assert I.inspect_item(_Img(), (100, 100)) is None
     assert got == [{"whole_screen": False}, {}]
+
+
+def test_progressive_hud_paints_intro_then_quality(monkeypatch):
+    """认准后先刷介绍（无品质），inspect 返回后再补品质。"""
+    hud = []
+    imgs, calls, logs, links = _setup(
+        monkeypatch, [_res("极地", "Polar", True) | {"quality": 700}]
+    )
+    monkeypatch.setattr(Hv, "_item_hud", lambda text, *a, **k: hud.append(text))
+
+    def inspect(img, cur, **kw):
+        calls.append((getattr(img, "n", "给的"), kw.get("whole_screen", True)))
+        res = {
+            "zh": "极地",
+            "en": "Polar",
+            "quality": 700,
+            "qty": 1,
+            "unit": "个",
+            "sure": True,
+            "raw": ("极地", "Polar"),
+            "canon": ("极地", "Polar"),
+            "craft": None,
+            "tokens": [],
+            "where": "50-70%@title",
+        }
+        cb = kw.get("on_identified")
+        if cb:
+            cb(
+                {
+                    "zh": "极地",
+                    "en": "Polar",
+                    "sure": True,
+                    "raw": ("极地", "Polar"),
+                    "canon": ("极地", "Polar"),
+                    "where": "50-70%@title",
+                }
+            )
+            assert any(t == "极地" or t.startswith("极地\n") for t in hud)
+            assert not any("品质" in t for t in hud)
+        return res
+
+    monkeypatch.setattr(Hv, "inspect_item", inspect)
+    assert Hv.hover_once(links)["ok"]
+    assert any("品质 700" in t for t in hud)
+    assert Hv._last_hover["lines"][0].startswith("极地｜品质 700")
+
+
+def test_abort_mid_inspect_returns_aborted(monkeypatch):
+    """识别中 begin() 作废：不报未识别、不写成功 HUD。"""
+    hud = []
+    imgs, calls, logs, links = _setup(monkeypatch, [_res("极地", "Polar", True)])
+    monkeypatch.setattr(Hv, "_item_hud", lambda text, *a, **k: hud.append(text))
+
+    def inspect(img, cur, **kw):
+        calls.append((getattr(img, "n", "给的"), kw.get("whole_screen", True)))
+        Hv.begin()  # 模拟再按 F8
+        assert kw.get("should_abort") and kw["should_abort"]()
+        return None
+
+    monkeypatch.setattr(Hv, "inspect_item", inspect)
+    assert Hv.hover_once(links) == {"aborted": True}
+    assert not any("极地" in t for t in hud)
+    assert not any(m.startswith("F8 成功识别") for m in logs)
