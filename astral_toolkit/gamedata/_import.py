@@ -1020,7 +1020,8 @@ def import_places(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> 
                 i,
             )
         )
-        lg = r.get("legacy") if isinstance(r.get("legacy"), dict) else {}
+        lg0 = r.get("legacy")
+        lg: dict[str, Any] = lg0 if isinstance(lg0, dict) else {}
         t = lg.get("t")
         if t == "pois":
             keys.add(
@@ -1038,7 +1039,8 @@ def import_places(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> 
         elif t == "mining_spots":
             keys.add((f"ms|{system}|{en or _s(lg.get('id'))}", pid))
         elif t == "city_places":
-            c = r.get("coord") if isinstance(r.get("coord"), dict) else {}
+            c0 = r.get("coord")
+            c: dict[str, Any] = c0 if isinstance(c0, dict) else {}
             city = (
                 parent[5:]
                 if isinstance(parent, str) and parent.startswith("site:")

@@ -269,13 +269,15 @@ def test_city_lists_and_site_follow_the_list(monkeypatch, tmp_path):
     here = {"inside": True, "body": "Hurston", "x": 1.0, "y": 2.0, "z": 3.0}
     _built(monkeypatch, tmp_path, **{"places.json": _PLACES})
     assert {q["id"] for q in transit.city_targets("公寓")} >= {"lor_hab", "lor_hab2"}
-    assert transit.site_at(here=here)["site"] == "Lorville"
+    site = transit.site_at(here=here)
+    assert site is not None and site["site"] == "Lorville"
     _built(
         monkeypatch, tmp_path, **{"places.json": _PLACES, "place_visibility.json": _VIS}
     )
     assert {q["id"] for q in transit.city_targets("公寓")} == {"lor_hab"}
     assert [q["id"] for _, q in transit.site_nearest("Lorville", "住宿")] == ["lor_hab"]
-    assert transit.site_at(here=here)["site"] == "Lorville"  # 站里还有可见的点：照认
+    site = transit.site_at(here=here)
+    assert site is not None and site["site"] == "Lorville"  # 站里还有可见的点：照认
     only_poi = {**_VIS, "ids": ["poi:Hurston/ent_lorville"]}
     _built(
         monkeypatch,
@@ -306,7 +308,8 @@ def test_nearby_does_not_name_hidden_places(monkeypatch, tmp_path):
     }
     monkeypatch.setattr(celestial, "waypoints", lambda: [])
     _built(monkeypatch, tmp_path, **{"places.json": _PLACES})
-    assert celestial.nearby(here, data)[1]["n"] == "No Marker"
+    hit = celestial.nearby(here, data)
+    assert hit is not None and hit[1]["n"] == "No Marker"
     _built(
         monkeypatch, tmp_path, **{"places.json": _PLACES, "place_visibility.json": _VIS}
     )
