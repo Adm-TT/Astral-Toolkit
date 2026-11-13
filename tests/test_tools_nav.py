@@ -2590,3 +2590,36 @@ def test_nav_hud_missing_does_not_break_halo_and_fix(monkeypatch, tmp_path):
     )
     got = t_nav.fix_here(deps)  # type: ignore[arg-type]  # 只用到 deps.nav，给个假的
     assert got == {"error": "当前未导航到太空路标"} and ran == [None]
+
+
+def test_waypoint_in_orbit_station_follows_the_planet(monkeypatch):
+    """跟着星球转的高轨道站里记路标：按星球坐标记，不当成太空点（2026-11-14：轨道讣闻站离地 429 km，
+    超过「离地多高算在星球上」的界限，记成太空点后星球一转路标就飘走）"""
+    from astral_toolkit.navigation import navigate as n
+    from astral_toolkit.tasks import navigation as t_nav
+
+    station = dict(b="Bloom", x=841.0, y=0.0, z=0.0, t="City", city="rr_p3_leo")
+    gate = dict(b="@Pyro", x=841.0, y=0.0, z=0.0, t="City", space=True, sys="Pyro")
+    monkeypatch.setattr(n, "city_places", lambda: [station, gate])
+
+    def here(x, height, body="Bloom", inside=True):
+        return dict(
+            body=body,
+            inside=inside,
+            x=x,
+            y=0.0,
+            z=0.0,
+            height_m=height,
+            radius_km=412.0,
+        )
+
+    assert t_nav._surface_limit(here(841.0, 429_000)) < 429_000  # 确实超过界限
+    assert t_nav._on_body(here(841.5, 429_000))  # 站里：跟着星球
+    assert not t_nav._on_body(here(900.0, 488_000))  # 离站 59 km 的高轨道：太空
+    assert not t_nav._on_body(here(841.5, 429_000, body="Monox"))  # 别的星球旁边
+    assert not t_nav._on_body(
+        here(841.5, 429_000, inside=False)
+    )  # 不在这颗星球的范围里
+    assert t_nav._on_body(here(420.0, 8_000))  # 贴地：照旧
+    monkeypatch.setattr(n, "city_places", lambda: [gate])
+    assert not t_nav._on_body(here(841.0, 429_000))  # 只有不跟着星球转的站：太空

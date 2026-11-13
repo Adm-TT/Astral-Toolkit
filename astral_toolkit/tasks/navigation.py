@@ -563,7 +563,7 @@ def waypoint_preview(deps: NavDeps, /, text=""):
         }
     data = n.load()
     here = n.locate(g, data=data, use_offset=False)
-    if here.get("inside") and here.get("height_m", 0) < _surface_limit(here):
+    if _on_body(here):
         return {
             "ok": True,
             "space": False,
@@ -793,6 +793,29 @@ def _surface_limit(here):
     return max(100_000, here.get("radius_km", 0) * 1000 * 0.25)
 
 
+STATION_NEAR_M = 20_000  # 离跟着星球转的站里的点这么近，就算在这个站里（和 transit.site_at 认站用的一样）
+
+
+def _on_body(here):
+    """这个坐标按星球坐标记（跟着星球自转），还是按星系坐标记（太空）。
+    离地 _surface_limit 以内算在星球上。再高的，要是就在一个跟着星球转的空间站里，也按星球坐标记：
+    派罗的轨道讣闻站离地 429 km、废墟空间站 163 km，都超过界限——2026-11-14 老大在轨道讣闻站记的路标被当成太空点，
+    星球一转，路标就以每秒几公里离开"""
+    if not here.get("inside"):
+        return False
+    if here.get("height_m", 0) < _surface_limit(here):
+        return True
+    from ..navigation import navigate as n
+
+    a = n.pos(here)
+    return any(
+        not q.get("space")
+        and q["b"] == here["body"]
+        and math.dist(n.pos(q), a) * 1000 < STATION_NEAR_M
+        for q in n.city_places()
+    )
+
+
 def _hints_near(deps: NavDeps, g, km=100):
     """右上角线索（定星系用）只在 g 就是你现在的位置时才可信：粘贴别人给的坐标、事后补存的原矿坐标，
     线索说的是你现在在哪个星系，不是那个坐标在哪个星系（审查 2026-10-31）"""
@@ -814,7 +837,7 @@ def _save_here(deps: NavDeps, name, g, info=None, system=None):
 
     data = n.load()
     here = n.locate(g, data=data, use_offset=False)
-    if here.get("inside") and here.get("height_m", 0) < _surface_limit(here):
+    if _on_body(here):
         n.add_waypoint(name, here["body"], n.pos(here))
         desc = n.body_label(here["body"]) + (
             f"，海拔 {here['height_m']:,.0f} m" if n.height_ok(here) else ""
@@ -942,7 +965,7 @@ def _coord_desc(deps: NavDeps, g):
 
     data = n.load()
     here = n.locate(g, data=data, use_offset=False)
-    if here.get("inside") and here.get("height_m", 0) < _surface_limit(here):
+    if _on_body(here):
         return n.body_label(here["body"]) + (
             f"，海拔 {here['height_m']:,.0f} m" if n.height_ok(here) else ""
         )
