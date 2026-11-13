@@ -348,10 +348,12 @@ def test_stage_regions_order_and_boxes():
         region_box,
     )
 
-    assert TITLE_Y0 == 0.24 and TITLE_Y1 == 0.30  # 2026-11-13 收紧标题带
+    assert (
+        TITLE_Y0 == 0.24 and TITLE_Y1 == 0.36
+    )  # 2026-11-13 收紧到 0.30 后样本回归有读错的，放回 0.36
     assert BODY_Y0 == 0.24 and BODY_Y1 == 0.70
     assert [s[2] for s in HEIGHT_STAGES] == ["title", "body"]
-    assert [(s[0], s[1]) for s in HEIGHT_STAGES] == [(0.24, 0.30), (0.24, 0.70)]
+    assert [(s[0], s[1]) for s in HEIGHT_STAGES] == [(0.24, 0.36), (0.24, 0.70)]
     assert [s[3] for s in HEIGHT_STAGES] == [True, False]  # 只有标题带按原尺寸认
 
     regions = [(0.30, 0.0, 0.50, 1.0, "30-50%"), (0.30, 0.0, 0.70, 1.0, "30-70%")]
@@ -363,8 +365,8 @@ def test_stage_regions_order_and_boxes():
         "30-70%@body",
     ]
     assert [box for box, *_ in got] == [
-        (300, 240, 500, 300),
-        (300, 240, 700, 300),
+        (300, 240, 500, 360),
+        (300, 240, 700, 360),
         (300, 240, 500, 700),
         (300, 240, 700, 700),
     ]

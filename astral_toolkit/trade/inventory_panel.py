@@ -47,7 +47,7 @@ _BAND_KEYS = {
 }
 
 # 高度阶段（相对截图高）
-TITLE_ROWS = (0.24, 0.30)
+TITLE_ROWS = (0.24, 0.36)
 BODY_ROWS = (0.24, 0.70)
 _ROW_KEYS = {"title": "hover.title_rows", "body": "hover.body_rows"}
 _ROW_DEFAULTS = {"title": TITLE_ROWS, "body": BODY_ROWS}

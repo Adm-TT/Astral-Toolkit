@@ -166,7 +166,7 @@ class TestReadTooltipExecution(unittest.TestCase):
         self.assertEqual(where, "30-50%@title")
         self.assertEqual(name, ("实准枪口补偿器2", "VeraCompensator2"))
         self.assertEqual(len(calls), 1)
-        self.assertEqual(calls[0], ((300, 240), True, (200, 60)))  # 标题带 0.24~0.30H
+        self.assertEqual(calls[0], ((300, 240), True, (200, 120)))  # 标题带顶 0.24H
 
     def test_second_stage_hit(self):
         """标题带没认到，说明框带（24%~70%）看到完整说明框：停在这一档，不走到全高和整屏"""
@@ -212,8 +212,8 @@ def test_cascade_order_and_cockpit_guard(monkeypatch):
     toks, name, where = _read_tooltip(MockImage(1000, 1000), (500, 500))
     assert name is None
     assert calls[:6] == [
-        ((300, 240), True, (200, 60)),  # 标题带 30-50%（0.24~0.30）
-        ((300, 240), True, (400, 60)),  # 标题带 30-70%
+        ((300, 240), True, (200, 120)),  # 标题带 30-50%
+        ((300, 240), True, (400, 120)),  # 标题带 30-70%
         ((300, 240), False, (200, 460)),  # 说明框带 30-50%
         ((300, 240), False, (400, 460)),  # 说明框带 30-70%
     ]
