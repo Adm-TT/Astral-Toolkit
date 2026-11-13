@@ -209,13 +209,16 @@ def main():
             continue
         (data_out / rel).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(p, data_out / rel)
-    # 对玩家可见清单（老大 2026-11-13）：安装包带的是 data/release/ 下那份；没有清单或没有地点总表不打包，不能把全量地点发出去
-    vis = ROOT / "data" / "release" / "place_visibility.json"
-    if not vis.is_file() or not (ROOT / "data" / "places.json").is_file():
-        raise SystemExit(
-            f"❌ 缺地点总表（data\\places.json）或对玩家可见清单（{vis}），不能打包"
-        )
-    shutil.copy2(vis, data_out / "place_visibility.json")
+    # 对玩家可见清单（老大 2026-11-13）：安装包带的是 data/release/ 下那份。没有清单、没有地点总表、结构不对都不打包，
+    # 不能把全量地点发出去（玩家电脑上清单坏了会当作没有清单）
+    from astral_toolkit.update import data_pack
+
+    try:
+        n_vis = data_pack.check_release()
+    except ValueError as e:
+        raise SystemExit(f"❌ {e}")
+    shutil.copy2(data_pack.release_visibility(), data_out / data_pack.VISIBILITY)
+    print(f"对玩家可见清单：{n_vis} 个地点")
     for f in TOP_FILES:
         shutil.copy2(ROOT / f, OUT / f)
     (OUT / "selftest").mkdir(exist_ok=True)

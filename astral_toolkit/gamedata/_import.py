@@ -997,6 +997,9 @@ def import_places(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> 
             [],
         ).append(q["id"])
     reg, keys, seen = [], set(), set()
+    used: dict[
+        tuple, int
+    ] = {}  # 同城同名同坐标的重复点：按源顺序一个编号对一个 id，不能互相借光
     for i, r in enumerate(rows if isinstance(rows, list) else []):
         if not isinstance(r, dict):
             continue
@@ -1051,8 +1054,11 @@ def import_places(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> 
                 )
             except (KeyError, TypeError, ValueError):
                 continue
-            for cid in city_ids.get(ck, ()):
-                keys.add((f"ct|{cid}", pid))
+            cids = city_ids.get(ck, ())
+            k = used.get(ck, 0)
+            used[ck] = k + 1
+            if k < len(cids):
+                keys.add((f"ct|{cids[k]}", pid))
     conn.executemany("insert into place_registry values (?,?,?,?,?,?,?)", reg)
     conn.executemany("insert or ignore into place_navkeys values (?,?)", sorted(keys))
     vis = _d(sources, "place_visibility.json", None)

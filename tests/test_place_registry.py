@@ -332,3 +332,103 @@ def test_data_pack_visibility_only_for_players(monkeypatch, tmp_path):
     (tmp_path / "data").mkdir()
     with raises(ValueError):  # 没有清单 / 总表不打数据包，不能把全量地点发出去
         P.make(tmp_path / "out", date="2026.11.13-0000")
+
+
+def test_duplicate_city_points_do_not_share_visibility(monkeypatch, tmp_path):
+    """同城同名同坐标的两个点（_city_rows 给第二个的 id 带 +）：只放行一个编号时，另一个不能跟着显示"""
+    from astral_toolkit.gamedata import place_registry as R
+
+    row = {
+        "city": "Lorville",
+        "body": "Hurston",
+        "cat": "货梯",
+        "en": "Freight Elevator",
+        "src": "lift",
+        "zh": "货运电梯",
+        "area": "",
+        "x": 9.0,
+        "y": 9.0,
+        "z": 9.0,
+        "kinds": [],
+        "site_en": "Lorville",
+        "site_zh": "洛维尔",
+    }
+    spot = {
+        "kind": "spot",
+        "parent": "site:Lorville",
+        "system": "Stanton",
+        "en": "Freight Elevator",
+        "coord": {"frame": "site_local", "unit": "raw", "x": 9.0, "y": 9.0, "z": 9.0},
+    }
+    places = {
+        "version": 1,
+        "places": [
+            {
+                **spot,
+                "id": "spot:Lorville/lift#1",
+                "legacy": {"t": "city_places", "row": 0},
+            },
+            {
+                **spot,
+                "id": "spot:Lorville/lift#2",
+                "legacy": {"t": "city_places", "row": 1},
+            },
+        ],
+    }
+    vis = {"version": "t", "ids": ["spot:Lorville/lift#2"]}
+    _built(
+        monkeypatch,
+        tmp_path,
+        **{
+            "city_places.json": [row, dict(row)],
+            "places.json": places,
+            "place_visibility.json": vis,
+        },
+    )
+    shown = R.checker()
+    assert (
+        shown({"t": "City", "id": "lift"}) is False
+        and shown({"t": "City", "id": "lift+"}) is True
+    )
+
+
+def test_navkey_matches_builder_on_missing_fields():
+    from astral_toolkit.gamedata.place_registry import navkey
+
+    assert navkey({"t": "Mining Spot", "sys": None, "n": None}) == "ms||"
+    assert navkey({"space": True, "t": "Jumppoint"}) == "pt||"
+    assert navkey({"t": "City"}) == "ct|"
+
+
+def test_check_release_blocks_bad_files(monkeypatch, tmp_path):
+    import json
+
+    from astral_toolkit.update import data_pack as P
+    from tests.minipytest import raises
+
+    d = tmp_path / "data"
+    (d / "release").mkdir(parents=True)
+    monkeypatch.setattr(P, "DATA", d)
+
+    def put(places, vis):
+        (d / "places.json").write_text(json.dumps(places), encoding="utf-8")
+        (d / "release" / P.VISIBILITY).write_text(json.dumps(vis), encoding="utf-8")
+
+    good = {"places": [{"id": "a"}, {"id": "b"}]}
+    put(good, {"ids": ["a"]})
+    assert P.check_release() == 1
+    for places, vis in (
+        (good, {"ids": "不是列表"}),
+        (good, {"ids": []}),
+        (good, ["a"]),
+        (good, {"ids": ["a", 3]}),
+        (good, {"ids": ["a", "总表里没有"]}),
+        ({"places": []}, {"ids": ["a"]}),
+        ([], {"ids": ["a"]}),
+    ):
+        put(places, vis)
+        with raises(ValueError):
+            P.check_release()
+    (d / "release" / P.VISIBILITY).write_text("{坏的", encoding="utf-8")
+    with raises(ValueError):
+        P.check_release()

@@ -9,6 +9,7 @@ import json
 from typing import Any, Callable
 
 from ._cache import VersionCache
+from ._import import _s
 from ._ready import use
 
 
@@ -25,12 +26,13 @@ def navkey(p: dict[str, Any]) -> str | None:
     t = p.get("t")
     if t == "Waypoint":
         return None
+    sys_, n = _s(p.get("sys")), _s(p.get("n"))  # 和建库端一样：不是字符串当空串
     if t == "City":
-        return f"ct|{p.get('id')}"
+        return f"ct|{_s(p.get('id'))}"
     if t == "Mining Spot":
-        return f"ms|{p.get('sys')}|{p.get('n')}"
+        return f"ms|{sys_}|{n}"
     if p.get("space"):
-        return f"pt|{p.get('sys')}|{p.get('n')}"
+        return f"pt|{sys_}|{n}"
     return poi_key(p.get("b"), p.get("n"), p.get("x"), p.get("y"), p.get("z"))
 
 
