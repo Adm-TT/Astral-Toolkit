@@ -2,8 +2,8 @@
 
 各列对应的源字段见 docs/superpowers/specs/ 下各批矩阵：2026-11-02-gamedata-callsites.md（批 1）、-b2（导航）、-b3（制造 / 维科洛 / 物品属性）、gd-b4（掉落）、gd-b6（名字对照）。"""
 
-SCHEMA_VERSION = 7  # 2：导航表；3：shop_items；4：制造 / 维科洛 / 物品属性等；5：可空文本列存 NULL、q 保留类型；6：采矿石头表 / 舰船截面 / 精炼站加成（批 5 公共层，2026-11-02）；7：wiki_items.g 仓库里横占几格（盘点认大物品，2026-11-09）
-IMPORTER_VERSION = 7  # 7：item_stats 空 dict 条目不入库（收口 2，2026-11-02）
+SCHEMA_VERSION = 8  # 8：地点总表 / 可见清单（2026-11-13）； 2：导航表；3：shop_items；4：制造 / 维科洛 / 物品属性等；5：可空文本列存 NULL、q 保留类型；6：采矿石头表 / 舰船截面 / 精炼站加成（批 5 公共层，2026-11-02）；7：wiki_items.g 仓库里横占几格（盘点认大物品，2026-11-09）
+IMPORTER_VERSION = 8  # 8：import_places（2026-11-13）； 7：item_stats 空 dict 条目不入库（收口 2，2026-11-02）
 
 DDL: list[str] = [
     # 清单和版本：schema_version / importer_version / data_version / generation_id / build_time / src:<文件名>=sha256
@@ -383,4 +383,23 @@ DDL: list[str] = [
         bonus_json TEXT NOT NULL,
         source_order INTEGER NOT NULL
     )""",
+    # places.json：地点总表，一行一个地点，pid = 固定编号（<种类>:<所属>/<实体名>[#序号]）；row_json = 源里整行原样。
+    # 没有这个文件（旧数据包）表是空的，可见清单也就不生效
+    """CREATE TABLE place_registry (
+        pid TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        parent TEXT,
+        system TEXT NOT NULL DEFAULT '',
+        en TEXT NOT NULL DEFAULT '',
+        row_json TEXT NOT NULL,
+        source_order INTEGER NOT NULL
+    )""",
+    # 导航列表里的一条 → 总表编号：navkey 由 place_registry.navkey() 算（建库和查询用同一个函数）；一个 navkey 可能对多个编号
+    """CREATE TABLE place_navkeys (
+        navkey TEXT NOT NULL,
+        pid TEXT NOT NULL,
+        PRIMARY KEY (navkey, pid)
+    )""",
+    # place_visibility.json 的 ids：对玩家可见的编号。有没有这份清单看 meta 'place_visibility'（没有这个键 = 没有清单 = 全部可见）
+    "CREATE TABLE place_visible (pid TEXT PRIMARY KEY)",
 ]
