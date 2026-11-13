@@ -49,6 +49,9 @@ SHELL_SRC = (
     ROOT / "tools" / "shell" / "ATShell"
 )  # AT 窗口外壳（WinUI 3 + WebView2，2026-10-27）
 SHELL_OUT = BUILD / "shell_out"
+UNINSTALL_SRC = (
+    ROOT / "tools" / "uninstall" / "Uninstall.cs"
+)  # 干净卸载（2026-11-13）：编成 AT.exe 旁边的 Uninstall.exe
 NUGET = BUILD / "nuget"  # NuGet 缓存放 E 盘，不放 C 盘
 ISCC = (
     BUILD / "tools" / "InnoSetup6" / "ISCC.exe"
@@ -227,6 +230,7 @@ def main():
     )
 
     build_shell()
+    build_uninstaller()
 
     total, internal, data = _size(OUT), _size(OUT / "_internal"), _size(data_out)
     must = [
@@ -258,6 +262,43 @@ def main():
             for k, v in sorted(big.items(), key=lambda x: -x[1])[:10]
         )
     )
+
+
+def build_uninstaller():
+    """编干净卸载 Uninstall.exe，放在 AT.exe 旁边：用 Windows 自带的 C# 编译器（.NET Framework 4，每台 Windows 10/11 都有，
+    玩家电脑上不用另装运行库）。问过玩家后可以连设置、库存一起删，见 tools/uninstall/Uninstall.cs 开头"""
+    windir = Path(os.environ.get("WINDIR", r"C:\Windows"))
+    cands = [
+        windir / "Microsoft.NET" / fw / "v4.0.30319" / "csc.exe"
+        for fw in ("Framework64", "Framework")
+    ]
+    csc = next((c for c in cands if c.exists()), None)
+    if csc is None:
+        raise SystemExit(
+            "❌ 没找到 Windows 自带的 C# 编译器（.NET Framework 4），编不了 Uninstall.exe"
+        )
+    out = OUT / "Uninstall.exe"
+    r = subprocess.run(
+        [
+            str(csc),
+            "/nologo",
+            "/target:winexe",
+            "/optimize+",
+            "/codepage:65001",
+            f"/win32icon:{ROOT / 'astral_toolkit' / 'app' / 'icon.ico'}",
+            "/r:System.Windows.Forms.dll",
+            "/r:System.Drawing.dll",
+            f"/out:{out}",
+            str(UNINSTALL_SRC),
+        ],
+        capture_output=True,
+        text=True,
+        encoding="mbcs",
+        errors="replace",
+    )
+    if r.returncode or not out.exists():
+        raise SystemExit("❌ Uninstall.exe 编译失败：" + (r.stdout + r.stderr).strip())
+    print(f"干净卸载：{out.name} {out.stat().st_size / 1024:,.0f} KB")
 
 
 def build_shell():

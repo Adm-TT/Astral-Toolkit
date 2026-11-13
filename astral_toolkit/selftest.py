@@ -205,7 +205,7 @@ def main():
         try:
             port = srv.server_address[1]
             req = urllib.request.Request(
-                f"http://127.0.0.1:{port}/api/status",
+                f"http://127.0.0.1:{port}/api/about_info",  # 不用接线就有的接口（status 要正式启动才有，这里只起一个空服务）
                 data=b"{}",
                 headers={"Content-Type": "application/json", "X-Token": S.TOKEN},
             )
@@ -221,7 +221,7 @@ def main():
             )
             if "AT 星际公民助手" not in html:
                 raise AssertionError("网页没加载出来")
-            return f"端口 {port}，版本 {d['data'].get('version')}"
+            return f"端口 {port}，接口和网页都通"
         finally:
             srv.shutdown()
 
