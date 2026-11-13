@@ -174,6 +174,10 @@ _TABLES = {
     "mining_rock_entries",
     "ship_signatures",
     "refinery_yields",
+    # schema 8（地点总表 / 可见清单，见 test_place_registry）
+    "place_registry",
+    "place_navkeys",
+    "place_visible",
 }
 
 
@@ -183,8 +187,8 @@ def test_ddl_creates_all_tables(tmp_path):
     from astral_toolkit.gamedata._schema import DDL, SCHEMA_VERSION
 
     assert (
-        SCHEMA_VERSION == 7
-    )  # 2 = 批 2 导航表（见 test_gamedata_nav）；3 = shop_items；4 = 制造 / 维科洛 / 物品属性（见 test_gamedata_craft）；5 = 可空列存 NULL、q 保留类型；6 = 采矿（见 test_gamedata_mining）；7 = wiki_items.g 占格（见 test_grid_width_from_wiki_items）
+        SCHEMA_VERSION == 8
+    )  # 8 = 地点总表 / 可见清单（见 test_place_registry）；2 = 批 2 导航表（见 test_gamedata_nav）；3 = shop_items；4 = 制造 / 维科洛 / 物品属性（见 test_gamedata_craft）；5 = 可空列存 NULL、q 保留类型；6 = 采矿（见 test_gamedata_mining）；7 = wiki_items.g 占格（见 test_grid_width_from_wiki_items）
     c = sqlite3.connect(tmp_path / "x.db")
     for s in DDL:
         c.execute(s)

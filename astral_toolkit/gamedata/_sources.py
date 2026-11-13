@@ -43,6 +43,9 @@ SOURCES: tuple[Source, ...] = (
     # schema 6：采矿（批 5 公共层）
     Source("mining_rocks.json", False),
     Source("ship_signatures.json", False),
+    # schema 8：地点总表 + 对玩家可见清单（后端架构第 1 步，2026-11-13）
+    Source("places.json", False),
+    Source("place_visibility.json", False),
 )
 
 

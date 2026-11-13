@@ -14,6 +14,7 @@ data.json：{"version": "2026.10.26-1310", "date": "2026-10-26", "game": "4.10.2
 
 import hashlib
 import json
+import os
 import re
 import shutil
 import tempfile
@@ -45,7 +46,60 @@ FILES = (
     "place_amenities.json",
     "places_extra_zh.json",
     "station_lifts.json",
-)  # 游戏数据：雷达石头表、挖矿点、星图改正、城里目的地（2026-10-27）
+    "places.json",
+    "place_visibility.json",
+)  # 游戏数据：雷达石头表、挖矿点、星图改正、城里目的地（2026-10-27）；地点总表 + 对玩家可见清单（2026-11-13）
+VISIBILITY = "place_visibility.json"
+
+
+# 发给玩家的可见清单放在 data/release/ 下：开发机的 data/ 里平时没有 place_visibility.json（没有 = 全部可见），
+# 打数据包、打安装包时才从这里取，放成 data/place_visibility.json 发出去
+def release_visibility():
+    return DATA / "release" / VISIBILITY
+
+
+def check_release():
+    """发给玩家之前查一遍：地点总表和可见清单都在、结构对、清单里的编号总表里都有。不对抛 ValueError，返回清单条数。
+    玩家电脑上清单坏了是当作没有清单（全部可见，导航不至于空掉），所以坏文件必须拦在发出去之前"""
+    try:
+        places = json.loads((DATA / "places.json").read_text(encoding="utf-8"))
+        vis = json.loads(release_visibility().read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        raise ValueError(
+            f"缺地点总表（data/places.json）或对玩家可见清单（{release_visibility()}），或者文件坏了：{e}"
+        ) from e
+    rows = places.get("places") if isinstance(places, dict) else None
+    ids = {
+        r["id"]
+        for r in (rows if isinstance(rows, list) else [])
+        if isinstance(r, dict) and isinstance(r.get("id"), str)
+    }
+    want = vis.get("ids") if isinstance(vis, dict) else None
+    if (
+        not ids
+        or not isinstance(want, list)
+        or not want
+        or not all(isinstance(x, str) and x for x in want)
+    ):
+        raise ValueError("地点总表或可见清单的结构不对，不能发给玩家")
+    missing = [x for x in want if x not in ids]
+    if missing:
+        raise ValueError(
+            f"可见清单里有 {len(missing)} 个编号总表里没有（例：{missing[:3]}），不能发给玩家"
+        )
+    return len(want)
+
+
+def _wanted(f):
+    """这个文件装不装：可见清单只装到玩家那边（安装版）。从源码运行的开发机不装，我们自己要看全量；
+    想在开发机上看玩家视角，设环境变量 AT_PLAYER_VIEW=1 再更新数据"""
+    if f != VISIBILITY:
+        return True
+    from ..core import paths
+
+    return bool(paths.VELOPACK) or os.environ.get("AT_PLAYER_VIEW") == "1"
+
+
 STAMP = (
     DATA / "data_pack.json"
 )  # 本地数据包版本（随数据一起，升级装回安装包里的数据时也一起装回）
@@ -228,7 +282,7 @@ def install(zip_path, info=None):
     try:
         with zipfile.ZipFile(zip_path) as z:
             names = {Path(n).name: n for n in z.namelist() if not n.endswith("/")}
-            got = [f for f in FILES if f in names]
+            got = [f for f in FILES if f in names and _wanted(f)]
             if not got:
                 raise ValueError("数据包里没有数据文件")
             for f in got:
@@ -390,7 +444,9 @@ def update(progress=print):
 
 
 def make(out_dir, date=None):
-    """作者发布数据用：把本机 data/ 里的这些文件打成数据包 + data.json。返回 (zip 路径, data.json 内容)"""
+    """作者发布数据用：把本机 data/ 里的这些文件打成数据包 + data.json。返回 (zip 路径, data.json 内容)。
+    可见清单从 data/release/ 取；没有清单或没有地点总表就不打——不能把全量地点发给玩家（老大 2026-11-13 定）"""
+    check_release()
     stamp = time.strftime("%Y.%m.%d-%H%M") if date is None else date
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -398,7 +454,7 @@ def make(out_dir, date=None):
     zp = out_dir / name
     with zipfile.ZipFile(zp, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         for f in FILES:
-            p = DATA / f
+            p = release_visibility() if f == VISIBILITY else DATA / f
             if p.exists():
                 json.loads(p.read_text(encoding="utf-8"))
                 z.write(p, f)

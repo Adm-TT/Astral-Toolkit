@@ -978,3 +978,101 @@ def import_refinery_yields(
             if isinstance(bonus, dict)
         ],
     )
+
+
+def import_places(conn: sqlite3.Connection, sources: dict[str, SourceBytes]) -> None:
+    """places.json → place_registry / place_navkeys；place_visibility.json → place_visible + meta 'place_visibility'。
+    navkey 用 place_registry.navkey 那一套拼（建库和查询同一个规则）；城内点要对上 _city_rows 给的 id（src 重复时带 +）"""
+    import json
+
+    from ..navigation.transit import _city_rows
+    from .place_registry import poi_key
+
+    raw = _d(sources, "places.json", None)
+    rows = raw.get("places") if isinstance(raw, dict) else None
+    city_ids: dict[tuple, list[str]] = {}
+    for q in _city_rows(_d(sources, "city_places.json", None)):
+        city_ids.setdefault(
+            (q["city"], q["n"], round(q["x"], 3), round(q["y"], 3), round(q["z"], 3)),
+            [],
+        ).append(q["id"])
+    reg, keys, seen = [], set(), set()
+    used: dict[
+        tuple, int
+    ] = {}  # 同城同名同坐标的重复点：按源顺序一个编号对一个 id，不能互相借光
+    for i, r in enumerate(rows if isinstance(rows, list) else []):
+        if not isinstance(r, dict):
+            continue
+        pid = r.get("id")
+        if not isinstance(pid, str) or not pid or pid in seen:
+            continue
+        seen.add(pid)
+        kind, system, en = _s(r.get("kind")), _s(r.get("system")), _s(r.get("en"))
+        parent = _txt(r.get("parent"))
+        reg.append(
+            (
+                pid,
+                kind,
+                parent,
+                system,
+                en,
+                json.dumps(r, ensure_ascii=False, separators=(",", ":")),
+                i,
+            )
+        )
+        lg = r.get("legacy") if isinstance(r.get("legacy"), dict) else {}
+        t = lg.get("t")
+        if t == "pois":
+            keys.add(
+                (
+                    poi_key(
+                        lg.get("b"), lg.get("n"), lg.get("x"), lg.get("y"), lg.get("z")
+                    ),
+                    pid,
+                )
+            )
+        elif t == "points":
+            keys.add((f"pt|{system}|{en}", pid))
+            if kind == "lagrange_point":  # 有刷矿表的拉格朗日点在导航里是「挖矿点」
+                keys.add((f"ms|{system}|{en}", pid))
+        elif t == "mining_spots":
+            keys.add((f"ms|{system}|{en or _s(lg.get('id'))}", pid))
+        elif t == "city_places":
+            c = r.get("coord") if isinstance(r.get("coord"), dict) else {}
+            city = (
+                parent[5:]
+                if isinstance(parent, str) and parent.startswith("site:")
+                else ""
+            )
+            try:
+                ck = (
+                    city,
+                    en,
+                    round(float(c["x"]), 3),
+                    round(float(c["y"]), 3),
+                    round(float(c["z"]), 3),
+                )
+            except (KeyError, TypeError, ValueError):
+                continue
+            cids = city_ids.get(ck, ())
+            k = used.get(ck, 0)
+            used[ck] = k + 1
+            if k < len(cids):
+                keys.add((f"ct|{cids[k]}", pid))
+    conn.executemany("insert into place_registry values (?,?,?,?,?,?,?)", reg)
+    conn.executemany("insert or ignore into place_navkeys values (?,?)", sorted(keys))
+    vis = _d(sources, "place_visibility.json", None)
+    if isinstance(vis, dict) and isinstance(vis.get("ids"), list):
+        ids = sorted({x for x in vis["ids"] if isinstance(x, str) and x})
+        conn.executemany(
+            "insert or ignore into place_visible values (?)", [(x,) for x in ids]
+        )
+        conn.execute(
+            "insert or replace into meta values ('place_visibility', ?)",
+            (
+                json.dumps(
+                    {"version": _s(vis.get("version")), "count": len(ids)},
+                    ensure_ascii=False,
+                ),
+            ),
+        )

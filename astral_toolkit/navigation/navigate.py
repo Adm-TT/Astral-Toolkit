@@ -314,8 +314,15 @@ def _search(query, data, limit):
         pass
     from ..core.i18n import mineral_zh
 
+    try:  # 对玩家可见清单（发给玩家的数据才有；没有清单 / 库不可用 = 全部可见）
+        shown = gamedata.place_registry.checker()
+    except gamedata.GamedataError:
+        shown = lambda p: True  # noqa: E731
+
     for p in waypoints() + data["pois"] + spots:
         if p["b"] not in data["bodies"] and not is_space(p):
+            continue
+        if not shown(p):
             continue
         rocks = " ".join(
             f"{o.lower()} {mineral_zh(o)}" for o in (p.get("rocks") or {})

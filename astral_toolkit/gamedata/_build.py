@@ -74,6 +74,7 @@ def build(sources: dict[str, SourceBytes], generation_id: str, dv: str) -> Path:
             _import.import_mining_rocks(conn, sources)
             _import.import_ship_signatures(conn, sources)
             _import.import_refinery_yields(conn, sources)
+            _import.import_places(conn, sources)
             meta = [
                 ("schema_version", str(SCHEMA_VERSION)),
                 ("importer_version", str(IMPORTER_VERSION)),
