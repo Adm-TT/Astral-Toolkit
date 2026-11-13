@@ -186,9 +186,8 @@ def test_item_info_calls_and_enriches(monkeypatch):
         item_id=None,
         show_loot=True,
         exact=False,
-        loot_online=True,
     ):
-        calls.append((name_en, name_zh, item_id, show_loot, exact, loot_online))
+        calls.append((name_en, name_zh, item_id, show_loot, exact))
         return dict(payload)
 
     monkeypatch.setattr(C, "_pinned", nullcontext)
@@ -221,7 +220,7 @@ def test_item_info_calls_and_enriches(monkeypatch):
     )
 
     assert calls == [
-        ("Hofstede-S2 Mining Laser", "旧中文", 7, False, True, False),
+        ("Hofstede-S2 Mining Laser", "旧中文", 7, False, True),
     ]
     assert goal_calls == [
         (
@@ -246,7 +245,6 @@ def test_item_info_keeps_original_zh_and_empty_goal(monkeypatch):
         item_id=None,
         show_loot=True,
         exact=False,
-        loot_online=True,
     ):
         return dict(payload)
 
@@ -282,7 +280,6 @@ def test_item_info_falls_back_to_zh_of(monkeypatch):
         item_id=None,
         show_loot=True,
         exact=False,
-        loot_online=True,
     ):
         return dict(payload)
 

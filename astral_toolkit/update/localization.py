@@ -333,28 +333,14 @@ def _write_name_files(zh_names, places_zh, codes_zh):
 
 
 def _rebuild_crafting(src, progress):
-    """制造蓝图和维科洛兑换：用本地已有的数据 + 新汉化重建（2026-10-28 审查：先看本机构建输入，没有才用 scmdb）。
+    """制造蓝图和维科洛兑换：本机有构建输入（由游戏数据整理的蓝图 + 任务）就用它 + 新汉化重建；
+    没有就不动，照用数据包带来的那份（2026-11-13 起不再用以前从 scmdb 下的 data/scmdb）。
     在自己的 updating() 里（schema 4 起这两份是库的源）"""
-    from ..crafting.build_crafting import (
-        latest_live,
-        live_version,
-        source_rows,
-        BUILD_LOCK,
-    )
+    from ..crafting.build_crafting import source_rows, BUILD_LOCK
 
     own = source_rows()
     if own:
         bp, merged = own[0], own[1]
-    else:
-        raw = DATA / "scmdb"
-        bp = latest_live(
-            raw.glob("crafting_blueprints-*.json")
-        )  # 只用正式服（以前按文件名排，会挑到测试服 PTU）
-        merged = (
-            raw / f"merged-{live_version(bp)}.json" if bp and live_version(bp) else None
-        )  # 和蓝图同一个版本
-        merged = merged if merged and merged.exists() else None
-    if bp and merged:
         from .. import gamedata
         from ..crafting.build_crafting import build
         from ..crafting.wikelo import build as build_wikelo

@@ -73,7 +73,6 @@
   "astral_toolkit/navigation/navigate.py::_stop_name",
   "astral_toolkit/navigation/navigate.py::_waypoints_strict",
   "astral_toolkit/navigation/navigate.py::calibration",
-  "astral_toolkit/navigation/navigate.py::city_targets",
   "astral_toolkit/navigation/navigate.py::orbital_markers",
   "astral_toolkit/navigation/navigate.py::qt_points"
  ],

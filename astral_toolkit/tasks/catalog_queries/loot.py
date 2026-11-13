@@ -1,10 +1,10 @@
 """掉落查询（目录迁移 Q3 从 crafting/loot.py 拆来）：这件东西在哪些地方的箱子里会开出来，副本专属矿去哪开采，
 船挖矿物去哪挖。数据来自 scl.miao.network（从游戏文件解析的掉落表）；概率是该站算出的「单个箱子开出这件东西的最高概率」，只作参考。
 
-- 找物品只查游戏数据库：物品索引由「更新数据」写 loot_index.json、导进库（update/loot.py），掉落索引缺了也不在这里下
-  （副本专属矿缺索引、联网时例外：先结束旧快照、下载重建，再开新快照读）
-- 单件掉落明细：先查随数据包发布的整包，再查本机缓存（infrastructure/persistence/loot_details.py），都没有才联网现取
-  （infrastructure/providers/loot_site.py）；online=False 时不联网，抛 Pending 让调用方后台再取
+- 整条查询路径不联网（2026-11-13 老大定：玩家端不再连 scl.miao.network，索引和明细都跟数据包来）
+- 找物品只查游戏数据库：物品索引随数据包来（loot_index.json，导进库），掉落索引缺了也不在这里下
+- 单件掉落明细：先查随数据包发布的整包，再查老版本留下的本机缓存（infrastructure/persistence/loot_details.py），
+  都没有就抛 NoDetail（「这件物品暂时没有掉落明细」）
 - 按名字挑候选、分组、汇总、认副本专属矿这些纯规则在 catalog/loot.py
 """
 
@@ -23,7 +23,6 @@ from ...catalog.loot import (
 )
 from ...contracts.textkeys import fold_mixed_loose as _fold
 from ...infrastructure.persistence import loot_details
-from ...infrastructure.providers import loot_site
 
 
 def _index_meta(snap=None):
@@ -51,7 +50,7 @@ def find(name_en="", name_zh=""):
     """按名字找物品：[(uuid, 英文名, 中文名, 稀有度)]，完全同名的排前面。
     同名的有好几个实体时，先要物品查询（wiki）里这个名字的类名，再去掉 NPC 专用、测试这些变体，有掉落的在前。
     名字只是开头像 / 包含的（Zeus 探索头盔 → Zeus 探索头盔 Echo）：物品查询里本来就有这个物品时不算。
-    数据来自游戏数据库（掉落索引缺了也不在 F8 / 物品页里联网下，更新数据会下）；库不可用时返回空"""
+    数据来自游戏数据库（掉落索引缺了不联网下，等数据包）；库不可用时返回空"""
     from ... import gamedata
     from ...gamedata import loot as gd_loot
 
@@ -70,22 +69,18 @@ def find(name_en="", name_zh=""):
         return []
 
 
-_failed = {}  # 下载失败的物品 → 时间：10 分钟内不再重试（断网时每次都要等超时）
-
-
-class Pending(Exception):
-    """掉落明细本机没有，要上网取（online=False 时抛出，调用方后台再取）"""
+class NoDetail(Exception):
+    """这件物品本机没有掉落明细：数据包的整包里没有，老版本留下的单件缓存里也没有（不再上网现查）"""
 
 
 _UUID_RE = re.compile(r"[0-9A-Za-z\-]{1,64}")
 _VER_RE = re.compile(r"\w[\w.\-]{0,63}")
 
 
-def detail(uuid, online=True):
-    """单件物品的掉落明细：整包 → 本机缓存 → 联网现取（写进缓存）。online=False 本机没有就抛 Pending；
-    同一件联网失败后 10 分钟内不再试（抛 OSError），断网时别每次都等超时"""
+def detail(uuid):
+    """单件物品的掉落明细：整包 → 老版本留下的本机缓存；都没有抛 NoDetail。不联网"""
     version = (_index_meta() or {}).get("version", "4.10.2LIVE")
-    # 要拼进缓存路径和网址：只认字母数字、点、横线，别让 ..\ 之类跑到缓存目录外面
+    # 要拼进缓存路径：只认字母数字、点、横线，别让 ..\ 之类跑到缓存目录外面
     if not isinstance(uuid, str) or not _UUID_RE.fullmatch(uuid):
         raise ValueError("物品编号格式不对")
     if not isinstance(version, str) or not _VER_RE.fullmatch(version):
@@ -96,23 +91,12 @@ def detail(uuid, online=True):
     cached = loot_details.read_cached(version, uuid)
     if cached is not loot_details.MISSING:
         return cached
-    if not online:
-        raise Pending()
-    import time as _t
-
-    if _t.time() - _failed.get(uuid, 0) < 600:
-        raise OSError("网络不通，稍后再试")
-    try:
-        d = loot_site.item_detail(version, uuid)
-    except Exception:
-        _failed[uuid] = _t.time()
-        raise
-    loot_details.write_cached(version, uuid, d)
-    return d
+    raise NoDetail("这件物品暂时没有掉落明细")
 
 
-def mine_info(key, top=5, online=True):
-    """副本专属矿的开采点：{name, mine: True, note, groups: [{p, box, regions}], more}"""
+def mine_info(key, top=5):
+    """副本专属矿的开采点：{name, mine: True, note, groups: [{p, box, regions}], more}；
+    没有掉落索引（数据包还没到）、库不可用返回 None；石头都没有明细给 {error}"""
     from ... import gamedata
     from ...gamedata import loot as gd_loot
 
@@ -125,36 +109,28 @@ def mine_info(key, top=5, online=True):
             )  # 库在、只是没有掉落索引（有索引、只是没有行不算）
             rocks = gd_loot.by_cls_prefix(want, s) if has else ()
         if not has:
-            if not online:
-                return None
-            from ...update import loot as loot_index
-
-            loot_index.load_index(
-                True
-            )  # 联网下一份（在快照外）：update() 在更新边界里，写完重建库
-            with (
-                gamedata.snapshot() as s
-            ):  # 重建后的新版本；若外面还钉着旧快照就还是旧的，下次再查
-                if gd_loot.index_meta(s) is None:
-                    return None
-                rocks = gd_loot.by_cls_prefix(want, s)
+            return None  # 没有掉落索引：等数据包，不在这里下
     except (
         gamedata.GamedataError
     ):  # 库不可用：不在查询路径里读 JSON / 联网（收口 2，待做 ⑮）
         return None
     rocks = [r for r in rocks if not (skip and r.cls_lower.startswith(skip))]
     best = {}  # 地区 → (概率, 位置说明)
+    missing = 0
     for r in rocks:
         try:
-            d = detail(r.uuid, online)
-        except Pending:
-            return {"pending": True}
+            d = detail(r.uuid)
+        except NoDetail:
+            missing += 1  # 这块石头没有明细：跳过，别的石头照样算
+            continue
         except Exception as e:
             return {"error": f"开采点数据暂时取不到（{e}）"}
         for region, p, where in summary(d, top=99):
             loc = where.split("｜")[0] if where else ""
             if region not in best or p > best[region][0]:
                 best[region] = (p, loc)
+    if rocks and missing == len(rocks):
+        return {"error": "开采点数据暂时没有"}
     rows, more = mine_groups(best, top)
     from ...core.i18n import mineral_zh
 
@@ -165,7 +141,8 @@ def mine_info(key, top=5, online=True):
         "en": en,
         "mine": True,
         "src": "scl.miao.network 开采点出现概率",
-        "note": "副本专属矿：不会从箱子里开出来，只能开采",
+        "note": "副本专属矿：不会从箱子里开出来，只能开采"
+        + (f"（有 {missing} 种矿石暂时没有开采点数据，下面不全）" if missing else ""),
         "groups": rows,
         "more": more,
     }
@@ -213,13 +190,13 @@ def ship_info(mineral, top=5):
     }
 
 
-def info(name_en="", name_zh="", top=5, online=True):
-    """掉落（窗口用）：{name, groups: [{p, box, regions}], more} 或 None；取不到数据时 {error}。
-    副本专属矿（科力晶、加纳石、杰金、烁迪银）返回开采点：多一个 mine=True、note。
-    online=False：明细本机没有就返回 {pending: True}，不上网等（2026-10-28 用户反馈物品查询卡 10 秒）"""
+def info(name_en="", name_zh="", top=5):
+    """掉落（窗口用）：{name, groups: [{p, box, regions}], more} 或 None；取不到数据时 {error}
+    （明细本机没有：「这件物品暂时没有掉落明细」）。只查本机，不联网。
+    副本专属矿（科力晶、加纳石、杰金、烁迪银）返回开采点：多一个 mine=True、note"""
     key = instance_ore(name_en, name_zh)
     if key:
-        return mine_info(key, top, online)
+        return mine_info(key, top)
     ship = ship_mineral(name_en, name_zh)
     if ship:
         return ship_info(ship, top)
@@ -228,9 +205,9 @@ def info(name_en="", name_zh="", top=5, online=True):
         return None
     u, en, zh, rar = hits[0]
     try:
-        d = detail(u, online)
-    except Pending:
-        return {"pending": True}
+        d = detail(u)
+    except NoDetail as e:
+        return {"error": str(e)}
     except Exception as e:
         return {"error": f"掉落数据暂时取不到（{e}）"}
     grouped = group_info(d, top)  # 概率和箱子一样的地点合成一行

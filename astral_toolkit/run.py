@@ -213,52 +213,20 @@ def run_entry(name):
     input("\n按回车关闭这个窗口")
 
 
-_SOURCE_FILES = {
-    # navigate.update 是从 starmap 转出来的（__module__ 是 starmap）：两个名字都认。以前只写了 navigate，星图的保护从没生效（收口 1）
-    "astral_toolkit.navigation.navigate": ["starmap.json"],
-    "astral_toolkit.navigation.starmap": ["starmap.json"],
-    "astral_toolkit.crafting.build_crafting": ["crafting.json"],
-}
-
-
-def _is_game_source(fn):
-    """这项更新对应的本地文件是不是由游戏数据构建的版本（paths.from_game）：是就不用网站版覆盖"""
-    import json as _j
-    from .core import paths
-
-    mod = getattr(fn, "__module__", "") or ""
-    if (
-        mod == "astral_toolkit.crafting.build_crafting"
-    ):  # 别名表返回的是真模块，__module__ 永远是新路径
-        from .crafting import build_crafting
-
-        if (
-            build_crafting.source_rows() is not None
-        ):  # 本机有构建输入：交给它自己按游戏数据重编（不会去 scmdb），游戏更新后新蓝图才进得来（二十一审）
-            return False
-    for f in _SOURCE_FILES.get(mod, []):
-        try:
-            if paths.from_game(_j.loads(paths.data(f).read_text(encoding="utf-8"))):
-                return True
-        except Exception:
-            pass
-    return False
-
-
-def update(direct=False, web_ok=()):
-    """更新数据（2026-10-26 起）：汉化包照旧从 SC汉化盒子（国内服务器）下载；其余数据先从 AT 服务器（不通再国内镜像、GitHub）下 AT 发布的数据包，
-    这几处都连不上才改从各数据网站直接下载（矿价、商店 UEX，蓝图 scmdb，星图 starmap.space，掉落 scl.miao.network）。
-    direct=True：跳过数据包、直接从各网站下载（作者发布数据包前用，tools/make_data_pack.py）。
-    web_ok：本机是游戏数据版也照样从网站下的模块名（make_data_pack 下了 starmap.space 后会用数据构建脚本重新合并，只取自转相位和玩家补充的点）"""
+def update(direct=False):
+    """更新数据：汉化包从 SC汉化盒子（国内服务器）下载；其余数据从 AT 服务器（不通再国内镜像、GitHub）下 AT 发布的数据包。
+    数据包连不上时只更新行情（矿价、商店，UEX）：星图、制造蓝图、掉落只跟数据包走，不再去别的网站下（2026-11-13 老大定）。
+    direct=True：作者发布数据包前用（tools/make_data_pack.py）：跳过数据包，更新行情、按本机构建输入重编制造数据、
+    更新掉落索引（掉落改成自己算之前，发数据还要从 scl.miao.network 取；玩家这边的更新走不到这两项）"""
     from .crafting import build_crafting
-    from .navigation import navigate
     from .update import data_pack, localization, loot, shops, uex
 
-    sources = (
+    market = (
         ("矿价和精炼站加成（UEX）", uex.refresh),
-        ("制造蓝图 + 维科洛兑换（scmdb）", build_crafting.update),
-        ("星图导航数据（starmap.space）", navigate.update),
         ("商店售卖地点（UEX）", shops.update),
+    )
+    author = (
+        ("制造蓝图 + 维科洛兑换（本机构建输入）", build_crafting.update),
         ("掉落数据（scl.miao.network）", loot.update),
     )
     pack = {"ok": None}
@@ -268,7 +236,7 @@ def update(direct=False, web_ok=()):
             r = data_pack.update()
         except Exception as e:
             pack["ok"] = (
-                False  # 下载到了但装的时候出错：是真失败，不要再去各网站直连盖掉半新半旧的文件
+                False  # 下载到了但装的时候出错：是真失败，不要再去更新行情盖掉半新半旧的文件
             )
             raise ValueError(f"数据包安装出错：{e}")
         pack["ok"] = r
@@ -276,21 +244,8 @@ def update(direct=False, web_ok=()):
             raise ValueError("数据包无法下载")
 
     from_pack_fn = from_pack
-    own = [
-        s
-        for s in sources
-        if getattr(s[1], "__module__", "") not in web_ok and _is_game_source(s[1])
-    ]  # 本机已是由游戏数据构建的（星图、制造 + 维科洛）：网站版不再盖掉（2026-10-28 负责人定：游戏数据优先）
-    sources = tuple(s for s in sources if s not in own)
-
-    def say_own():
-        for s in own:
-            print(f"跳过{s[0]}：用游戏数据构建的版本")
-
-    if direct:
-        say_own()
     jobs = (("最新汉化包（SC汉化盒子）", localization.update),) + (
-        sources if direct else (("数据包", from_pack),)
+        market + author if direct else (("数据包", from_pack),)
     )
 
     try:  # 在 AT 窗口里点「更新」时：几个下载线程的输出都要进窗口的更新记录
@@ -312,7 +267,10 @@ def update(direct=False, web_ok=()):
         except Exception as e:
             if (
                 fn is from_pack_fn and pack["ok"] is None
-            ):  # 数据包下不到：不算失败，下面改从各数据网站更新
+            ):  # 数据包下不到：下面只更新行情，这一项照样记成没成功
+                print(
+                    "❌ 数据包连不上：星图、制造蓝图、掉落这次没更新（不影响使用，继续用现有的）"
+                )
                 return {"title": title, "ok": False, "error": str(e)}
             print(f"❌ {title} 更新失败：{e}（不影响使用，继续用旧数据）")
             return {"title": title, "ok": False, "error": str(e)}
@@ -324,12 +282,10 @@ def update(direct=False, web_ok=()):
         results = list(ex.map(run, jobs))
     if (
         not direct and pack["ok"] is None
-    ):  # 数据包连不上：改从各数据网站直接下载（和 2026-10-26 以前一样）
-        print("—— 改从各数据网站直接更新 ——")
-        results = [r for r in results if r["title"] != "数据包"]
-        say_own()
-        with ThreadPoolExecutor(len(sources)) as ex:  # 游戏数据版的上面已经去掉了
-            results += list(ex.map(run, sources))
+    ):  # 数据包连不上：行情（玩家上报的价格，游戏文件里没有）还是从 UEX 更新；别的数据等数据包
+        print("—— 先只更新矿价和商店行情 ——")
+        with ThreadPoolExecutor(len(market)) as ex:
+            results += list(ex.map(run, market))
     print("全部更新完成")
     try:
         data_pack.clear_caches()  # 不管走哪条路，换了文件就清缓存，不用重启

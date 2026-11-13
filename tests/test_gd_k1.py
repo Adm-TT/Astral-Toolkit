@@ -290,32 +290,11 @@ def test_itemsearch_sees_new_aliases_after_localization_rebuild(monkeypatch, tmp
     )
 
 
-# ---------------------------------------------------------------- Task 3：数据来源判断认得 starmap 模块名
+# ---------------------------------------------------------------- 发数据包前的更新：不去外面下星图（2026-11-13）
 
 
-def test_is_game_source_recognizes_starmap_update(monkeypatch, tmp_path):
-    """navigate.update 其实是 starmap.update：本机 starmap.json 是游戏数据版 → 跳过网站更新；网站版 → 不跳过"""
-    import json
-
-    from astral_toolkit import run
-    from astral_toolkit.core import paths
-    from astral_toolkit.navigation import navigate
-
-    monkeypatch.setattr(paths, "DATA", tmp_path)
-    assert navigate.update.__module__ == "astral_toolkit.navigation.starmap"
-    (tmp_path / "starmap.json").write_text(
-        json.dumps({"source": paths.SRC_GAME}), encoding="utf-8"
-    )
-    assert run._is_game_source(navigate.update) is True
-    (tmp_path / "starmap.json").write_text(
-        json.dumps({"source": "starmap.space"}), encoding="utf-8"
-    )
-    assert run._is_game_source(navigate.update) is False
-
-
-def test_make_data_pack_web_ok_names_starmap_too(monkeypatch, tmp_path):
-    """设好了构建目录：去网站更新时 web_ok 里两个模块名都有（否则 run.update 会按 starmap 名跳过星图）"""
-    import json
+def test_make_data_pack_updates_direct_without_starmap_download(monkeypatch, tmp_path):
+    """发数据包：只调一次 run.update(direct=True)，不带别的参数；不起别的进程去合并星图（星图由解包那步写好）"""
     import runpy
     import subprocess
     import sys
@@ -332,23 +311,14 @@ def test_make_data_pack_web_ok_names_starmap_too(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(paths, "DATA", tmp_path)
     monkeypatch.setattr(
-        loot_index, "load_index", lambda auto=True: {}
+        loot_index, "load_index", lambda: {}
     )  # loot_index.INDEX 是 import 时绑的真实路径：别读真实 data/
     monkeypatch.setattr(loot_index, "_index", None)
     monkeypatch.setattr(sys, "path", list(sys.path))  # runpy 会往 sys.path 插一条
-    (tmp_path / "starmap.json").write_text(
-        json.dumps({"source": "starmap.space"}), encoding="utf-8"
-    )
     calls = []
     monkeypatch.setattr(run, "update", lambda **kw: calls.append(kw) or {"results": []})
-    src = tmp_path / "src"
-    (src / "oc_x").mkdir(parents=True)
-    tools = tmp_path / "tools"
-    tools.mkdir()
-    (tools / "starmap_merge.py").write_text("", encoding="utf-8")
-    monkeypatch.setenv("AT_SRC_DIR", str(src))
-    monkeypatch.setenv("AT_DATA_TOOLS", str(tools))
-    monkeypatch.setattr(subprocess, "run", lambda *a, **k: None)
+    spawned = []
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: spawned.append(a))
 
     class Stop(Exception):
         pass
@@ -359,7 +329,7 @@ def test_make_data_pack_web_ok_names_starmap_too(monkeypatch, tmp_path):
     monkeypatch.setattr(data_pack, "make", stop)  # 走到打包就停，不真打包
     with raises(Stop):
         M["main"](["--no-loot"])
-    assert len(calls) == 1 and set(calls[0]["web_ok"]) == {
-        "astral_toolkit.navigation.navigate",
-        "astral_toolkit.navigation.starmap",
-    }
+    assert calls == [{"direct": True}] and spawned == []
+    with raises(Stop):
+        M["main"](["--no-update", "--no-loot"])
+    assert calls == [{"direct": True}] and spawned == []

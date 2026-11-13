@@ -866,7 +866,6 @@ def _item_info_id(name):
         item_id=None,
         show_loot=False,
         exact=False,
-        loot_online=False,
     )
     return data.get("id")
 

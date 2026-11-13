@@ -63,7 +63,6 @@ def _freeze_world():
     """断网、时间写死、配装写死"""
     from astral_toolkit import gamedata
     from astral_toolkit.core import net, settings
-    from astral_toolkit.navigation import starmap
     from astral_toolkit.update import uex
 
     def no_net(*a, **k):
@@ -71,7 +70,6 @@ def _freeze_world():
 
     uex._get = no_net
     net.read = no_net
-    starmap.read = no_net
     gamedata.ensure()  # 先建好库：建库文件名要用真实时间，写死后冷启动会建库失败
     time.strftime = lambda *a, **k: "12:00:00"
     real = settings.load

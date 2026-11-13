@@ -406,27 +406,21 @@ def test_clear_caches_still_safe(monkeypatch, tmp_path):
 
 
 def _detail_env(monkeypatch, tmp_path):
-    """明细相关路径都换到 tmp_path；整包 from_zip、下载 get_json 换成记录器（不联网、不读真实整包）"""
+    """明细相关路径都换到 tmp_path；整包 from_zip、联网 core.net.read 换成记录器（不读真实整包；
+    查询路径 2026-11-13 起不联网，rec["net"] 应该一直是空的）"""
+    from astral_toolkit.core import net
     from astral_toolkit.infrastructure.persistence import loot_details
-    from astral_toolkit.infrastructure.providers import loot_site
-    from astral_toolkit.tasks.catalog_queries import loot
     from astral_toolkit.update import loot as loot_index
 
-    rec = {"zip": [], "get": []}
+    rec = {"zip": [], "net": []}
     monkeypatch.setattr(loot_details, "DETAILS", tmp_path / "loot_details.zip")
     monkeypatch.setattr(loot_details, "CACHE_DIR", tmp_path / "loot")
     monkeypatch.setattr(loot_index, "INDEX", tmp_path / "loot_index.json")
     monkeypatch.setattr(loot_index, "_index", None)
-    monkeypatch.setattr(loot, "_failed", {})
     monkeypatch.setattr(
         loot_details, "from_zip", lambda u, v: rec["zip"].append((u, v)) or None
     )
-
-    def get(url, timeout=60):
-        rec["get"].append(url)
-        return {"url": url}
-
-    monkeypatch.setattr(loot_site, "get_json", get)
+    monkeypatch.setattr(net, "read", lambda *a, **k: rec["net"].append(a) or b"{}")
     return rec
 
 
@@ -434,12 +428,12 @@ def test_detail_version_from_meta_matches_legacy(monkeypatch, tmp_path):
     import json
 
     import astral_toolkit.gamedata as G
-    from astral_toolkit.infrastructure.providers import loot_site
     from astral_toolkit.tasks.catalog_queries import loot
     from tests.minipytest import raises
 
     _setup(monkeypatch, tmp_path)
     rec = _detail_env(monkeypatch, tmp_path)
+    (tmp_path / "loot").mkdir()
 
     def legacy_version():
         f = tmp_path / "loot_index.json"
@@ -460,35 +454,41 @@ def test_detail_version_from_meta_matches_legacy(monkeypatch, tmp_path):
         G.rebuild()
         u = f"u{i}"
         want = legacy_version()
-        assert loot.detail(u, online=True) == {
-            "url": f"{loot_site.BASE}{want}/q/{u}.json"
-        }
+        with raises(loot.NoDetail):  # 整包、缓存里都没有：说没有，不联网
+            loot.detail(u)
         assert rec["zip"][-1] == (u, want)
-        assert (tmp_path / "loot" / f"{want}_{u}.json").exists()
-        assert loot.detail(u, online=False) == {
-            "url": f"{loot_site.BASE}{want}/q/{u}.json"
-        }  # 读缓存
+        (tmp_path / "loot" / f"{want}_{u}.json").write_text(
+            json.dumps({"v": want}), encoding="utf-8"
+        )  # 老版本联网存下的单件缓存：按这个版本找得到
+        assert loot.detail(u) == {"v": want}
+    assert rec["net"] == []
     _write_min_sources(tmp_path, **{"loot_index.json": {"version": 4.1, "rows": []}})
     G.rebuild()
     with raises(ValueError):  # 版本不是字符串：和以前一样拒绝（原值类型照存）
-        loot.detail("u9", online=False)
+        loot.detail("u9")
 
 
-def test_detail_online_write_not_in_updating(monkeypatch, tmp_path):
+def test_detail_never_writes_or_goes_online(monkeypatch, tmp_path):
+    """查明细不写文件（以前联网现查会写单件缓存）、不联网"""
     from astral_toolkit.tasks.catalog_queries import loot
+    from tests.minipytest import raises
     from tests.test_gamedata_b1 import _count_updating
 
     _setup(monkeypatch, tmp_path)
-    _detail_env(monkeypatch, tmp_path)
+    rec = _detail_env(monkeypatch, tmp_path)
     state = _count_updating(monkeypatch)
-    assert loot.detail("u1", online=True)
-    assert state["n"] == 0
-    assert state["writes"] == [(tmp_path / "loot" / "4.10.2LIVE_u1.json", False)]
+    with raises(loot.NoDetail) as e:
+        loot.detail("u1")
+    assert "暂时没有掉落明细" in str(e.value)
+    assert state["n"] == 0 and state["writes"] == [] and rec["net"] == []
+    assert not (tmp_path / "loot").exists()
+    assert not hasattr(loot, "Pending") and not hasattr(loot, "loot_site")
 
 
 def test_detail_does_not_read_index_json(monkeypatch, tmp_path):
     from astral_toolkit.tasks.catalog_queries import loot
     from astral_toolkit.update import loot as loot_index
+    from tests.minipytest import raises
 
     def boom(*a, **kw):
         raise AssertionError("detail 不该再读 loot_index.json")
@@ -496,20 +496,23 @@ def test_detail_does_not_read_index_json(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path)
     rec = _detail_env(monkeypatch, tmp_path)
     monkeypatch.setattr(loot_index, "load_index", boom)
-    assert loot.detail("u1", online=True)
+    with raises(loot.NoDetail):
+        loot.detail("u1")
     assert rec["zip"] == [("u1", "4.10.2LIVE")]
 
 
 def test_detail_default_version_when_db_unavailable(monkeypatch, tmp_path):
     from astral_toolkit.core import paths
     from astral_toolkit.tasks.catalog_queries import loot
+    from tests.minipytest import raises
 
     _setup(monkeypatch, tmp_path)
     rec = _detail_env(monkeypatch, tmp_path)
     monkeypatch.setattr(
         paths, "DATA", tmp_path / "empty"
     )  # 库建不出来：当没有索引，用默认版本
-    assert loot.detail("u1", online=True)
+    with raises(loot.NoDetail):
+        loot.detail("u1")
     assert rec["zip"] == [("u1", "4.10.2LIVE")]
 
 
@@ -540,7 +543,7 @@ def _fake_details(monkeypatch):
 
     seen = []
 
-    def detail(u, online=True):
+    def detail(u):
         seen.append(u)
         return {"regions": [{"name": f"区域-{u}", "best": 0.25, "containers": []}]}
 
@@ -548,13 +551,13 @@ def _fake_details(monkeypatch):
     return seen
 
 
-def _mine(key, online):
+def _mine(key):
     """mine_info 的结果，断言不是 None（类型检查要知道下面能取下标）"""
     from typing import Any
 
     from astral_toolkit.tasks.catalog_queries import loot
 
-    d = loot.mine_info(key, online=online)
+    d = loot.mine_info(key)
     assert d is not None
     out: dict[str, Any] = d
     return out
@@ -565,21 +568,20 @@ def test_mine_info_cls_prefix_literal_and_skips_pure(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path, **_loot_src(_ROCKS))
     _detail_env(monkeypatch, tmp_path)
     seen = _fake_details(monkeypatch)
-    d = _mine("carinite", online=False)
+    d = _mine("carinite")
     assert seen == ["r1"] and d["groups"] == [
         {"p": 0.25, "box": "", "regions": ["区域-r1"]}
     ]
     assert d["name"] == "科力晶" and d["mine"] is True and d["more"] == 0
     seen.clear()
-    d = _mine("carinitepure", online=False)
+    d = _mine("carinitepure")
     assert seen == ["r2"] and d["groups"][0]["regions"] == ["区域-r2"]
     seen.clear()
-    assert _mine("janalite", online=False)["groups"] == [] and seen == []
+    assert _mine("janalite")["groups"] == [] and seen == []
 
 
-def test_mine_info_online_downloads_when_no_index(monkeypatch, tmp_path):
-    import json
-
+def test_mine_info_none_when_no_index_and_never_downloads(monkeypatch, tmp_path):
+    """没有掉落索引（数据包还没到）：给 None，不去下（以前联网时会下一份索引）"""
     import astral_toolkit.gamedata as G
     from astral_toolkit.tasks.catalog_queries import loot
     from astral_toolkit.update import loot as loot_index
@@ -587,41 +589,39 @@ def test_mine_info_online_downloads_when_no_index(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path, **_loot_src(_ROCKS))
     (tmp_path / "loot_index.json").unlink()
     G.rebuild()
-    _detail_env(monkeypatch, tmp_path)
+    rec = _detail_env(monkeypatch, tmp_path)
     _fake_details(monkeypatch)
     calls = []
-
-    def update(version=None, progress=print):
-        calls.append(1)
-        data = {"version": "4.10.2LIVE", "rows": _ROCKS}
-        with G.updating():
-            (tmp_path / "loot_index.json").write_text(
-                json.dumps(data, ensure_ascii=False), encoding="utf-8"
-            )
-        loot_index._index = data
-        return data
-
-    monkeypatch.setattr(loot_index, "update", update)
-    assert loot.mine_info("carinite", online=False) is None and calls == []
-    d = _mine("carinite", online=True)
-    assert calls == [1] and d["groups"][0]["regions"] == ["区域-r1"]
+    monkeypatch.setattr(loot_index, "update", lambda *a, **kw: calls.append(1))
+    assert loot.mine_info("carinite") is None and calls == [] and rec["net"] == []
 
 
-def test_mine_info_none_when_download_fails(monkeypatch, tmp_path):
-    import astral_toolkit.gamedata as G
+def test_mine_info_skips_rocks_without_detail(monkeypatch, tmp_path):
+    """有的石头本机没有明细：跳过它，别的照样算；一块都没有才说暂时没有"""
     from astral_toolkit.tasks.catalog_queries import loot
-    from astral_toolkit.update import loot as loot_index
 
-    _setup(monkeypatch, tmp_path)
-    (tmp_path / "loot_index.json").unlink()
-    G.rebuild()
+    rocks = _ROCKS + [
+        ["r9", "Carinite", "MineableRock_FPS_Carinite_09", "", 1, "科力晶"]
+    ]
+    _setup(monkeypatch, tmp_path, **_loot_src(rocks))
     _detail_env(monkeypatch, tmp_path)
 
-    def update(version=None, progress=print):
-        raise OSError("断网")
+    def detail(u):
+        if u == "r9":
+            raise loot.NoDetail("这件物品暂时没有掉落明细")
+        return {"regions": [{"name": f"区域-{u}", "best": 0.25, "containers": []}]}
 
-    monkeypatch.setattr(loot_index, "update", update)
-    assert loot.mine_info("carinite", online=True) is None
+    monkeypatch.setattr(loot, "detail", detail)
+    d = _mine("carinite")
+    assert d["groups"] == [{"p": 0.25, "box": "", "regions": ["区域-r1"]}]
+    assert "有 1 种矿石暂时没有开采点数据" in d["note"]  # 不全要明说，别让人当成完整的
+    assert "暂时没有" not in _mine("carinitepure")["note"]
+
+    def none(u):
+        raise loot.NoDetail("这件物品暂时没有掉落明细")
+
+    monkeypatch.setattr(loot, "detail", none)
+    assert loot.mine_info("carinite") == {"error": "开采点数据暂时没有"}
 
 
 def test_mine_info_empty_rows_does_not_download(monkeypatch, tmp_path):
@@ -631,7 +631,7 @@ def test_mine_info_empty_rows_does_not_download(monkeypatch, tmp_path):
     _detail_env(monkeypatch, tmp_path)
     calls = []
     monkeypatch.setattr(loot_index, "update", lambda *a, **kw: calls.append(1))
-    d = _mine("carinite", online=True)
+    d = _mine("carinite")
     assert calls == [] and d["groups"] == [] and d["more"] == 0
 
 
@@ -648,8 +648,7 @@ def test_mine_info_none_when_db_unavailable(monkeypatch, tmp_path):
     monkeypatch.setattr(
         loot_index, "load_index", lambda *a, **kw: calls.append("load_index")
     )  # 连读本地索引也不该走到（不然 _detail_env 指的那份文件在，这条会空过）
-    assert loot.mine_info("carinite", online=False) is None
-    assert loot.mine_info("carinite", online=True) is None
+    assert loot.mine_info("carinite") is None
     assert (
         calls == []
     )  # 库不可用 ≠ 没有索引：查询路径不联网、不读 JSON（收口 2，待做 ⑮）
@@ -714,14 +713,14 @@ _DETAILS = {
 
 
 def test_info_equal_legacy_on_sample(monkeypatch, tmp_path):
-    """loot.info 离线、在线两种调法，新的找物品和旧的（legacy）结果一样；顺带钉住分组（多于 6 类地点、
-    还有概率更低的、刷在场景里）和明细本机没有时离线挂起、在线断网报错
+    """loot.info 新的找物品和旧的（legacy）结果一样；顺带钉住分组（多于 6 类地点、
+    还有概率更低的、刷在场景里）和明细本机没有时说「暂时没有掉落明细」、不联网
     （原来还比 loot.text 的整段文字，CL-C4 删了 text，改成看 info 本身）"""
     import json
 
     from astral_toolkit.catalog.loot import PLACED
+    from astral_toolkit.core import net
     from astral_toolkit.infrastructure.persistence import loot_details
-    from astral_toolkit.infrastructure.providers import loot_site
     from astral_toolkit.tasks.catalog_queries import loot
 
     _find_setup(monkeypatch, tmp_path)
@@ -735,10 +734,8 @@ def test_info_equal_legacy_on_sample(monkeypatch, tmp_path):
         loot_details, "_zip", {"z": None, "mtime": None, "version": None}
     )
 
-    def no_net(*a, **kw):
-        raise OSError("断网")
-
-    monkeypatch.setattr(loot_site, "get_json", no_net)
+    sent = []
+    monkeypatch.setattr(net, "read", lambda *a, **k: sent.append(a) or b"{}")
     inputs = [
         ("Citadel Core", ""),
         ("Combat Knife", ""),
@@ -750,9 +747,6 @@ def test_info_equal_legacy_on_sample(monkeypatch, tmp_path):
     def run():
         out = []
         for en, zh in inputs:
-            monkeypatch.setattr(loot, "_failed", {})
-            out.append(loot.info(en, zh, online=False))
-            monkeypatch.setattr(loot, "_failed", {})
             out.append(loot.info(en, zh))
         return out
 
@@ -774,9 +768,9 @@ def test_info_equal_legacy_on_sample(monkeypatch, tmp_path):
     assert any(len(g["regions"]) == 8 for g in groups)  # 多于 6 类地点
     assert any(d.get("more", 0) > 0 for d in found)  # 还有概率更低的地点
     assert any(PLACED in (g["box"] or "") for g in groups)  # 刷在场景里
-    # 明细本机没有：离线挂起、在线断网报错
-    assert new[4] == {"pending": True} and "暂时取不到" in new[5]["error"]
-    assert new[8] is None and new[9] is None
+    # 明细本机没有：说暂时没有，不联网
+    assert new[2] == {"error": "这件物品暂时没有掉落明细"}
+    assert new[4] is None and sent == []
 
 
 def test_loot_update_still_inside_updating(monkeypatch, tmp_path):
@@ -807,14 +801,17 @@ def test_load_index_still_available_for_batch6(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path)
     monkeypatch.setattr(loot_index, "INDEX", tmp_path / "loot_index.json")
     monkeypatch.setattr(loot_index, "_index", None)
-    assert loot_index.load_index(False) == _MIN_SOURCES["loot_index.json"]
+    assert loot_index.load_index() == _MIN_SOURCES["loot_index.json"]
+    assert (
+        "auto" not in loot_index.load_index.__code__.co_varnames
+    )  # 没有「没有就下载」那条路了
 
 
 # ---------------------------------------------------------------- 目录迁移 Q3a 补测：改坏检查第一次没抓到的（老代码也没人测）
 
 
 def test_detail_rejects_bad_uuid_before_touching_files(monkeypatch, tmp_path):
-    """编号要拼进缓存路径和网址：不是字母数字、横线的（..\\ 之类、空的、太长的、不是字符串的）先拒，
+    """编号要拼进缓存路径：不是字母数字、横线的（..\\ 之类、空的、太长的、不是字符串的）先拒，
     不碰整包、不建缓存目录、不联网"""
     from astral_toolkit.tasks.catalog_queries import loot
     from tests.minipytest import raises
@@ -823,41 +820,13 @@ def test_detail_rejects_bad_uuid_before_touching_files(monkeypatch, tmp_path):
     rec = _detail_env(monkeypatch, tmp_path)
     for bad in ("../x", "a/b", "a\\b", "x.json", "", "x" * 65, 7, None):
         with raises(ValueError):
-            loot.detail(bad, online=True)
-    assert rec == {"zip": [], "get": []}
+            loot.detail(bad)
+    assert rec == {"zip": [], "net": []}
     assert not (tmp_path / "loot").exists()
 
 
-def test_detail_backs_off_ten_minutes_after_failure(monkeypatch, tmp_path):
-    """同一件联网失败后 10 分钟内不再试，直接报网络不通（断网时别每次都等超时）；别的物品照常试；过了 10 分钟再试"""
-    from astral_toolkit.infrastructure.providers import loot_site
-    from astral_toolkit.tasks.catalog_queries import loot
-
-    _setup(monkeypatch, tmp_path)
-    _detail_env(monkeypatch, tmp_path)
-    calls = []
-
-    def down(url, timeout=60):
-        calls.append(url)
-        raise OSError("断网")
-
-    def err(u):
-        try:
-            loot.detail(u, online=True)
-        except OSError as e:
-            return str(e)
-        raise AssertionError("断网却没报错")
-
-    monkeypatch.setattr(loot_site, "get_json", down)
-    assert err("u1") == "断网" and len(calls) == 1
-    assert err("u1") == "网络不通，稍后再试" and len(calls) == 1  # 10 分钟内：不再联网
-    assert err("u2") == "断网" and len(calls) == 2  # 别的物品照常试
-    loot._failed["u1"] -= 601  # 过了 10 分钟
-    assert err("u1") == "断网" and len(calls) == 3
-
-
 def test_detail_drops_half_written_cache_file(monkeypatch, tmp_path):
-    """单件缓存是半个文件（旧版直接写、写到一半被结束）：删掉当没有——离线照样挂起，联网现取再写好"""
+    """单件缓存是半个文件（旧版直接写、写到一半被结束）：删掉当没有，不联网补"""
     from astral_toolkit.tasks.catalog_queries import loot
 
     _setup(monkeypatch, tmp_path)
@@ -866,13 +835,13 @@ def test_detail_drops_half_written_cache_file(monkeypatch, tmp_path):
     f.parent.mkdir(parents=True)
     f.write_text('{"half": ', encoding="utf-8")
     try:
-        loot.detail("u1", online=False)
-    except loot.Pending:
+        loot.detail("u1")
+    except loot.NoDetail:
         pass
     else:
         raise AssertionError("半个缓存文件不该当成有")
     assert not f.exists()  # 坏文件删了，不会一直卡在它上面
-    assert loot.detail("u1", online=True) == {"url": rec["get"][-1]} and f.exists()
+    assert rec["net"] == []
 
 
 def test_close_bundle_closes_the_open_bundle(monkeypatch, tmp_path):
@@ -957,7 +926,7 @@ def test_mine_info_english_names(monkeypatch, tmp_path):
     _setup(monkeypatch, tmp_path, **_loot_src(_ROCKS))
     _detail_env(monkeypatch, tmp_path)
     _fake_details(monkeypatch)
-    pure = _mine("carinitepure", online=False)
+    pure = _mine("carinitepure")
     assert pure["en"] == "Carinite (Pure)" and pure["name"] == "科力晶（纯）"
-    assert _mine("carinite", online=False)["en"] == "Carinite"
-    assert _mine("janalite", online=False)["en"] == "Janalite"
+    assert _mine("carinite")["en"] == "Carinite"
+    assert _mine("janalite")["en"] == "Janalite"

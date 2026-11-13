@@ -88,46 +88,24 @@ def test_waypoints_facade_reexport():
     assert navigate.is_space is waypoints.is_space
 
 
-def test_starmap_compact():
-    oc = [
-        {
-            "Type": "Planet",
-            "BodyRadius": 1000000,
-            "System": "Stanton",
-            "Planet": "Microtech",
-            "XCoord": 100.0,
-            "YCoord": 200.0,
-            "ZCoord": 300.0,
-            "RotationSpeedX": 24.0,
-            "RotationAdjustmentX": 10.0,
-            "OrbitalMarkerRadius": 1200000,
-            "GRIDRadius": 1500000,
-        }
-    ]
-    pois = [
-        {
-            "Planet": "Microtech",
-            "PoiName": "New Babbage",
-            "Type": "City",
-            "XCoord": 10.0,
-            "YCoord": 20.0,
-            "ZCoord": 30.0,
-            "QTMarker": 1,
-        }
-    ]
-    data = starmap.compact(oc, pois)
-    assert "bodies" in data
-    assert "Microtech" in data["bodies"]
-    assert len(data["pois"]) == 1
-    assert data["pois"][0]["n"] == "New Babbage"
-
-
 def test_starmap_facade_reexport():
     assert navigate.CACHE is starmap.CACHE
-    assert navigate.API is starmap.API
     assert navigate.load is starmap.load
-    assert navigate.compact is starmap.compact
-    assert navigate.update is starmap.update
+
+
+def test_starmap_never_downloads(monkeypatch, tmp_path):
+    """星图不再从外面下（2026-11-13）：模块里没有下载入口；没有 starmap.json 时明说等数据包，一个请求都不发"""
+    from astral_toolkit.core import net
+    from tests.minipytest import raises
+
+    for gone in ("update", "_fetch", "API", "compact"):
+        assert not hasattr(starmap, gone) and not hasattr(navigate, gone), gone
+    sent = []
+    monkeypatch.setattr(net, "read", lambda *a, **k: sent.append(a) or b"{}")
+    monkeypatch.setattr(starmap, "CACHE", tmp_path / "starmap.json")
+    with raises(RuntimeError) as e:
+        starmap.load()
+    assert "数据包" in str(e.value) and sent == []
 
 
 def test_celestial_math():

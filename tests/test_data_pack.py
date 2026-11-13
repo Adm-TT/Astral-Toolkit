@@ -1,4 +1,4 @@
-"""数据包（2026-10-26）：从 AT 服务器 / 国内镜像 / GitHub 下载 AT 整理好的数据；连不上时改从各数据网站更新（不联网：换掉 _open）"""
+"""数据包（2026-10-26）：从 AT 服务器 / 国内镜像 / GitHub 下载 AT 整理好的数据；连不上时只更新行情（不联网：换掉 _open）"""
 
 import hashlib
 import io
@@ -115,14 +115,12 @@ def test_unreachable_returns_none_and_run_falls_back(monkeypatch, tmp_path):
     from astral_toolkit.crafting import build_crafting
     from astral_toolkit.update import loot as loot_index
     from astral_toolkit.update import shops
-    from astral_toolkit.navigation import navigate
 
     called = []
     for mod, fn in (
         (localization, "update"),
         (uex, "refresh"),
         (build_crafting, "update"),
-        (navigate, "update"),
         (shops, "update"),
         (loot_index, "update"),
     ):
@@ -130,9 +128,17 @@ def test_unreachable_returns_none_and_run_falls_back(monkeypatch, tmp_path):
             mod, fn, (lambda n: lambda *a, **k: called.append(n))(mod.__name__)
         )
     r = run.update()
-    assert (
-        len(called) == 6 and r["total"] == 6 and r["ok"] == 6
-    )  # 汉化包 + 5 个数据网站
+    # 数据包连不上：只更新汉化包和行情（矿价、商店）；制造、掉落不去别的网站下（2026-11-13），数据包那项记成没成功
+    assert sorted(called) == sorted(
+        [localization.__name__, uex.__name__, shops.__name__]
+    )
+    assert r["total"] == 4 and r["ok"] == 3
+    assert [x["title"] for x in r["results"] if not x["ok"]] == ["数据包"]
+    called.clear()
+    r = run.update(
+        direct=True
+    )  # 作者发数据包前：行情 + 重编制造 + 掉落索引，不下数据包
+    assert len(called) == 5 and r["total"] == r["ok"] == 5
 
 
 def test_pack_up_to_date_skips_sources(monkeypatch, tmp_path):
@@ -190,10 +196,11 @@ def _loot_zip(path, version, items):
 
 
 def test_loot_detail_reads_bundle_first(monkeypatch, tmp_path):
-    """掉落明细先查整包，版本对得上才用；整包里没有的才联网"""
+    """掉落明细只查整包（版本对得上才用）和老版本留下的单件缓存；都没有就说没有，不联网（2026-11-13）"""
+    from astral_toolkit.core import net
     from astral_toolkit.infrastructure.persistence import loot_details
-    from astral_toolkit.infrastructure.providers import loot_site
     from astral_toolkit.tasks.catalog_queries import loot
+    from tests.minipytest import raises
 
     monkeypatch.setattr(
         loot_details,
@@ -205,21 +212,22 @@ def test_loot_detail_reads_bundle_first(monkeypatch, tmp_path):
         loot_details, "_zip", {"z": None, "mtime": None, "version": None}
     )
     monkeypatch.setattr(loot, "_index_meta", lambda: {"version": "4.10.2LIVE"})
-    monkeypatch.setattr(
-        loot_site,
-        "get_json",
-        lambda *a, **k: (_ for _ in ()).throw(OSError("不该联网")),
-    )
+    sent = []
+    monkeypatch.setattr(net, "read", lambda *a, **k: sent.append(a) or b"{}")
     assert (
         loot.detail("u1") == {"a": 1} and loot_details.details_version() == "4.10.2LIVE"
     )
-    monkeypatch.setattr(
-        loot_site, "get_json", lambda url, timeout=60: {"net": url.endswith("u2.json")}
+    with raises(loot.NoDetail):  # 整包里没有：不现查
+        loot.detail("u2")
+    (tmp_path / "loot").mkdir()
+    (tmp_path / "loot" / "4.10.2LIVE_u2.json").write_text(
+        '{"old": 1}', encoding="utf-8"
     )
-    assert loot.detail("u2") == {"net": True}  # 整包里没有：现查
+    assert loot.detail("u2") == {"old": 1}  # 老版本联网存下的单件缓存照样读
     monkeypatch.setattr(loot, "_index_meta", lambda: {"version": "4.11.0LIVE"})
-    monkeypatch.setattr(loot_site, "get_json", lambda url, timeout=60: {"new": True})
-    assert loot.detail("u1") == {"new": True}  # 游戏版本变了：旧整包不用
+    with raises(loot.NoDetail):  # 游戏版本变了：旧整包、旧缓存都不用
+        loot.detail("u1")
+    assert sent == []
 
 
 def test_data_pack_downloads_loot_bundle_only_when_version_changes(

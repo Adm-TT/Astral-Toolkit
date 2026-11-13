@@ -44,7 +44,6 @@ def test_get_item_info_pins_snapshot_and_builds_iteminfo(monkeypatch):
         item_id=None,
         show_loot=True,
         exact=False,
-        loot_online=True,
     ):
         log.append("info")
         assert (
@@ -53,8 +52,7 @@ def test_get_item_info_pins_snapshot_and_builds_iteminfo(monkeypatch):
             item_id,
             show_loot,
             exact,
-            loot_online,
-        ) == ("参数名", "参数中", 7, False, True, False)
+        ) == ("参数名", "参数中", 7, False, True)
         return payload
 
     def fake_zh(en):
@@ -188,9 +186,8 @@ def test_get_item_info_passes_acquire_arguments(monkeypatch):
         item_id=None,
         show_loot=True,
         exact=False,
-        loot_online=True,
     ):
-        calls.append((name_en, name_zh, item_id, show_loot, exact, loot_online))
+        calls.append((name_en, name_zh, item_id, show_loot, exact))
         return {"name": "N", "zh": "中文"}
 
     monkeypatch.setattr(acquire, "info", fake_info)
@@ -200,7 +197,7 @@ def test_get_item_info_passes_acquire_arguments(monkeypatch):
     exact: Any = 1  # 故意传 1：get_item_info 要把它转成 True 再交给 acquire.info
     C.get_item_info("N", "中", id=9, loot=False, exact=exact)
 
-    assert calls == [("N", "中", 9, False, True, False)]
+    assert calls == [("N", "中", 9, False, True)]
     assert calls[0][4] is True  # 1 要转成真正的 True（1 == True，只比相等测不出）
 
 
@@ -218,7 +215,6 @@ def test_get_item_info_zh_fallbacks(monkeypatch):
         item_id=None,
         show_loot=True,
         exact=False,
-        loot_online=True,
     ):
         return dict(facts[name_en])
 

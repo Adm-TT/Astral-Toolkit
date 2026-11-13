@@ -546,24 +546,39 @@ def test_vpk_beta_gets_same_number_live(monkeypatch):
             sys.modules["velopack"] = old
 
 
-def test_game_source_marker(monkeypatch, tmp_path):
-    from astral_toolkit import run
+def test_game_source_marker():
     from astral_toolkit.core import paths
+
+    assert paths.from_game({"source": paths.SRC_GAME}) and not paths.from_game(None)
+    assert paths.from_game({"source": paths.SRC_GAME_OLD})
+    assert not paths.from_game({"source": "scmdb.net"})
+
+
+def test_crafting_update_without_build_input_stays_offline(monkeypatch, tmp_path):
+    """本机没有构建输入（玩家的电脑）：制造数据不重建、不联网（2026-11-13 起不再去 scmdb 下），数据包带来的那份原样留着；
+    以前从 scmdb 下到 data/scmdb 的旧文件也不再拿来重建（换汉化时）"""
+    from astral_toolkit.core import net, paths
     from astral_toolkit.crafting import build_crafting
+    from astral_toolkit.update import localization
 
     monkeypatch.setattr(paths, "DATA", tmp_path)
-    monkeypatch.setattr(build_crafting, "source_rows", lambda: None)
-    f = tmp_path / "crafting.json"
-    for src, want in (
-        (paths.SRC_GAME, True),
-        (paths.SRC_GAME_OLD, True),
-        ("scmdb.net", False),
-    ):
-        f.write_text(json.dumps({"source": src}), encoding="utf-8")
-        assert run._is_game_source(build_crafting.update) is want, src
-    f.unlink()
-    assert run._is_game_source(build_crafting.update) is False
-    assert paths.from_game({"source": paths.SRC_GAME}) and not paths.from_game(None)
+    monkeypatch.setattr(localization, "DATA", tmp_path)
+    sent = []
+    monkeypatch.setattr(net, "read", lambda *a, **k: sent.append(a) or b"[]")
+    built = []
+    monkeypatch.setattr(build_crafting, "build", lambda *a, **k: built.append(a))
+    out = tmp_path / "crafting.json"
+    out.write_text('{"version": "pack"}', encoding="utf-8")
+    old = tmp_path / "scmdb"
+    old.mkdir()
+    (old / "crafting_blueprints-4.10.2-live.1.json").write_text("{}", encoding="utf-8")
+    (old / "merged-4.10.2-live.1.json").write_text("{}", encoding="utf-8")
+    for gone in ("SCMDB", "_fetch", "pick_live"):
+        assert not hasattr(build_crafting, gone), gone
+    build_crafting.update()
+    localization._rebuild_crafting(tmp_path / "names.json", lambda *_: None)
+    assert sent == [] and built == []
+    assert out.read_text(encoding="utf-8") == '{"version": "pack"}'
 
 
 def test_build_input_rows(monkeypatch, tmp_path):
@@ -583,6 +598,7 @@ def test_build_input_rows(monkeypatch, tmp_path):
 
 
 def test_make_data_pack_keeps_game_starmap(monkeypatch, tmp_path):
+    """本机星图是游戏数据版：发数据包前的更新不会碰它（不下星图、不调合并脚本），也不用再设构建目录的环境变量"""
     import runpy
     import subprocess
     from pathlib import Path
@@ -598,19 +614,14 @@ def test_make_data_pack_keeps_game_starmap(monkeypatch, tmp_path):
 
     monkeypatch.setattr(paths, "DATA", tmp_path)
     star = tmp_path / "starmap.json"
-    star.write_text(json.dumps({"source": paths.SRC_GAME}), encoding="utf-8")
+    text = json.dumps({"source": paths.SRC_GAME})
+    star.write_text(text, encoding="utf-8")
     calls = []
     monkeypatch.setattr(run, "update", lambda **kw: calls.append(kw) or {"results": []})
     monkeypatch.setenv("AT_SRC_DIR", "")
     monkeypatch.setenv("AT_DATA_TOOLS", "")
-    assert M["main"]([]) == 2 and calls == []
-    src = tmp_path / "src"
-    (src / "oc_x").mkdir(parents=True)
-    empty = tmp_path / "empty"
-    empty.mkdir()
-    monkeypatch.setenv("AT_SRC_DIR", str(src))
-    monkeypatch.setenv("AT_DATA_TOOLS", str(empty))
-    assert M["main"]([]) == 2 and calls == []
+    spawned = []
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: spawned.append(a))
 
     class Stop(Exception):
         pass
@@ -620,23 +631,9 @@ def test_make_data_pack_keeps_game_starmap(monkeypatch, tmp_path):
 
     monkeypatch.setattr(data_pack, "make", stop)
     with raises(Stop):
-        M["main"](["--no-update", "--no-loot"])
-    tools = tmp_path / "tools"
-    tools.mkdir()
-    (tools / "starmap_merge.py").write_text("", encoding="utf-8")
-    monkeypatch.setenv("AT_DATA_TOOLS", str(tools))
-    seen = []
-
-    def fake_run(cmd, **kw):
-        seen.append((cmd, kw.get("env") or {}))
-        raise Stop
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-    with raises(Stop):
-        M["main"](["--no-update"])
-    cmd, env = seen[0]
-    assert cmd[-2].endswith("starmap_merge.py") and cmd[-1] == "--write"
-    assert env["AT_REPO"] == str(M["ROOT"]) and env["AT_SRC_DIR"] == str(src)
+        M["main"](["--no-loot"])
+    assert calls == [{"direct": True}] and spawned == []
+    assert star.read_text(encoding="utf-8") == text
 
 
 def test_falls_back_to_github_and_ignores_older(monkeypatch, tmp_path):

@@ -2,7 +2,7 @@
 国内也能稳定下载；数据和程序版本分开发布（更新数据不用发新版本）。
 
 - 先读自己服务器（dl.astral-trade.com，2026-10-27）上的 data.json，再试国内镜像（COS，2026-10-29）、GitHub，版本比本地新就下载数据包、核对大小和 SHA-256，只解出下面列的文件
-- 三处都连不上：返回 None，调用方改从各数据网站直接更新（和以前一样）
+- 三处都连不上：返回 None，调用方这次只更新行情（矿价、商店），别的数据等数据包（2026-11-13 起不再去各数据网站下）
 - 汉化包不在数据包里：SC汉化盒子本来就是国内服务器，照旧直接下载
 - 作者用 tools/make_data_pack.py 生成数据包和 data.json
 
@@ -411,7 +411,7 @@ def update(progress=print):
     数据包本身坏了（校验不符等）抛 ValueError"""
     info, err = fetch()
     if not info:
-        progress(f"⚠️ 数据包无法下载（{err}），改从各数据网站更新")
+        progress(f"⚠️ 数据包无法下载（{err}）")
         return None
     cur = local_version()
     if (
@@ -428,7 +428,7 @@ def update(progress=print):
             try:
                 _download(info, z, progress)
             except Exception as e:  # 附件下不到（国内连 GitHub 附件常失败）：和 data.json 读不到一样，退回各网站直连
-                progress(f"⚠️ 数据包下载失败（{e}），改从各数据网站更新")
+                progress(f"⚠️ 数据包下载失败（{e}）")
                 return None
             n = install(z, info)
         finally:
