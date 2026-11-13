@@ -27,6 +27,7 @@ from astral_toolkit.core.paths import BUILD_DIR  # noqa: E402
 SKIP_DATA_DIRS = {
     "scmdb",
     "loc",
+    "release",
     BUILD_DIR,
 }  # BUILD_DIR：构建输入目录（2026-10-28），只在作者电脑上用                         # 原始大文件，更新数据时会自动下载（和 tools/pack.py 一致）
 SKIP_DATA_FILES = {
@@ -208,6 +209,13 @@ def main():
             continue
         (data_out / rel).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(p, data_out / rel)
+    # 对玩家可见清单（老大 2026-11-13）：安装包带的是 data/release/ 下那份；没有清单或没有地点总表不打包，不能把全量地点发出去
+    vis = ROOT / "data" / "release" / "place_visibility.json"
+    if not vis.is_file() or not (ROOT / "data" / "places.json").is_file():
+        raise SystemExit(
+            f"❌ 缺地点总表（data\\places.json）或对玩家可见清单（{vis}），不能打包"
+        )
+    shutil.copy2(vis, data_out / "place_visibility.json")
     for f in TOP_FILES:
         shutil.copy2(ROOT / f, OUT / f)
     (OUT / "selftest").mkdir(exist_ok=True)

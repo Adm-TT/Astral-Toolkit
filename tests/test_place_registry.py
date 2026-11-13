@@ -261,3 +261,74 @@ def test_search_hides_places_not_on_the_list(monkeypatch, tmp_path):
     names = {p["n"] for p in navigate.search("hurston", data, limit=1000)[0]}
     assert "Lorville" in names and "No Marker" not in names
     assert "Hab Lobby" in names and "Hab Lobby 2" not in names  # 城内点跟着清单走
+
+
+def test_city_lists_and_site_follow_the_list(monkeypatch, tmp_path):
+    from astral_toolkit.navigation import transit
+
+    here = {"inside": True, "body": "Hurston", "x": 1.0, "y": 2.0, "z": 3.0}
+    _built(monkeypatch, tmp_path, **{"places.json": _PLACES})
+    assert {q["id"] for q in transit.city_targets("公寓")} >= {"lor_hab", "lor_hab2"}
+    assert transit.site_at(here=here)["site"] == "Lorville"
+    _built(
+        monkeypatch, tmp_path, **{"places.json": _PLACES, "place_visibility.json": _VIS}
+    )
+    assert {q["id"] for q in transit.city_targets("公寓")} == {"lor_hab"}
+    assert [q["id"] for _, q in transit.site_nearest("Lorville", "住宿")] == ["lor_hab"]
+    assert transit.site_at(here=here)["site"] == "Lorville"  # 站里还有可见的点：照认
+    only_poi = {**_VIS, "ids": ["poi:Hurston/ent_lorville"]}
+    _built(
+        monkeypatch,
+        tmp_path,
+        **{"places.json": _PLACES, "place_visibility.json": only_poi},
+    )
+    assert (
+        transit.site_at(here=here) is None
+    )  # 站里一个可见的点都没有：当作不认识这个站
+    assert transit.city_targets("公寓") == []
+
+
+def test_nearby_does_not_name_hidden_places(monkeypatch, tmp_path):
+    from astral_toolkit.navigation import celestial
+
+    data = {
+        "bodies": {"Hurston": {"sys": "Stanton"}},
+        "pois": [dict(_LORVILLE), dict(_NOMARK)],
+        "points": [],
+    }
+    here = {
+        "inside": True,
+        "body": "Hurston",
+        "x": 6.0,
+        "y": 6.0,
+        "z": 0.1,
+        "radius_km": 1000.0,
+    }
+    monkeypatch.setattr(celestial, "waypoints", lambda: [])
+    _built(monkeypatch, tmp_path, **{"places.json": _PLACES})
+    assert celestial.nearby(here, data)[1]["n"] == "No Marker"
+    _built(
+        monkeypatch, tmp_path, **{"places.json": _PLACES, "place_visibility.json": _VIS}
+    )
+    hit = celestial.nearby(here, data)
+    assert hit is None or hit[1]["n"] == "Lorville"  # 不可见的不报；可见的在范围内才报
+
+
+def test_data_pack_visibility_only_for_players(monkeypatch, tmp_path):
+    from astral_toolkit.core import paths
+    from astral_toolkit.update import data_pack as P
+    from tests.minipytest import raises
+
+    assert "places.json" in P.FILES and P.VISIBILITY in P.FILES
+    monkeypatch.setenv("AT_PLAYER_VIEW", "0")
+    monkeypatch.setattr(paths, "VELOPACK", False)
+    assert P._wanted("places.json") and not P._wanted(P.VISIBILITY)  # 开发机不装清单
+    monkeypatch.setenv("AT_PLAYER_VIEW", "1")
+    assert P._wanted(P.VISIBILITY)  # 想在开发机上看玩家视角
+    monkeypatch.setenv("AT_PLAYER_VIEW", "0")
+    monkeypatch.setattr(paths, "VELOPACK", True)
+    assert P._wanted(P.VISIBILITY)  # 安装版照装
+    monkeypatch.setattr(P, "DATA", tmp_path / "data")
+    (tmp_path / "data").mkdir()
+    with raises(ValueError):  # 没有清单 / 总表不打数据包，不能把全量地点发出去
+        P.make(tmp_path / "out", date="2026.11.13-0000")

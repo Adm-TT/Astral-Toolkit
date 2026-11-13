@@ -939,8 +939,14 @@ def nearby(
         return None
     a = pos(here)
     best: Optional[Tuple[float, Dict[str, Any]]] = None
+    from .. import gamedata
+
+    try:  # 对玩家不可见的地点不报「附近：某某」（可见清单，见 gamedata/place_registry.py）；路标照报
+        shown = gamedata.place_registry.checker()
+    except gamedata.GamedataError:
+        shown = lambda p: True  # noqa: E731
     for p in waypoints() + data["pois"]:
-        if p["b"] != here["body"]:
+        if p["b"] != here["body"] or not shown(p):
             continue
         d = surface_km(a, pos(p), here["radius_km"])
         if best is None or d < best[0]:

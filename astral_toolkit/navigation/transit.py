@@ -242,11 +242,22 @@ def amenity_targets(
     return out
 
 
+def _shown():
+    """「这一条对玩家可不可见」的函数（可见清单，见 gamedata/place_registry.py）；库不可用当作没有清单"""
+    try:
+        return gamedata.place_registry.checker()
+    except gamedata.GamedataError:
+        return lambda p: True
+
+
 def city_targets(kind: str) -> List[Dict[str, Any]]:
     """城里这类的点：有能直接办事的（登记处 / 取船终端）就只要这些，没有就这类全部"""
     by_city: Dict[str, List[Dict[str, Any]]] = {}
     alias = NEAR_ALIAS.get(kind, kind)
+    shown = _shown()
     for q in city_places():
+        if not shown(q):
+            continue
         if q.get("cat") == kind or alias in (q.get("kinds") or ()):
             by_city.setdefault(q.get("city") or "", []).append(q)
     pref = NEAR_PREFER.get(kind)
@@ -282,9 +293,13 @@ def site_at(
     if best is None:
         return None
     q = best[1]
-    have = {
-        k for p in pts if p.get("city") == q.get("city") for k in (p.get("kinds") or ())
-    }
+    shown = (
+        _shown()
+    )  # 认在哪个站用全部的点；这个站一个可见的点都没有，就当作不认识这个站
+    here_pts = [p for p in pts if p.get("city") == q.get("city") and shown(p)]
+    if not here_pts:
+        return None
+    have = {k for p in here_pts for k in (p.get("kinds") or ())}
     return {
         "site": q.get("city"),
         "zh": q.get("city_zh") or "",
@@ -304,10 +319,11 @@ def site_nearest(
     """主城 / 空间站里这一类的点，近的在前 → [(距离米或 None, 点)]"""
     data = data or load()
     out = []
+    shown = _shown()
     qs = [
         q
         for q in city_places()
-        if q.get("city") == site and kind in (q.get("kinds") or ())
+        if q.get("city") == site and kind in (q.get("kinds") or ()) and shown(q)
     ]
     pref = NEAR_PREFER.get(kind)
     good = [q for q in qs if pref and q["n"] in pref]
