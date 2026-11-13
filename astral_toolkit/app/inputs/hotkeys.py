@@ -69,11 +69,13 @@ class HotkeyCommands:
                 )
             act()
         elif name == "trade_capture_key":
+            # 再按 F8：作废当前识别，立刻开新一轮（docs/superpowers/specs/2026-11-12-f8-progressive-hud-design.md）
             bus.runtime_log(
-                f"{key} 正在识别中，请稍候...",
+                f"捕获到 {key} 快捷键，重新识别...",
                 tag="HOVER",
-                level="WARN",
+                level="INFO",
             )
+            act()
 
     def _game_front(self):
         """游戏窗口在不在最前面（tasks/mining：True / False；判断不了是 None，照常响应）"""
@@ -180,38 +182,22 @@ class HotkeyCommands:
         return navigation_tasks.fix_here(self._nav)
 
     def _start_hover(self):
-        """F8：和窗口里的「识别」接口共用同一个任务名，已经在识别就不再起第二个（两个同时跑会互相清掉 _last_hover）"""
+        """F8：和窗口「识别」共用任务名；再按则 begin() 作废旧轮并起新任务（合作式抢占）"""
         from .. import hud_state
+        from ...tasks import hover as hover_tasks
 
         hud_state.item_key_pressed()
-        if (
-            task_runner.run_task_once("hover", self._recognize, title="识别物品")
-            is None
-        ):
-            # 上一次可能刚识别完、线程还在发「完成」消息：另起个短线程等它一下再试，热键线程不跟着等
-            threading.Thread(
-                target=self._retry_hover, daemon=True, name="hover-retry"
-            ).start()
-
-    def _retry_hover(self):
-        old = task_runner._running.get("hover")
-        if old is not None:
-            old.join(0.3)
-        if (
-            task_runner.run_task_once("hover", self._recognize, title="识别物品")
-            is None
-        ):
-            self.busy = False
-            bus.runtime_log(
-                f"{self.label.get('trade_capture_key', 'F8')} 正在识别中，请稍候...",
-                tag="HOVER",
-                level="WARN",
-            )
+        hover_tasks.begin()  # 立刻作废旧 seq，旧线程在检查点退出
+        task_runner.run_task("hover", self._recognize, title="识别物品")
 
     def _recognize(self):
+        me = threading.current_thread()
         try:
             from ...tasks import hover as hover_tasks
 
             return hover_tasks.hover_once(self._links)
         finally:
-            self.busy = False
+            # 抢占后旧线程结束时 _running 已是新线程：别清 busy；直接调 _recognize 时 _running 为空也要清
+            cur = task_runner._running.get("hover")
+            if cur is me or cur is None:
+                self.busy = False

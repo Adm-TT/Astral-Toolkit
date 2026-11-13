@@ -243,7 +243,23 @@ def test_hover_sends_raw_and_canon_to_train_data(monkeypatch):
             started.append((self.target, self.args))
 
     monkeypatch.setattr(Hv, "WIN", False)
-    monkeypatch.setattr(Hv, "inspect_item", lambda img, cur: dict(res))
+
+    def _inspect(img, cur, **kw):
+        cb = kw.get("on_identified")
+        if cb and res.get("sure"):
+            cb(
+                {
+                    "zh": res["zh"],
+                    "en": res["en"],
+                    "sure": True,
+                    "raw": res["raw"],
+                    "canon": res["canon"],
+                    "where": res["where"],
+                }
+            )
+        return dict(res)
+
+    monkeypatch.setattr(Hv, "inspect_item", _inspect)
     monkeypatch.setattr(Hv, "item_info", lambda *a, **k: {})
     monkeypatch.setattr(Hv, "_item_hud", lambda *a, **k: None)
     monkeypatch.setattr(Hv, "_hover_lines", lambda *a, **k: [])
@@ -717,6 +733,78 @@ def test_debug_mode_default_off():
     from astral_toolkit.core import settings
 
     assert settings.DEFAULTS.get("debug_mode") is False
+
+
+def test_on_identified_fires_before_quality_ocr(monkeypatch):
+    """sure 后、body/角标之前回调；未 sure 不回调。"""
+    from astral_toolkit.trade import inspector
+    from astral_toolkit.trade import names
+
+    order = []
+    monkeypatch.setattr(
+        inspector,
+        "_read_tooltip",
+        lambda *a, **k: (
+            [OcrToken("医疗笔", 90, (100, 50, 80, 20))],
+            ("医疗笔", "MedPen"),
+            "30-50%@title",
+        ),
+    )
+    monkeypatch.setattr(names, "canonical", lambda zh, en: ("医疗笔", "MedPen"))
+    monkeypatch.setattr(inspector, "_is_mineral", lambda *a, **k: False)
+    monkeypatch.setattr(
+        inspector,
+        "_tooltip_body_tokens",
+        lambda *a, **k: order.append("body") or [],
+    )
+    monkeypatch.setattr(
+        inspector,
+        "cell_labels",
+        lambda *a, **k: order.append("cell") or (500, 2),
+    )
+
+    def on_id(p):
+        order.append(("id", p["zh"], p["en"]))
+
+    res = inspector.inspect_item(MockImage(), (200, 500), on_identified=on_id)
+    assert res is not None
+    assert res["quality"] == 500 and res["qty"] == 2
+    assert order[0] == ("id", "医疗笔", "MedPen")
+    assert "body" in order and "cell" in order
+    assert order.index(("id", "医疗笔", "MedPen")) < order.index("body")
+    assert order.index(("id", "医疗笔", "MedPen")) < order.index("cell")
+
+    order.clear()
+    monkeypatch.setattr(names, "canonical", lambda zh, en: None)
+    res = inspector.inspect_item(MockImage(), (200, 500), on_identified=on_id)
+    assert res is not None and not res["sure"]
+    assert not any(x[0] == "id" for x in order if isinstance(x, tuple))
+
+
+def test_should_abort_stops_inspect(monkeypatch):
+    """should_abort 为真时 inspect_item 返回 None，不跑角标。"""
+    from astral_toolkit.trade import inspector
+    from astral_toolkit.trade import names
+
+    monkeypatch.setattr(
+        inspector,
+        "_read_tooltip",
+        lambda *a, **k: (
+            [OcrToken("医疗笔", 90, (100, 50, 80, 20))],
+            ("医疗笔", "MedPen"),
+            "30-50%@title",
+        ),
+    )
+    monkeypatch.setattr(names, "canonical", lambda zh, en: ("医疗笔", "MedPen"))
+    cells = []
+    monkeypatch.setattr(
+        inspector, "cell_labels", lambda *a, **k: cells.append(1) or (0, 1)
+    )
+    assert (
+        inspector.inspect_item(MockImage(), (200, 500), should_abort=lambda: True)
+        is None
+    )
+    assert cells == []
 
 
 if __name__ == "__main__":

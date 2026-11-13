@@ -250,6 +250,7 @@ function connect() {
       state.haloWhere = data;
       if (page === "nav" && state.navTab === "halo") drawHaloWhere();
     } else if (kind === "hover") {
+      const prevHover = state.hover;
       state.hover = data;
       if (replay) {
         if (data.state === "ok" && !state.item) {         // 刷新窗口后把上一次 F8 的结果放回来，不跳页、不弹提示
@@ -260,12 +261,22 @@ function connect() {
         }
         $("#pip-hover").className = "pip";
       } else if (data.state === "ok") {
-        appendRuntimeLog({ time: new Date().toTimeString().slice(0, 8), tag: "HOVER", level: "INFO", line: `成功识别: ${data.zh || data.en} (品质 ${data.quality ?? "无"})` });
-        state.sel++; data.info.marketId = data.market?.id || "";
+        const sameHover = prevHover && data.seq != null && prevHover.seq === data.seq;
+        if (!data.pending_quality) {
+          appendRuntimeLog({ time: new Date().toTimeString().slice(0, 8), tag: "HOVER", level: "INFO", line: `成功识别: ${data.zh || data.en} (品质 ${data.quality ?? "无"})` });
+        } else if (!sameHover) {
+          appendRuntimeLog({ time: new Date().toTimeString().slice(0, 8), tag: "HOVER", level: "INFO", line: `已认出: ${data.zh || data.en}（品质识别中）` });
+        }
+        if (!sameHover) state.sel++;
+        data.info.marketId = data.market?.id || state.item?.marketId || "";
         state.item = data.info; state.itemFrom = "F8";
         state.market = data.market; state.candidates = data.candidates;
-        state.prices = data.pending ? { loading: true, quality: data.tier || "q0", op: "sell" } : null;
-        if (data.market && !data.pending) loadPrices(data.market.id, data.tier || "q0");
+        if (!data.pending_quality) {
+          state.prices = data.pending ? { loading: true, quality: data.tier || "q0", op: "sell" } : null;
+          if (data.market && !data.pending) loadPrices(data.market.id, data.tier || "q0");
+        } else if (!sameHover) {
+          state.prices = { loading: true, quality: data.tier || "q0", op: "sell" };
+        }
         location.hash = "#item";
         if (page === "item") renderPage();
       } else if (data.state === "miss") {

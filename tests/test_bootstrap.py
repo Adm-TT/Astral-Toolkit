@@ -699,14 +699,17 @@ def test_hover_links_shared_by_hotkey_and_route(monkeypatch):
     try:
         assert app.hotkey_commands._links is app.hover_links
         got = []
+        begins = []
+        monkeypatch.setattr(hover_tasks, "begin", lambda: begins.append(1) or 1)
         monkeypatch.setattr(
             task_runner,
-            "run_task_once",
-            lambda task_id, fn, *args, **kw: got.append((task_id, fn, args)),
+            "run_task",
+            lambda task_id, fn, *args, **kw: got.append((task_id, fn, args)) or "th",
         )
         out = bootstrap.routes(app).call("hover_trigger")
+        assert begins == [1]
         assert got == [("hover", hover_tasks.hover_once, (app.hover_links,))]
-        assert out == {"ok": True, "data": {"error": "F8 正在识别中，请稍候"}}
+        assert out == {"ok": True, "data": "th"}
         seen = []
         monkeypatch.setattr(
             hover_tasks,

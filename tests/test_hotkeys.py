@@ -227,7 +227,7 @@ def test_f8_and_count_key_only_hint_outside_the_game(monkeypatch):
 
 
 def test_busy_hotkeys_run_one_at_a_time(monkeypatch):
-    """要截屏的（F8、问题反馈）占着「忙」，同一时间只跑一个：忙着再按 F8 说「正在识别中」，再按反馈键不响应；
+    """要截屏的（F8、问题反馈）占着「忙」：忙着再按 F8 会重新识别（抢占）；再按反馈键不响应；
     不占忙的（记路标等）忙着也照做；热键线程出错重来前 failed() 清掉忙"""
     logs = []
     monkeypatch.setattr(
@@ -250,13 +250,13 @@ def test_busy_hotkeys_run_one_at_a_time(monkeypatch):
     cmd.pressed("trade_capture_key", "F8")
     cmd.pressed("report_key", "F10")
     cmd.pressed("mark_key", "F7")
-    assert acted == ["f8", "mark"]
-    assert logs[1:] == [("F8 正在识别中，请稍候...", "HOVER", "WARN")]
+    assert acted == ["f8", "f8", "mark"]
+    assert logs[1:] == [("捕获到 F8 快捷键，重新识别...", "HOVER", "INFO")]
     cmd.failed()
     assert not cmd.busy
     cmd.pressed("report_key", "F10")
     assert (
-        cmd.busy and acted == ["f8", "mark", "report"] and len(logs) == 2
+        cmd.busy and acted == ["f8", "f8", "mark", "report"] and len(logs) == 2
     )  # 反馈键不往日志里说
 
 
@@ -338,61 +338,37 @@ def test_bindings_follow_settings_in_hotkey_order(monkeypatch):
     assert ("F10", "report_key") in cmd.bindings()
 
 
-def test_f8_retry_waits_for_the_last_run_and_uses_the_pressed_key(monkeypatch):
-    """F8：先记下按键那一刻（鼠标位置、Shift），再起识别；起不来（上一次还没收尾）就另起短线程，等上一次 0.3 秒再试。
-    重试也起不来：清掉「忙」，提示里说的是玩家按的那个键（如改绑的 F11）；重试起来了：不提示，「忙」留给识别做完再清"""
+def test_f8_preempts_running_hover(monkeypatch):
+    """F8：再按会 begin() 作废旧轮并用 run_task 起新识别，不再「请稍候」；提示里用玩家按的那个键"""
+    from astral_toolkit.tasks import hover as hover_tasks
+
     logs = []
     monkeypatch.setattr(bus, "runtime_log", lambda line, **kw: logs.append(line))
     monkeypatch.setattr(mining_tasks, "_game_front", lambda: True)
     tries = []
     monkeypatch.setattr(hud_state, "item_key_pressed", lambda: tries.append("item"))
-    outcomes = []  # run_task_once 每次回什么：None = 同名任务还在跑、没起来
+    begins = []
+    monkeypatch.setattr(hover_tasks, "begin", lambda: begins.append("begin") or 1)
+    runs = []
 
-    def run_task_once(tid, fn, *a, **k):
+    def run_task(tid, fn, *a, **k):
         tries.append(tid)
-        return outcomes.pop(0)
+        runs.append(tid)
+        return "started"
 
-    monkeypatch.setattr(task_runner, "run_task_once", run_task_once)
-    running = {}
-    monkeypatch.setattr(task_runner, "_running", running)
-
-    made = []
-
-    class _Now:
-        def __init__(self, target, daemon=None, name=None):
-            self.target = target
-            made.append((target, daemon, name))
-
-        def start(self):
-            made.append("start")
-            self.target()
-
-    class _Last:
-        def __init__(self):
-            self.joined = []
-
-        def join(self, timeout=None):
-            self.joined.append(timeout)
-
-    monkeypatch.setattr(entry, "threading", SimpleNamespace(Thread=_Now))
+    monkeypatch.setattr(task_runner, "run_task", run_task)
     cmd = _commands()
-    outcomes[:] = [None, None]
     cmd.pressed("trade_capture_key", "F11")
-    assert tries == ["item", "hover", "hover"]
-    # 重试另起守护短线程（热键线程不跟着等那 0.3 秒）
-    assert made == [(cmd._retry_hover, True, "hover-retry"), "start"]
-    assert logs == ["捕获到 F11 快捷键，触发悬停识别...", "F11 正在识别中，请稍候..."]
-    assert cmd.busy is False
+    assert tries == ["item", "hover"] and begins == ["begin"] and runs == ["hover"]
+    assert logs == ["捕获到 F11 快捷键，触发悬停识别..."]
+    assert cmd.busy is True
 
-    last = _Last()
-    running["hover"] = last
-    outcomes[:] = [None, "重试起来了"]
     tries.clear()
+    begins.clear()
     logs.clear()
     cmd.pressed("trade_capture_key", "F11")
-    assert last.joined == [0.3]
-    assert tries == ["item", "hover", "hover"]
-    assert logs == ["捕获到 F11 快捷键，触发悬停识别..."]
+    assert tries == ["item", "hover"] and begins == ["begin"]
+    assert logs == ["捕获到 F11 快捷键，重新识别..."]
     assert cmd.busy is True
 
 
