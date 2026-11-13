@@ -66,7 +66,10 @@ _last_at = [0.0]
 
 
 def is_city(p: Optional[Dict[str, Any]]) -> bool:
-    return bool(p) and p.get("t") == "City"
+    """按城里 / 站里那一套带路的目标：城里 / 站里自带的点，和玩家在站里记的路标（带 city = 站的编号，2026-11-14）"""
+    return bool(p) and (
+        p.get("t") == "City" or (p.get("t") == "Waypoint" and bool(p.get("city")))
+    )
 
 
 def city_arrived(d: float, before: bool = False) -> bool:

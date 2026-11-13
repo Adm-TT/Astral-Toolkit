@@ -226,6 +226,10 @@ def _place_row(p):
             " · ".join(v for v in (p.get("city_zh"), p.get("area")) if v)
             or TYPE_ZH["City"]
         )
+    elif p.get("city"):  # 玩家在站里记的路标：路标 · 哪个站
+        typ = " · ".join(
+            v for v in (TYPE_ZH.get(p["t"], p["t"]), p.get("city_zh")) if v
+        )
     else:
         typ = TYPE_ZH.get(p["t"], p["t"])
     return {
@@ -238,7 +242,7 @@ def _place_row(p):
         "qt_direct": _qt_direct(p),
         "waypoint": p["t"] == "Waypoint",
         "space": bool(p.get("space")),
-        "city": p["t"] == "City",
+        "city": p["t"] == "City" or bool(p.get("city")),
     }
 
 
@@ -360,7 +364,9 @@ def nav_plan(key=""):
         }
     lat, lon, r = latlon(pos(p))
     b = data["bodies"][p["b"]]
-    if p.get("t") == "City":  # 城里：不给量子跳的参照点（审查 2026-10-27）
+    if p.get("t") == "City" or p.get(
+        "city"
+    ):  # 城里 / 站里（含玩家在站里记的路标）：不给量子跳的参照点
         return {
             **_place_row(p),
             "city": True,
@@ -816,6 +822,44 @@ def _on_body(here):
     )
 
 
+def _site_here(deps: NavDeps, g, here, data, system=None):
+    """g 在不在一个主城 / 空间站里（2026-11-14 站内自定义点）→ {"city", "area_id", "space", "sys", "desc"}；不在 None。
+    在站里记的路标按站内方式带路：米、上下楼、坐电梯。区域先看右上角的 Zone（就是现在的位置时才可信），
+    没有就取离得最近的已知点的区域，都认不出就不记区域（只给方向和上下楼，不带坐电梯的步骤）"""
+    from ..navigation import navigate as n
+
+    try:
+        system = system or n.system_of(g, data, **_hints_near(deps, g))
+        s = n.site_at(g, here, None, data, system)
+        if not s:
+            return None
+        q = next(q for q in n.city_places() if q.get("city") == s["site"])
+        space = bool(q.get("space"))
+        a = tuple(v / 1000 for v in g) if space else n.pos(here)
+        st = n.station_lifts().get(s["site"])
+        area = None
+        if st:
+            _t, live, info = _pos_current(deps)
+            if live is not None and math.dist(live, g) < 100:
+                area = n.zone_kind(str((info or {}).get("inner_zone") or ""), st)
+            if area != "hangar" and area not in st["areas"]:
+                area = n.site_area_at(s["site"], a)
+        name = s["zh"] or s["en"]
+        zh = ((st or {}).get("areas") or {}).get(area or "", {}).get("zh") or ""
+        return {
+            "city": s["site"],
+            "area_id": area,
+            "space": space,
+            "sys": q.get("sys") or system,
+            "desc": name + (f" · {zh}" if zh else ""),
+        }
+    except (
+        Exception
+    ) as e:  # 认站出错：照老办法记成星球上 / 太空里的点，不丢这个路标；记一笔好查
+        _wp_log(f"认站出错，按普通路标记：{e!r}")
+        return None
+
+
 def _hints_near(deps: NavDeps, g, km=100):
     """右上角线索（定星系用）只在 g 就是你现在的位置时才可信：粘贴别人给的坐标、事后补存的原矿坐标，
     线索说的是你现在在哪个星系，不是那个坐标在哪个星系（审查 2026-10-31）"""
@@ -837,7 +881,14 @@ def _save_here(deps: NavDeps, name, g, info=None, system=None):
 
     data = n.load()
     here = n.locate(g, data=data, use_offset=False)
-    if _on_body(here):
+    site = _site_here(deps, g, here, data, system)
+    if site and site["space"]:  # 太空里的站（L 点站、星门站）：站不动，记星系坐标
+        n.add_space_waypoint(name, site["sys"], g, site=site)
+        desc = site["desc"]
+    elif site:  # 跟着星球转的站 / 主城：记星球坐标
+        n.add_waypoint(name, here["body"], n.pos(here), site=site)
+        desc = site["desc"]
+    elif _on_body(here):
         n.add_waypoint(name, here["body"], n.pos(here))
         desc = n.body_label(here["body"]) + (
             f"，海拔 {here['height_m']:,.0f} m" if n.height_ok(here) else ""

@@ -23,11 +23,34 @@ def is_space(p: Optional[Dict[str, Any]]) -> bool:
 
 
 def waypoints() -> List[Dict[str, Any]]:
-    """路标表（查询用：读不到就当没有，搜索 / 导航照常）"""
+    """路标表（查询用：读不到就当没有，搜索 / 导航照常）。站里记的路标补上站名和站的「上」（_with_site）"""
     try:
-        return _waypoints_strict()
+        return [_with_site(w) for w in _waypoints_strict()]
     except RuntimeError:
         return []
+
+
+def _with_site(w: Dict[str, Any]) -> Dict[str, Any]:
+    """站里记的路标（带 city = 站的编号）：补上按站内方式带路要的站名、站的「上」——文件里只存编号，名字现取。
+    数据里没有这个站了：当成普通路标（星球上 / 太空里的点），照样能导航"""
+    if not w.get("city"):
+        return w
+    from .transit import site_meta
+
+    meta = site_meta(w["city"])
+    if meta is None:
+        return {k: v for k, v in w.items() if k not in ("city", "area_id")}
+    return {**w, **meta}
+
+
+def _site_keys(site: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """路标里记站的那两项：city = 站的编号，area_id = 站里哪个区域（认不出就不记）"""
+    if not site or not site.get("city"):
+        return {}
+    out = {"city": site["city"]}
+    if site.get("area_id"):
+        out["area_id"] = site["area_id"]
+    return out
 
 
 def _waypoints_strict() -> List[Dict[str, Any]]:
@@ -43,8 +66,13 @@ def _waypoints_strict() -> List[Dict[str, Any]]:
     return rows if isinstance(rows, list) else []
 
 
-def add_waypoint(name: str, body: str, local_xyz: Sequence[float]) -> None:
-    """新建/覆盖一个路标；local_xyz 是星球自转坐标系里的千米坐标"""
+def add_waypoint(
+    name: str,
+    body: str,
+    local_xyz: Sequence[float],
+    site: Optional[Dict[str, Any]] = None,
+) -> None:
+    """新建/覆盖一个路标；local_xyz 是星球自转坐标系里的千米坐标。site：在站 / 城里记的（见 _site_keys）"""
     wps = [w for w in _waypoints_strict() if w.get("n") != name]
     wps.append(
         dict(
@@ -56,13 +84,19 @@ def add_waypoint(name: str, body: str, local_xyz: Sequence[float]) -> None:
             z=round(local_xyz[2], 3),
             qt=0,
             saved=datetime.now().strftime("%Y-%m-%d %H:%M"),
+            **_site_keys(site),
         )
     )
     write_json(WAYPOINTS, wps, indent=1)
 
 
-def add_space_waypoint(name: str, system: str, g: Sequence[float]) -> None:
-    """g：游戏右上角读到的星系坐标（米）；存成千米"""
+def add_space_waypoint(
+    name: str,
+    system: str,
+    g: Sequence[float],
+    site: Optional[Dict[str, Any]] = None,
+) -> None:
+    """g：游戏右上角读到的星系坐标（米）；存成千米。site：在太空里的站（L 点站、星门站）里记的"""
     wps = [w for w in _waypoints_strict() if w.get("n") != name]
     wps.append(
         dict(
@@ -76,6 +110,7 @@ def add_space_waypoint(name: str, system: str, g: Sequence[float]) -> None:
             z=round(g[2] / 1000, 3),
             qt=0,
             saved=datetime.now().strftime("%Y-%m-%d %H:%M"),
+            **_site_keys(site),
         )
     )
     write_json(WAYPOINTS, wps, indent=1)

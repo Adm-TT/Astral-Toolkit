@@ -2623,3 +2623,93 @@ def test_waypoint_in_orbit_station_follows_the_planet(monkeypatch):
     assert t_nav._on_body(here(420.0, 8_000))  # 贴地：照旧
     monkeypatch.setattr(n, "city_places", lambda: [gate])
     assert not t_nav._on_body(here(841.0, 429_000))  # 只有不跟着星球转的站：太空
+
+
+def test_waypoint_inside_a_site(monkeypatch, tmp_path):
+    """站内自定义点（2026-11-14）：在站里记的路标带上站的编号，按站内方式带路；文件里只存编号，站名现取；
+    离站远的照旧是太空点；数据里没有这个站了就当普通路标"""
+    import json  # noqa: F811
+    from types import SimpleNamespace
+    from typing import Any
+    from astral_toolkit.navigation import navigate as n
+    from astral_toolkit.tasks import navigation as t_nav
+
+    if not n.CACHE.exists():
+        pytest.skip("没有星图数据")
+    data = n.load()
+    lp = next(p for p in data["points"] if p["n"] == "ARC L1")
+    row = dict(
+        city="rr_arc_l1",
+        site_en="ARC-L1 Wide Forest Station",
+        site_zh="弧 L1 广袤森林站",
+        body="",
+        sys="Stanton",
+        space=True,
+        up=[0, 0, 1],
+        area="",
+        cat="取船",
+        kinds=["取船"],
+        en="Fleet Manager Terminal",
+        zh="舰队管理器终端",
+        src="a",
+        x=lp["x"] / 1000,
+        y=lp["y"] / 1000,
+        z=lp["z"] / 1000,
+    )
+    (tmp_path / "city_places.json").write_text(
+        json.dumps([row], ensure_ascii=False), encoding="utf-8"
+    )
+    _nav_db(monkeypatch, tmp_path)
+    monkeypatch.setattr(n, "WAYPOINTS", tmp_path / "wp.json")
+    monkeypatch.setattr(t_nav, "_wp_log", lambda *a, **k: None)
+    deps: Any = SimpleNamespace(
+        pos=SimpleNamespace(current=(0.0, None, None), hints=lambda: {})
+    )
+    g = (lp["x"] + 40, lp["y"], lp["z"] + 5)
+    assert t_nav._save_here(deps, "站里的点", g) == "弧 L1 广袤森林站"
+    raw = json.loads((tmp_path / "wp.json").read_text(encoding="utf-8"))[0]
+    assert raw["city"] == "rr_arc_l1" and raw["space"] and raw["t"] == "Waypoint"
+    assert (
+        "city_zh" not in raw and "area_id" not in raw
+    )  # 只存编号；没有电梯数据就不记区域
+    wp = n.waypoints()[0]
+    assert n.is_city(wp) and wp["city_zh"] == "弧 L1 广袤森林站"
+    assert tuple(wp["up"]) == (0.0, 0.0, 1.0)
+    shown = t_nav._place_row(wp)
+    assert shown["city"] and shown["waypoint"] and not shown["qt_direct"]
+    assert shown["type"] == "路标 · 弧 L1 广袤森林站"
+    assert t_nav.nav_plan(shown["key"])["city"]  # 界面按城内步行那一套显示
+
+    t_nav._save_here(deps, "远点", (lp["x"] + 50_000, lp["y"], lp["z"]))
+    far = next(w for w in n.waypoints() if w["n"] == "远点")
+    assert not n.is_city(far) and "city" not in far and far["space"]
+
+    (tmp_path / "city_places.json").write_text("[]", encoding="utf-8")
+    _nav_db(monkeypatch, tmp_path)
+    gone = next(w for w in n.waypoints() if w["n"] == "站里的点")
+    assert not n.is_city(gone) and "city" not in gone and gone["space"]
+
+
+def test_site_area_at(monkeypatch):
+    """站里的位置在哪个区域：取最近的已知点的区域，30 米以内才认"""
+    from astral_toolkit.navigation import navigate as n
+
+    st = {
+        "areas": {"A": {}, "B": {}},
+        "places": {},
+        "hangars": [],
+        "lifts": [
+            {
+                "stops": [
+                    {"area": "A", "gates": [[1.0, 0.0, 0.0]]},
+                    {"area": "B", "gates": [[1.0, 0.0, 0.05]]},
+                ]
+            }
+        ],
+    }
+    monkeypatch.setattr(n, "station_lifts", lambda: {"s": st})
+    monkeypatch.setattr(n, "city_places", lambda: [])
+    assert n.site_area_at("s", (1.0, 0.0, 0.004)) == "A"  # 离 A 的电梯口 4 米
+    assert n.site_area_at("s", (1.0, 0.0, 0.046)) == "B"
+    assert n.site_area_at("s", (1.2, 0.0, 0.0)) is None  # 200 米外没有已知点
+    assert n.site_area_at("没有电梯数据的站", (1.0, 0.0, 0.0)) is None

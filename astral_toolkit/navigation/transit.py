@@ -288,6 +288,39 @@ def site_at(
     }
 
 
+SITE_AREA_M = (
+    30  # 站里记路标：离已知的点（电梯口、机库、站里的地点）这么近才认它在那个区域
+)
+
+
+def site_meta(site: str) -> Optional[Dict[str, Any]]:
+    """一个站 / 城的名字和「上」（站里记的路标按站内方式带路要用）；数据里没有这个站 → None"""
+    pts = [q for q in city_places() if q.get("city") == site]
+    if not pts:
+        return None
+    out: Dict[str, Any] = {
+        "city_zh": pts[0].get("city_zh") or "",
+        "site_en": pts[0].get("site_en") or "",
+    }
+    up = next((q["up"] for q in pts if q.get("up")), None)
+    if up:
+        out["up"] = up
+    return out
+
+
+def site_area_at(site: str, a: Sequence[float]) -> Optional[str]:
+    """站里的位置 a（千米，站自己的坐标）在哪个区域：取最近的已知点的区域，SITE_AREA_M 以内才认；
+    这个站没有电梯数据、附近没有已知点 → None（那就不带坐电梯的步骤，只给方向、距离、上下楼）"""
+    st = station_lifts().get(site)
+    if not st:
+        return None
+    d, area = min(
+        ((math.dist(a, p) * 1000, ar) for p, ar in _station_points(st, site)),
+        default=(float("inf"), None),
+    )
+    return area if d < SITE_AREA_M else None
+
+
 AREA_ORDER = ("大厅", "购物中心", "精炼站", "货运中心", "外部货运")
 
 
@@ -834,6 +867,11 @@ def station_leg(
     """空间站里这一段该去哪：(该指向的点, 步骤文字[])"""
     st = station_lifts().get(target.get("city") or "")
     dest = st and st["places"].get(target.get("id") or "")
+    if (
+        st and not dest
+    ):  # 玩家在站里记的路标：没有编号，记的时候认出来的区域（2026-11-14）
+        area = target.get("area_id")
+        dest = area if area == "hangar" or area in st["areas"] else None
     plan = {} if plan is None else plan
     if not dest:
         plan.clear()
