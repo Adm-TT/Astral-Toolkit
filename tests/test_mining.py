@@ -1936,3 +1936,20 @@ def test_fill_name_exact_tier_before_one_edit():
         ("Inert Materials", 36.68, 0),
     ]
     assert _fix_by_tiers(comp, "Hephaestanite")[0] == ("Silicon", 4.77, 510)
+
+
+def test_head_numbers_on_multi_head_ships():
+    """船上不止一个矿头位：方案里的矿头名前面带「几号」（涵涵 11-13：两个同款自造矿头分不清是哪个位）；
+    只有一个矿头位的船、临时拼的不带"""
+    from astral_toolkit.mining import laser
+    from astral_toolkit.mining.data import SHIPS
+
+    mole = laser._setups(laser.clean_loadout("mole", None))
+    assert [h.no for h in mole] == [1, 2, 3]
+    plain = laser.HeadSetup(mole[0].key, []).label
+    assert [h.label for h in mole] == [f"{i} 号 {plain}" for i in (1, 2, 3)]
+    one = laser._setups(laser.clean_loadout("prospector", None))
+    assert one[0].no == 0 and one[0].label == laser.HeadSetup(one[0].key, []).label
+    made = laser.HeadSetup("helix_ii", [], {"Emitter": 1000, "Bus Bars": 1000}, 2)
+    assert made.label.startswith("2 号 ") and "（自造 " in made.label
+    assert len(SHIPS["mole"]["seats"]) == SHIPS["mole"]["heads"]

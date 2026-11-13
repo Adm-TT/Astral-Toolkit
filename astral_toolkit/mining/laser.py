@@ -144,6 +144,7 @@ class HeadSetup:
     key: str
     modules: list
     craft: dict | None = None  # 自造的：{槽名: 品质}；商店买的 None
+    no: int = 0  # 船上第几个矿头位（1 起）；只有一个矿头位的船、临时拼出来的不编号 = 0
 
     @property
     def head(self):
@@ -158,12 +159,16 @@ class HeadSetup:
 
     @property
     def label(self):
-        """方案、悬浮窗里显示的名字（「中文 English」）：自造的后面标功率变化，比如「螺旋 Helix II（自造 +41%）」"""
+        """方案、悬浮窗里显示的名字（「中文 English」）：自造的后面标功率变化，比如「螺旋 Helix II（自造 +41%）」。
+        船上不止一个矿头位时前面带「几号」（涵涵 11-13：两个自造的同款矿头分不清是哪个位）"""
         from ..core.i18n import gear_label
 
+        name = gear_label(str(self.name))
+        if self.no:
+            name = f"{self.no} 号 {name}"
         if not self.craft:
-            return gear_label(self.name)
-        return f"{gear_label(self.name)}（自造 {(self.power_mult() - 1) * 100:+.0f}%）"
+            return name
+        return f"{name}（自造 {(self.power_mult() - 1) * 100:+.0f}%）"
 
     def max_power(self):
         return (
@@ -360,7 +365,11 @@ def ship_loadout(ship=None):
 
 def _setups(lo):
     craft = lo.get("craft") or [None] * len(lo["heads"])
-    return [HeadSetup(k, mods, craft[i]) for i, (k, mods) in enumerate(lo["heads"])]
+    many = len(lo["heads"]) > 1
+    return [
+        HeadSetup(k, mods, craft[i], i + 1 if many else 0)
+        for i, (k, mods) in enumerate(lo["heads"])
+    ]
 
 
 def loadout():

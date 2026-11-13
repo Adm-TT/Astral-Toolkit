@@ -288,6 +288,7 @@ def _gear(ship=None):
                 "heads": spec["heads"],
                 "crew_max": spec["crew_max"],
                 "fixed": spec.get("fixed"),
+                "seats": list(spec.get("seats") or ()),
                 "loadout": lo,
                 "power": [power(k, craft[i]) for i, (k, _) in enumerate(lo["heads"])],
                 "cards": [

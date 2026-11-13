@@ -730,7 +730,7 @@ function gearRender() {
   if (!state.gearOpen) {    // 平时：一行看完整套配置
     box.innerHTML = `<div class="gear-line">
       <b>${esc(ship.name)}</b>${ship.crew_max > 1 ? `<span class="muted">${lo.crew || 1} 人同时操作</span>` : ""}
-      <span class="chips">${lo.heads.map(([k, mods], i) => `<span class="chip">${esc(headName(k))}${(lo.craft || [])[i] ? "（自制）" : ""}${mods.length ? ` <i>+${esc(gearModsText(g, mods))}</i>` : ""}</span>`).join("")}</span>
+      <span class="chips">${lo.heads.map(([k, mods], i) => `<span class="chip">${lo.heads.length > 1 ? `${i + 1} 号 ` : ""}${esc(headName(k))}${(lo.craft || [])[i] ? "（自制）" : ""}${mods.length ? ` <i>+${esc(gearModsText(g, mods))}</i>` : ""}</span>`).join("")}</span>
       <span class="muted num">总功率 <b>${money(sum.power)}</b> W</span>
       ${(g.gadgets || []).length ? `<span class="muted">手持工具 ${g.gadgets.filter((x) => x.on).length}/${g.gadgets.length}</span>` : ""}
       <button class="btn small" id="g-open" style="margin-left:auto">选择矿头 / 模组</button></div>
@@ -748,7 +748,7 @@ function gearRender() {
       return `<button type="button" class="chip g-slot${m ? "" : " empty"}" data-h="${i}" data-m="${j}" title="${esc(m ? m.desc : "点击选择模组")}">${m ? esc(m.name) : "＋ 选择模组"}</button>`;
     }).join("");
     return `<div class="gear-card">
-      <div class="gear-k"><span>矿头 ${lo.heads.length > 1 ? i + 1 : ""}</span>
+      <div class="gear-k"><span>${lo.heads.length > 1 ? `${i + 1} 号矿头${(ship.seats || [])[i] ? `（${esc(ship.seats[i])}）` : ""}` : "矿头"}</span>
         ${h.craft?.length ? segH(`g-src-${i}`, [["shop", "商店购买"], ["craft", "自制"]], c ? "craft" : "shop", "来源") : ""}</div>
       <select class="input g-head" data-h="${i}"${ship.fixed ? " disabled" : ""} title="${esc(h.desc)}">${heads.map((x) => `<option value="${x.key}"${x.key === hk ? " selected" : ""}>${esc(x.name)}</option>`).join("")}</select>
       <div class="gear-pw num">${cd.power !== cd.base ? `<span class="faint">${money(cd.base)} →</span> ` : ""}<b>${money(cd.power)}</b> W</div>
@@ -757,6 +757,7 @@ function gearRender() {
       ${c ? `<div class="g-craft">
         <div class="faint" style="font-size:12.5px">${pw ? `自制品质使激光功率 ${pw.pct >= 0 ? "+" : ""}${pw.pct}%（两个槽合计）；框架（铁）的品质只影响耐久` : ""}</div>
         <div class="row" style="gap:6px"><button class="btn small g-preset" data-h="${i}" data-q="500" type="button">商店品质 500</button><button class="btn small g-preset" data-h="${i}" data-q="1000" type="button">最佳 1000</button></div>
+        <div class="row" style="gap:6px;align-items:center"><span class="faint" style="font-size:12.5px">不清楚各槽品质：直接填游戏里这个矿头显示的激光功率加成</span><input class="input g-pct" data-h="${i}" value="${pw ? pw.pct : 0}" inputmode="decimal" style="width:72px"><span class="faint">%</span></div>
         <div class="slots">${h.craft.map((s) => craftQHTML(i, s, c[s.slot])).join("")}</div></div>` : ""}
     </div>`;
   }).join("");
@@ -820,6 +821,19 @@ function gearRender() {
     const i = +b.dataset.h, h = g.heads.find((x) => x.key === c.heads[i][0]);
     setCraft(c, i, Object.fromEntries(h.craft.map((s) => [s.slot, +b.dataset.q])));
   })));
+  // 做好的矿头在游戏里只看得到加成百分比、看不到当初用的品质（涵涵 11-13）：填百分比，按各槽同一个品质反推，功率对得上
+  box.querySelectorAll(".g-pct").forEach((el) => {
+    el.onkeydown = (e) => { if (e.key === "Enter") el.blur(); };
+    el.onchange = () => {
+      const i = +el.dataset.h, h = g.heads.find((x) => x.key === lo.heads[i][0]), want = parseFloat(el.value);
+      if (!isFinite(want)) { gearRender(); return; }
+      const at = (q) => h.craft.reduce((s, x) => s + (curveVal(x.segs, q) - 1) * 100, 0);
+      let best = 500;
+      for (let q = 0; q <= 1000; q++) if (Math.abs(at(q) - want) < Math.abs(at(best) - want)) best = q;
+      if (Math.abs(at(best) - want) > 0.5) toast(`这个矿头自制的加成范围是 ${at(0).toFixed(0)}% ~ +${at(1000).toFixed(0)}%，已按最接近的填`);
+      save((c) => setCraft(c, i, Object.fromEntries(h.craft.map((s) => [s.slot, best]))));
+    };
+  });
   // 手持工具：点一下切换带 / 不带（老大 11-04）
   box.querySelectorAll(".g-gad").forEach((el) => (el.onclick = async () => {
     const on = new Set(g.gadgets.filter((x) => x.on).map((x) => x.key));

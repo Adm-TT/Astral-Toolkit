@@ -284,8 +284,11 @@ GADGETS = {
 
 # ---------------------------------------------------------------- 采矿船
 # heads: 几个矿头位；size: 矿头尺寸；fixed: 矿头锁死（只能换模组）；crew_max: 最多几人同时开矿头
+# seats: 1、2、3 号矿头位在船上哪边（2026-11-13 负责人按游戏里的配置确认：鼹鼠一号中、二号左、三号右）
 SHIPS = {
-    "mole": dict(name="鼹鼠 MOLE", size=2, heads=3, crew_max=3),
+    "mole": dict(
+        name="鼹鼠 MOLE", size=2, heads=3, crew_max=3, seats=("中", "左", "右")
+    ),
     "prospector": dict(name="勘探者 Prospector", size=1, heads=1, crew_max=1),
     "golem": dict(name="魔像 Golem", size=1, heads=1, crew_max=1, fixed="pitman"),
 }
