@@ -2,7 +2,7 @@
 
 提供：
 1. 城市设施与点位解析（city_places、city_metrics、city_text）；
-2. 空间站与主城按分类查找（amenity_targets、city_targets、site_at、site_nearest、nearest、station_text）；
+2. 空间站与主城按分类 / 区域查找（amenity_targets、site_at、site_tree、station_text）；
 3. 城市地铁捷运多段换乘路径规划与分步指引（city_route、city_leg、_metro_lines）；
 4. 空间站/主城多层电梯（含机库电梯）拓扑图寻路与实时轿厢换乘跟随算法（station_lifts、station_route、station_leg、zone_kind）。
 """
@@ -148,23 +148,6 @@ NEAR_PREFER = {
     "空港": ("Fleet Manager Terminal",),
 }
 NEAR_ALIAS = {"空港": "取船"}
-SITE_KINDS = (
-    "取船",
-    "交易",
-    "货梯",
-    "医院",
-    "武器",
-    "护甲",
-    "服装",
-    "部件",
-    "吃喝",
-    "精炼",
-    "行政",
-    "罚款",
-    "租船",
-    "买船",
-    "地铁",
-)
 SITE_NEAR_M = 6000
 
 
@@ -250,13 +233,9 @@ def _shown():
         return lambda p: True
 
 
-def city_targets(kind: str) -> List[Dict[str, Any]]:
-    """城里这类的点（给玩家看的：按可见清单过滤）：有能直接办事的（登记处 / 取船终端）就只要这些，没有就这类全部"""
-    return _city_targets(kind, _shown())
-
-
 def _city_targets(kind: str, shown: Any) -> List[Dict[str, Any]]:
-    """shown：一条可不可见的函数；内部取数（设施去重、交易定位）传 None，不过滤"""
+    """城里这类的点：有能直接办事的（登记处 / 取船终端）就只要这些，没有就这类全部。
+    shown：一条可不可见的函数；内部取数（设施去重、交易定位）传 None，不过滤"""
     by_city: Dict[str, List[Dict[str, Any]]] = {}
     alias = NEAR_ALIAS.get(kind, kind)
     for q in city_places():
@@ -279,7 +258,7 @@ def site_at(
     data: Optional[Dict[str, Any]] = None,
     system: str = "",
 ) -> Optional[Dict[str, Any]]:
-    """现在在哪个主城 / 空间站里 → {"site", "zh", "en", "kinds": [这里有的分类]}；不在就 None"""
+    """现在在哪个主城 / 空间站里 → {"site", "zh", "en"}；不在就 None"""
     best = None
     pts = city_places()
     if here and here.get("inside"):
@@ -300,49 +279,63 @@ def site_at(
     shown = (
         _shown()
     )  # 认在哪个站用全部的点；这个站一个可见的点都没有，就当作不认识这个站
-    here_pts = [p for p in pts if p.get("city") == q.get("city") and shown(p)]
-    if not here_pts:
+    if not any(p.get("city") == q.get("city") and shown(p) for p in pts):
         return None
-    have = {k for p in here_pts for k in (p.get("kinds") or ())}
     return {
         "site": q.get("city"),
         "zh": q.get("city_zh") or "",
         "en": q.get("site_en") or q.get("city") or "",
-        "kinds": [k for k in SITE_KINDS if k in have],
     }
 
 
-def site_nearest(
-    site: str,
-    kind: str,
-    g: Optional[Sequence[float]] = None,
-    when: Optional[Any] = None,
-    data: Optional[Dict[str, Any]] = None,
-    here: Optional[Dict[str, Any]] = None,
-) -> List[Tuple[Optional[float], Dict[str, Any]]]:
-    """主城 / 空间站里这一类的点，近的在前 → [(距离米或 None, 点)]"""
-    data = data or load()
-    out = []
+AREA_ORDER = ("大厅", "购物中心", "精炼站", "货运中心", "外部货运")
+
+
+def site_tree(site: str) -> Optional[Dict[str, Any]]:
+    """一个主城 / 空间站里给玩家看的点，按楼层 / 区域分组（2026-11-13 负责人定）；数据里没标区域的点按分类归组。
+    同一组里英文名一样的并成一条（三部货运电梯 → 一条，points 里三个点）。
+    → {"site", "zh", "en", "groups": [{"name", "items": [{"label", "kinds", "points"}]}]}；这个站没有可见的点 → None"""
     shown = _shown()
-    qs = [
-        q
-        for q in city_places()
-        if q.get("city") == site and kind in (q.get("kinds") or ()) and shown(q)
-    ]
-    pref = NEAR_PREFER.get(kind)
-    good = [q for q in qs if pref and q["n"] in pref]
-    for q in good or qs:
-        d = None
-        if g is not None:
-            try:
-                d = math.dist(
-                    g, target_global(q, data, when, (g, here, when) if here else None)
-                )
-            except Exception:
-                d = None
-        out.append((d is None, d or 0.0, label(q), d, q))
-    out.sort(key=lambda r: r[:3])
-    return [(d, q) for *_, d, q in out]
+    pts = [q for q in city_places() if q.get("city") == site and shown(q)]
+    if not pts:
+        return None
+    twins: Dict[str, int] = {}
+    for q in pts:
+        twins[q["n"]] = twins.get(q["n"], 0) + 1
+    rank: Dict[str, int] = {}
+    groups: Dict[str, Dict[str, Dict[str, Any]]] = {}
+    for q in pts:
+        area = q.get("area") or ""
+        name = area or q.get("cat") or "其他"
+        r = (
+            AREA_ORDER.index(area)
+            if area in AREA_ORDER
+            else len(AREA_ORDER) + (0 if area else 1)
+        )
+        rank[name] = min(r, rank.get(name, r))
+        item = groups.setdefault(name, {}).get(q["n"])
+        if item is None:
+            # 城里同名的点建库时编了号（卷饼吧 2）：并成一条 / 分在两个区域后，编号没有意义，去掉
+            zh = (
+                re.sub(r" \d+$", "", q.get("zh") or "")
+                if twins[q["n"]] > 1
+                else q.get("zh")
+            )
+            item = groups[name][q["n"]] = {
+                "label": label(dict(q, zh=zh)),
+                "kinds": list(q.get("kinds") or ()),
+                "points": [],
+            }
+        item["points"].append(q)
+    return {
+        "site": site,
+        "zh": pts[0].get("city_zh") or "",
+        "en": pts[0].get("site_en") or site,
+        "groups": [
+            {"name": name, "items": list(groups[name].values())}
+            for name in sorted(groups, key=lambda k: rank[k])
+        ],
+    }
 
 
 def station_text(
@@ -372,47 +365,6 @@ def target_system(p: Dict[str, Any], data: Optional[Dict[str, Any]] = None) -> s
         return p.get("sys") or ""
     b = data["bodies"].get(p.get("b"))
     return b["sys"] if b else ""
-
-
-def nearest(
-    kind: str,
-    g: Optional[Sequence[float]] = None,
-    system: str = "",
-    when: Optional[Any] = None,
-    data: Optional[Dict[str, Any]] = None,
-    here: Optional[Dict[str, Any]] = None,
-) -> List[Tuple[Optional[float], Dict[str, Any]]]:
-    """最近的医院 / 空港 / 买船 → [(距离米或 None, 目标)]，近的在前"""
-    data = data or load()
-    shown = _shown()  # 城外设施（空间站、前哨）也按可见清单走；amenity_targets 自己不过滤，交易定位还要用全量
-    cands = city_targets(kind) + [q for q in amenity_targets(kind, data) if shown(q)]
-    site = site_at(g, here, when, data, system)
-    if site:
-        inside = [q for q in city_targets(kind) if q.get("city") == site["site"]]
-        if inside:
-            cands = inside
-    out = []
-    for q in cands:
-        d = None
-        if g is not None:
-            try:
-                d = math.dist(
-                    g, target_global(q, data, when, (g, here, when) if here else None)
-                )
-            except Exception:
-                d = None
-        same = not system or target_system(q, data) == system
-        if not same:
-            d = None
-        out.append((not same, d is None, d or 0.0, label(q), d, q))
-    out.sort(key=lambda r: r[:4])
-    seen, res = set(), []
-    for *_, d, q in out:
-        k = (q.get("id") or q["n"], q.get("b"))
-        if k not in seen:
-            seen.add(k)
-            res.append((d, q))
-    return res
 
 
 METRO_MIN_M = 400

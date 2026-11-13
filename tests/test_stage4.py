@@ -153,7 +153,6 @@ _OLD_API_NAMES = [
     "mineral_search",
     "mining_gear",
     "nav_mode",
-    "nav_near",
     "nav_plan",
     "nav_refresh",
     "nav_search",

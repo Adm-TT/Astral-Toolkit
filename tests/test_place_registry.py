@@ -263,19 +263,23 @@ def test_search_hides_places_not_on_the_list(monkeypatch, tmp_path):
     assert "Hab Lobby" in names and "Hab Lobby 2" not in names  # 城内点跟着清单走
 
 
+def _tree_ids(tree):
+    return {q["id"] for g in tree["groups"] for it in g["items"] for q in it["points"]}
+
+
 def test_city_lists_and_site_follow_the_list(monkeypatch, tmp_path):
     from astral_toolkit.navigation import transit
 
     here = {"inside": True, "body": "Hurston", "x": 1.0, "y": 2.0, "z": 3.0}
     _built(monkeypatch, tmp_path, **{"places.json": _PLACES})
-    assert {q["id"] for q in transit.city_targets("公寓")} >= {"lor_hab", "lor_hab2"}
+    assert _tree_ids(transit.site_tree("Lorville")) >= {"lor_hab", "lor_hab2"}
     site = transit.site_at(here=here)
     assert site is not None and site["site"] == "Lorville"
     _built(
         monkeypatch, tmp_path, **{"places.json": _PLACES, "place_visibility.json": _VIS}
     )
-    assert {q["id"] for q in transit.city_targets("公寓")} == {"lor_hab"}
-    assert [q["id"] for _, q in transit.site_nearest("Lorville", "住宿")] == ["lor_hab"]
+    assert "lor_hab" in _tree_ids(transit.site_tree("Lorville"))
+    assert "lor_hab2" not in _tree_ids(transit.site_tree("Lorville"))
     site = transit.site_at(here=here)
     assert site is not None and site["site"] == "Lorville"  # 站里还有可见的点：照认
     only_poi = {**_VIS, "ids": ["poi:Hurston/ent_lorville"]}
@@ -287,7 +291,7 @@ def test_city_lists_and_site_follow_the_list(monkeypatch, tmp_path):
     assert (
         transit.site_at(here=here) is None
     )  # 站里一个可见的点都没有：当作不认识这个站
-    assert transit.city_targets("公寓") == []
+    assert transit.site_tree("Lorville") is None
 
 
 def test_nearby_does_not_name_hidden_places(monkeypatch, tmp_path):

@@ -2775,7 +2775,6 @@ _FS_B5_FIRST_ARG = {
     "system/settings.py": {"set_settings": "sources*"},
     "system/about.py": {"agree": "sources*"},
     "navigation.py": {
-        "nav_near": "deps*",
         "nav_site": "deps*",
         "nav_start": "deps*",
         "nav_mode": "deps*",
@@ -2815,7 +2814,6 @@ _FS_B5_BOUND = {
     "vision.py": {"hover_trigger"},
     "system.py": {"status", "feedback_report", "set_settings", "agree"},
     "navigation.py": {
-        "nav_near",
         "nav_site",
         "nav_start",
         "nav_mode",

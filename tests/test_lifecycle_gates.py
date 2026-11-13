@@ -133,7 +133,6 @@ def test_closing_gate_navigation_and_writes(monkeypatch):
     deps: Any = SimpleNamespace()
     with _closing_gate(True):
         assert navigation.nav_start(deps, "x").get("error") == "正在退出"
-        assert navigation.nav_near(deps, "mine").get("error") == "正在退出"
         assert navigation.mark_here(deps).get("error") == "正在退出"
 
         h = HotkeyCommands(

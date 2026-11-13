@@ -57,9 +57,6 @@ def halo_unpin(**kw):
 
 
 def bound(deps):
-    def nav_near(**kw):
-        return _t.nav_near(deps, **kw)
-
     def nav_site(**kw):
         return _t.nav_site(deps, **kw)
 
@@ -94,7 +91,6 @@ def bound(deps):
         return _t.halo_pin(deps, **kw)
 
     return {
-        "nav_near": nav_near,
         "nav_site": nav_site,
         "nav_start": nav_start,
         "nav_mode": nav_mode,

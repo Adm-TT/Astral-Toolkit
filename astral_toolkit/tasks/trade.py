@@ -196,6 +196,8 @@ def nav_shop(deps: "NavDeps", /, shop="", place=""):
         return {"error": "导航数据里没有这个地点"}
     _place_row, _places, _start_nav = _nav_objects()
     row = _place_row(hit)
+    if row.get("qt_direct"):  # 游戏里能量子直达的不给导航（2026-11-13 负责人定）
+        return {"error": f"「{row['label']}」游戏里可以直接量子跳跃过去，不用导航"}
     err = _start_nav(
         deps, _places[row["key"]]
     )  # 停止中被拒时如实返回，不报「已开始」（RT-B5b）

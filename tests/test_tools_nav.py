@@ -1938,12 +1938,11 @@ def test_displayinfo_yields_to_mining(monkeypatch):
     assert not D.read().get("yielded")
 
 
-def test_nav_nearest(monkeypatch, tmp_path):
-    """导航「医院 / 空港 / 买船」找最近的（2026-10-27）：城里只找本城（取船终端 / 登记处优先），城外按星图里的站算距离；
-    位置不知道只列出来；汉化名自带的英文不重复"""
+def test_amenity_targets(monkeypatch, tmp_path):
+    """城外有医院 / 空港 / 买船的站（交易定位用）：城里已经解出这类点的站不重复列；
+    站里只解出别的点的照样列；引用不到的、坏行跳过；汉化名自带的英文不重复"""
     import json  # noqa: F811
     from astral_toolkit.navigation import navigate as n
-    from astral_toolkit.tasks import navigation as t_nav
 
     if not n.CACHE.exists():
         pytest.skip("没有星图数据")
@@ -2017,41 +2016,15 @@ def test_nav_nearest(monkeypatch, tmp_path):
         json.dumps(amen, ensure_ascii=False), encoding="utf-8"
     )
     _nav_db(monkeypatch, tmp_path)
-    now = time.time()
-    arc = next(p for p in data["points"] if p["n"] == "ARC L1")
-    g = (arc["x"] + 5000, arc["y"], arc["z"])
-    hits = n.nearest("医院", g, "Stanton", now, data)
-    assert hits[0][1]["n"] == "ARC-L1 Wide Forest Station" and 4000 < hits[0][0] < 6000
-    assert n.label(hits[0][1]) == "弧 L1 广袤森林站（ARC-L1 Wide Forest Station）"
-    assert {q["n"] for _, q in hits} == {
-        "ARC-L1 Wide Forest Station",
-        "Hospital Check-In",
-    }  # 城里只要登记处，药店不列
-    nb = next(
-        q
-        for q in n.city_places()
-        if q["city"] == "NewBabbage"
-        and q["cat"] == "医院"
-        and q["n"] == "Hospital Check-In"
-    )
-    g2 = n.target_global(nb, data, now)
-    here = n.locate(g2, when=now)
-    hits = n.nearest("医院", g2, "Stanton", now, data, here)
-    assert [q["city"] for _, q in hits] == ["NewBabbage"] and hits[0][
-        0
-    ] < 50  # 在城里：只找本城
-    assert all(
-        d is None for d, _ in n.nearest("医院", None, "", None, data)
-    )  # 不知道位置：只列出来
+    hits = n.amenity_targets("医院", data)
+    assert [q["n"] for q in hits] == ["ARC-L1 Wide Forest Station"]
+    assert n.label(hits[0]) == "弧 L1 广袤森林站（ARC-L1 Wide Forest Station）"
     assert (
         n.label(
             {"n": "Checkmate", "zh": "死局空间站 (Checkmate)", "t": "Orbital Station"}
         )
         == "死局空间站（Checkmate）"
     )
-    from tests.bootstrap_helpers import nav_deps
-
-    assert "error" in t_nav.nav_near(nav_deps(), "加油")
 
 
 def test_city_route(monkeypatch, tmp_path):
@@ -2289,14 +2262,181 @@ def test_site_menu(monkeypatch, tmp_path):
     )
     g = (1000_000.0, 0.0, 0.0)
     s = n.site_at(g, None, None, data)
-    assert s["site"] == "rr_hur_l1" and s["kinds"] == ["取船", "吃喝"]
+    assert s == {
+        "site": "rr_hur_l1",
+        "zh": "赫 L1 绿色林地站",
+        "en": "HUR-L1 Green Glade Station",
+    }
     assert (
         n.site_at((1010_000.0, 0.0, 0.0), None, None, data) is None
     )  # 离站 10 km：不在站里
-    near = n.site_nearest("rr_hur_l1", "吃喝", g, None, data)
-    assert [q["id"] for _, q in near] == ["b", "c"] and round(near[0][0]) == 54
-    assert "上方 20 米" in n.station_text(g, near[0][1], data)
+    assert "上方 20 米" in n.station_text(g, ps[1], data)
     assert n.station_text(g, ps[0], data).startswith("✅ 到了")
+    # 没标区域的按分类归组；同组同名的并成一条，编号去掉（2026-11-13）
+    tree = n.site_tree("rr_hur_l1")
+    assert tree is not None
+    assert [
+        (gr["name"], [it["label"] for it in gr["items"]]) for gr in tree["groups"]
+    ] == [
+        ("取船", ["舰队管理器终端（Fleet Manager Terminal）"]),
+        ("商店", ["酒吧（Bar）"]),
+    ]
+    assert [q["id"] for q in tree["groups"][1]["items"][0]["points"]] == ["b", "c"]
+    assert n.site_tree("没有这个站") is None
+
+
+def _site_rows():
+    base = dict(
+        city="rr_hur_leo",
+        site_en="Everus Harbor",
+        site_zh="埃弗勒斯空间站",
+        body="Hurston",
+        up=[0, 0, 1],
+    )
+
+    def row(src, en, zh, cat, kinds, area, x):
+        return dict(
+            base,
+            src=src,
+            en=en,
+            zh=zh,
+            cat=cat,
+            kinds=kinds,
+            area=area,
+            x=x,
+            y=0.0,
+            z=0.0,
+        )
+
+    return [
+        row(
+            "lift1",
+            "Freight Elevator",
+            "货运电梯",
+            "货梯",
+            ["货梯"],
+            "外部货运",
+            1000.0,
+        ),
+        row(
+            "lift2",
+            "Freight Elevator",
+            "货运电梯",
+            "货梯",
+            ["货梯"],
+            "外部货运",
+            1000.3,
+        ),
+        row("bar1", "Burrito Bar", "卷饼吧", "商店", ["吃喝"], "购物中心", 1000.1),
+        row("bar2", "Burrito Bar", "卷饼吧", "商店", ["吃喝"], "大厅", 1000.2),
+        row(
+            "fleet",
+            "Fleet Manager Terminal",
+            "舰队管理器终端",
+            "取船",
+            ["取船"],
+            "大厅",
+            1000.0,
+        ),
+        row("odd", "Vending", "售货机", "商店", ["吃喝"], "", 1000.0),
+    ]
+
+
+_SITE_DATA = {
+    "bodies": {"Hurston": {"sys": "Stanton", "r": 1000000.0, "x": 0, "y": 0, "z": 0}},
+    "pois": [
+        dict(
+            b="Hurston",
+            n="Everus Harbor",
+            t="Orbital Station",
+            qt=1,
+            x=1000.0,
+            y=0.0,
+            z=0.0,
+        ),
+        dict(b="Hurston", n="Some Cave", t="Cave", qt=0, x=1.0, y=0.0, z=0.0),
+    ],
+    "points": [],
+}
+
+
+def test_site_tree_and_search(monkeypatch, tmp_path):
+    """搜站名出一条站、点开按楼层 / 区域看；词点到具体地点照旧列点；量子可达的不给导航（2026-11-13 负责人定）"""
+    import json  # noqa: F811
+    from types import SimpleNamespace
+    from typing import Any
+    from astral_toolkit.navigation import navigate as n
+    from astral_toolkit.tasks import navigation as t_nav
+
+    (tmp_path / "city_places.json").write_text(
+        json.dumps(_site_rows(), ensure_ascii=False), encoding="utf-8"
+    )
+    _nav_db(monkeypatch, tmp_path)
+    monkeypatch.setattr(n, "waypoints", lambda: [])
+    monkeypatch.setattr(n, "mining_spots", lambda data=None: [])
+    data = _SITE_DATA
+    tree = n.site_tree("rr_hur_leo")
+    assert tree is not None
+    assert [gr["name"] for gr in tree["groups"]] == [
+        "大厅",
+        "购物中心",
+        "外部货运",
+        "商店",
+    ]
+    lobby, mall, cargo, _other = tree["groups"]
+    assert [it["label"] for it in lobby["items"]] == [
+        "卷饼吧（Burrito Bar）",
+        "舰队管理器终端（Fleet Manager Terminal）",
+    ]  # 分在两个区域的同名点：各一条，编号去掉
+    assert [it["label"] for it in mall["items"]] == ["卷饼吧（Burrito Bar）"]
+    assert [q["id"] for q in cargo["items"][0]["points"]] == ["lift1", "lift2"]
+
+    for q in (
+        "埃弗勒斯",
+        "everus",
+        "hurston",
+    ):  # 中文站名、英文站名、所在星球：都只出这个站一条
+        hits, total = n.search(q, data, limit=30, sites=True)
+        sites = [p for p in hits if p["t"] == "Site"]
+        assert len(sites) == 1 and sites[0]["site"] == "rr_hur_leo", q
+        assert sites[0]["count"] == 6 and sites[0]["qt"] == 1
+        assert not [p for p in hits if p["t"] in ("City", "Orbital Station")], q
+    hits, _ = n.search("hurston", data, limit=30, sites=True)
+    assert hits[0]["t"] == "Site" and {p["n"] for p in hits} == {
+        "Everus Harbor",
+        "Some Cave",
+    }
+    hits, _ = n.search("埃弗勒斯 卷饼", data, limit=30, sites=True)
+    assert [p["id"] for p in hits] == ["bar1", "bar2"]  # 词点到具体地点：列点
+    hits, _ = n.search("everus", data, limit=30)
+    assert (
+        "Site" not in {p["t"] for p in hits} and len(hits) == 7
+    )  # 不并（别处的调用照旧）
+
+    monkeypatch.setattr(n, "load", lambda: data)
+    deps: Any = SimpleNamespace(pos=SimpleNamespace(current=(0.0, None, None)))
+    rows = t_nav.nav_search("埃弗勒斯")["rows"]
+    assert [
+        (r["label"], r["type"], r["site"], r["count"], r["has_qt"]) for r in rows
+    ] == [("埃弗勒斯空间站（Everus Harbor）", "空间站", "rr_hur_leo", 6, True)]
+    assert t_nav.nav_search("卷饼")["rows"][0]["type"] == "埃弗勒斯空间站 · 购物中心"
+    assert t_nav.nav_site(deps) == {"site": None}  # 位置不知道
+    assert "error" in t_nav.nav_site(deps, site="没有这个站")
+    r: Any = t_nav.nav_site(deps, site="rr_hur_leo")
+    assert r["name"] == "埃弗勒斯空间站（Everus Harbor）" and r["here"] is False
+    assert [
+        (g["name"], [(x["label"], x["n"]) for x in g["rows"]]) for g in r["groups"]
+    ][2] == (
+        "外部货运",
+        [("货运电梯（Freight Elevator）", 2)],
+    )
+    key = r["groups"][2]["rows"][0]["key"]
+    assert t_nav._places[key]["id"] == "lift1" and not t_nav.nav_plan(key)["qt_direct"]
+    # 量子可达的（星图里有信标的）：照常显示，开始导航被拒
+    row = t_nav._place_row(data["pois"][0])
+    assert row["qt_direct"] and t_nav.nav_plan(row["key"])["qt_direct"]
+    assert t_nav.nav_start(deps, row["key"]) == {"error": t_nav.QT_DIRECT_MSG}
+    assert not t_nav._place_row(data["pois"][1])["qt_direct"]
 
 
 def test_train_data(monkeypatch, tmp_path):

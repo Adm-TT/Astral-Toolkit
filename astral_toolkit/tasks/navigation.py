@@ -190,16 +190,44 @@ def _pos_latest(deps: NavDeps) -> Any:
 
 
 # ---------------------------------------------------------------- 导航与地点搜索
-def _place_row(p):
-    from ..navigation.navigate import label, body_label, TYPE_ZH, QT_ZH
+def _qt_direct(p):
+    """游戏里能直接量子跳跃过去的地点（有信标）：照常显示，不给导航（2026-11-13 负责人定）。
+    城里的点、玩家自己的路标不算"""
+    return p.get("qt") == 1 and p.get("t") not in ("City", "Waypoint")
 
+
+QT_DIRECT_MSG = "这个地点游戏里可以直接量子跳跃过去，不用导航"
+
+
+def _place_row(p):
+    from ..navigation.navigate import label, body_label, CITY_ZH, TYPE_ZH, QT_ZH
+
+    if (
+        p["t"] == "Site"
+    ):  # 搜索并出来的一个主城 / 空间站：点开看各层（nav_site），本身不是导航目标，不进 _places
+        return {
+            "key": f"{p['b']}|Site|{p['site']}",
+            "label": label(p),
+            "body": body_label(p["b"]),
+            "type": "主城" if p["site"] in CITY_ZH else "空间站",
+            "qt": QT_ZH.get(p["qt"], "信标未确认"),
+            "has_qt": p["qt"] == 1,
+            "qt_direct": False,
+            "waypoint": False,
+            "space": bool(p.get("space")),
+            "city": False,
+            "site": p["site"],
+            "count": p["count"],
+        }
     key = f"{p['b']}|{p['t']}|{p.get('id') or p['n']}"  # 城里同名地点靠 id 区分（审查 2026-10-27）
     _places[key] = p
-    typ = (
-        (p.get("area") or p.get("city_zh") or TYPE_ZH["City"])
-        if p["t"] == "City"
-        else TYPE_ZH.get(p["t"], p["t"])
-    )
+    if p["t"] == "City":  # 哪个站 · 哪一层（跨站列出来时分得清）
+        typ = (
+            " · ".join(v for v in (p.get("city_zh"), p.get("area")) if v)
+            or TYPE_ZH["City"]
+        )
+    else:
+        typ = TYPE_ZH.get(p["t"], p["t"])
     return {
         "key": key,
         "label": label(p),
@@ -207,6 +235,7 @@ def _place_row(p):
         "type": typ,
         "qt": QT_ZH.get(p["qt"], "信标未确认"),
         "has_qt": p["qt"] == 1,
+        "qt_direct": _qt_direct(p),
         "waypoint": p["t"] == "Waypoint",
         "space": bool(p.get("space")),
         "city": p["t"] == "City",
@@ -216,123 +245,74 @@ def _place_row(p):
 def nav_search(q=""):
     from ..navigation.navigate import search as s
 
-    hits, total = s(q, limit=30)
+    hits, total = s(q, limit=30, sites=True)
     return {"rows": [_place_row(p) for p in hits], "total": total}
 
 
-def nav_near(deps: NavDeps, /, kind=""):
-    refused = _rt_b6_closing_error()
-    if refused:
-        return refused
-    """导航页「医院 / 空港 / 买船」：知道当前位置就直接导航到最近的那个，列表按远近排；
-    位置不知道就只列出来让玩家自己挑（2026-10-27 负责人定）"""
+def nav_site(deps: NavDeps, /, site=""):
+    """一个主城 / 空间站里的地点，按楼层 / 区域分组（2026-11-13 负责人定，换掉以前那排分类按钮和「最近的」）。
+    site 不给 = 人现在在的那个（不在任何站里 → site=None）；给了 = 搜索里点开的那个站。
+    人就在这个站里时，并成一条的几个点（三部货运电梯）取离得最近的那个"""
     from ..navigation import navigate as n
 
-    if kind not in n.NEAR_KINDS and kind not in n.SITE_KINDS:
-        return {"error": "不支持的分类"}
-    data = n.load()
     t, g, info = _pos_current(deps)
     info = info or {}
-    fresh = bool(g) and time.time() - t < POS_FRESH
-    here, system, when, sure = None, "", None, False
-    if fresh:
-        when = info.get("t")
+    cur, data, here = None, None, None
+    if g and time.time() - t <= POS_FRESH:
         try:
+            data = n.load()
             here = n.locate(
                 g,
-                when=when,
+                when=info.get("t"),
+                data=data,
                 local=info.get("local"),
                 zone=info.get("zone"),
                 local_ok=info.get("local_ok"),
+                record=False,
             )
-            # 星系线索用这份位置自己带的（hints 只给 5 秒内的，可能已经过期）；没把握就只列不自动走（二审 2026-10-27）
-            system, sure = n.system_info(
+            system, _sure = n.system_info(
                 g,
                 data,
                 **{k: info.get(k) or "" for k in ("zone", "location", "solar_id")},
             )
+            cur = n.site_at(g, here, info.get("t"), data, system)
         except Exception:
-            here = None
-        if (
-            here and here.get("inside")
-        ):  # 站在星球上：星系就是这颗星球的——但右上角明写了别的星系时以它为准（复审 2026-10-27）
-            b = data["bodies"].get(here.get("body"))
-            if b and (not sure or b["sys"] == system):
-                system, sure = b["sys"], True
-    site = (
-        n.site_at(g, here, when, data, system) if fresh else None
-    )  # 站内识别也核对星系（二审 2026-10-27）
-    if (
-        kind in n.SITE_KINDS and kind not in n.NEAR_KINDS
-    ):  # 主城 / 空间站里才有的分类：只找这里的
-        if not site:
-            return {
-                "rows": [],
-                "total": 0,
-                "started": None,
-                "error": "不在主城或空间站内",
-            }
-        hits = n.site_nearest(
-            site["site"], kind, g, when, data, here
-        )  # 星系只是猜的：只列出来，不自动开始（复审 2026-10-27）
-    else:
-        hits = n.nearest(kind, g if fresh else None, system, when, data, here)
-    rows = []
-    for d, p in hits[:40]:
-        r = _place_row(p)
-        r["dist"] = d
-        if p.get("t") == "City" and p.get("city_zh"):  # 跨城列出来时分得清是哪个城
-            r["label"] = f"{p['city_zh']} · {r['label']}"
-        rows.append(r)
-    if (
-        fresh
-        and sure
-        and rows
-        and rows[0]["dist"] is not None
-        and n.target_system(hits[0][1], data) == system
-    ):
-        err = _start_nav(
-            deps, _places[rows[0]["key"]]
-        )  # 目标行由 _place_row 现算，和手动开始一致
-        if err:
-            return err
-        return {"rows": rows, "total": len(rows), "started": rows[0]["key"]}
-    return {"rows": rows, "total": len(rows), "started": None}
+            cur = None
+    want = site or (cur["site"] if cur else "")
+    tree = n.site_tree(want) if want else None
+    if not tree:
+        return {"error": "未找到这个站点，需重新搜索"} if site else {"site": None}
+    at = bool(cur and cur["site"] == want)
 
+    def far(q):
+        try:
+            return math.dist(
+                g, n.target_global(q, data, info.get("t"), (g, here, info.get("t")))
+            )
+        except Exception:
+            return math.inf
 
-def nav_site(deps: NavDeps, /):
-    """现在在哪个主城 / 空间站里、这里有哪些分类（导航页那排按钮，2026-10-27）；不在就 site=None"""
-    from ..navigation import navigate as n
-
-    t, g, info = _pos_current(deps)
-    info = info or {}
-    if not g or time.time() - t > POS_FRESH:
-        return {"site": None, "all": list(n.SITE_KINDS)}
-    try:
-        data = n.load()
-        here = n.locate(
-            g,
-            when=info.get("t"),
-            data=data,
-            local=info.get("local"),
-            zone=info.get("zone"),
-            local_ok=info.get("local_ok"),
-            record=False,
-        )
-        system, _sure = n.system_info(
-            g, data, **{k: info.get(k) or "" for k in ("zone", "location", "solar_id")}
-        )
-        s = n.site_at(g, here, info.get("t"), data, system)
-    except Exception:
-        s = None
-    if not s:
-        return {"site": None, "all": list(n.SITE_KINDS)}
-    name = f"{s['zh']}（{s['en']}）" if s["zh"] and s["zh"] != s["en"] else s["en"]
+    groups = []
+    for gr in tree["groups"]:
+        rows = []
+        for it in gr["items"]:
+            pts = it["points"]
+            p = min(pts, key=far) if at and len(pts) > 1 else pts[0]
+            rows.append(
+                {
+                    "key": _place_row(p)["key"],
+                    "label": it["label"],
+                    "kinds": it["kinds"],
+                    "n": len(pts),
+                }
+            )
+        groups.append({"name": gr["name"], "rows": rows})
+    zh, en = tree["zh"], tree["en"]
     return {
-        "site": s["site"],
-        "name": name,
-        "kinds": s["kinds"],
-        "all": list(n.SITE_KINDS),
+        "site": want,
+        "name": f"{zh}（{en}）" if zh and zh != en else en,
+        "here": at,
+        "groups": groups,
     }
 
 
@@ -350,6 +330,8 @@ def nav_plan(key=""):
         p.get("t"),  # 只记地点类型：自定义路标名是玩家自己起的，会随 F10 上传
         ui_tag="NAV",
     )
+    if _qt_direct(p):  # 量子直达：只显示这个地点，不算路线
+        return {**_place_row(p), "routes": []}
     data = load()
     if p.get("space"):
         from ..navigation.navigate import space_landmarks
@@ -423,6 +405,8 @@ def nav_start(deps: NavDeps, /, key=""):
     p = _places.get(key)
     if not p:
         return {"error": "未找到此地点，需重新搜索"}
+    if _qt_direct(p):
+        return {"error": QT_DIRECT_MSG}
     row = _place_row(p)
     err = _start_nav(deps, p, row)
     if err:
@@ -1371,7 +1355,6 @@ __all__ = [
     "NavDeps",
     "_place_row",
     "nav_search",
-    "nav_near",
     "nav_site",
     "nav_plan",
     "nav_start",

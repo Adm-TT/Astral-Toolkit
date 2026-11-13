@@ -401,6 +401,14 @@ a.btn { text-decoration: none; }
 .list button:hover { background: var(--panel); }
 .list button.on { background: var(--raised); box-shadow: inset 2px 0 0 var(--text); }
 .list .l2 { grid-column: 1 / -1; color: var(--muted); font-size: 12.5px; }
+/* 主城 / 空间站里的地点：一层 / 一个区域一组，点开看里面 */
+.list summary { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-radius: var(--r-sm); cursor: pointer; list-style: none; }
+.list summary::-webkit-details-marker { display: none; }
+.list summary::before { content: "▸"; color: var(--muted); width: 12px; }
+.list details[open] > summary::before { content: "▾"; }
+.list summary:hover { background: var(--panel); }
+.list summary .tag { margin-left: auto; }
+.list details > button { width: 100%; box-sizing: border-box; padding-left: 32px; }
 .tag { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: var(--pill); background: var(--raised); color: var(--muted); letter-spacing: .3px; }
 .tag.qt { color: var(--good); background: color-mix(in srgb, var(--good) 12%, transparent); }
 .tag.noqt { color: var(--amber); background: color-mix(in srgb, var(--amber) 12%, transparent); }

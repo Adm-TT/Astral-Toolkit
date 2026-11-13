@@ -143,7 +143,6 @@ from .transit import (
     NEAR_PREFER,
     REROUTE_M,
     REROUTE_RIDE_M,
-    SITE_KINDS,
     SITE_NEAR_M,
     ZONE_MARGIN,
     _bi,
@@ -164,11 +163,9 @@ from .transit import (
     city_metrics,
     city_places,
     city_route,
-    city_targets,
     city_text,
-    nearest,
     site_at,
-    site_nearest,
+    site_tree,
     station_leg,
     station_lifts,
     station_route,
@@ -280,18 +277,20 @@ def space_points(data=None):
 # ---------------------------------------------------------------- 搜索
 
 
-def search(query, data=None, limit=15):
-    """按中文名/英文名/星球名/类型搜地点；多个词都要命中。没信标的排前面"""
+def search(query, data=None, limit=15, sites=False):
+    """按中文名/英文名/星球名/类型搜地点；多个词都要命中。没信标的排前面。
+    sites=True（导航页、全局搜索，2026-11-13 负责人定）：搜的词只点到站名 / 城名 / 所在星球的城里地点，不一条条列，
+    并成这个站一条（t="Site"，点开看各层）；词点到具体地点（「埃弗勒斯 医院」「卷饼吧」）照旧列点"""
     data = data or load()
     with ExitStack() as stack:
         try:  # 一次搜索钉在一个版本上：几千次地名查询复用这个快照，不每次读清单
             stack.enter_context(gamedata.snapshot())
         except gamedata.GamedataError:
             pass  # 库不可用（调用方自己传了星图）：不钉快照照常搜，地名退化成空
-        return _search(query, data, limit)
+        return _search(query, data, limit, sites)
 
 
-def _search(query, data, limit):
+def _search(query, data, limit, sites=False):
     words = [w for w in re.split(r"[\s,，]+", query.strip().lower()) if w]
     rows = []
     try:
@@ -313,38 +312,98 @@ def _search(query, data, limit):
     except gamedata.GamedataError:
         shown = lambda p: True  # noqa: E731
 
+    found: dict[str, dict] = {}  # 站 → 并出来的那一条
+    counts: dict[str, int] = {}  # 站 → 里面命中了几个点
     for p in waypoints() + data["pois"] + spots:
         if p["b"] not in data["bodies"] and not is_space(p):
             continue
         if not shown(p):
             continue
+        where = [
+            p["b"].lower(),
+            BODY_ZH.get(p["b"], ""),
+            p["t"].lower(),
+            TYPE_ZH.get(p["t"], ""),
+            "太空 space" if is_space(p) else "",
+            SYS_ZH.get(p.get("sys", ""), "").lower(),
+            p.get("sys", "").lower(),
+            p.get("city_zh", ""),
+            p.get("city", "").lower(),
+            p.get("site_en", "").lower(),
+        ]
+        if sites and p["t"] == "City" and p.get("city"):
+            site_hay = " ".join(where)
+            if all(w in site_hay for w in words):
+                if p["city"] not in found:
+                    s = found[p["city"]] = dict(
+                        b=p["b"],
+                        n=p.get("site_en") or p["city"],
+                        zh=p.get("city_zh", ""),
+                        t="Site",
+                        qt=0,
+                        site=p["city"],
+                    )
+                    if p.get("space"):
+                        s.update(space=True, sys=p["sys"])
+                counts[p["city"]] = counts.get(p["city"], 0) + 1
+                continue
         rocks = " ".join(
             f"{o.lower()} {mineral_zh(o)}" for o in (p.get("rocks") or {})
         )  # 挖矿点：按会刷的矿也能搜到
         hay = " ".join(
             [
-                p["n"].lower(),
+                label(
+                    p
+                ).lower(),  # 玩家看到的名字（星图里的站、跳跃点的中文名只在这里）
                 p.get("zh", ""),
                 rocks,
                 poi_zh(p["n"]),
-                p["b"].lower(),
-                BODY_ZH.get(p["b"], ""),
-                p["t"].lower(),
-                TYPE_ZH.get(p["t"], ""),
-                "太空 space" if is_space(p) else "",
-                SYS_ZH.get(p.get("sys", ""), "").lower(),
-                p.get("sys", "").lower(),
                 p.get("cat", ""),
                 p.get("area", ""),
-                p.get("city_zh", ""),
-                p.get("city", "").lower(),
+                *where,
             ]
         )
         if all(w in hay for w in words):
             exact = _norm(p["n"]) == _norm(query) or poi_zh(p["n"]) == query.strip()
             rows.append(
-                (not exact, p["t"] != "Waypoint", p["qt"] == 1, p["b"], p["n"], p)
+                (
+                    not exact,
+                    1 if p["t"] == "Waypoint" else 2,
+                    p["qt"] == 1,
+                    p["b"],
+                    p["n"],
+                    p,
+                )
             )
+    if found:
+        # 星图里这个站 / 城自己的那一条（量子信标）和站并成一条：站这条标上「有信标」，星图那条不再单列
+        names = {}
+        for s in found.values():
+            for k in (_norm(s["n"]), _norm(s["site"])):
+                names.setdefault(k, []).append(s)
+        qt = {_norm(q["n"]) for q in data["pois"] if q["qt"] == 1}
+        try:
+            qt |= {_norm(q["n"]) for q in space_points(data)}
+        except Exception:
+            pass
+        for k, ss in names.items():
+            if k in qt:
+                for s in ss:
+                    s["qt"] = 1
+        rows = [
+            r
+            for r in rows
+            if not (
+                r[-1]["t"] not in ("City", "Waypoint") and _norm(r[-1]["n"]) in names
+            )
+        ]
+        for s in found.values():
+            s["count"] = counts[s["site"]]
+            exact = (
+                _norm(query) in (_norm(s["n"]), _norm(s["site"]))
+                or query.strip() == s["zh"]
+            )
+            rows.append((not exact, 0, False, s["b"], s["n"], s))
     rows.sort(key=lambda r: r[:5])
     return [r[-1] for r in rows[:limit]], len(rows)
 

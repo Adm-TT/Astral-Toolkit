@@ -487,7 +487,7 @@ function omniInit() {
       const html =
         group("矿物", r.minerals, (x) => ({ label: x.zh, sub: x.en, go: () => openMineral(x.en) })) +
         group("物品", r.items, (x) => ({ html: nameHTML(x.zh, x.name), label: x.zh || x.name, sub: x.category || SRC_ZH[x.src] || "", go: () => openItem(x.name, x.zh, x.id, true) })) +
-        group("地点", r.places, (x) => ({ label: x.label, sub: `${x.body}｜${x.type}`, go: () => openPlace(x.key) })) +
+        group("地点", r.places, (x) => ({ label: x.label, sub: `${x.body}｜${x.type}`, go: () => x.site ? openSite(x.site) : openPlace(x.key) })) +
         group("蓝图", r.blueprints, (x) => ({ html: x.en ? nameHTML(x.zh, x.en) + (x.note ? esc("｜" + x.note) : "") : "", label: x.name, sub: x.kind, go: () => openCraft(x.key) })) +
         group("维科洛兑换", r.wikelo, (x) => ({ label: x.title, sub: x.reward, go: () => openWikelo(x.key) }));
       pop.innerHTML = html || `<div class="empty" style="padding:12px">未找到「${esc(q)}」。地名、物品名可用中文或英文搜索</div>`;
@@ -1352,40 +1352,20 @@ function drawHaloWhere() {
 }
 
 function navSearchView() {
-  $("#navbody").innerHTML = `<div class="row"><input class="input" id="nq" placeholder="例：戴玛尔 洞穴 / Kudre / 残骸 耶拉" style="width:340px"><button class="btn primary" id="ngo">搜索</button>
-    <button class="btn" data-near="医院">医院</button><button class="btn" data-near="空港">空港</button><button class="btn" data-near="买船">买船</button></div>
+  $("#navbody").innerHTML = `<div class="row"><input class="input" id="nq" placeholder="例：戴玛尔 洞穴 / Kudre / 残骸 耶拉" style="width:340px"><button class="btn primary" id="ngo">搜索</button></div>
     <div id="nsite"></div>
     <div class="split" style="margin-top:16px"><div class="list" id="nlist"></div><div id="nplan"></div></div>`;
-  // 医院 / 空港 / 买船：知道位置就直接导航到最近的，列表按远近排（2026-10-27）
-  const near = async (kind) => {
-    try {
-      const r = await api("nav_near", { kind });
-      state.navRows = r;
-      listPlaces(r);
-      if (r.started) { await showPlan(r.started); toast(`已开始导航：最近的${kind}`); }
-      else if (r.error) toast(r.error);
-      else if (r.rows.length) toast("当前位置未知，需从列表中选择");
-    } catch (e) { toast(e.message); }
-  };
-  document.querySelectorAll("#navbody [data-near]").forEach((b) => b.onclick = () => near(b.dataset.near));
-  // 主城 / 空间站导航：分类按钮常驻；在主城 / 空间站里点一下去最近的，不在就提示（2026-10-27 负责人定）
-  const SITE_ALL = ["取船", "交易", "货梯", "医院", "武器", "护甲", "服装", "部件", "吃喝", "精炼", "行政", "罚款", "租船", "买船", "地铁"];
+  // 人在主城 / 空间站里：给一个入口看这里各层有什么（2026-11-13 负责人定：按楼层 / 区域分，不再放一排分类按钮和「最近的」）
   const site = async () => {
     const box = $("#nsite");
     if (!box) { clearInterval(state.navSiteTimer); state.navSiteTimer = null; return; }
     let r = null;
     try { r = await api("nav_site"); } catch (e) { r = null; }
-    const all = (r && r.all) || SITE_ALL, have = (r && r.site && r.kinds) || [];
-    const key = (r && r.site ? r.site : "") + "|" + have.join(",");
+    const key = (r && r.site) || "";
     if (box.dataset.k === key) return;
     box.dataset.k = key;
-    box.innerHTML = `<div class="row" style="margin-top:10px;flex-wrap:wrap;gap:6px"><span class="muted" style="margin-right:6px">${r && r.site ? esc(r.name) : "主城 / 空间站"}</span>
-      ${all.map((k) => `<button class="btn" data-site="${esc(k)}"${r && r.site && !have.includes(k) ? ' style="opacity:.45"' : ""}>${esc(k)}</button>`).join("")}</div>`;
-    box.querySelectorAll("[data-site]").forEach((b) => b.onclick = () => {
-      if (!(r && r.site)) { toast("当前不在主城或空间站内，进入后可用"); return; }
-      if (!have.includes(b.dataset.site)) { toast(`此处没有${b.dataset.site}`); return; }
-      near(b.dataset.site);
-    });
+    box.innerHTML = key ? `<div class="row" style="margin-top:10px"><span class="muted">当前位置：${esc(r.name)}</span><button class="btn" id="nhere">查看这里的地点</button></div>` : "";
+    if (key) $("#nhere").onclick = () => openSite(key);
   };
   site();
   clearInterval(state.navSiteTimer);
@@ -1397,14 +1377,28 @@ function navSearchView() {
   };
   $("#ngo").onclick = go;
   $("#nq").onkeydown = (e) => { if (e.key === "Enter") go(); };   // 只管回车，别的键（退格、删除、方向键）照常
-  $("#nlist").onclick = (e) => { const b = e.target.closest("button[data-k]"); if (b) showPlan(b.dataset.k); };
+  $("#nlist").onclick = (e) => {
+    const st = e.target.closest("button[data-s]");
+    if (st) { openSite(st.dataset.s); return; }
+    const b = e.target.closest("button[data-k]");
+    if (b) showPlan(b.dataset.k);
+  };
   if (state.navQuery) $("#nq").value = state.navQuery;
   if (state.navQuery && !state.navRows) go();               // 从矿物页点「导航」过来：自动搜这个地方
   if (state.navRows) listPlaces(state.navRows);
   if (state.plan) drawPlan(state.plan);
 }
 function listPlaces(r) {
-  $("#nlist").innerHTML = r.rows.map((p) => `<button data-k="${esc(p.key)}"><span>${esc(p.label)}</span><span class="tag ${p.has_qt ? "qt" : "noqt"}">${p.has_qt ? "有信标" : "无信标"}</span><span class="l2">${esc(p.body)}｜${esc(p.type)}${p.dist != null ? "｜" + km(p.dist / 1000) : ""}</span></button>`).join("")
+  if (r.groups) {   // 一个主城 / 空间站：按楼层 / 区域收起来，点开看里面的地点
+    const one = r.groups.length === 1;
+    $("#nlist").innerHTML = `<p class="faint" style="padding:6px 12px">${esc(r.name)}${r.here ? "｜你在这里" : ""}</p>`
+      + r.groups.map((g) => `<details${one ? " open" : ""}><summary><span>${esc(g.name)}</span><span class="tag">${g.rows.length}</span></summary>`
+        + g.rows.map((p) => `<button data-k="${esc(p.key)}"><span>${esc(p.label)}</span>${p.n > 1 ? `<span class="tag">${p.n} 处</span>` : ""}<span class="l2">${esc(p.kinds.join(" · "))}</span></button>`).join("") + `</details>`).join("");
+    return;
+  }
+  $("#nlist").innerHTML = r.rows.map((p) => p.site
+    ? `<button data-s="${esc(p.site)}"><span>${esc(p.label)}</span><span class="tag">${esc(p.type)}</span><span class="l2">${esc(p.body)}｜${p.count} 处地点，点开按楼层查看</span></button>`
+    : `<button data-k="${esc(p.key)}"><span>${esc(p.label)}</span><span class="tag ${p.has_qt ? "qt" : "noqt"}">${p.has_qt ? "有信标" : "无信标"}</span><span class="l2">${esc(p.body)}｜${esc(p.type)}</span></button>`).join("")
     + (r.total > r.rows.length ? `<p class="faint" style="padding:6px 12px">共 ${r.total} 个，可添加关键词（例如星球名）缩小范围</p>` : "")
     || `<p class="empty">未找到。可尝试其他地名或星球名</p>`;
 }
@@ -1431,8 +1425,16 @@ async function showPlan(key) {
 }
 function drawPlan(p) {
   document.querySelectorAll("#nlist button").forEach((b) => b.classList.toggle("on", b.dataset.k === p.key));
+  const on = document.querySelector("#nlist details > button.on");
+  if (on) on.parentElement.open = true;
   const box = $("#nplan");
   if (!box) return;
+  if (p.qt_direct) {   // 游戏里能量子直达的：照常显示，不给导航（2026-11-13 负责人定）
+    box.innerHTML = `<div class="panel"><div class="item-head"><span class="name">${esc(p.label)}</span><span class="tag qt">量子直达</span></div>
+      <p class="muted" style="margin:0 0 12px">${esc(p.body)}｜${esc(p.type)}</p>
+      <p>此地点有量子信标：在游戏星图中选择后可直接量子跳跃到达，不需要 AT 导航</p></div>`;
+    return;
+  }
   if (p.space) {
     box.innerHTML = `<div class="panel"><div class="item-head"><span class="name">${esc(p.label)}</span><span class="tag noqt">太空路标</span></div>
       <p class="muted" style="margin:0 0 12px">${esc(p.body)}｜太空中没有南北方向，导航时显示直线距离、对准的标记和偏差角度</p>
@@ -1452,7 +1454,6 @@ function drawPlan(p) {
   }
   box.innerHTML = `<div class="panel"><div class="item-head"><span class="name">${esc(p.label)}</span><span class="tag ${p.has_qt ? "qt" : "noqt"}">${esc(p.qt)}</span></div>
     <p class="muted" style="margin:0 0 12px">${esc(p.body)}｜${esc(p.type)}｜纬度 ${p.lat.toFixed(3)}°，经度 ${p.lon.toFixed(3)}°，海拔约 ${money(p.alt)} m</p>
-    ${p.has_qt ? `<p>此地点有量子信标，可在星图中选择后量子跳跃</p>` : ""}
     <h3>推荐路线</h3><p class="muted" style="margin:0 0 6px;font-size:13px">先量子跳跃到以下参照点，再按方位飞行</p>
     ${p.routes.map((r) => `<div class="route"><span class="tag">${esc(r.kind)}</span><span>${esc(r.name)}<div class="muted" style="font-size:12.5px">距目标 ${km(r.surface)}（直线 ${km(r.direct)}）</div></span><span class="b">${String(Math.round(r.bearing) % 360).padStart(3, "0")}° ${esc(r.compass)}</span></div>`).join("")}
     <div class="row" style="margin-top:14px"><button class="btn primary" id="nstart">开始导航</button></div></div>`;
@@ -1633,6 +1634,14 @@ async function navWaypointView() {
       toast("已添加路标"); navWaypointView();
     } catch (e) { toast(e.message); }
   };
+}
+async function openSite(site) {
+  state.navTab = "search";
+  let r;
+  try { r = await api("nav_site", { site }); } catch (e) { toast(e.message); return; }
+  if (!r || r.error || !r.groups) { toast((r && r.error) || "未找到这个站点，需重新搜索"); return; }
+  state.navRows = r; state.plan = null;
+  if (page === "nav") renderPage(); else location.hash = "#nav";
 }
 async function openPlace(key) {
   state.navTab = "search";

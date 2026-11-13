@@ -991,7 +991,6 @@ def test_crafted_item_qualities_from_bonus(monkeypatch, tmp_path):
 # ---------------------------------------------------------------- 2026-10-30 重构阶段 2：导航、目标的接口走自己的 Controller
 _NAV_API = [
     "nav_search",
-    "nav_near",
     "nav_site",
     "nav_plan",
     "nav_start",
@@ -1017,7 +1016,6 @@ _NAV_API = [
 ]
 # F 段 B5d 起要导航后台对象的 12 个由 navigation 的 bound(deps) 给，不在 ROUTES 里
 _NAV_BOUND = [
-    "nav_near",
     "nav_site",
     "nav_start",
     "nav_mode",

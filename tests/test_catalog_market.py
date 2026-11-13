@@ -250,6 +250,17 @@ def test_nav_shop_search_fallback_takes_only_exact_names(monkeypatch):
     assert started == ["Checkmate"]
 
 
+def test_nav_shop_refuses_quantum_reachable_places(monkeypatch):
+    """游戏里能量子直达的地点不给导航，说清楚（2026-11-13 负责人定）"""
+    started = _nav_fakes(monkeypatch, {"Checkmate": [{"n": "Checkmate", "b": "Pyro4"}]})
+    row = lambda hit: {"key": hit["n"], "label": "死局空间站", "qt_direct": True}  # noqa: E731
+    monkeypatch.setattr(T, "_nav_objects", lambda: (row, {}, None))
+    assert T.nav_shop(_DEPS, shop="Shop - A", place="Pyro · Checkmate") == {
+        "error": "「死局空间站」游戏里可以直接量子跳跃过去，不用导航"
+    }
+    assert started == []
+
+
 def test_nav_shop_grimhex_full_name(monkeypatch):
     """BF-2：UEX 写 Green Imperial Housing Exchange，星图叫 Grim HEX"""
     started = _nav_fakes(monkeypatch, {})
