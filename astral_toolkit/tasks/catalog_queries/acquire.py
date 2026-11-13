@@ -60,9 +60,7 @@ def ships_with(name):
         return []
 
 
-def info(
-    name_en="", name_zh="", item_id=None, show_loot=True, exact=False, loot_online=True
-):
+def info(name_en="", name_zh="", item_id=None, show_loot=True, exact=False):
     """一件东西的详情字典，键和顺序见 catalog/acquire.empty_facts（name、zh、category、id、here、buyable、buy、
     buy_total、variants、sell、loot、wikelo、nowhere、craft、desc、aka、ships、how）。
     exact=True：从物品查询搜索结果点进来的，英文名是准的，不再按中文名去模糊找（以前会找成别的东西）；
@@ -139,7 +137,7 @@ def info(
         out["sell"] = _rules.sell_summary(shops.where(item_id)[1])
     if _rules.shows_loot(show_loot, hit):
         try:
-            out["loot"] = loot.info(name_en or name, name_zh, online=loot_online)
+            out["loot"] = loot.info(name_en or name, name_zh)
         except Exception as e:
             out["loot"] = {"error": f"掉落数据出错：{e}"}
     try:
@@ -181,9 +179,7 @@ def loot_source(name_en, name_zh=""):
     note 掉落说明、box 箱子、placed 直接刷在场景里、p 单箱最高概率}；没有掉落给 None。那一句话在 app/presenters/wikelo。
     regions、note、box、p 原样给：掉落数据缺字段时拼字那步出错、写空，和以前在这里拼时一样"""
     try:
-        d: Any = loot.info(
-            name_en, name_zh, top=2, online=False
-        )  # 本机没有明细就算没有，不在页面里逐个材料联网等（细查 2026-10-28）
+        d: Any = loot.info(name_en, name_zh, top=2)  # 只查本机，不联网
     except Exception:
         return None
     return _rules.loot_fact(d)

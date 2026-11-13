@@ -359,6 +359,55 @@ def test_crafting_dataset_and_links():
                     assert name in data.SIGNATURES, name
 
 
+def _compact(oc, pois):
+    """把以前星图接口那种原始行压成程序用的 {bodies, pois, points}（原来在 navigation/starmap.compact，
+    2026-11-13 不再从外面下星图后产品里用不上了，只剩这里拿它造小星图）"""
+    from typing import Any
+
+    bodies: dict[str, dict[str, Any]] = {}
+    for x in oc:
+        if x.get("Type") != "Planet" or not float(x.get("BodyRadius") or 0):
+            continue
+        bodies[x["ObjectContainer"]] = dict(
+            sys=x["System"],
+            x=float(x["XCoord"]),
+            y=float(x["YCoord"]),
+            z=float(x["ZCoord"]),
+            rot=float(x["RotationSpeedX"] or 0),
+            adj=float(x["RotationAdjustmentX"] or 0),
+            r=float(x["BodyRadius"]),
+            om=float(x["OrbitalMarkerRadius"] or 0),
+            grid=float(x["GRIDRadius"] or 0),
+        )
+    points = [
+        dict(
+            n=x["ObjectContainer"],
+            i=x.get("InternalName") or "",
+            sys=x["System"],
+            t=x.get("Type") or "",
+            x=float(x["XCoord"]),
+            y=float(x["YCoord"]),
+            z=float(x["ZCoord"]),
+        )
+        for x in oc
+    ]
+    out = [
+        dict(
+            b=p["Planet"],
+            n=p["PoiName"].strip(),
+            t=p["Type"].strip(),
+            x=round(float(p["XCoord"]), 3),
+            y=round(float(p["YCoord"]), 3),
+            z=round(float(p["ZCoord"]), 3),
+            qt=None if p.get("QTMarker") in (None, "") else int(p["QTMarker"]),
+        )
+        for p in pois
+        if p["Planet"] in bodies
+    ]
+    data: dict[str, Any] = dict(bodies=bodies, pois=out, points=points)
+    return data
+
+
 def _nav_data():
     from astral_toolkit.navigation import navigate as n
 
@@ -394,7 +443,7 @@ def _nav_data():
             ),
         ]
     ]
-    return n, n.compact(oc, pois)
+    return n, _compact(oc, pois)
 
 
 def test_nav_matches_starmap():
@@ -1802,11 +1851,7 @@ def test_review_104_final(monkeypatch, tmp_path):
     """1.0.4 发版前二审：派罗 L 点缺石头表时不能判成「不刷」；只认正式服数据；星图改正文件坏了不崩"""
     from astral_toolkit.navigation import navigate as n
     from astral_toolkit.mining import mining_area as M
-    from astral_toolkit.crafting.build_crafting import (
-        pick_live,
-        latest_live,
-        live_version,
-    )
+    from astral_toolkit.crafting.build_crafting import latest_live, live_version
 
     # 1. 缺表 → None（不过滤），不是「此处不刷船挖矿」
     try:
@@ -1818,10 +1863,6 @@ def test_review_104_final(monkeypatch, tmp_path):
         monkeypatch.setattr(M, "_spots_raw", lambda: [])
         assert M.area((l4["x"] + 1e6, l4["y"], l4["z"]), "Pyro") is None
     # 2. 只认 LIVE
-    assert (
-        pick_live(["4.10.3-ptu.1", "4.10.2-live.5", "4.10.1-live.9"]) == "4.10.2-live.5"
-    )
-    assert pick_live(["4.10.3-ptu.1"]) is None and pick_live([]) is None
     fs = [
         tmp_path / f"merged-{v}.json"
         for v in ("4.10.3-ptu.1", "4.9.0-live.99", "4.10.2-live.5")

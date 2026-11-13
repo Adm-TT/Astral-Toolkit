@@ -1,28 +1,19 @@
-"""把 scmdb 的蓝图 + 任务数据压缩成 crafting.json（程序直接读这个）
+"""把蓝图 + 任务数据（本机构建输入：由游戏数据整理出来的）压缩成 crafting.json（程序直接读这个）
 
-在你电脑上：python -m astral_toolkit.build_crafting   → 联网检查 scmdb 新版本，有就下载并重建
+在你电脑上：python -m astral_toolkit.build_crafting   → 本机有构建输入就按它重建；没有就不动（2026-11-13 起不再去 scmdb 下载）
 开发时：    python -m astral_toolkit.build_crafting <蓝图json> <任务json> <global.ini 或 names_zh.json> <输出>
 中文名来自用户的汉化包；随程序附带的 names_zh.json 是从汉化包里摘出来的子集。
 """
 
 import json
-import os
 import re
 import sys
-import threading
 from collections import defaultdict
 from pathlib import Path
 
 from ..core import paths
 
 HERE = Path(__file__).resolve().parent
-SCMDB = "https://scmdb.net/data/"
-UA = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/130.0 Safari/537.36",
-    "Accept": "application/json",
-    "Referer": "https://scmdb.net/",
-}
 RES_FIX = {"Pressurized Ice": "Ice"}  # 与矿物表统一
 CJK = "\u4e00-\u9fff"
 
@@ -136,7 +127,7 @@ BUILD_LOCK = __import__(
 
 
 def make_data(bp_path, merged_path, names_path):
-    """读 scmdb 的蓝图 / merged-*.json + 汉化名，算出 crafting.json 的内容（只算不写，不拿锁）"""
+    """读蓝图 / merged-*.json + 汉化名，算出 crafting.json 的内容（只算不写，不拿锁）"""
     bp = json.loads(Path(bp_path).read_text(encoding="utf-8"))
     merged = json.loads(Path(merged_path).read_text(encoding="utf-8"))
     ini, items = _load_names(names_path)
@@ -289,13 +280,6 @@ def _write(out_path, data):
         write_json(out_path, data, separators=(",", ":"))
 
 
-def _fetch(name):
-    import urllib.request
-    from ..core.net import read
-
-    return read(urllib.request.Request(SCMDB + name, headers=UA), timeout=60)
-
-
 def _names_tag(p):
     """中文名来自哪份汉化（换了汉化包就要重建）"""
     try:
@@ -306,20 +290,13 @@ def _names_tag(p):
         return str(p)
 
 
-def pick_live(versions):
-    """scmdb 的版本列表里挑正式服（LIVE）的最新一个：列表第一个常常是测试服 PTU（2026-10-27 发现：玩家在 4.10.2 正式服，
-    制造、维科洛却用了 4.10.3-ptu 的数据）。只认正式服；一个都没有返回 None（保留现有数据，不拿测试服的顶上）"""
-    live = [v for v in versions if "-live." in str(v).lower()]
-    return max(live, key=_ver_key) if live else None
-
-
 def _ver_key(s):
     m = re.search(r"(\d+)\.(\d+)\.(\d+)-(\w+)\.(\d+)", str(s))
     return (tuple(int(x) for x in m.groups()[:3]), int(m.group(5))) if m else ((0,), 0)
 
 
 def latest_live(files):
-    """本地 scmdb 文件里挑正式服的最新一个（按版本号排，不按文件名字母排）；没有正式服的返回 None"""
+    """一批蓝图文件里挑正式服的最新一个（按版本号排，不按文件名字母排）；没有正式服的返回 None"""
     live = [f for f in files if "-live." in Path(f).name.lower()]
     return max(live, key=_ver_key) if live else None
 
@@ -331,7 +308,7 @@ def live_version(path):
 
 
 def source_rows():
-    """本机构建输入目录里由游戏数据整理出的蓝图 + 任务文件（数据构建脚本生成，2026-10-28 起优先于 scmdb）：(蓝图文件, 任务文件, 版本)；没有返回 None"""
+    """本机构建输入目录里由游戏数据整理出的蓝图 + 任务文件（数据构建脚本生成）：(蓝图文件, 任务文件, 版本)；没有返回 None"""
     d = paths.data(paths.BUILD_DIR)
     bp = latest_live(d.glob("crafting_blueprints-*.json")) if d.exists() else None
     if not bp:
@@ -341,9 +318,8 @@ def source_rows():
 
 
 def update():
-    """重建 crafting.json + wikelo.json：有本机构建输入就用它；没有才去 scmdb 看有没有新版本。
-    比版本、下载不拿任何锁（下载最多 2×60 s；以前在 BUILD_LOCK 里，汉化重建并行时会拿着写锁等它——收口 2，待做 ⑱）：
-    原始文件先写临时文件再换名，读的一方拿到的要么旧要么新；要重建时两份文件由 _write 各自套 updating() → BUILD_LOCK
+    """重建 crafting.json + wikelo.json：有本机构建输入就用它；没有就不动（数据包带来的那份照用，不联网）。
+    比版本不拿任何锁；要重建时两份文件由 _write 各自套 updating() → BUILD_LOCK
     （锁顺序和 data_pack.install 一致），最外层出口只重建一次库"""
     job = _update()
     if job:
@@ -378,7 +354,7 @@ def _rebuild(bp, merged, names, out, done):
 
 
 def _update():
-    """比版本、需要时下载；要重建返回 (蓝图文件, 任务文件, 汉化源, 输出, 完成提示)，不用重建返回 None"""
+    """比版本；要重建返回 (蓝图文件, 任务文件, 汉化源, 输出, 完成提示)，不用重建返回 None"""
     own = source_rows()
     if own:
         bp, merged, ver = own
@@ -394,54 +370,8 @@ def _update():
             print(f"制造数据已是最新（游戏数据 {ver}）")
             return
         return bp, merged, names_source(), out, f"制造数据已更新（游戏数据 {ver}）"
-    ver = pick_live([v["version"] for v in json.loads(_fetch("versions.json"))])
-    if not ver:
-        print("scmdb 现在没有正式服（LIVE）的数据，制造数据先不动")
-        return
-    if not isinstance(ver, str) or not re.fullmatch(
-        r"\w[\w.\-]{0,63}", ver
-    ):  # 要拼进文件名和网址：网上来的不信
-        raise ValueError("scmdb 返回的版本号格式不对，制造数据先不动")
-    out = paths.data("crafting.json")
-    old = json.loads(out.read_text(encoding="utf-8")) if out.exists() else {}
-    cur = old.get("version")
-    from ..update.localization import names_source
-
-    if (
-        ver == cur
-        and old.get("names") == _names_tag(names_source())
-        and all("u" in x for x in old.get("blueprints", [])[:1])
-    ):
-        print(f"制造数据已是最新（{ver}）")
-        return
-    if ver == cur:
-        print("游戏里的汉化变了，按它重建蓝图中文名…")
-    raw = paths.data("scmdb")
-    raw.mkdir(parents=True, exist_ok=True)
-    files = []
-    for name in (f"crafting_blueprints-{ver}.json", f"merged-{ver}.json"):
-        p = raw / name
-        if p.exists():
-            try:
-                json.loads(p.read_bytes())
-                files.append(p)
-                continue
-            except (
-                ValueError
-            ):  # 以前下到一半 / 对方回了别的东西：删掉重下，别每次都卡在这
-                p.unlink(missing_ok=True)
-        print(f"下载 {name} …")
-        body = _fetch(name)
-        json.loads(body)  # 不是 JSON 就到此为止（抛错），不落盘
-        tmp = p.with_name(
-            f"{p.name}.{os.getpid()}.{threading.get_ident()}.tmp"
-        )  # 下载不再拿锁（收口 2）：临时名别撞
-        tmp.write_bytes(body)
-        tmp.replace(p)  # 先写临时文件再换名，不留半个文件
-        files.append(p)
-    from ..update.localization import names_source
-
-    return files[0], files[1], names_source(), out, f"制造数据已更新：{cur} → {ver}"
+    print("本机没有构建输入：制造数据用数据包带来的那份，不重建")
+    return None
 
 
 if __name__ == "__main__":

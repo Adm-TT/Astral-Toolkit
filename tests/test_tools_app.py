@@ -194,7 +194,6 @@ def test_update_log_reaches_window(monkeypatch):
     import astral_toolkit.run as run
     from astral_toolkit.update import localization, uex
     from astral_toolkit.crafting import build_crafting
-    from astral_toolkit.navigation import navigate
 
     logs = []
     monkeypatch.setattr(bus, "publish", lambda kind, msg: logs.append((kind, msg)))
@@ -202,7 +201,6 @@ def test_update_log_reaches_window(monkeypatch):
         (localization, "update"),
         (uex, "refresh"),
         (build_crafting, "update"),
-        (navigate, "update"),
         (shops, "update"),
         (loot, "update"),
     ):
@@ -212,7 +210,7 @@ def test_update_log_reaches_window(monkeypatch):
 
     monkeypatch.setattr(
         data_pack, "update", lambda progress=print: None
-    )  # 不联网：当作数据包下不到，走各数据网站
+    )  # 不联网：当作数据包下不到，只更新汉化包和行情（矿价、商店）
     monkeypatch.setattr(
         G, "rebuild", lambda: None
     )  # 收尾 clear_caches 会补建游戏数据库：不碰真实 data/
@@ -223,7 +221,7 @@ def test_update_log_reaches_window(monkeypatch):
     finally:
         sys.stdout = old
     lines = [m["line"] for k, m in logs if k == "log"]
-    assert sum("ok" in l for l in lines) == 6 and lines[-1] == "全部更新完成"  # noqa: E741
+    assert sum("ok" in l for l in lines) == 3 and lines[-1] == "全部更新完成"  # noqa: E741
 
 
 def test_export_logs(monkeypatch, tmp_path):

@@ -4,7 +4,6 @@
 不读真实 data/、不碰 userdata/、不联网。"""
 
 import json
-from contextlib import contextmanager
 
 from tests.test_gamedata_nav import _NAV_SOURCES, _write_all
 
@@ -88,84 +87,19 @@ def test_starmap_load_refreshes_after_rebuild(monkeypatch, tmp_path):
     assert d["bodies"]["Hurston"]["x"] == 42.0 and d["fetched"] == "2026-11-02"
 
 
-def test_starmap_update_runs_inside_updating(monkeypatch, tmp_path):
-    """starmap.update() 写 starmap.json 在 gamedata.updating() 里（退出时重建库），联网不在里面"""
-    import astral_toolkit.gamedata as G
+def test_starmap_load_without_file_waits_for_pack(monkeypatch, tmp_path):
+    """还没有 starmap.json：不下载（2026-11-13 起星图只跟数据包来），明说等数据包"""
+    from astral_toolkit.core import net
     from astral_toolkit.navigation import starmap
+    from tests.minipytest import raises
 
     _setup(monkeypatch, tmp_path)
     (tmp_path / "starmap.json").unlink()
-    log = []
-    fake = dict(
-        source="starmap.space",
-        fetched="2026-11-02",
-        bodies={f"B{i}": {} for i in range(10)},
-        pois=[{"qt": 1}] * 300,
-        points=[],
-    )
-    monkeypatch.setattr(starmap, "_fetch", lambda path: log.append("fetch") or [])
-    monkeypatch.setattr(starmap, "compact", lambda oc, pois: fake)
-
-    @contextmanager
-    def updating():
-        log.append(("enter", starmap.CACHE.exists()))
-        yield
-        log.append(("exit", starmap.CACHE.exists()))
-
-    monkeypatch.setattr(G, "updating", updating)
-    starmap.update()
-    assert log == ["fetch", "fetch", ("enter", False), ("exit", True)]
-
-
-def test_starmap_update_reports_rebuild_failure(monkeypatch, tmp_path):
-    """星图下载写好了、但出口重建库失败：不能再说「已更新」，要说还在用旧星图（整改第 1 批第 2 条）"""
-    import builtins
-
-    from astral_toolkit.gamedata import _build
-    from astral_toolkit.navigation import starmap
-
-    _setup(monkeypatch, tmp_path)
-    fake = dict(
-        source="starmap.space",
-        fetched="2026-11-02",
-        bodies={f"B{i}": {} for i in range(10)},
-        pois=[{"qt": 1}] * 300,
-        points=[],
-    )
-    monkeypatch.setattr(starmap, "_fetch", lambda path: [])
-    monkeypatch.setattr(starmap, "compact", lambda oc, pois: fake)
-
-    def boom():
-        raise RuntimeError("建库炸了")
-
-    monkeypatch.setattr(_build, "rebuild_if_needed", boom)
-    said = []
-    monkeypatch.setattr(
-        builtins, "print", lambda *a, **k: said.append(" ".join(map(str, a)))
-    )
-    starmap.update()
-    last = said[-1]
-    assert (
-        "已更新" not in last.split("：")[0] and "旧星图" in last and "建库炸了" in last
-    )
-
-
-def test_starmap_load_downloads_when_no_file(monkeypatch, tmp_path):
-    """还没有 starmap.json：和以前一样先下载一次再读"""
-    from astral_toolkit.navigation import starmap
-
-    _setup(monkeypatch, tmp_path)
-    src = (tmp_path / "starmap.json").read_text(encoding="utf-8")
-    (tmp_path / "starmap.json").unlink()
-    called = []
-
-    def fake_update():
-        called.append(1)
-        (tmp_path / "starmap.json").write_text(src, encoding="utf-8")
-
-    monkeypatch.setattr(starmap, "update", fake_update)
-    d = starmap.load()
-    assert called == [1] and "Hurston" in d["bodies"]
+    sent = []
+    monkeypatch.setattr(net, "read", lambda *a, **k: sent.append(a) or b"{}")
+    with raises(RuntimeError) as e:
+        starmap.load()
+    assert "数据包" in str(e.value) and sent == []
 
 
 # ---------------------------------------------------------------- Task 2：按内部名 / 名字找点

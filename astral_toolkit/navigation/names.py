@@ -11,9 +11,6 @@ import re
 
 from .. import gamedata
 
-# POI 接口里的星球名 → 星体接口里的名字
-_POI_BODY = {"microTech": "Microtech", "Pyro V": "Pyro5"}
-
 BODY_ZH = {
     "Hurston": "赫斯顿",
     "Arial": "艾瑞尔",

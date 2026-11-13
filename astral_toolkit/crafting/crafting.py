@@ -317,7 +317,7 @@ def describe(bp, with_locations: bool = True) -> str:
                 f"    {_labels.clean_title(title)}｜{who}｜{mtype}｜{systems or '—'}{p}"
             )
     elif not bp["d"]:
-        lines.append("  蓝图来源：scmdb 的任务数据里没有找到")
+        lines.append("  蓝图来源：任务数据里没有找到")
     return "\n".join(lines)
 
 

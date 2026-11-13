@@ -1,7 +1,9 @@
 """掉落数据更新（目录迁移 Q3 从 crafting/loot.py 拆来）：从 scl.miao.network 下物品索引写 loot_index.json
-（游戏数据库的源之一：只把写文件放进更新边界，出口重建库），以及作者发布数据用的掉落明细整包抓取（crawl_details）。
+（游戏数据库的源之一：只把写文件放进更新边界，出口重建库），以及掉落明细整包抓取（crawl_details）。
+这里联网的两样（update、crawl_details）只给作者发布数据包用（run.update(direct=True)、tools/make_data_pack.py）：
+玩家这边索引和明细整包都跟数据包来，不从这里下（2026-11-13 老大定；掉落改成自己算以后这两样也删）。
 下载经 infrastructure/providers/loot_site.py；整包的读、关和单件缓存在 infrastructure/persistence/loot_details.py；
-查掉落在 tasks/catalog_queries/loot.py（那边只查游戏数据库，副本专属矿缺索引、联网时才经 load_index 来这里下）。
+查掉落在 tasks/catalog_queries/loot.py（只查游戏数据库和本机整包，不联网）。
 """
 
 import json
@@ -18,7 +20,7 @@ def update(version=None, progress=print):
     version = (
         version
         or loot_site.latest_version()
-        or (load_index(False) or {}).get("version")
+        or (load_index() or {}).get("version")
         or "4.10.2LIVE"
     )
     manifest = loot_site.manifest(version)
@@ -36,22 +38,17 @@ def update(version=None, progress=print):
     return data
 
 
-def load_index(auto=True):
+def load_index():
+    """本机的掉落索引文件（loot_index.json）；没有返回 None（不下载：索引跟数据包来）"""
     global _index
     if _index is None and INDEX.exists():
         _index = json.loads(INDEX.read_text(encoding="utf-8"))
-    if _index is None and auto:
-        print("第一次用掉落查询，下载物品索引（约 1.5 MB）…")
-        try:
-            update()
-        except Exception as e:
-            print(f"掉落数据下载失败（{e}）")
     return _index
 
 
 def crawl_details(out=None, workers=16, progress=print):
     """作者发布数据用：全速下载当前版本所有物品的掉落明细，打成 loot_details.zip。
-    对方限流或拒绝（HTTP 429 / 403）立即停下，不硬抓；单件失败的跳过（玩家查看时现查）。返回 (成功数, 失败数, 版本)"""
+    对方限流或拒绝（HTTP 429 / 403）立即停下，不硬抓；单件失败的跳过（那几件玩家那边就没有掉落明细）。返回 (成功数, 失败数, 版本)"""
     import urllib.error
     import zipfile
     from concurrent.futures import ThreadPoolExecutor

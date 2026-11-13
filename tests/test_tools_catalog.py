@@ -483,7 +483,7 @@ def test_nearest_distinct_places_and_loot_grouping(monkeypatch, tmp_path):
         + [{"name": "SoO", "best": 0.1364, "containers": []}]
     }
     monkeypatch.setattr(loot, "find", lambda en, zh: [("u", "X", "某物", 1)])
-    monkeypatch.setattr(loot, "detail", lambda u, online=True: d)
+    monkeypatch.setattr(loot, "detail", lambda u: d)
     got = loot.info("X")
     groups = got["groups"] if got else None
     assert isinstance(groups, list)
@@ -588,7 +588,7 @@ def test_wikelo_materials_all_have_source(monkeypatch):
     from astral_toolkit.tasks.catalog_queries.acquire import material_source
 
     cs = wikelo.load()
-    if not cs or not loot_index.load_index(False):
+    if not cs or not loot_index.load_index():
         pytest.skip("没有维科洛 / 掉落数据")
     names = {r["n"] for c in cs for r in c["req"]}
     missing = [n for n in sorted(names) if not material_source(n)]
@@ -640,10 +640,10 @@ def test_material_source_order_and_sentence(monkeypatch):
         "Ore": {"mine": True, "note": "副本专属矿：要开采", "groups": [ore]},
         "OreNoNote": {"mine": True, "groups": [ore]},  # 掉落数据缺说明
     }
-    online = []
+    extra = []
 
     def fake_info(en="", zh="", **kw):
-        online.append(kw.get("online"))
+        extra.append(sorted(kw))
         return found.get(en)
 
     monkeypatch.setattr(loot, "info", fake_info)
@@ -672,8 +672,8 @@ def test_material_source_order_and_sentence(monkeypatch):
         said("OreNoNote") == ""
     )  # 以前在查询里拼会出错、取的时候吞成空；不拼出半句「，只能开采：…」
     assert acquire.material_source("Nothing") is None and said("Nothing") == ""
-    # 只看本机：每次都要明说 online=False（loot.info 默认联网，漏传就会联网），不在页面里逐个材料联网等
-    assert online and all(v is False for v in online), online
+    # loot.info 只查本机（2026-11-13 起没有联网那条路了）：只多传一个 top
+    assert extra and all(k == ["top"] for k in extra), extra
 
 
 def test_presenters_write_distance_and_source_text():

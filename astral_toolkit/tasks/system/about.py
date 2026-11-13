@@ -63,7 +63,7 @@ def _data_versions():
     try:
         from ...update.loot import load_index
 
-        idx = load_index(False)
+        idx = load_index()
         out["loot"] = (idx or {}).get("version", "")
     except Exception:
         out["loot"] = ""

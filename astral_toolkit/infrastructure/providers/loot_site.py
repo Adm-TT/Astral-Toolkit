@@ -1,6 +1,6 @@
 """scl.miao.network（从游戏文件解析的掉落表）的下载适配（目录迁移 Q3 从 crafting/loot.py 拆出来）：
 站点当前的数据版本、某个版本的清单和物品索引、单件物品的掉落明细。只管发请求、解析响应，出错原样抛给调用方；
-存哪、什么时候下、下不到怎么办由调用方定（掉落查询 tasks/catalog_queries/loot.py、掉落数据更新 update/loot.py）。
+存哪、什么时候下、下不到怎么办由调用方定（掉落数据更新 update/loot.py：只有作者发布数据包时用，玩家端不联这个站，2026-11-13）。
 core.net.read 在函数里现取（测试和行为基线换它就能断网）。"""
 
 import json
@@ -47,11 +47,6 @@ def manifest(version):
 def search_rows(version):
     """某个数据版本的物品索引 search.json 的行（约 1.5 MB，1.3 万项，中英文名都有）"""
     return get_json(f"{BASE}{version}/search.json", timeout=120)
-
-
-def item_detail(version, uuid):
-    """单件物品的掉落明细 q/<编号>.json（玩家查看时现取，最多等 15 秒）"""
-    return get_json(f"{BASE}{version}/q/{uuid}.json", timeout=15)
 
 
 def item_detail_raw(version, uuid):

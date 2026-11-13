@@ -1683,10 +1683,6 @@ async function openItem(name, zh, id, exact = false) {      // exact：从搜索
   info.sel = sel; info.marketId = "";
   state.item = info;
   if (page !== "item") location.hash = "#item"; else drawItem();
-  if (info.loot && info.loot.pending) {                     // 掉落明细本机没有：后台取，取到再补上（不卡页面）
-    api("item_loot", { name: info.name, zh: zh || "" }).then((r) => { if (sel === state.sel) { info.loot = r.loot; drawItem(); } })
-      .catch(() => { if (sel === state.sel) { info.loot = null; drawItem(); } });
-  }
   api("market_lookup", { q: name }).then((r) => {
     if (sel !== state.sel) return;
     const exact = r.items.find((x) => x.label.toLowerCase().includes(name.toLowerCase()));
@@ -1756,8 +1752,7 @@ function drawItem() {
     ways.push(["var(--coral)", `商店无售<small>未找到可购买的同款</small>`, ""]);
   }
   const L = it.loot;
-  if (L && L.pending) ways.push(["var(--violet)", "掉落", `<p class="muted">掉落数据获取中…</p>`]);
-  else if (L && L.error) ways.push(["var(--violet)", "掉落", `<p class="muted">${esc(L.error)}</p>`]);
+  if (L && L.error) ways.push(["var(--violet)", "掉落", `<p class="muted">${esc(L.error)}</p>`]);
   else if (L && L.mine) ways.push(["var(--violet)", `开采<small>${esc(L.note)}｜${esc(L.src || "")}</small>`,
     L.groups.map((g) => `<div class="loot"><span class="p">${(g.p * 100).toFixed(2)}%</span><span>${esc(g.regions.slice(0, 8).join("、"))}${g.regions.length > 8 ? ` 等 ${g.regions.length} 类` : ""}<div class="box">${esc(g.box || "")}</div></span></div>`).join("")
     + (L.more ? `<p class="faint" style="margin:6px 0 0">另有 ${L.more} 类地点概率更低</p>` : "")]);
@@ -2782,7 +2777,7 @@ PAGES.settings = () => {
       </div>
       <div class="panel">
         <h3>更新数据</h3>
-        <p class="muted" style="margin:0 0 12px">从 AT 服务器下载 AT 发布的数据包（矿价、制造蓝图、维科洛兑换、星图、商店价格、掉落数据），并更新汉化包。数据包无法下载时，改从各数据网站更新，约需 2–3 分钟。</p>
+        <p class="muted" style="margin:0 0 12px">从 AT 服务器下载 AT 发布的数据包（矿价、制造蓝图、维科洛兑换、星图、商店价格、掉落数据），并更新汉化包。数据包无法下载时，只更新矿价和商店行情，其余数据等数据包。</p>
         <button class="btn primary" id="upd" ${running ? "disabled" : ""}>${running ? "更新中…" : "开始更新"}</button>
         <div class="log" id="log-update" style="margin-top:12px">${esc((state.logs.update || []).join("\n")) || "暂无更新记录"}</div>
       </div>

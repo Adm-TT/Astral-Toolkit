@@ -4,7 +4,7 @@
 → 算出你在哪个星球、经纬度 → 告诉你朝哪个方位飞、还有多远。
 
 坐标换算照搬 starmap.space 的公式（星球自转相位从 2020-01-01 UTC 起算），
-星球/地点数据来自 starmap.space 的公开接口，缓存在 starmap.json。
+星球/地点数据是 AT 自己从游戏数据整理的（starmap.json，随安装包和数据包来）。
 方位：0°=北（OM-1 方向），90°=东，应该和游戏头盔指南针一致（待游戏内确认）。
 """
 
@@ -27,7 +27,6 @@ from .names import (
     QT_ZH,
     SYS_ZH,
     TYPE_ZH,
-    _POI_BODY,
     _RR,
     _RULE_HEAD,
     _RULE_TAIL,
@@ -53,13 +52,8 @@ from .waypoints import (
     _waypoints_strict,
 )
 from .starmap import (
-    API,
     CACHE,
-    UA,
-    _fetch,
-    compact,
     load,
-    update,
 )
 from .celestial import (
     BELT_SYS,
@@ -399,7 +393,3 @@ class _NavigateModule(sys.modules[__name__].__class__):
 
 
 sys.modules[__name__].__class__ = _NavigateModule
-
-
-if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "update":
-    update()  # 更新星图数据（命令行导航 2026-11-06 删了，F 段 B3）

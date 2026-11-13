@@ -2,7 +2,7 @@
 
 - search_items：搜索列表（catalog_queries.search.find 的行原样，最多 30 条）
 - get_item_info：一件物品的详情（acquire.info + 中文名 + 目标提示）→ ItemInfo
-- get_item_loot：掉落（catalog_queries.loot.info，会上网）→ LootLookup，出错不抛
+- get_item_loot：掉落（catalog_queries.loot.info，只查本机）→ LootLookup，出错不抛
 - MarketSession / open_market / market_rows / market_hud_text：玩家市场（IQ-B6：F8 用 Trade 只经这里，报价留 F 段）
 详情一次查询钉一个游戏数据快照（_pinned）；掉落不另钉（见 get_item_loot）。窗口物品查询页经 app/api/trade.py 调这里；
 tasks/trade.py 的 item_search 是旧壳（库存联想、全局搜索还在调），也转到这里。
@@ -64,14 +64,12 @@ def _goal_hint(*names):
 
 def get_item_info(name="", zh="", id=None, loot=True, exact=False):
     """一件物品的详情。exact=True：从物品查询 / 顶上搜索框的结果点进来的（名字是准的）。
-    掉落明细本机没有时不上网等（loot 里给 pending），窗口再调 item_loot 后台取（2026-10-28 用户反馈卡 10 秒）"""
+    掉落那块跟着一起给（只查本机，不联网；本机没有明细时 loot 里是一句说明）"""
     from ..core.i18n import gear_zh_of_item
     from .catalog_queries import acquire
 
     with _pinned():
-        d = acquire.info(
-            name, zh, id, show_loot=loot, exact=bool(exact), loot_online=False
-        )
+        d = acquire.info(name, zh, id, show_loot=loot, exact=bool(exact))
         zh_name = (
             gear_zh_of_item(d["name"]) or d.get("zh") or _zh_of(d["name"])
         )  # 采矿装备的中文不带型号，和配置区一致
@@ -81,9 +79,8 @@ def get_item_info(name="", zh="", id=None, loot=True, exact=False):
 
 
 def get_item_loot(name="", zh=""):
-    """物品查询里掉落那一块：明细本机没有时窗口在后面单独调这个（会上网，最多等 15 秒，不挡别的）。
-    不另钉快照：loot.info 自己分步钉（找物品、副本矿各钉一个）；副本矿缺掉落索引时会下载索引、重建库，再开新快照读
-    新版本，外面钉着旧快照就读不到（见 catalog_queries/loot.mine_info）。出错不抛：异常放进 LootLookup.error，
+    """掉落那一块单独查（F8 说明框后台补掉落用；只查本机，不联网）。
+    不另钉快照：loot.info 自己分步钉（找物品、副本矿各钉一个）。出错不抛：异常放进 LootLookup.error，
     展示层写成「掉落数据出错：…」"""
     try:
         from .catalog_queries.loot import info as loot_info
