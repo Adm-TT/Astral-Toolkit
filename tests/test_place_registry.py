@@ -291,6 +291,10 @@ def test_city_lists_and_site_follow_the_list(monkeypatch, tmp_path):
     assert (
         transit.site_at(here=here) is None
     )  # 站里一个可见的点都没有：当作不认识这个站
+    shell = transit.site_at(here=here, hidden=True)
+    assert (
+        shell is not None and shell["site"] == "Lorville"
+    )  # 记自己的路标：没列出来的站也认
     assert transit.site_tree("Lorville") is None
 
 

@@ -257,8 +257,10 @@ def site_at(
     when: Optional[Any] = None,
     data: Optional[Dict[str, Any]] = None,
     system: str = "",
+    hidden: bool = False,
 ) -> Optional[Dict[str, Any]]:
-    """现在在哪个主城 / 空间站里 → {"site", "zh", "en"}；不在就 None"""
+    """现在在哪个主城 / 空间站里 → {"site", "zh", "en"}；不在就 None。
+    hidden=True：没给玩家看的站也认（记自己的路标用：站是「壳」，不列出来但知道你在里面，2026-11-14）"""
     best = None
     pts = city_places()
     if here and here.get("inside"):
@@ -279,7 +281,7 @@ def site_at(
     shown = (
         _shown()
     )  # 认在哪个站用全部的点；这个站一个可见的点都没有，就当作不认识这个站
-    if not any(p.get("city") == q.get("city") and shown(p) for p in pts):
+    if not hidden and not any(p.get("city") == q.get("city") and shown(p) for p in pts):
         return None
     return {
         "site": q.get("city"),

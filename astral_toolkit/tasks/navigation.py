@@ -830,7 +830,7 @@ def _site_here(deps: NavDeps, g, here, data, system=None):
 
     try:
         system = system or n.system_of(g, data, **_hints_near(deps, g))
-        s = n.site_at(g, here, None, data, system)
+        s = n.site_at(g, here, None, data, system, hidden=True)
         if not s:
             return None
         q = next(q for q in n.city_places() if q.get("city") == s["site"])
