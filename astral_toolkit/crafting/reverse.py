@@ -40,7 +40,14 @@ GAME_STAT = {
     "半径": "Radius",
     "制造速度": "Craft Speed",
 }
-_MOD = re.compile(r"^(.{1,10}?)\s*[:：]\s*([+\-−–])\s*(\d+(?:[.,]\d+)?)\s*(%?)$")
+# 一行里找「属性名：±数字」，行尾、行首多出来的字不管（2026-11-14 实机：加成后面的 ▲ 被认出来、
+# 背景上的字和加成行排成一行，整行就对不上，那条加成丢了，品质只按剩下的槽算）。长名字排前面
+_MOD = re.compile(
+    "("
+    + "|".join(sorted(map(re.escape, GAME_STAT), key=len, reverse=True))
+    + r")\s*[:：]\s*([+\-−–])\s*(\d+(?:[.,]\d+)?)\s*(%?)"
+)
+_SHOWN_PROPS = frozenset(GAME_STAT.values())
 
 # 说明框上的正负号和曲线算出来的一不一样：1 一样，-1 反过来（游戏把有的属性变小显示成 +）。按说明框上的名字查，
 # 只写实机核过的：视差「血红」钨 858 · 金 916 · 科力晶 959（1.6.67 F10、11-06 F8），曲线算出来后坐力三项
@@ -70,13 +77,11 @@ def parse_mods(tokens):
         text = "".join(k.text for k in sorted(ts, key=lambda k: k.box[0])).replace(
             " ", ""
         )
-        m = _MOD.match(text)
+        m = _MOD.search(text)
         if not m:
             continue
-        label = m.group(1).strip()
-        prop = GAME_STAT.get(label)
-        if not prop:
-            continue
+        label = m.group(1)
+        prop = GAME_STAT[label]
         v = float(m.group(3).replace(",", "."))
         out.append((label, -v if m.group(2) in "-−–" else v, bool(m.group(4)), prop))
     return out
@@ -94,18 +99,21 @@ def solve_slots(bp, mods, tiers, material_zh):
     同一属性几个槽都影响时各槽百分比相加（和制造终端一致，那把枪验证过）。
     显示符号核过的属性（SHOWN_SIGN）带符号比，其余只比绝对值。
     返回 {"slots": [{idx, slot, mat, q}], "avg": 平均品质, "exact": 每个属性都对得上（差 ≤0.02），
-    而且没有「绝对值一样、符号相反」的另一组也对得上（CR-C1）}；几组在说明框上一模一样（曲线台阶）时报最低那组；
-    对不上返回 None"""
+    而且没有「绝对值一样、符号相反」的另一组也对得上（CR-C1），而且蓝图里会改说明框属性的槽都算到了
+    （有的槽一条加成都没读到：只凭剩下的槽报平均品质是错的，2026-11-14）}；
+    几组在说明框上一模一样（曲线台阶）时报最低那组；对不上返回 None"""
     if not bp or not mods:
         return None
     obs = {}
     for label, v, pct, prop in mods:
         obs[prop] = (v, SHOWN_SIGN.get(label))
     slots = []
+    partial = False
     for idx, (slot, opts, ms) in enumerate(bp["slots"]):
         gm = group_mods(ms)
         hit = {p: segs for p, segs in gm.items() if p in obs}
         if not hit:
+            partial = partial or any(p in _SHOWN_PROPS for p in gm)
             continue
         mat = _slot_material(opts)
         cand = tiers(mat) or list(range(0, 1001, 1))
@@ -163,7 +171,7 @@ def solve_slots(bp, mods, tiers, material_zh):
     return {
         "slots": out,
         "avg": round(sum(x["q"] for x in out) / len(out)),
-        "exact": worst <= _EXACT and not (pos & neg),
+        "exact": worst <= _EXACT and not (pos & neg) and not partial,
     }
 
 

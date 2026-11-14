@@ -369,6 +369,20 @@ def test_listing_reverse_and_classify_rules_are_pure(monkeypatch):
         ("后坐力操控", -2.0, False, "Recoil Handling"),
         ("冲击力", 17.5, True, "Impact Force"),
     ]
+    # 实机 2026-11-14：加成后面的 ▲、同一行上背景的字，不能让这条加成丢了
+    noisy = [
+        SimpleNamespace(text="冲击力:", box=(0, 10, 0, 16)),
+        SimpleNamespace(text="+6.11 %▲", box=(60, 10, 0, 16)),
+        SimpleNamespace(text="后坐力冲击：", box=(0, 40, 0, 16)),
+        SimpleNamespace(text="-28.64 %", box=(60, 40, 0, 16)),
+        SimpleNamespace(text="STAND", box=(200, 44, 0, 16)),
+        SimpleNamespace(text="射速:", box=(0, 70, 0, 16)),
+        SimpleNamespace(text="389.68 RPM▲", box=(60, 70, 0, 16)),
+    ]
+    assert reverse.parse_mods(noisy) == [
+        ("冲击力", 6.11, True, "Impact Force"),
+        ("后坐力冲击", -28.64, True, "Recoil Kick"),
+    ]
 
     solve_bp = _bp(
         "Solve",
