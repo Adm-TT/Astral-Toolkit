@@ -6,7 +6,7 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
-import pytest
+from tests.minipytest import raises
 
 from astral_toolkit.trade.migrate import MigrationStep, upgrade_if_needed
 from astral_toolkit.trade.storage import APP_ID, SCHEMA_VERSION, Database
@@ -73,7 +73,7 @@ def test_upgrade_2_to_3_with_injected_steps(tmp_path):
 def test_upgrade_step_failure_keeps_version_and_backup(tmp_path):
     path = tmp_path / "dubhe_inventory.db"
     Database(path)
-    with pytest.raises(ValueError, match="版本未抬升"):
+    with raises(ValueError, match="版本未抬升"):
         upgrade_if_needed(
             path,
             target_version=3,
@@ -98,7 +98,7 @@ def test_database_refuses_newer_than_program(tmp_path):
     with closing(sqlite3.connect(path)) as c:
         c.execute("PRAGMA user_version=99")
         c.commit()
-    with pytest.raises(ValueError, match="比本程序新"):
+    with raises(ValueError, match="比本程序新"):
         Database(path)
 
 
@@ -110,7 +110,7 @@ def test_backup_failure_does_not_change_db(tmp_path, monkeypatch):
         raise OSError("磁盘满")
 
     monkeypatch.setattr("astral_toolkit.trade.migrate._backup_file", boom)
-    with pytest.raises(ValueError, match="备份失败"):
+    with raises(ValueError, match="备份失败"):
         upgrade_if_needed(
             path,
             target_version=3,
@@ -123,7 +123,7 @@ def test_backup_failure_does_not_change_db(tmp_path, monkeypatch):
 def test_missing_steps_does_not_change_db(tmp_path):
     path = tmp_path / "dubhe_inventory.db"
     Database(path)
-    with pytest.raises(ValueError, match="没有从版本"):
+    with raises(ValueError, match="没有从版本"):
         upgrade_if_needed(path, target_version=3, steps=[], backup_dir=tmp_path)
     assert _version(path) == 2
     assert list(tmp_path.glob("inventory_升级前备份_*.db")) == []
