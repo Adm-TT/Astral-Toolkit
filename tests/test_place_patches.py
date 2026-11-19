@@ -90,6 +90,18 @@ def test_whole_file_is_refused_when_anything_is_off():
     assert "不认识" in _why(_patch(格式="AT 地点补丁 x"))
     assert "不认识" in _why(_patch(格式="AT 地点补丁 01"))
     assert "需要先更新 AT" in _why(_patch(格式="AT 地点补丁 2"))
+    for odd in (
+        chr(0xB2),
+        "1" * 5000,
+        chr(0xFF11),
+        " 1",
+        "1.0",
+        "",
+    ):  # 不是规矩的版本号（审查 2026-11-19）
+        assert "不认识" in _why(_patch(格式="AT 地点补丁 " + odd)), odd
+    assert "不是 JSON" in P_why("[" * 5000 + "]" * 5000)  # 套几千层
+    assert "读不出" in P_why(chr(0xD800))  # 落单的代理字符
+    assert "读不出" in P_why(123)
     assert "多了「备注」" in _why(_patch(备注="hi"))  # 文件头多一项
     assert "少了「作者」" in _why({k: v for k, v in _patch().items() if k != "作者"})
     assert "「作者」不是文字" in _why(_patch(作者=5))
@@ -128,6 +140,11 @@ def test_each_place_is_checked_and_the_message_says_which_one():
     for xyz in ([1, 2, "3"], [1, 2, True], [1, 2, None]):
         assert "不是数" in _why(_place(坐标=xyz)), xyz
     assert "不是 JSON" in P_why('{"坐标": [NaN]}'.replace("NaN", "nope"))
+    assert "太大" in _why(_place(坐标=[10**400, 0, 0]))  # 几百位的整数不能把程序弄崩
+    big = json.dumps(_place(), ensure_ascii=False).replace("1000.1", "1e999")
+    assert "不是数" in P_why(big)  # 1e999 读出来是无穷大
+    assert "里有换行或控制字符" in P_why(json.dumps(_place(中文名="a" + chr(0xD800))))
+    assert "里有换行或控制字符" in _why(_place(中文名="a" + chr(0x2028)))
     # 范围：太空里太大、星球上太远太深、站里离站太远
     assert "太大" in _why(_place(所在="太空:Pyro", 坐标=[2e9, 0, 0]))
     assert "太远或太深" in _why(_place(所在="星球:Daymar", 坐标=[1, 1, 1]))
@@ -219,6 +236,11 @@ def test_install_list_toggle_remove(monkeypatch, tmp_path):
     else:
         raise AssertionError("坏文件装上了")
     assert not (tmp_path / "patches" / "bad.json").exists()  # 不合格什么都不存
+    assert (
+        P._safe_name("CON.json") == "补丁_CON"
+        and P._safe_name("lpt1 .json") == "补丁_lpt1"
+    )
+    assert P._safe_name("  ..  ") == "补丁" and P._safe_name("x/y:z.json") == "y_z"
 
     rows = P.installed("4.10.3")
     assert [r["file"] for r in rows] == ["state.json", "我的点.json", "我的点_2.json"]

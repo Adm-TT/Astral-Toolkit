@@ -43,7 +43,18 @@ KINDS = ("站", "星球", "太空")
 PATCH_DIR = USER / "patches"  # 一份补丁一个文件，原样保存；升级和普通卸载不动它
 STATE = PATCH_DIR / "_state.json"  # 哪几份停用了
 
-_CTRL = re.compile(r"[\x00-\x1f\x7f-\x9f  ]")
+_CTRL = re.compile(
+    r"[\x00-\x1f\x7f-\x9f\u2028\u2029\ud800-\udfff]"
+)  # 换行、控制字符、落单的代理字符
+# Windows 不让当文件名用的名字（带不带扩展名都不行）
+_RESERVED = {
+    "CON",
+    "PRN",
+    "AUX",
+    "NUL",
+    *(f"COM{i}" for i in range(1, 10)),
+    *(f"LPT{i}" for i in range(1, 10)),
+}
 
 
 class PatchError(ValueError):
@@ -127,11 +138,13 @@ def _xyz(value: Any, kind: str, name: str, kn: Known) -> tuple[float, float, flo
     if not isinstance(value, list) or len(value) != 3:
         raise PatchError("「坐标」要正好三个数")
     for v in value:
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            raise PatchError("「坐标」里有不是数的东西")
         if (
-            isinstance(v, bool)
-            or not isinstance(v, (int, float))
-            or not math.isfinite(v)
-        ):
+            isinstance(v, int) and abs(v) > SPACE_MAX_KM
+        ):  # 几百位的整数：先拦住，转成小数会出错
+            raise PatchError("「坐标」太大，不像是这个星系里的位置")
+        if not math.isfinite(v):
             raise PatchError("「坐标」里有不是数的东西")
     x, y, z = (float(v) for v in value)
     frame = kn.site(name) if kind == "站" else None
@@ -148,17 +161,25 @@ def _xyz(value: Any, kind: str, name: str, kn: Known) -> tuple[float, float, flo
     return x, y, z
 
 
+def _bytes(raw: Any) -> bytes:
+    if isinstance(raw, str):
+        try:
+            return raw.encode("utf-8")
+        except UnicodeEncodeError:
+            raise PatchError("读不出文件内容") from None
+    if isinstance(raw, (bytes, bytearray)):
+        return bytes(raw)
+    raise PatchError("读不出文件内容")
+
+
 def check(raw: Any, kn: Optional[Known] = None) -> Dict[str, Any]:
     """raw：文件内容（字节或文字）→ 查过的补丁 {"head": {...}, "places": [{"zh","en","kind","name","xyz"}]}；不合格抛 PatchError"""
-    if isinstance(raw, str):
-        raw = raw.encode("utf-8")
-    if not isinstance(raw, (bytes, bytearray)):
-        raise PatchError("读不出文件内容")
+    raw = _bytes(raw)
     if len(raw) > MAX_BYTES:
         raise PatchError("文件超过 1 MB")
     try:
-        obj = json.loads(bytes(raw).decode("utf-8-sig"))
-    except (ValueError, UnicodeDecodeError):
+        obj = json.loads(raw.decode("utf-8-sig"))
+    except (ValueError, RecursionError):  # 不是 JSON、编码不对、套了几千层
         raise PatchError("这不是地点补丁文件（不是 JSON）") from None
     if not isinstance(obj, dict):
         raise PatchError("这不是地点补丁文件")
@@ -166,7 +187,7 @@ def check(raw: Any, kn: Optional[Known] = None) -> Dict[str, Any]:
     if not isinstance(fmt, str) or not fmt.startswith(FORMAT_HEAD):
         raise PatchError("这不是地点补丁文件（没有「格式」那一行）")
     ver = fmt[len(FORMAT_HEAD) :]
-    if not ver.isdigit() or ver != str(int(ver)) or int(ver) < 1:
+    if not (ver.isascii() and ver.isdigit() and len(ver) <= 4 and ver[0] != "0"):
         raise PatchError("这份补丁的「格式」AT 不认识")
     if int(ver) > FORMAT_VERSION:
         raise PatchError("这份补丁是更新的格式，需要先更新 AT")
@@ -286,22 +307,35 @@ def _files() -> List[Path]:
 
 def _safe_name(name: str) -> str:
     stem = re.sub(r'[\\/:*?"<>|\x00-\x1f]+', "_", Path(name or "").stem).strip(" ._")
-    return (stem or "补丁")[:60]
+    stem = _CTRL.sub("_", stem)[:60].strip(" ._") or "补丁"
+    return "补丁_" + stem if stem.split(".")[0].upper() in _RESERVED else stem
 
 
 def install(raw: Any, filename: str = "", kn: Optional[Known] = None) -> Dict[str, Any]:
     """查一遍，合格就原样存进 userdata/patches（重名的后面加序号）；不合格抛 PatchError，什么都不存"""
-    data = raw.encode("utf-8") if isinstance(raw, str) else bytes(raw)
+    data = _bytes(raw)
     patch = check(data, kn)
-    PATCH_DIR.mkdir(parents=True, exist_ok=True)
     stem = _safe_name(filename)
     path = PATCH_DIR / f"{stem}.json"
-    n = 2
-    while path.exists() or path.name == STATE.name:
-        path = PATCH_DIR / f"{stem}_{n}.json"
-        n += 1
-    path.write_bytes(data)
-    _cache["key"] = None
+    try:
+        PATCH_DIR.mkdir(parents=True, exist_ok=True)
+        n = 2
+        while True:
+            if path.name != STATE.name:
+                try:
+                    with open(
+                        path, "xb"
+                    ) as f:  # 只新建：已经有同名的就换下一个名字，绝不盖掉
+                        f.write(data)
+                    break
+                except FileExistsError:
+                    pass
+            path = PATCH_DIR / f"{stem}_{n}.json"
+            n += 1
+    except OSError as e:
+        raise PatchError(f"补丁存不进去：{e}") from None
+    finally:
+        _cache["key"] = None
     return {"file": path.name, "count": len(patch["places"]), **patch["head"]}
 
 
