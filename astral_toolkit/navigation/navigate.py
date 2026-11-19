@@ -51,6 +51,7 @@ from .waypoints import (
     waypoints,
     _waypoints_strict,
 )
+from .patches import points as patch_points
 from .starmap import (
     CACHE,
     load,
@@ -315,7 +316,9 @@ def _search(query, data, limit, sites=False):
 
     found: dict[str, dict] = {}  # 站 → 并出来的那一条
     counts: dict[str, int] = {}  # 站 → 里面命中了几个点
-    for p in waypoints() + data["pois"] + spots:
+    for p in (
+        waypoints() + patch_points() + data["pois"] + spots
+    ):  # 自己的路标、装着的补丁、自带的地点
         if p["b"] not in data["bodies"] and not is_space(p):
             continue
         if not shown(p):

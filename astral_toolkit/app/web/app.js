@@ -1601,12 +1601,27 @@ function renderNavLive() {
 
 async function navWaypointView() {
   const wps = await api("waypoints").catch(() => []);
+  const patches = ((await api("patch_list").catch(() => null)) || {}).rows || [];   // 装着的地点补丁（2026-11-19）
   $("#navbody").innerHTML = `<div class="panel">
     ${wps.length ? `<table class="t"><tr><th>名称</th><th>星球</th><th>位置</th><th></th></tr>
       ${wps.map((w) => `<tr><td>${esc(w.name)}</td><td class="muted">${esc(w.body)}</td><td class="muted">${w.space ? "太空固定点" : `纬度 ${w.lat.toFixed(3)}° 经度 ${w.lon.toFixed(3)}° 高度 ${money(w.alt)} m`}</td>
         <td class="n"><button class="btn small" data-go="${esc(w.key)}">导航</button> <button class="btn small" data-del="${esc(w.name)}">删除</button></td></tr>`).join("")}</table>`
       : `<p class="muted" style="margin:0">暂无路标</p>`}
     <p class="muted" style="margin:10px 0 0">点「用当前位置新建」后，在游戏聊天框输入 /showlocation 回车即可保存。星球表面和太空均可使用。</p>
+  </div>
+  <h2>地点补丁</h2>
+  <div class="panel">
+    <p class="muted" style="margin:0 0 10px">把上面的路标导出成一个文件发给别人；装上别人发来的补丁后，里面的地点可以搜索和导航。补丁只增加地点，不改动路标和其他数据。</p>
+    <div class="row">
+      <label class="field">作者（选填）<input class="input" id="p-author" size="14" maxlength="40"></label>
+      <button class="btn" id="p-export" style="align-self:flex-end"${wps.length ? "" : " disabled"}>导出全部路标</button>
+      <button class="btn" id="p-import" style="align-self:flex-end">导入补丁</button>
+      <input type="file" id="p-file" accept=".json,application/json" style="display:none"></div>
+    ${patches.length ? `<table class="t" style="margin-top:12px"><tr><th>补丁</th><th>作者</th><th>日期</th><th>地点</th><th></th></tr>
+      ${patches.map((p) => `<tr><td>${esc(p.file)}${p.error ? `<br><span class="muted">已失效：${esc(p.error)}</span>` : p.stale ? `<br><span class="muted">游戏 ${esc(p.game_version)} 时记录，位置可能已变化</span>` : ""}</td>
+        <td class="muted">${esc(p.author || "未填写")}</td><td class="muted">${esc(p.date)}</td><td class="muted">${p.count} 个${p.enabled || p.error ? "" : "（已停用）"}</td>
+        <td class="n">${p.error ? "" : `<button class="btn small" data-ptoggle="${esc(p.file)}" data-on="${p.enabled ? 0 : 1}">${p.enabled ? "停用" : "启用"}</button> `}<button class="btn small" data-pdel="${esc(p.file)}">删除</button></td></tr>`).join("")}</table>`
+      : `<p class="muted" style="margin:12px 0 0">暂无已安装的补丁</p>`}
   </div>
   <h2>新建路标</h2>
   <div class="panel">
@@ -1624,6 +1639,24 @@ async function navWaypointView() {
     if (g) { try { await api("nav_start", { key: g.dataset.go }); toast("已开始导航"); } catch (err) { toast(err.message); } }
     if (d) popconfirm(d, { title: "删除此路标？", sub: esc(d.dataset.del), okText: "删除", danger: true,
       onOk: async () => { try { await api("waypoint_delete", { name: d.dataset.del }); navWaypointView(); } catch (err) { toast(err.message); } } });
+    const pt = e.target.closest("[data-ptoggle]"), pd = e.target.closest("[data-pdel]");
+    if (pt) { try { await api("patch_toggle", { file: pt.dataset.ptoggle, on: pt.dataset.on === "1" }); navWaypointView(); } catch (err) { toast(err.message); } }
+    if (pd) popconfirm(pd, { title: "删除此补丁？", sub: esc(pd.dataset.pdel), okText: "删除", danger: true,
+      onOk: async () => { try { await api("patch_delete", { file: pd.dataset.pdel }); navWaypointView(); } catch (err) { toast(err.message); } } });
+  };
+  $("#p-export").onclick = async () => {
+    try { const r = await api("patch_export", { author: $("#p-author").value }); toast(`已导出 ${r.count} 个地点到桌面`); } catch (err) { toast(err.message); }
+  };
+  $("#p-import").onclick = () => $("#p-file").click();
+  $("#p-file").onchange = async (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    if (f.size > 1000000) { toast("文件超过 1 MB，不是地点补丁"); return; }
+    try {
+      const r = await api("patch_import", { text: await f.text(), name: f.name });
+      toast(`已安装补丁：${r.count} 个地点${r.stale ? `（游戏 ${r.game_version} 时记录，位置可能已变化）` : ""}`);
+      navWaypointView();
+    } catch (err) { toast(err.message); }
   };
   if (!state.wpListen) {           // 游戏里按 F7 记了新路标：在这页的话马上刷新
     state.wpListen = true;

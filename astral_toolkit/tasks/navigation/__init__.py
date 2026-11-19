@@ -23,6 +23,7 @@ from . import (
     belt as _m_belt,
     marks as _m_marks,
     ore_records as _m_ore,
+    place_patches as _m_patches,
     search as _m_search,
     where as _m_where,
 )
@@ -103,8 +104,20 @@ from .belt import (
     halo_routes,
     halo_unpin,
 )
+from .place_patches import (
+    patch_delete,
+    patch_export,
+    patch_import,
+    patch_list,
+    patch_toggle,
+)
 
 __all__ = [
+    "patch_export",
+    "patch_import",
+    "patch_list",
+    "patch_toggle",
+    "patch_delete",
     "_start_nav",
     "_places",
     "POS_FRESH",
@@ -185,7 +198,15 @@ __all__ = [
 class _NavModule(sys.modules[__name__].__class__):
     def __setattr__(self, name, value):
         super().__setattr__(name, value)
-        for sub in (_m_base, _m_where, _m_search, _m_marks, _m_ore, _m_belt):
+        for sub in (
+            _m_base,
+            _m_where,
+            _m_search,
+            _m_marks,
+            _m_ore,
+            _m_belt,
+            _m_patches,
+        ):
             if hasattr(sub, name):
                 setattr(sub, name, value)
 

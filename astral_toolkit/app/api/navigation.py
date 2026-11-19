@@ -28,6 +28,26 @@ def waypoints(**kw):
     return _t.waypoints(**kw)
 
 
+def patch_export(**kw):
+    return _t.patch_export(**kw)
+
+
+def patch_import(**kw):
+    return _t.patch_import(**kw)
+
+
+def patch_list(**kw):
+    return _t.patch_list(**kw)
+
+
+def patch_toggle(**kw):
+    return _t.patch_toggle(**kw)
+
+
+def patch_delete(**kw):
+    return _t.patch_delete(**kw)
+
+
 def waypoint_delete(**kw):
     return _t.waypoint_delete(**kw)
 
@@ -118,4 +138,9 @@ ROUTES = {
     "halo_options": halo_options,
     "halo_routes": halo_routes,
     "halo_unpin": halo_unpin,
+    "patch_export": patch_export,
+    "patch_import": patch_import,
+    "patch_list": patch_list,
+    "patch_toggle": patch_toggle,
+    "patch_delete": patch_delete,
 }

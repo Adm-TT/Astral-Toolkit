@@ -68,7 +68,7 @@ def _place_row(p):
         )
     else:
         typ = TYPE_ZH.get(p["t"], p["t"])
-    return {
+    row = {
         "key": key,
         "label": label(p),
         "body": body_label(p["b"]),
@@ -80,6 +80,13 @@ def _place_row(p):
         "space": bool(p.get("space")),
         "city": p["t"] == "City" or bool(p.get("city")),
     }
+    if p.get("patch"):  # 别人补丁里的点：标出来自补丁、作者是谁；不算「我的路标」
+        row["type"] = " · ".join(
+            v for v in ("补丁", p["patch"].get("author"), p.get("city_zh")) if v
+        )
+        row["waypoint"] = False
+        row["patch"] = dict(p["patch"])
+    return row
 
 
 def nav_search(q=""):

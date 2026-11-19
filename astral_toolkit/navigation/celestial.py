@@ -29,6 +29,7 @@ from .names import (
     label,
 )
 from .starmap import load
+from .patches import points as patch_points
 from .waypoints import is_space, waypoints
 
 EPOCH = datetime(2020, 1, 1, tzinfo=timezone.utc)
@@ -948,7 +949,7 @@ def nearby(
         shown = gamedata.place_registry.checker()
     except gamedata.GamedataError:
         shown = lambda p: True  # noqa: E731
-    for p in waypoints() + data["pois"]:
+    for p in waypoints() + patch_points() + data["pois"]:
         if p["b"] != here["body"] or not shown(p):
             continue
         d = surface_km(a, pos(p), here["radius_km"])

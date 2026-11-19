@@ -1013,6 +1013,11 @@ _NAV_API = [
     "halo_routes",
     "halo_pin",
     "halo_unpin",
+    "patch_export",
+    "patch_import",
+    "patch_list",
+    "patch_toggle",
+    "patch_delete",
 ]
 # F 段 B5d 起要导航后台对象的 12 个由 navigation 的 bound(deps) 给，不在 ROUTES 里
 _NAV_BOUND = [
