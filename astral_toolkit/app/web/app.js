@@ -1603,18 +1603,18 @@ async function navWaypointView() {
   const wps = await api("waypoints").catch(() => []);
   const patches = ((await api("patch_list").catch(() => null)) || {}).rows || [];   // 装着的地点补丁（2026-11-19）
   $("#navbody").innerHTML = `<div class="panel">
-    ${wps.length ? `<table class="t"><tr><th>名称</th><th>星球</th><th>位置</th><th></th></tr>
-      ${wps.map((w) => `<tr><td>${esc(w.name)}</td><td class="muted">${esc(w.body)}</td><td class="muted">${w.space ? "太空固定点" : `纬度 ${w.lat.toFixed(3)}° 经度 ${w.lon.toFixed(3)}° 高度 ${money(w.alt)} m`}</td>
+    ${wps.length ? `<table class="t"><tr><th title="勾选要导出成补丁的路标"><input type="checkbox" id="p-all" checked aria-label="全选要导出的路标"></th><th>名称</th><th>星球</th><th>位置</th><th></th></tr>
+      ${wps.map((w) => `<tr><td><input type="checkbox" class="p-pick" value="${esc(w.name)}" checked aria-label="导出 ${esc(w.name)}"></td><td>${esc(w.name)}</td><td class="muted">${esc(w.body)}</td><td class="muted">${w.space ? "太空固定点" : `纬度 ${w.lat.toFixed(3)}° 经度 ${w.lon.toFixed(3)}° 高度 ${money(w.alt)} m`}</td>
         <td class="n"><button class="btn small" data-go="${esc(w.key)}">导航</button> <button class="btn small" data-del="${esc(w.name)}">删除</button></td></tr>`).join("")}</table>`
       : `<p class="muted" style="margin:0">暂无路标</p>`}
     <p class="muted" style="margin:10px 0 0">点「用当前位置新建」后，在游戏聊天框输入 /showlocation 回车即可保存。星球表面和太空均可使用。</p>
   </div>
   <h2>地点补丁</h2>
   <div class="panel">
-    <p class="muted" style="margin:0 0 10px">把上面的路标导出成一个文件发给别人；装上别人发来的补丁后，里面的地点可以搜索和导航。补丁只增加地点，不改动路标和其他数据。</p>
+    <p class="muted" style="margin:0 0 10px">在上面的列表里勾选路标，导出成一个文件发给别人；装上别人发来的补丁后，里面的地点可以搜索和导航。补丁只增加地点，不改动路标和其他数据。</p>
     <div class="row">
       <label class="field">作者（选填）<input class="input" id="p-author" size="14" maxlength="40"></label>
-      <button class="btn" id="p-export" style="align-self:flex-end"${wps.length ? "" : " disabled"}>导出全部路标</button>
+      <button class="btn" id="p-export" style="align-self:flex-end"${wps.length ? "" : " disabled"}>导出勾选的路标（${wps.length}）</button>
       <button class="btn" id="p-import" style="align-self:flex-end">导入补丁</button>
       <input type="file" id="p-file" accept=".json,application/json" style="display:none"></div>
     ${patches.length ? `<table class="t" style="margin-top:12px"><tr><th>补丁</th><th>作者</th><th>日期</th><th>地点</th><th></th></tr>
@@ -1644,8 +1644,21 @@ async function navWaypointView() {
     if (pd) popconfirm(pd, { title: "删除此补丁？", sub: esc(pd.dataset.pdel), okText: "删除", danger: true,
       onOk: async () => { try { await api("patch_delete", { file: pd.dataset.pdel }); navWaypointView(); } catch (err) { toast(err.message); } } });
   };
+  const picked = () => [...document.querySelectorAll("#navbody .p-pick:checked")].map((c) => c.value);
+  const pickSync = () => {                                   // 勾选变了：按钮上的个数、全选框跟着变
+    const n = picked().length, all = document.querySelectorAll("#navbody .p-pick").length;
+    $("#p-export").textContent = `导出勾选的路标（${n}）`;
+    $("#p-export").disabled = !n;
+    if ($("#p-all")) { $("#p-all").checked = n === all && all > 0; $("#p-all").indeterminate = n > 0 && n < all; }
+  };
+  $("#navbody").onchange = (e) => {
+    if (e.target.id === "p-all") document.querySelectorAll("#navbody .p-pick").forEach((c) => { c.checked = e.target.checked; });
+    if (e.target.id === "p-all" || e.target.classList.contains("p-pick")) pickSync();
+  };
   $("#p-export").onclick = async () => {
-    try { const r = await api("patch_export", { author: $("#p-author").value }); toast(`已导出 ${r.count} 个地点到桌面`); } catch (err) { toast(err.message); }
+    const names = picked();
+    if (!names.length) { toast("未勾选路标"); return; }
+    try { const r = await api("patch_export", { names, author: $("#p-author").value }); toast(`已导出 ${r.count} 个地点到桌面`); } catch (err) { toast(err.message); }
   };
   $("#p-import").onclick = () => $("#p-file").click();
   $("#p-file").onchange = async (e) => {

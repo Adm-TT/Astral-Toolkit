@@ -60,6 +60,17 @@ PAGES: dict[str, dict[str, tuple[str, tuple[str, ...]]]] = {
             ),
         ),
         "waypoint_notes": (SOON, ()),  # 路标备注
+        # 地点补丁：自己的路标导出成文件、装别人给的补丁（2026-11-19）
+        "patches": (
+            READY,
+            (
+                "patch_export",
+                "patch_import",
+                "patch_list",
+                "patch_toggle",
+                "patch_delete",
+            ),
+        ),
         "belt": (READY, ("halo_options", "halo_routes", "halo_pin", "halo_unpin")),
     },
     "collect": {  # 收集
