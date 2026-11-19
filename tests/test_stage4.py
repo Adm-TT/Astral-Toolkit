@@ -26,9 +26,11 @@ _SYSTEM_API = [
     "quit",
     "runtime_capture_now",
     "runtime_clear_logs",
+    "ui_capabilities",
+    "ui_health",
 ]
 
-_SYSTEM_BOUND = ("status", "feedback_report", "set_settings", "agree")
+_SYSTEM_BOUND = ("status", "feedback_report", "set_settings", "agree", "ui_health")
 
 
 def test_system_controller_routes():

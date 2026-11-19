@@ -599,6 +599,7 @@ def test_routes_table_static_plus_bound(monkeypatch):
             "feedback_report",
             "set_settings",
             "agree",
+            "ui_health",
             "nav_site",
             "nav_start",
             "nav_mode",

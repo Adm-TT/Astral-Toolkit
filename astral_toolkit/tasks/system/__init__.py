@@ -33,6 +33,7 @@ from .settings import (
     update_data,
 )
 from .status import _desktop, _gridtext_status, export_logs, status
+from .ui_manifest import capabilities as ui_capabilities, health as ui_health
 from .upgrade import (
     VPK_PREV,
     _online,
@@ -67,6 +68,8 @@ __all__ = [
     "quit",
     "hotkey_conflicts",
     "VPK_PREV",
+    "ui_capabilities",
+    "ui_health",
 ]
 
 

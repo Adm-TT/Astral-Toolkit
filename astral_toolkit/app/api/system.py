@@ -78,6 +78,11 @@ def runtime_capture_now():
     return meta
 
 
+def ui_capabilities():
+    """新界面的页面能力表：哪页哪块后端现在有、哪块先占位（tasks/system/ui_manifest）"""
+    return _t.ui_capabilities()
+
+
 def runtime_clear_logs():
     """清空前端实时运行日志"""
     bus.clear_runtime_logs()
@@ -100,8 +105,13 @@ def bound(sources, start):
     def agree(**kw):
         return _t.agree(sources, start, **kw)
 
+    def ui_health():
+        """新界面的运行状态信号灯：把 status 里的几项汇总成绿 / 黄 / 红"""
+        return _t.ui_health(_t.status(sources))
+
     return {
         "status": status,
+        "ui_health": ui_health,
         "feedback_report": feedback_report,
         "set_settings": set_settings,
         "agree": agree,
@@ -125,4 +135,5 @@ ROUTES = {
     "quit": quit,
     "runtime_capture_now": runtime_capture_now,
     "runtime_clear_logs": runtime_clear_logs,
+    "ui_capabilities": ui_capabilities,
 }

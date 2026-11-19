@@ -128,6 +128,7 @@ MODULES = [
     "tests.test_gamedata_b4",
     "tests.test_gamedata_b6",
     "tests.test_gamedata_b5",
+    "tests.test_ui_manifest",
     "tests.test_ui_stream",
     "tests.test_ui_k0b",
     "tests.test_ui_k0c",
