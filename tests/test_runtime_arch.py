@@ -2937,10 +2937,20 @@ def _fs_b5_route_names(source):
     return set()
 
 
+def _fs_b5_tasks_source(name):
+    """tasks 下一个文件的源码；拆成包的（navigation.py → navigation/，2026-11-19）把包里各文件接起来一起查"""
+    path = _ROOT / "tasks" / name
+    if path.exists():
+        return path.read_text(encoding="utf-8")
+    return "\n".join(
+        p.read_text(encoding="utf-8") for p in sorted(path.with_suffix("").glob("*.py"))
+    )
+
+
 def test_fs_b5_tasks_without_module_binding():
     """FS-B5：采矿、F8、系统、导航的 tasks 没有模块级绑定；接口表里要后台对象的接口（含物品查询的商店导航）由 bound 给。"""
     for name, gone in _FS_B5_GONE.items():
-        source = (_ROOT / "tasks" / name).read_text(encoding="utf-8")
+        source = _fs_b5_tasks_source(name)
         assert not (_fs_b5_defined_names(source) & gone), name
         assert not _fs_b5_globals(source), name
 
@@ -2950,7 +2960,7 @@ def test_fs_b5_tasks_without_module_binding():
     assert "start_background" not in settings_source
 
     for name, expected in _FS_B5_FIRST_ARG.items():
-        source = (_ROOT / "tasks" / name).read_text(encoding="utf-8")
+        source = _fs_b5_tasks_source(name)
         assert not _fs_b5_first_arg_bad(source, expected), name
 
     bootstrap_source = (_ROOT / "bootstrap.py").read_text(encoding="utf-8")

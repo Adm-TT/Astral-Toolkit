@@ -1063,14 +1063,16 @@ def test_nav_goals_controller_routes():
 
 
 def test_nav_goals_tasks_no_services():
-    """tasks/navigation.py、tasks/goals.py 不再反过来引用 app.services"""
+    """tasks/navigation（2026-11-19 拆成包，各文件都查）、tasks/goals.py 不再反过来引用 app.services"""
     from pathlib import Path
 
     root = Path(__file__).resolve().parent.parent / "astral_toolkit" / "tasks"
-    for f in ("navigation.py", "goals.py"):
-        text = (root / f).read_text(encoding="utf-8")
+    files = sorted((root / "navigation").glob("*.py")) + [root / "goals.py"]
+    assert len(files) > 2
+    for f in files:
+        text = f.read_text(encoding="utf-8")
         for bad in ("app import services", "_services()", "@api"):
-            assert bad not in text, (f, bad)
+            assert bad not in text, (f.name, bad)
 
 
 def test_nav_goals_router_roundtrip(monkeypatch, tmp_path):

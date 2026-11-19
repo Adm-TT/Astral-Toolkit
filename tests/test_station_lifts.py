@@ -689,7 +689,7 @@ def test_no_synthetic_input_in_nav_files():
     root = Path(__file__).resolve().parent.parent / "astral_toolkit"
     files = [
         root / "system" / "showloc.py",
-        root / "tasks" / "navigation.py",
+        *sorted((root / "tasks" / "navigation").glob("*.py")),  # 2026-11-19 拆成包
         root / "app" / "overlay.py",
         root / "runtime" / "workers" / "navigation.py",  # R2 起导航线程在这里
         root / "runtime" / "workers" / "game_events.py",

@@ -1242,7 +1242,7 @@
                 }
             }
         ],
-        "./astral_toolkit/tasks/navigation.py": [
+        "./astral_toolkit/tasks/navigation/marks.py": [
             {
                 "code": "reportArgumentType",
                 "range": {
@@ -1274,7 +1274,9 @@
                     "endColumn": 51,
                     "lineCount": 1
                 }
-            },
+            }
+        ],
+        "./astral_toolkit/tasks/navigation/where.py": [
             {
                 "code": "reportArgumentType",
                 "range": {
