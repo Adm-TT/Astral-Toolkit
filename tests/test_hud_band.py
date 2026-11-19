@@ -13,6 +13,22 @@ def test_band_width_height_and_origin():
     )
 
 
+def test_keep_off_box_moves_the_panel_away_from_the_position_readout():
+    from astral_toolkit.app.overlay import keep_off_box
+
+    area = {"left": 100, "top": 40, "width": 1920, "height": 1080}
+    box = (0.66, 0.0, 1.0, 0.22)  # 右上角读位置那块：屏幕上 x 1367~2020、y 40~277
+    # 小号 2026-11-14 那次：左缘 713、宽 768，右边压住了那块 → 往左挪到它左边
+    assert keep_off_box(100 + 713, 40, 768, 185, area, box) == (1367 - 4 - 768, 40)
+    # 默认落点（左 30%、宽 40%）右边也压着 4% → 同样让开
+    assert keep_off_box(100 + 576, 40, 768, 185, area, box)[0] == 595
+    # 没碰到：原样（在它左边、在它下面）
+    assert keep_off_box(300, 40, 768, 185, area, box) == (300, 40)
+    assert keep_off_box(1500, 400, 400, 100, area, box) == (1500, 400)
+    # 左边放不下（窗比那块左边的空地还宽）→ 挪到它下面
+    assert keep_off_box(900, 60, 1400, 100, area, box) == (900, 277 + 4)
+
+
 def test_clamp_scroll_from_bottom():
     from astral_toolkit.app.overlay import clamp_scroll_from_bottom
 

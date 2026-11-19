@@ -7,6 +7,7 @@
 - 宽约游戏客户区 40%（左右 30%–70%）；高跟内容，最高不超过客户区高度 20%（超出可滚动；顶栏另占一行）
 - 功能往悬浮窗写字时显示文案窗；有文案就保持显示，全部清空或点 X 才隐藏（不再空闲自动隐藏）
 - 默认落在客户区顶边偏中（左约 30%）；拖动后自由定位并记住（overlay_pos.json）
+- 文案窗不盖右上角读位置的那块（调试信息）：碰到就自动往左让开，拖也拖不进去（2026-11-19，见 keep_off_box）
 - 导航菱形 / 瞄准环仍是另两扇独立窗口（鼠标穿透）
 - 悬浮窗在自己的线程里运行，任何线程都可以调用 set()
 
@@ -113,6 +114,23 @@ def band_origin(area: dict) -> tuple[int, int]:
         int(area["left"] + area["width"] * BAND_X0),
         int(area["top"]),
     )
+
+
+def keep_off_box(x, y, w, h, area, box, gap=4):
+    """文案窗（屏幕坐标 x、y，宽高 w、h）不能盖住右上角读位置的那块：读屏时会把自己的窗口整块涂黑（连透明的地方），
+    盖上调试信息就读不到位置了（2026-11-14 实机：悬浮窗右边缘压住行首，导航一直报「读不到位置」）。
+    area = 游戏客户区 {left, top, width, height}；box = 那一块占客户区的比例（左、上、右、下）。
+    碰到 → 往左挪到它左边；左边放不下（会出客户区）→ 挪到它下面。没碰到原样返回"""
+    l = area["left"] + box[0] * area["width"]  # noqa: E741
+    t = area["top"] + box[1] * area["height"]
+    r = area["left"] + box[2] * area["width"]
+    b = area["top"] + box[3] * area["height"]
+    if not (x < r and x + w > l and y < b and y + h > t):
+        return int(x), int(y)
+    nx = int(l - gap - w)
+    if nx >= area["left"]:
+        return nx, int(y)
+    return int(x), int(b + gap)
 
 
 def clamp_scroll_from_bottom(scroll: float, content_h: int, view_h: int) -> float:
@@ -1041,6 +1059,7 @@ class Hud:
         self.scroll_from_bottom = 0.0  # 距内容底部的偏移；0 = 钉底
         self._content_h = 1
         self._view_h = 1
+        self._win_wh = (1, 1)  # 文案窗现在画出来的宽高（让开右上角那块要用）
         self._chrome_h = chrome_height(1.0)
         self._chrome_x = MARGIN
         self._chrome_w = 1
@@ -1435,8 +1454,45 @@ class Hud:
         if not self._visible or not self._has_text():
             self._push(None)
             return False
+        self._win_wh = (img.width, img.height)
+        if not self._grip_dragging:  # 拖着的时候由拖动那边管，别抢
+            self._keep_off()
         self._push(img)
         return busy
+
+    def _off_box(self, x, y):
+        """(x, y) 放文案窗会不会盖住右上角读位置那块 → 让开后的位置；拿不到游戏窗口 / 区域就原样"""
+        try:
+            from ..infrastructure.platform.capture import game_area
+            from ..navigation.displayinfo import _region
+
+            a = game_area()
+            w, h = self._win_wh
+            return keep_off_box(
+                x, y, w, h, a, _region((int(a["width"]), int(a["height"])))
+            )
+        except Exception:
+            return int(x), int(y)
+
+    def _keep_off(self):
+        """内容变高变宽、或记住的位置本来就压着那块：挪开（只挪窗口，不改玩家记住的位置文件）"""
+        try:
+            import ctypes
+
+            x, y = self._rect()
+            nx, ny = self._off_box(x, y)
+            if (nx, ny) != (x, y):
+                ctypes.windll.user32.SetWindowPos(
+                    ctypes.c_void_p(HWND),
+                    None,
+                    nx,
+                    ny,
+                    0,
+                    0,
+                    SWP_NOSIZE | SWP_NOACTIVATE,
+                )
+        except Exception:
+            pass
 
     def _push(self, img):
         global SHOWN
@@ -1595,8 +1651,7 @@ class Hud:
         try:
             import ctypes
 
-            nx = e.x_root - self._off[0]
-            ny = e.y_root - self._off[1]
+            nx, ny = self._off_box(e.x_root - self._off[0], e.y_root - self._off[1])
             ctypes.windll.user32.SetWindowPos(
                 ctypes.c_void_p(HWND),
                 None,
