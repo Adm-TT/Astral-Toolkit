@@ -733,8 +733,8 @@ def test_presenters_write_distance_and_source_text():
         "p": 0.1,
     }
     assert (
-        source_text({"loot": loot}) == "开箱：甲等（，单箱最高约 10%）"
-    )  # 箱子名是数字开头的不写（「（，」是以前就这样，字不改）
+        source_text({"loot": loot}) == "开箱：甲等（单箱最高约 10%）"
+    )  # 箱子名是数字开头的不写，括号里不留多余的逗号（2026-11-23 修）
     three = dict(loot, regions=["一", "二", "三"], more=False, box="Crate", p=0.5)
     assert (
         source_text({"loot": three}) == "开箱：一、二、三（Crate 箱，单箱最高约 50%）"

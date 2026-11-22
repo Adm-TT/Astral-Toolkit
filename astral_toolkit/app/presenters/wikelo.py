@@ -9,7 +9,7 @@ from ...crafting.wikelo_rules import req_label
 
 def _loot_text(lt):
     """开箱掉落那一句：地方最多写 3 个（多了或后面还有写「等」）；副本专属矿说只能开采，刷在场景里的不说箱子，
-    箱子名是数字开头的不写箱子名"""
+    箱子名是数字开头的不写箱子名（这时括号里直接写概率，不留一个孤零零的逗号）"""
     regions = "、".join(lt["regions"][:3]) + (
         "等" if len(lt["regions"]) > 3 or lt["more"] else ""
     )
@@ -25,8 +25,8 @@ def _loot_text(lt):
     box = "" if re.fullmatch(r"\d+.*", box or "") else box
     return (
         f"开箱：{regions}"
-        + (f"（{box} 箱" if box else "（")
-        + f"，单箱最高约 {lt['p']:.0%}）"
+        + (f"（{box} 箱，" if box else "（")
+        + f"单箱最高约 {lt['p']:.0%}）"
     )
 
 
