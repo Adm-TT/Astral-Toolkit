@@ -26,6 +26,10 @@ def item_loot(**kw):
     return _present.present_item_loot(_catalog.get_item_loot(**kw))
 
 
+def item_tags(**kw):
+    return _catalog.item_tags(**kw)
+
+
 def trade(**kw):
     return _t.trade(**kw)
 
@@ -60,6 +64,7 @@ ROUTES = {
     "item_search": item_search,
     "item_info": item_info,
     "item_loot": item_loot,
+    "item_tags": item_tags,
     "trade": trade,
     "market_lookup": market_lookup,
     "market_prices": market_prices,

@@ -1220,6 +1220,7 @@ _TRADE_API = [
     "item_search",
     "item_info",
     "item_loot",
+    "item_tags",
     "trade",
     "market_lookup",
     "market_prices",

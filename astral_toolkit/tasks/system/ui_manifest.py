@@ -18,7 +18,10 @@ VERSION = 1
 # 页 → 块 → (状态, 这一块用到的接口名)。READY 的块必须列接口名，而且都得真的注册了（tests/test_ui_manifest.py 看着）
 PAGES: dict[str, dict[str, tuple[str, tuple[str, ...]]]] = {
     "query": {  # 查询
-        "items": (READY, ("search", "item_search", "item_info", "item_loot")),
+        "items": (
+            READY,
+            ("search", "item_search", "item_info", "item_loot", "item_tags"),
+        ),
         "add_goal": (READY, ("goal_add",)),
     },
     "craft": {  # 制造
@@ -89,7 +92,7 @@ PAGES: dict[str, dict[str, tuple[str, tuple[str, ...]]]] = {
             ("ore_record", "ore_list", "ore_delete", "ore_restore", "ore_go"),
         ),
     },
-    "stock": {  # 仓库：库存归另一条线，这里只登记现在有的接口
+    "stock": {  # 仓库：表结构归另一条线；页面接口这边做（老大 11-23）
         "inventory": (
             READY,
             (
@@ -120,7 +123,9 @@ PAGES: dict[str, dict[str, tuple[str, tuple[str, ...]]]] = {
             READY,
             ("count_toggle", "count_state", "count_apply", "count_cancel"),
         ),
-        "categories": (SOON, ()),  # 九类页签、颜色分档、待核
+        # 大类页签：item_tags 按英文名给大类（2026-11-23）；颜色分档、待核还没有
+        "categories": (READY, ("item_tags",)),
+        "grades": (SOON, ()),
         "favorites": (SOON, ()),
         "sort": (SOON, ()),
         "equip": (SOON, ()),

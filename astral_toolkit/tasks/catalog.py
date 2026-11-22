@@ -62,6 +62,37 @@ def _goal_hint(*names):
     return goals._goal_text(g) if g else ""
 
 
+TAGS_MAX = 500  # item_tags 一次最多查这么多个名字
+
+
+def item_tags(names=()):
+    """新界面物品卡片的分类（2026-11-23）：一批英文名 → 每件的大类 top、尺寸 size、目录里有没有 known；
+    classes 是十个大类的键和中文（页签用）。规则在 catalog/topclass；不认识的名字归「未分类」"""
+    from ..catalog import topclass
+    from .catalog_queries import search
+
+    if isinstance(names, str):
+        names = [names]
+    elif not isinstance(names, (list, tuple)):
+        names = []  # 页面传了别的东西（数字、对象）：当没传
+    items: dict[str, dict] = {}
+    for n in names:
+        if len(items) >= TAGS_MAX:
+            break
+        if not isinstance(n, str) or not n or n in items:
+            continue
+        e = search.lookup(n) or {}
+        items[n] = {
+            "top": topclass.top_class(e.get("cat"), e.get("wtype"), n),
+            "size": e.get("wsize"),
+            "known": bool(e),
+        }
+    return {
+        "classes": [{"key": k, "label": z} for k, z in topclass.CLASSES],
+        "items": items,
+    }
+
+
 def get_item_info(name="", zh="", id=None, loot=True, exact=False):
     """一件物品的详情。exact=True：从物品查询 / 顶上搜索框的结果点进来的（名字是准的）。
     掉落那块跟着一起给（只查本机，不联网；本机没有明细时 loot 里是一句说明）"""
