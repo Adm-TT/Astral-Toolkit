@@ -46,6 +46,14 @@ def hotkey_conflicts(cfg=None):
     return out
 
 
+def _as_bool(v):
+    """开关类设置收成真假。页面该传真假值；传成字符串时「false / 0 / off / no / 空」算关
+    （以前一律 bool()，字符串 "false" 会被当成开）"""
+    if isinstance(v, str):
+        return v.strip().lower() not in ("", "0", "false", "off", "no")
+    return bool(v)
+
+
 def set_settings(sources: StatusSources, /, **kw):
     from ...core import settings
     from .status import status
@@ -69,7 +77,7 @@ def set_settings(sources: StatusSources, /, **kw):
         "debug_mode",
     ):
         if k in kw:
-            kw[k] = bool(kw[k])
+            kw[k] = _as_bool(kw[k])
         allowed.add(k)
     if "ocr_device" in kw:
         allowed.add("ocr_device")

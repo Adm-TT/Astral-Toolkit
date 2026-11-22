@@ -149,3 +149,12 @@ def test_window_look_settings_are_saved(monkeypatch, tmp_path):
         cfg = set_settings(sources, theme="pink", ui_solid="")
         assert cfg["theme"] == "light" and cfg["ui_solid"] is False
     assert settings.load()["ui_solid"] is False
+
+
+def test_switch_settings_read_string_false_as_off():
+    from astral_toolkit.tasks.system.settings import _as_bool
+
+    for off in (False, 0, None, "", "false", "False", " 0 ", "off", "NO"):
+        assert _as_bool(off) is False, off
+    for on in (True, 1, "true", "1", "on", "yes"):
+        assert _as_bool(on) is True, on
