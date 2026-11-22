@@ -34,6 +34,17 @@ def test_ready_blocks_only_name_registered_routes():
                 assert routes == (), (page, name)  # 还没有的不许挂接口名
 
 
+def test_blocks_do_not_name_routes_that_are_not_page_apis():
+    """接口表里有、但不是给页面取数用的两个：trade 返回内部对象，scan_view 要传扫描对象（R354 核对 2026-11-23）"""
+    used = {
+        r
+        for blocks in M.PAGES.values()
+        for _s, routes in blocks.values()
+        for r in routes
+    }
+    assert not used & {"trade", "scan_view"}
+
+
 def test_capabilities_shape_and_page_states():
     out = M.capabilities()
     assert out["version"] == M.VERSION

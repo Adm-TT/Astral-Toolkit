@@ -80,8 +80,9 @@ PAGES: dict[str, dict[str, tuple[str, tuple[str, ...]]]] = {
         ),
         "scan_gather": (SOON, ()),  # 采集
         "scan_salvage": (SOON, ()),  # 打捞
-        # 实时采矿助手：开关在「信号扫描」磁贴和这一页的扫描工具里，两处是同一个（老大 11-19）
-        "live_assist": (READY, ("live_start", "live_stop", "scan_view", "manual_scan")),
+        # 实时采矿助手：开关在「信号扫描」磁贴和这一页的扫描工具里，两处是同一个（老大 11-19）。
+        # 读屏出来的结果走实时事件，不是接口；scan_view 要传扫描对象，不是「取最近一次扫描」，所以不列（R354 核对指出）
+        "live_assist": (READY, ("live_start", "live_stop", "manual_scan")),
         "refine": (SOON, ()),  # 精炼订单
         "records": (
             READY,
@@ -143,9 +144,11 @@ PAGES: dict[str, dict[str, tuple[str, tuple[str, ...]]]] = {
         "carry_list": (SOON, ()),
     },
     "trade": {  # 交易行
+        # 商店价在物品详情里（item_info 的 buy / sell）；market_* 是玩家行情汇总，不是商店报价。
+        # trade 这个接口返回的是内部对象、不是给页面用的数据，不列（R354 核对指出）
         "shop_prices": (
             READY,
-            ("trade", "market_lookup", "market_prices", "nav_shop"),
+            ("item_info", "market_lookup", "market_prices", "nav_shop"),
         ),
         "player_listings": (SOON, ()),
         "sell": (SOON, ()),
