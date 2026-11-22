@@ -104,7 +104,5 @@ def sub_class(cat: str | None = "", wtype: str | None = "", en: str | None = "")
             return "armor"
         return "clothing" if wtype.startswith(_CLOTHING_PREFIXES) else "armor"
     if top == "collectible":
-        return (
-            "paint" if cat == "Liveries" or (not cat and wtype == "Paints") else "decor"
-        )
+        return "paint" if cat == "Liveries" or wtype == "Paints" else "decor"
     return ""

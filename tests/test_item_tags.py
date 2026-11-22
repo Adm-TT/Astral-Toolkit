@@ -79,8 +79,22 @@ def test_clothing_and_paint_are_their_own_sub_classes():
     assert T.sub_class("Decorations") == T.sub_class("", "Flair_Wall") == "decor"
     assert T.sub_class("Personal Weapons") == T.sub_class() == ""
     assert T.sub_class("Attachments", "", "P4-AR Magazine (40 Cap)") == ""
-    for top, pairs in T.SUBS.items():
-        assert top in {k for k, _ in T.CLASSES} and len(pairs) == 2
+    assert T.sub_class("没见过的分类", "Paints") == "paint"
+    assert T.sub_class("", "Char_Accessory_Eyes") == "clothing"
+    assert T.sub_class("", "Char_Head_Piercings") == "clothing"
+    for top in T.SUBS:
+        assert top in {k for k, _ in T.CLASSES}
+
+
+def test_sub_class_always_belongs_to_its_top_class():
+    cats = ["", "没见过的分类", *T._CAT]
+    wtypes = ["", "Bogus", "Flair_Wall", "Char_Armor_Legs", "XController", *T._WTYPE]
+    for cat in cats:
+        for wtype in wtypes:
+            for en in ("", "X Magazine (10 Cap)"):
+                top, sub = T.top_class(cat, wtype, en), T.sub_class(cat, wtype, en)
+                allowed = {k for k, _ in T.SUBS.get(top, ())}
+                assert (sub in allowed) if allowed else sub == "", (cat, wtype, en)
 
 
 def test_item_tags_accepts_one_name_and_caps_the_batch(monkeypatch):
