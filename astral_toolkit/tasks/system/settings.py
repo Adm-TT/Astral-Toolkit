@@ -60,6 +60,7 @@ def set_settings(sources: StatusSources, /, **kw):
         kw.pop("theme")
     allowed.add("theme")
     for k in (
+        "ui_solid",
         "ata",
         "update_online",
         "feedback_upload",

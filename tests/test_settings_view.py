@@ -129,3 +129,23 @@ def test_mining_gadgets_saved_and_read_back(monkeypatch, tmp_path):
     settings.update(theme="light")
     assert settings.load()["mining_gadgets"] == ["sabir"]
     assert laser.carried_gadgets() == ("sabir",)
+
+
+def test_window_look_settings_are_saved(monkeypatch, tmp_path):
+    """新界面的外观两项（主题、减少透明度）存进设置；乱传的主题不存，减少透明度一律收成真假"""
+    import astral_toolkit.tasks.system.settings as system_settings
+    from astral_toolkit import bootstrap
+    from astral_toolkit.tasks.system.settings import set_settings
+    from tests.bootstrap_helpers import app_for_test
+
+    monkeypatch.setattr(settings, "FILE", tmp_path / "settings.json")
+    monkeypatch.setattr("astral_toolkit.tasks.system.status.status", lambda sources: {})
+    monkeypatch.setattr(system_settings.bus, "publish", lambda kind, data: None)
+    assert settings.DEFAULTS["ui_solid"] is False
+    with app_for_test() as app:
+        sources = bootstrap.status_sources(app)
+        cfg = set_settings(sources, theme="light", ui_solid=1)
+        assert cfg["theme"] == "light" and cfg["ui_solid"] is True
+        cfg = set_settings(sources, theme="pink", ui_solid="")
+        assert cfg["theme"] == "light" and cfg["ui_solid"] is False
+    assert settings.load()["ui_solid"] is False
