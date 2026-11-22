@@ -56,10 +56,31 @@ def test_item_tags_route_shape(monkeypatch):
     d = C.item_tags(names=["P4-AR Rifle", "JS-300", "不存在", "P4-AR Rifle", "", 7])
     assert [c["key"] for c in d["classes"]][0] == "weapon" and len(d["classes"]) == 10
     assert d["items"] == {
-        "P4-AR Rifle": {"top": "weapon", "size": 2, "known": True},
-        "JS-300": {"top": "ship", "size": 1, "known": True},
-        "不存在": {"top": "unclassified", "size": None, "known": False},
+        "P4-AR Rifle": {"top": "weapon", "sub": "", "size": 2, "known": True},
+        "JS-300": {"top": "ship", "sub": "", "size": 1, "known": True},
+        "不存在": {"top": "unclassified", "sub": "", "size": None, "known": False},
     }
+    subs = {c["key"]: [s["key"] for s in c["subs"]] for c in d["classes"]}
+    assert subs["armor"] == ["armor", "clothing"] and subs["weapon"] == []
+    assert subs["collectible"] == ["paint", "decor"]
+
+
+def test_clothing_and_paint_are_their_own_sub_classes():
+    assert (T.top_class("Jackets"), T.sub_class("Jackets")) == ("armor", "clothing")
+    assert T.sub_class("Helmets", "Char_Armor_Helmet") == "armor"
+    assert T.sub_class("", "Char_Clothing_Torso_1") == "clothing"
+    assert T.sub_class("", "Char_Armor_Torso") == "armor"
+    assert T.sub_class("Mobiglas") == "clothing"
+    for cat, wtype in (("Liveries", ""), ("", "Paints")):
+        assert (T.top_class(cat, wtype), T.sub_class(cat, wtype)) == (
+            "collectible",
+            "paint",
+        )
+    assert T.sub_class("Decorations") == T.sub_class("", "Flair_Wall") == "decor"
+    assert T.sub_class("Personal Weapons") == T.sub_class() == ""
+    assert T.sub_class("Attachments", "", "P4-AR Magazine (40 Cap)") == ""
+    for top, pairs in T.SUBS.items():
+        assert top in {k for k, _ in T.CLASSES} and len(pairs) == 2
 
 
 def test_item_tags_accepts_one_name_and_caps_the_batch(monkeypatch):

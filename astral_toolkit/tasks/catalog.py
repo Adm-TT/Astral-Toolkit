@@ -66,8 +66,8 @@ TAGS_MAX = 500  # item_tags 一次最多查这么多个名字
 
 
 def item_tags(names=()):
-    """新界面物品卡片的分类（2026-11-23）：一批英文名 → 每件的大类 top、尺寸 size、目录里有没有 known；
-    classes 是十个大类的键和中文（页签用）。规则在 catalog/topclass；不认识的名字归「未分类」"""
+    """新界面物品卡片的分类（2026-11-23）：一批英文名 → 每件的大类 top、小类 sub（这个大类不分小类
+    就是空串）、尺寸 size、目录里有没有 known；classes 是十个大类的键、中文和下面的小类（页签用）。规则在 catalog/topclass；不认识的名字归「未分类」"""
     from ..catalog import topclass
     from .catalog_queries import search
 
@@ -84,11 +84,21 @@ def item_tags(names=()):
         e = search.lookup(n) or {}
         items[n] = {
             "top": topclass.top_class(e.get("cat"), e.get("wtype"), n),
+            "sub": topclass.sub_class(e.get("cat"), e.get("wtype"), n),
             "size": e.get("wsize"),
             "known": bool(e),
         }
     return {
-        "classes": [{"key": k, "label": z} for k, z in topclass.CLASSES],
+        "classes": [
+            {
+                "key": k,
+                "label": z,
+                "subs": [
+                    {"key": sk, "label": sz} for sk, sz in topclass.SUBS.get(k, ())
+                ],
+            }
+            for k, z in topclass.CLASSES
+        ],
         "items": items,
     }
 
