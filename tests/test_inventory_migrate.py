@@ -92,6 +92,62 @@ def test_upgrade_step_failure_keeps_version_and_backup(tmp_path):
     assert _version(path) == 3
 
 
+def test_step_that_commits_on_its_own_is_reported(tmp_path):
+    """步骤里用 executescript 会把事务提交掉：出错时前面的改动回滚不了。跑完一步要查出来并报错，版本不抬（审查 2026-11-23）"""
+    path = tmp_path / "dubhe_inventory.db"
+    Database(path)
+
+    def upgrade(c: sqlite3.Connection) -> None:
+        c.executescript(
+            "CREATE TABLE IF NOT EXISTS schema_migration_demo (id INTEGER);"
+        )
+
+    with raises(ValueError, match="版本未抬升"):
+        upgrade_if_needed(
+            path,
+            target_version=3,
+            steps=[MigrationStep(2, 3, "测试：自己提交", upgrade)],
+            backup_dir=tmp_path,
+        )
+    assert _version(path) == 2
+
+
+def test_plain_ddl_rolls_back_with_the_step(tmp_path):
+    """一步里先建表、后出错：表不留下（建表语句和这一步同一个事务）"""
+    path = tmp_path / "dubhe_inventory.db"
+    Database(path)
+
+    def upgrade(c: sqlite3.Connection) -> None:
+        c.execute("CREATE TABLE schema_migration_demo (id INTEGER)")
+        raise RuntimeError("注入失败")
+
+    with raises(ValueError, match="版本未抬升"):
+        upgrade_if_needed(
+            path,
+            target_version=3,
+            steps=[MigrationStep(2, 3, "测试：建表后失败", upgrade)],
+            backup_dir=tmp_path,
+        )
+    with closing(sqlite3.connect(path)) as c:
+        assert not c.execute(
+            "SELECT 1 FROM sqlite_master WHERE name='schema_migration_demo'"
+        ).fetchone()
+
+
+def test_backups_in_the_same_second_do_not_overwrite(tmp_path):
+    path = tmp_path / "dubhe_inventory.db"
+    Database(path)
+    for _ in range(2):
+        with raises(ValueError, match="版本未抬升"):
+            upgrade_if_needed(
+                path,
+                target_version=3,
+                steps=[_step_2_to_3_fail()],
+                backup_dir=tmp_path,
+            )
+    assert len(list(tmp_path.glob("inventory_升级前备份_*.db"))) == 2
+
+
 def test_database_refuses_newer_than_program(tmp_path):
     path = tmp_path / "dubhe_inventory.db"
     Database(path)

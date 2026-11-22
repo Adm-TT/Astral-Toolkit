@@ -2,7 +2,9 @@
 
 发版 STEPS 为空、SCHEMA_VERSION 仍为 2：通道与测试就绪，下一刀真实 DDL 再登记步骤并抬版本。
 新结构性对象必须走 N→N+1 迁移并抬 user_version，不要只靠 CREATE IF NOT EXISTS 偷加。
-每步须幂等（SQLite DDL 常会隐式提交，失败重试靠 IF NOT EXISTS）。
+每一步在一个事务里跑，建表、加列这类语句和数据改写一起提交、出错一起回滚（实测能回滚）。
+步骤里不许自己提交：不要用 executescript（它会先把当前事务提交掉）、不要自己 COMMIT——
+那样出错时前面的改动已经落盘、版本却没抬，库就成了半截升级的。跑完一步会查这件事，查到就报错（审查 2026-11-23）。
 不做 down-migrate。详见 docs/superpowers/specs/2026-11-17-inventory-schema-migrations.md。
 """
 
@@ -94,6 +96,10 @@ def upgrade_if_needed(
     chain = _chain(current, target_version, use_steps)
     stamp = time.strftime("%Y%m%d_%H%M%S")
     backup_path = backup_root / f"inventory_升级前备份_{stamp}.db"
+    n = 2
+    while backup_path.exists():  # 同一秒里又升一次：别盖掉上一份备份
+        backup_path = backup_root / f"inventory_升级前备份_{stamp}_{n}.db"
+        n += 1
     try:
         _backup_file(path, backup_path)
     except (OSError, sqlite3.Error) as e:
@@ -108,6 +114,13 @@ def upgrade_if_needed(
                 c.execute("BEGIN IMMEDIATE")
                 try:
                     step.upgrade(c)
+                    if (
+                        not c.in_transaction
+                    ):  # 这一步自己把事务提交了：改动已经落盘，没法回滚
+                        raise RuntimeError(
+                            "这一步自己提交了事务（用了 executescript 或 COMMIT），"
+                            "库可能只升了一半，要从备份恢复"
+                        )
                     c.execute(f"PRAGMA user_version={int(step.to_version)}")
                     c.execute("COMMIT")
                 except BaseException:
