@@ -68,7 +68,7 @@ class Database:
         self.lock = threading.RLock()
         self._tls = threading.local()
         if self.path.exists():
-            self._validate(self.path)
+            self._prepare_existing(self.path)
         with (
             self.lock,
             closing(sqlite3.connect(self.path, timeout=15)) as con,
@@ -81,6 +81,18 @@ class Database:
                 (PERSONAL, "personal", "个人"),
             )
             con.commit()
+
+    @classmethod
+    def _prepare_existing(cls, path: Path) -> None:
+        """已有文件：预检 → 过旧则原地升级 → 签名校验。升级失败抛错，不假装空库。"""
+        version = cls._preflight(path)
+        if version > SCHEMA_VERSION:
+            raise ValueError("库存库比本程序新，请升级 AT")
+        if version < SCHEMA_VERSION:
+            from .migrate import upgrade_if_needed
+
+            upgrade_if_needed(path, target_version=SCHEMA_VERSION)
+        cls._validate(path)
 
     @contextmanager
     def connection(self):
@@ -111,6 +123,23 @@ class Database:
                 con.close()
 
     @staticmethod
+    def _preflight(path: Path) -> int:
+        """打开前轻量检查 → user_version；签名校验在升级之后做。"""
+        try:
+            with closing(
+                sqlite3.connect(path.absolute().as_uri() + "?mode=ro", uri=True)
+            ) as c:
+                if c.execute("PRAGMA application_id").fetchone()[0] != APP_ID:
+                    raise ValueError("不是交易助手数据库")
+                if c.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                    raise ValueError("数据库完整性检查失败")
+                return int(c.execute("PRAGMA user_version").fetchone()[0])
+        except ValueError:
+            raise
+        except (sqlite3.Error, OSError) as e:
+            raise ValueError("无法读取有效数据库") from e
+
+    @staticmethod
     def _validate(path: Path):
         try:
             with closing(
@@ -132,6 +161,8 @@ class Database:
                     raise ValueError("数据库表结构或约束与当前版本不符")
                 if c.execute("PRAGMA foreign_key_check").fetchone() is not None:
                     raise ValueError("数据库包含无效物品关联")
+        except ValueError:
+            raise
         except (sqlite3.Error, OSError) as e:
             raise ValueError("无法读取有效数据库") from e
 
