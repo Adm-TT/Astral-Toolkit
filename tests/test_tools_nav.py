@@ -990,6 +990,30 @@ def test_nav_mode_switch(monkeypatch, tmp_path):
     assert f["same_system"] and 1.5 < f["direct"] < 2.0
 
 
+def test_halo_route_blocked_by_planet_on_the_way():
+    """亚伦带路线：航线穿过路上的星球 / 卫星也算被挡（以前只看恒星）；出发点、目标本身是星球不算挡（造的小星图，不用真实数据）"""
+    from astral_toolkit.navigation import halo
+
+    # 一条径向线：A 在带里面，往外跳都穿过第 5 带（离恒星 20.23–20.41 Gm）
+    pts = {"A": (19.0, 0.0, 0.0), "B": (23.0, 0.0, 0.0), "Planet": (22.0, 0.0, 0.0)}
+    obs = {"Planet": ((22.0, 0.0, 0.0), 0.5)}
+    # A → B 正好穿过 Planet：挡；航线离恒星 19 Gm，恒星不挡
+    r = halo.route("A", "B", 5, 259, pts, obs)
+    assert r and r["blocked"] and r["block_by"] == ["Planet"] and r["star"] > 1
+    # 目标就是 Planet：航线终点在它中心，不算被它挡
+    r = halo.route("A", "Planet", 5, 259, pts, obs)
+    assert r and not r["blocked"] and r["block_by"] == []
+    # 卫星在航线上：照样挡；名字大小写不同（microTech / Microtech）的目标本身不算
+    obs2 = {"planet": ((22.0, 0.0, 0.0), 0.5), "Moon": ((21.0, 0.0, 0.0), 0.3)}
+    r = halo.route("A", "Planet", 5, 259, pts, obs2)
+    assert r and r["block_by"] == ["Moon"]
+    # 离航线比挡的半径远：不挡
+    obs3 = {"Moon": ((21.0, 1.0, 0.0), 0.5)}
+    assert not halo.route("A", "B", 5, 259, pts, obs3)["blocked"]
+    rows = {x["to"]: x for x in halo.routes("A", 5, 259, pts, obs)}
+    assert rows["B"]["blocked"] and not rows["Planet"]["blocked"]
+
+
 def test_halo_routes_match_scminer():
     """小行星带导航：对照 SCMiner 的 Aaron Halo Flight Computer（ARC-L1 出发，第 5 带）
     SCMiner：CRU-L3 12.7 Gm/389 Mm、CRU-L4 14.3/345、Hurston 13.5/192、Crusader 33.2/177、CRU-L5 39.5/151"""
@@ -1021,6 +1045,14 @@ def test_halo_routes_match_scminer():
     assert (
         rows["CRU-L5"]["blocked"] and not rows["CRU-L4"]["blocked"]
     )  # 穿过恒星的标出来
+    assert rows["CRU-L5"]["block_by"] == ["恒星"]
+    # 穿过路上星球的也标出来：CRU-L1 → CRU-L2 正好穿过十字军（以前只看恒星，当能跳）
+    r = halo.route("CRU-L1", "CRU-L2", 5, 103, pts)
+    assert r and r["blocked"] and any("Crusader" in x for x in r["block_by"]), r
+    assert r["star"] > halo.STAR_GM
+    # 目标就是星球本身不算挡：ARC-L4 → 十字军（这条离恒星近，恒星照样挡）
+    r = halo.route("ARC-L4", "Crusader", 5, 103, pts)
+    assert r and r["block_by"] == ["恒星"], r
     ms = [r["margin"] for r in halo.routes("ARC-L1", 5, 103, pts)]
     assert ms == sorted(ms, reverse=True)
     assert "microTech" in pts and halo.route("ARC-L1", "ARC-L1", 5, 103, pts) is None

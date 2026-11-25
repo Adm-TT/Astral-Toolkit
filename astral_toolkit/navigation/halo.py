@@ -12,6 +12,8 @@
 坐标：斯坦顿星系坐标原点就是恒星（用 ARC-L1→CRU-L4 第 5 带核对：算出 14.29 Gm，SCMiner 显示 14.3 Gm）。
 安全窗口：航线在带「核心」（中心 85% 厚度）里走的长度。这样算出的 5 条路线和 SCMiner 的 margin 相差 3% 以内
 （SCMiner 没公开公式，这个比例是对着它的数反推的）。反应时间 = 安全窗口 ÷ 量子引擎速度。
+遮挡：航线离恒星太近、或者穿过路上的星球 / 卫星（出发点、目标本身不算），游戏里量子跳不过去，标出来让玩家换目标
+（以前只看恒星，CRU-L1→CRU-L2 这种穿过十字军的也当能跳，2026-11-25 补上星球）。
 """
 
 import math
@@ -65,6 +67,9 @@ WIDE_MM = 250  # 安全窗口超过这么多算「宽」，好断
 FAR_MM = 3000  # Mm：离要去的带、方案的断开点差这么多，就不是在这一趟上了（还没跳、跳去了别处、到了目标）
 PLANETS = ("Hurston", "Crusader", "ArcCorp", "microTech")
 STAR_GM = 1.0  # 航线离恒星中心这么近，游戏里量子跳多半会被恒星挡住（SCMiner 没过滤这种，我们标出来）
+# 星球、卫星挡量子跳的半径 ÷ 星球半径：游戏解包 starmap 的 quantumTravelData.obstructionRadius（4.10.3，2026-11-25）
+# 斯坦顿 4 颗行星、12 颗卫星都比半径大 0.9%～1.9%，取 1.02 都罩住
+OBSTRUCT = 1.02
 
 
 def band(b):
@@ -119,6 +124,29 @@ def points(data=None):
     return out
 
 
+def obstacles(data=None):
+    """斯坦顿的星球、卫星：{名字: ((x, y, z) Gm, 挡量子跳的半径 Gm)}，没有半径的跳过"""
+    from . import navigate as n
+
+    data = data or n.load()
+    return {
+        k: ((b["x"] / 1e9, b["y"] / 1e9, b["z"] / 1e9), b["r"] / 1e9 * OBSTRUCT)
+        for k, b in data.get("bodies", {}).items()
+        if b.get("sys") == "Stanton" and b.get("r")
+    }
+
+
+def _gap(A, D, C):
+    """航线 A + t·D（t 在 0~1）离点 C 最近多少"""
+    L2 = sum(x * x for x in D)
+    t = (
+        max(0.0, min(1.0, sum((C[i] - A[i]) * D[i] for i in range(3)) / L2))
+        if L2
+        else 0.0
+    )
+    return math.dist(C, [A[i] + t * D[i] for i in range(3)])
+
+
 def point_zh(name):
     from .navigate import BODY_ZH
 
@@ -148,8 +176,16 @@ def _inside(A, D, t0, lo, hi):
     return t0, t0
 
 
-def route(frm, to, b, speed: float = QDS[0][2], pts: dict | None = None):
-    """从 frm 量子跳向 to，在第 b 带断开：到 to 还剩多少（Gm）时断、安全窗口多长。航线不穿过这条带就 None"""
+def route(
+    frm,
+    to,
+    b,
+    speed: float = QDS[0][2],
+    pts: dict | None = None,
+    obs: dict | None = None,
+):
+    """从 frm 量子跳向 to，在第 b 带断开：到 to 还剩多少（Gm）时断、安全窗口多长。航线不穿过这条带就 None。
+    obs 是 obstacles() 的结果（不给就现读星图）：航线穿过路上的星球、卫星也算被挡"""
     pts = pts or points()
     if frm not in pts or to not in pts or frm == to:
         return None
@@ -169,10 +205,16 @@ def route(frm, to, b, speed: float = QDS[0][2], pts: dict | None = None):
     if margin <= 0:
         return None
     out_r = math.sqrt(sum(x * x for x in A))
-    tc = max(0.0, min(1.0, -sum(A[i] * D[i] for i in range(3)) / (L * L)))
-    star = math.sqrt(
-        sum((A[i] + tc * D[i]) ** 2 for i in range(3))
-    )  # 航线离恒星最近多少 Gm
+    star = _gap(A, D, (0.0, 0.0, 0.0))  # 航线离恒星最近多少 Gm
+    # 出发点、目标是星球的，航线从它中心算起，本来就在它里面：不算挡（名字大小写不一定一样：microTech / Microtech）
+    ends = {frm.lower(), to.lower()}
+    obs = obstacles() if obs is None else obs
+    by = ["恒星"] if star < STAR_GM else []
+    by += [
+        point_zh(k)
+        for k, (c, rad) in obs.items()
+        if k.lower() not in ends and _gap(A, D, c) < rad
+    ]
     return {
         "from": frm,
         "to": to,
@@ -190,14 +232,18 @@ def route(frm, to, b, speed: float = QDS[0][2], pts: dict | None = None):
         "total": round(L, 3),
         "inward": out_r > mid,
         "star": round(star, 2),
-        "blocked": star < STAR_GM,
+        "blocked": bool(by),
+        "block_by": by,  # 挡住航线的：恒星、星球、卫星（中文名）
     }
 
 
-def routes(frm, b, speed: float = QDS[0][2], pts: dict | None = None):
+def routes(
+    frm, b, speed: float = QDS[0][2], pts: dict | None = None, obs: dict | None = None
+):
     """从 frm 出发、航线穿过第 b 带的所有目标，安全窗口宽的排前面"""
     pts = pts or points()
-    rows = [r for to in pts if (r := route(frm, to, b, speed, pts))]
+    obs = obstacles() if obs is None else obs
+    rows = [r for to in pts if (r := route(frm, to, b, speed, pts, obs))]
     return sorted(rows, key=lambda r: -r["margin"])
 
 

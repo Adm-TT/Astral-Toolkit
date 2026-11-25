@@ -1342,7 +1342,7 @@ function drawHaloRoutes() {
   const h = state.halo, r = h.res;
   if (!r || !$("#hroutes")) return;
   $("#hroutes").innerHTML = r.rows.length ? `<p class="faint" style="padding:4px 12px">${r.rows.length} 个目标的航线穿过第${r.band.band}带，按安全窗口从宽到窄排序</p>` + r.rows.map((x) => `<button data-to="${esc(x.to)}" class="${x.to === h.to ? "on" : ""}">
-      <span>${esc(x.to_zh)}</span><span class="tag ${x.blocked ? "noqt" : x.wide ? "qt" : "noqt"}">${x.blocked ? "被恒星遮挡" : x.wide ? "窗口宽" : "窗口窄"}</span>
+      <span>${esc(x.to_zh)}</span><span class="tag ${x.blocked ? "noqt" : x.wide ? "qt" : "noqt"}">${x.blocked ? "航线被遮挡" : x.wide ? "窗口宽" : "窗口窄"}</span>
       <span class="l2">剩余约 ${gmText(x.dropout)} 时退出</span></button>`).join("")
     : `<p class="empty">从此出发点没有航线穿过第${r.band.band}带，换一个出发点</p>`;
   const x = r.rows.find((y) => y.to === h.to);
@@ -1352,7 +1352,7 @@ function drawHaloRoutes() {
     <p class="muted" style="margin:0">HUD 上 ${esc(x.to_zh)} 的剩余距离</p>
     <div style="font-size:40px;font-weight:700;margin:4px 0">${gmText(x.dropout)}</div>
     <p class="muted" style="margin:0 0 10px">剩余 ${gmText(x.early)} 至 ${gmText(x.late)} 之间退出均在带内｜${x.wide ? "窗口宽" : "窗口窄，需及时退出"}</p>
-    ${x.blocked ? `<p style="color:var(--amber)">⚠️ 此航线距恒星中心仅 ${x.star} Gm，量子跳跃可能被恒星阻挡，建议更换目标</p>` : ""}
+    ${x.blocked ? `<p style="color:var(--amber)">⚠️ 此航线被${esc(x.block_by.join("、"))}挡住，量子跳跃可能跳不过去，建议更换目标</p>` : ""}
     <h3>步骤</h3>
     <ol style="margin:0 0 8px 18px;padding:0;line-height:1.8">
       <li>在 ${esc(x.from_zh)} 选择 ${esc(x.to_zh)}，充能后量子跳跃</li>
