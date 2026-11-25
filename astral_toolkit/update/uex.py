@@ -41,10 +41,15 @@ def _pick_price(row):
 
 def refresh():
     from ..mining.data import SELL_TERMINALS, SIGNATURES, CITY_PRICES
+    from ..trade.names import raw_base
 
     prices, flagged = {}, []
     for tid, city in SELL_TERMINALS.items():
         for row in _get(f"commodities_prices?id_terminal={tid}"):
+            # 价表是精炼矿收购价：原矿那条不要。以前去掉「(Raw)」后按矿名存，同一终端两种都报时
+            # 后到的那条盖掉前一条，原矿价可能顶替精炼价（2026-11-25 通读）
+            if raw_base(row["commodity_name"]):
+                continue
             m = _base(row["commodity_name"])
             if m not in SIGNATURES:
                 continue
