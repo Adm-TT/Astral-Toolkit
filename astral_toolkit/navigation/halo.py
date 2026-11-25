@@ -66,7 +66,9 @@ CORE = 0.85  # 安全窗口只算带中心 85% 的厚度
 WIDE_MM = 250  # 安全窗口超过这么多算「宽」，好断
 FAR_MM = 3000  # Mm：离要去的带、方案的断开点差这么多，就不是在这一趟上了（还没跳、跳去了别处、到了目标）
 PLANETS = ("Hurston", "Crusader", "ArcCorp", "microTech")
-STAR_GM = 1.0  # 航线离恒星中心这么近，游戏里量子跳多半会被恒星挡住（SCMiner 没过滤这种，我们标出来）
+# 航线离恒星中心这么近（Gm），量子跳被恒星挡住（SCMiner 没过滤这种，我们标出来）：游戏解包 stantonstar 的
+# obstructionRadius 76,560 km（4.10.3，2026-11-25）。以前凭感觉取 1 Gm，宽了十几倍，ARC-L1→CRU-L5 这种能跳的也标成挡
+STAR_GM = 0.07656
 # 星球、卫星挡量子跳的半径 ÷ 星球半径：游戏解包 starmap 的 quantumTravelData.obstructionRadius（4.10.3，2026-11-25）
 # 斯坦顿 4 颗行星、12 颗卫星都比半径大 0.9%～1.9%，取 1.02 都罩住
 OBSTRUCT = 1.02

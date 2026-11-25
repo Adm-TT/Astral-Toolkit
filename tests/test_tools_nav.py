@@ -1043,17 +1043,19 @@ def test_halo_routes_match_scminer():
         assert r["late"] < r["dropout"] < r["early"]
     assert abs(rows["CRU-L4"]["window"] - 3.3) < 0.2  # 345 Mm ÷ 103 Mm/s
     assert rows["CRU-L4"]["wide"] and not rows["Hurston"]["wide"]
-    assert (
-        rows["CRU-L5"]["blocked"] and not rows["CRU-L4"]["blocked"]
-    )  # 穿过恒星的标出来
-    assert rows["CRU-L5"]["block_by"] == ["恒星"]
+    # 恒星挡路按游戏的 obstructionRadius（76.56 Mm）：ARC-L1→CRU-L5 离恒星 0.39 Gm，不挡（以前按 1 Gm 算标成挡）
+    assert not rows["CRU-L5"]["blocked"] and not rows["CRU-L4"]["blocked"]
+    assert 0.3 < rows["CRU-L5"]["star"] < 0.5
+    # 正好穿过恒星的照样标出来：MIC-L1 → MIC-L3 从恒星中间穿过，路上没有星球
+    r = halo.route("MIC-L1", "MIC-L3", 5, 103, pts)
+    assert r and r["star"] < halo.STAR_GM and r["block_by"] == ["恒星"], r
     # 穿过路上星球的也标出来：CRU-L1 → CRU-L2 正好穿过十字军（以前只看恒星，当能跳）
     r = halo.route("CRU-L1", "CRU-L2", 5, 103, pts)
     assert r and r["blocked"] and any("Crusader" in x for x in r["block_by"]), r
     assert r["star"] > halo.STAR_GM
-    # 目标就是星球本身不算挡：ARC-L4 → 十字军（这条离恒星近，恒星照样挡）
+    # 目标就是星球本身不算挡：ARC-L4 → 十字军（离恒星 0.4 Gm，恒星也不挡）
     r = halo.route("ARC-L4", "Crusader", 5, 103, pts)
-    assert r and r["block_by"] == ["恒星"], r
+    assert r and r["block_by"] == [], r
     ms = [r["margin"] for r in halo.routes("ARC-L1", 5, 103, pts)]
     assert ms == sorted(ms, reverse=True)
     assert "microTech" in pts and halo.route("ARC-L1", "ARC-L1", 5, 103, pts) is None
