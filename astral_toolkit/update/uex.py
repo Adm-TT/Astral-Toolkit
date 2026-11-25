@@ -4,6 +4,7 @@
 """
 
 import json
+import re
 import urllib.request
 from pathlib import Path  # noqa: F401
 
@@ -27,6 +28,15 @@ def _base(name: str) -> str:
     return "Ice" if name == "Pressurized Ice" else name
 
 
+# 原矿 / 矿石的写法：末尾「(Raw)」「(Ore)」「(R)」，或开头「Raw 」（原冰 Raw Ice）
+_RAW = re.compile(r"\s*\((?:raw|ore|r)\)\s*$|^\s*raw\s", re.I)
+
+
+def _is_raw(name: str) -> bool:
+    """UEX 商品名是不是原矿（精炼站加成表按原矿名报，收购价表只要精炼矿）"""
+    return bool(_RAW.search(name or ""))
+
+
 OUTLIER = 0.25  # 最新报价偏离均价超过 25% 视为异常，改用均价
 
 
@@ -45,6 +55,10 @@ def refresh():
     prices, flagged = {}, []
     for tid, city in SELL_TERMINALS.items():
         for row in _get(f"commodities_prices?id_terminal={tid}"):
+            # 价表是精炼矿收购价：原矿那条不要。以前去掉「(Raw)」后按矿名存，同一终端两种都报时
+            # 后到的那条盖掉前一条，原矿价可能顶替精炼价（2026-11-25 通读）
+            if _is_raw(row["commodity_name"]):
+                continue
             m = _base(row["commodity_name"])
             if m not in SIGNATURES:
                 continue

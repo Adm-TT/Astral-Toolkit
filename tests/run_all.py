@@ -63,6 +63,7 @@ _off_userdata()
 MODULES = [
     "tests.test_mining",
     "tests.test_trade",
+    "tests.test_uex_prices",
     "tests.test_inventory_migrate",
     "tests.test_tools_trade",
     "tests.test_tools_catalog",
