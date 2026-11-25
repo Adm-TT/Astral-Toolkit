@@ -1009,7 +1009,8 @@ def test_halo_route_blocked_by_planet_on_the_way():
     assert r and r["block_by"] == ["Moon"]
     # 离航线比挡的半径远：不挡
     obs3 = {"Moon": ((21.0, 1.0, 0.0), 0.5)}
-    assert not halo.route("A", "B", 5, 259, pts, obs3)["blocked"]
+    r = halo.route("A", "B", 5, 259, pts, obs3)
+    assert r and not r["blocked"]
     rows = {x["to"]: x for x in halo.routes("A", 5, 259, pts, obs)}
     assert rows["B"]["blocked"] and not rows["Planet"]["blocked"]
 
