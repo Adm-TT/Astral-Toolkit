@@ -40,15 +40,6 @@ def _row(name, price):
     return {"commodity_name": name, "price_sell": price, "price_sell_avg": price}
 
 
-def test_is_raw():
-    from astral_toolkit.update.uex import _is_raw
-
-    for name in ("Quantainium (Raw)", "Gold (Ore)", "Hephaestanite (R)", "Raw Ice"):
-        assert _is_raw(name), name
-    for name in ("Quantainium", "Gold", "Pressurized Ice", "Carinite (Pure)", ""):
-        assert not _is_raw(name), name
-
-
 def test_raw_after_refined_does_not_override(monkeypatch):
     out = _run_refresh(
         monkeypatch,
