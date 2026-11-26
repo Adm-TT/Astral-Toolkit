@@ -3,7 +3,7 @@
 用的就是 bootstrap 装配时那三样（_mining_analysis、_mining_views、_mining_links），和生产一样：分析原样转给
 mining/screen、mining/signals、tasks/mining 等；抓图、游戏在不在前台、热键名、日志和截图目录、让读位置让出识别引擎
 都是用的时候才去那几个模块取——测试换那边的函数、常数（先造线程再换也一样）都生效；没出结果的画面交给新造的
-MissShotsService；设置里的 live_on 照旧写（要换就在造线程之前换 bootstrap.setting_run_flag）。活动磁贴接的是
+MissShotsService；设置里的 live_on 照旧写（要换就在造线程之前换 bootstrap.mining.setting_run_flag）。活动磁贴接的是
 造的时候 app/presenters/mining.activity 那个函数。没给 output 用 BusOutput；grab / foreground 给了就用给的。
 """
 
