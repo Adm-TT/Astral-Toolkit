@@ -133,7 +133,8 @@ def install():
         sys.modules["pytest"] = sys.modules[__name__]
 
 
-def run_module(modname):
+def run_module(modname, skip=None):
+    """skip：{测试函数名: 原因}，这些整条记成跳过（云端没有游戏数据时用，见 tests/needs_game_data.py）"""
     install()
     fails = skips = passed = 0
     try:
@@ -145,8 +146,17 @@ def run_module(modname):
         traceback.print_exc()
         return 0, 1, 0
     fixtures = {n: f for n, f in vars(m).items() if getattr(f, "_is_fixture", False)}
+    skip = skip or {}
+    stale = sorted(n for n in skip if not callable(getattr(m, n, None)))
+    if stale:  # 名单写错或测试改名了：算失败，别让名单悄悄失效
+        print("FAIL", modname, "跳过名单里没有这些测试：", stale)
+        fails += 1
     for name, fn in list(vars(m).items()):
         if not (name.startswith("test_") and callable(fn)):
+            continue
+        if name in skip:
+            skips += 1
+            print("SKIP", modname, name, skip[name])
             continue
         cases = [{}]
         if hasattr(fn, "_params"):
@@ -217,10 +227,16 @@ def run_module(modname):
     return passed, fails, skips
 
 
-def run_all(modules):
+def run_all(modules, skip=None):
+    """skip：{模块名: {测试函数名: 原因}}"""
     total = [0, 0, 0]
+    skip = skip or {}
+    unknown = sorted(set(skip) - set(modules))
+    if unknown:  # 跳过名单里的模块不在这一轮里：名单过时了
+        print("FAIL 跳过名单里的模块不在 MODULES 里：", unknown)
+        total[1] += 1
     for mod in modules:
-        for i, n in enumerate(run_module(mod)):
+        for i, n in enumerate(run_module(mod, skip.get(mod))):
             total[i] += n
     print(f"tests: {total[0]} passed, {total[1]} failed, {total[2]} skipped")
     if total[1]:

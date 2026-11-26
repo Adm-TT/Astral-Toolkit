@@ -1,7 +1,9 @@
-# 门禁：push / PR 时在 Windows 上自动跑 AGENTS.md「验证命令」里不需要游戏数据的那三条。
+# 门禁：push / PR 时在 Windows 上自动跑 AGENTS.md「验证命令」里不需要游戏数据的部分。
 #
 # 为什么是 Windows：项目只跑 Windows（DirectML、ctypes.windll、ATShell），换平台类型检查的结论会变。
-# 为什么只有三条：全量 tests.run_all 和 sample_sweep 要真实 data/ 和截图样本，云端没有，仍留本机跑。
+# 两个 job 并行：gates（lint / 格式 / 类型 / 垃圾代码）和 tests（单元测试）。
+# 单元测试：云端没有 data/ 和截图样本，设 AT_NO_GAME_DATA=1 跳过 tests/needs_game_data.py 登记的要数据的测试，
+# 要截图的测试本来就会自己跳过；带数据的全量 tests.run_all 和 sample_sweep 仍在本机跑。
 # 目的：把「本地忘了跑」这一类漏网挡住（2026-11-02 包名替换后 16 个文件格式变红，就是没人重跑 formatter）。
 name: 门禁
 
@@ -60,3 +62,42 @@ jobs:
       # 和 tools/junk_baseline.json 登记的老问题比，只许减不许加（2026-11-05 老大定每个 PR 都查）。只用标准库，不要游戏数据
       - name: 垃圾代码检查
         run: ./.venv/Scripts/python.exe -X utf8 tools/junk_check.py
+
+  tests:
+    name: 单元测试（不要游戏数据的）
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.lock.txt
+            requirements-build.lock.txt
+            requirements-dev.lock.txt
+
+      # 和 gates 一样装在 .venv、--no-deps（理由见上面）
+      - name: 建 venv 并装开发依赖
+        run: |
+          python -m venv .venv
+          ./.venv/Scripts/python.exe -m pip install --upgrade pip
+          ./.venv/Scripts/python.exe -m pip install --no-deps -r requirements-dev.lock.txt
+
+      # AT_FEEDBACK_OFF：不往服务器发问题反馈；AT_NO_GAME_DATA：跳过要游戏数据的测试
+      - name: tests.run_all
+        env:
+          AT_FEEDBACK_OFF: "1"
+          AT_NO_GAME_DATA: "1"
+        run: ./.venv/Scripts/python.exe -X utf8 -m tests.run_all
+
+      # PROBE（临时，开 PR 前删）：不跳过跑一遍，看 Windows 上缺数据到底挂哪些
+      - name: probe 不跳过
+        if: always()
+        continue-on-error: true
+        env:
+          AT_FEEDBACK_OFF: "1"
+        run: ./.venv/Scripts/python.exe -X utf8 -m tests.run_all

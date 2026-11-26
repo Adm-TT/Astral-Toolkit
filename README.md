@@ -46,7 +46,7 @@ AT 靠截屏识别文字、读游戏写出的日志文件工作；不模拟按�
 2. 运行：`.venv\Scripts\python.exe -m astral_toolkit.run`
 3. 第一次打开后在「设置与更新」里点「开始更新」（或者运行 `.venv\Scripts\python.exe -m astral_toolkit.run update`），游戏数据不在仓库里
 
-跑测试：`.venv\Scripts\python.exe -X utf8 -m tests.run_all`。要先更新过数据；仓库里不带游戏截图，用到截图的测试会自动跳过。
+跑测试：`.venv\Scripts\python.exe -X utf8 -m tests.run_all`。要先更新过数据；仓库里不带游戏截图，用到截图的测试会自动跳过。提交前检查（ruff）：`git config core.hooksPath tools/git-hooks` 装一次，详见 AGENTS.md。
 
 ## 目录
 
