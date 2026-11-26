@@ -939,16 +939,17 @@ def test_logwatch_reads_game_log_through_tasks_position():
 def test_search_warmup_thread_builds_index_in_background(monkeypatch):
     """搜索预热（Q1 起线程由 bootstrap 起，搜索模块 import 时不起）：后台 daemon 线程、名字 search-warmup，
     跑 _warm_search_index → tasks/catalog_queries/search.build_index；建索引出错不往外抛"""
+    from astral_toolkit.bootstrap import register as boot_register
     from astral_toolkit.tasks.catalog_queries import search as item_search
 
     made = {}
-    real = bootstrap.register.OneShot
+    real = boot_register.OneShot
 
     def record(name, phase, thread=None, *, factory=None):
         made[name] = factory
         return real(name, phase, thread, factory=factory)
 
-    monkeypatch.setattr(bootstrap.register, "OneShot", record)
+    monkeypatch.setattr(boot_register, "OneShot", record)
     app = bootstrap.build("test")
     try:
         calls = []

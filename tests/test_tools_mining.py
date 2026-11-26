@@ -290,8 +290,10 @@ def test_live_scan_resumes_after_restart(monkeypatch, tmp_path):
         monkeypatch.setattr(cls, "start", lambda self: None)
     monkeypatch.setattr(monitor, "start", lambda: None)  # 不起 perfmon 常驻线程
     monkeypatch.setattr(OCR, "warmup", lambda: None)  # 不预热 OCR
+    from astral_toolkit.bootstrap import register as boot_register
+
     monkeypatch.setattr(
-        bootstrap.register, "_warm_search_index", lambda: None
+        boot_register, "_warm_search_index", lambda: None
     )  # 不预热搜索索引
     monkeypatch.setattr(gamedata, "warm_up", lambda: None)  # 不建游戏数据库
     monkeypatch.setattr(t_sys, "_online_loop", lambda *a: None)  # 测试里不联网检查更新
