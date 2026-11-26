@@ -12,7 +12,7 @@ def market_price(trade, item_id, minq=0, unit=None):
     """玩家市场（UEX / SCM）出售挂牌里最便宜的单价；没有挂牌返回 None。
     unit 是需求的单位（「SCU」「个」）：给了就只比单位对得上的挂牌，并换算成每 SCU / 每个的价（单位对不上的不猜）"""
     from decimal import Decimal
-    from ..trade.providers.http import quality_group
+    from ..contracts.market_quality import quality_group
 
     item = trade.catalog.get(item_id)
     if not item:
