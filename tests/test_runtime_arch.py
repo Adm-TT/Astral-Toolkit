@@ -1914,6 +1914,7 @@ def test_crafting_presenters_only_format():
     )
     for bad in (
         "from ...crafting import crafting\n",
+        "from ...crafting.labels import GEAR_ZH\n",  # 老路径不许回来（2026-11-26 挪到 contracts/crafting）
         "from ...crafting.wikelo import load\n",
         "from ...tasks import crafting\n",
         "from ...gamedata import crafting\n",
