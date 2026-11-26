@@ -14,7 +14,7 @@ from astral_toolkit.core import run_records
 from astral_toolkit.tasks.catalog_queries import loot as loot_mod
 from astral_toolkit.crafting import reverse as reverse_mod
 from astral_toolkit.crafting import wikelo as wikelo_mod
-from astral_toolkit.crafting import wikelo_rules
+from astral_toolkit.contracts.crafting import wikelo_rules
 from astral_toolkit.tasks import crafting as crafting_tasks
 from astral_toolkit.tasks import hover as Hv
 from astral_toolkit.tasks import trade as T

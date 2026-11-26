@@ -5,7 +5,7 @@
 
 import re
 
-from ..contracts.textkeys import fold_mixed_loose as _fold
+from ..textkeys import fold_mixed_loose as _fold
 
 # 汉化包里没有中文名、或者需要说明来源的材料（游戏里 RCMBNT 本身就显示英文代号）
 NOTES = {

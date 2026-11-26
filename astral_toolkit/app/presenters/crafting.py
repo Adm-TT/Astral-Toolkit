@@ -1,16 +1,16 @@
 """制造相关接口的展示（CR-B4）：用例取好的东西 → 窗口制造页的 JSON（字段、顺序、文字和以前逐字一样）。
 只排版，不取数据；原来写在 tasks/goals.py 的 craft_search / craft_browse / _craft_struct / craft_detail 里。"""
 
-from ...crafting.classify import category_zh, part_of
-from ...crafting.labels import (
+from ...contracts.crafting.classify import category_zh, part_of
+from ...contracts.crafting.labels import (
     GEAR_ZH,
     SUB_ZH,
     clean_title,
     prop_zh,
     slot_zh,
 )
-from ...crafting.materials import needs
-from ...crafting.quality import (
+from ...contracts.crafting.materials import needs
+from ...contracts.crafting.quality import (
     LOWER_BETTER,
     PROP_KEY,
     curve_text,

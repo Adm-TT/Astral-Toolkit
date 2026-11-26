@@ -21,10 +21,10 @@ from ..crafting.crafting import (
     variant_note,
 )
 from ..crafting.crafting import item_tags
-from ..crafting.labels import spec_tags, weight_zh
+from ..contracts.crafting.labels import spec_tags, weight_zh
 from ..crafting.listing import named
 from ..crafting.mix import mix_plan
-from ..crafting.quality import laser_total
+from ..contracts.crafting.quality import laser_total
 from ..mining.data import best_price
 from ..mining.locations import where, zh_name
 

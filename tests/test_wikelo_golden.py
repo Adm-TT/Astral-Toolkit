@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from astral_toolkit import gamedata
 from astral_toolkit.contracts.textkeys import fold_mixed_loose
 from astral_toolkit.crafting import wikelo
-from astral_toolkit.crafting import wikelo_rules
+from astral_toolkit.contracts.crafting import wikelo_rules
 from astral_toolkit.gamedata import wikelo as gd_wikelo
 from astral_toolkit.tasks import goals
 from astral_toolkit.tasks import wikelo as t_wikelo

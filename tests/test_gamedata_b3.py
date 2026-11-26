@@ -447,7 +447,7 @@ def _wk(monkeypatch, tmp_path):
 def _legacy_wk_uses(cs, name_en="", name_zh=""):
     """迁移前的 wikelo.uses（照抄，比对用；_fold / _same 用模块里的，没改）"""
     from astral_toolkit.crafting.wikelo import _fold
-    from astral_toolkit.crafting.wikelo_rules import _same
+    from astral_toolkit.contracts.crafting.wikelo_rules import _same
 
     hits = []
     for c in cs:

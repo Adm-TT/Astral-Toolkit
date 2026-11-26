@@ -6,8 +6,8 @@
 import re
 from itertools import product
 
-from .labels import slot_zh
-from .quality import curve_value, group_mods
+from ..contracts.crafting.labels import slot_zh
+from ..contracts.crafting.quality import curve_value, group_mods
 
 # ================================================================ 1.6.67：制造出来的东西 → 倒推材料品质
 # 游戏说明框最下面列着加成（冲击力：+17.50 %）。属性名照玩家汉化包 global.ini 的 StatName_GPP_*（2026-10-25 从用户电脑里查的）。

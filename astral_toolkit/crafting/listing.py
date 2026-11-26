@@ -4,9 +4,9 @@
 """
 
 from ..contracts.textkeys import blueprint_search_norm as _search_norm, fold_mixed
-from .classify import category, facet, part_of
-from .labels import CLS_ZH, GEAR_ZH, SUB_ZH, spec_parts
-from .materials import needs
+from ..contracts.crafting.classify import category, facet, part_of
+from ..contracts.crafting.labels import CLS_ZH, GEAR_ZH, SUB_ZH, spec_parts
+from ..contracts.crafting.materials import needs
 
 
 def search_rank(rows, q, limit):

@@ -151,7 +151,7 @@ def call_quality_hints(composition):
 
 
 def call_curve_value(segs, q):
-    from astral_toolkit.crafting import quality
+    from astral_toolkit.contracts.crafting import quality
 
     return quality.curve_value(segs, q)
 
@@ -213,13 +213,13 @@ def call_wikelo_source_note(name):
 
 
 def call_wikelo_describe(c, where=None):
-    from astral_toolkit.crafting import wikelo_rules
+    from astral_toolkit.contracts.crafting import wikelo_rules
 
     return wikelo_rules.describe(c, where=where)
 
 
 def call_group_mods(mods):
-    from astral_toolkit.crafting import quality
+    from astral_toolkit.contracts.crafting import quality
 
     return quality.group_mods(mods)
 

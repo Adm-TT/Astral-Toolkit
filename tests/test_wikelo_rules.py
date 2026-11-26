@@ -1,6 +1,7 @@
 """维科洛纯规则（CR-B3）：不读库、不读文件；旧名字还从 crafting.wikelo 拿。"""
 
-from astral_toolkit.crafting import wikelo, wikelo_rules
+from astral_toolkit.contracts.crafting import wikelo_rules
+from astral_toolkit.crafting import wikelo
 from astral_toolkit.gamedata import wikelo as gd_wikelo
 from astral_toolkit.trade import names
 

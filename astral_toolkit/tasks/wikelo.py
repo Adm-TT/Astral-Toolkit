@@ -2,7 +2,7 @@
 接口在 app/api/wikelo.py；tasks/goals.py 的 wikelo_* 是旧壳（全局搜索、目标页、测试还在调）。不 import app / runtime / bootstrap。"""
 
 from ..crafting import wikelo
-from ..crafting.wikelo_rules import note_for, rewarding
+from ..contracts.crafting.wikelo_rules import note_for, rewarding
 
 _wk_cache = {}
 

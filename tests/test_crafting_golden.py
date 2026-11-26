@@ -14,7 +14,7 @@ from astral_toolkit.crafting import crafting as C
 from astral_toolkit.crafting import (
     crafting as craft_data,
 )  # 成品属性取数据在这（11-09 删了 crafting/itemstats）
-from astral_toolkit.crafting import quality
+from astral_toolkit.contracts.crafting import quality
 from astral_toolkit.crafting import reverse
 from astral_toolkit.gamedata import crafting as gd_crafting
 from astral_toolkit.gamedata._types import GamedataError

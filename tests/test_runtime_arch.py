@@ -1028,6 +1028,8 @@ def test_contracts_import_stdlib_only():
         source = path.read_text(encoding="utf-8")
         assert [d for d in _dynamic_imports(source) if d != "open"] == [], path.name
         for module in _imports_in(path):
+            if _module_under(module, "astral_toolkit.contracts"):
+                continue  # contracts 里面互相引用可以（比如 contracts/crafting 拿 textkeys）
             root = module.split(".", 1)[0]
             assert not module.startswith("astral_toolkit"), f"{path.name}: {module}"
             assert root in sys.stdlib_module_names, f"{path.name}: {module}"
@@ -1121,17 +1123,20 @@ def test_catalog_imports_stdlib_or_contracts_only():
 
 
 # 制造 / 维科洛的纯规则文件（CR-B2、B3）：只吃传进来的数据
+# 制造的纯规则文件：标签排版那几个 2026-11-26 整块挪到 contracts/crafting（界面层、采矿也从那里拿），其余还在 crafting/
 _CRAFTING_RULE_FILES = (
-    "labels",
-    "classify",
-    "materials",
-    "quality",
-    "mix",
-    "listing",
-    "reverse",
-    "wikelo_rules",
+    ("contracts/crafting", "labels"),
+    ("contracts/crafting", "classify"),
+    ("contracts/crafting", "materials"),
+    ("contracts/crafting", "quality"),
+    ("crafting", "mix"),
+    ("crafting", "listing"),
+    ("crafting", "reverse"),
+    ("contracts/crafting", "wikelo_rules"),
 )
-_CRAFTING_RULE_MODULES = {f"astral_toolkit.crafting.{n}" for n in _CRAFTING_RULE_FILES}
+_CRAFTING_RULE_MODULES = {
+    "astral_toolkit." + d.replace("/", ".") + "." + n for d, n in _CRAFTING_RULE_FILES
+}
 
 
 def _crafting_rule_ok(module):
@@ -1174,8 +1179,8 @@ def test_crafting_rules_import_stdlib_contracts_or_each_other():
     pkg = "astral_toolkit.crafting"
     assert (
         _crafting_rule_bad_imports(
-            "import re\nfrom collections import Counter\nfrom . import labels\n"
-            "from .quality import group_mods\nfrom ..contracts.textkeys import blueprint_norm\n",
+            "import re\nfrom collections import Counter\nfrom ..contracts.crafting import labels\n"
+            "from .mix import mix_plan\nfrom ..contracts.textkeys import blueprint_norm\n",
             pkg,
         )
         == []
@@ -1190,10 +1195,15 @@ def test_crafting_rules_import_stdlib_contracts_or_each_other():
         "def f():\n    import math\n",
     ):
         assert _crafting_rule_bad_imports(bad, pkg), bad
-    for name in _CRAFTING_RULE_FILES:
-        source = (_ROOT / "crafting" / f"{name}.py").read_text(encoding="utf-8")
+    for folder, name in _CRAFTING_RULE_FILES:
+        source = (_ROOT / folder / f"{name}.py").read_text(encoding="utf-8")
         assert _dynamic_imports(source) == [], name
-        assert _crafting_rule_bad_imports(source, pkg) == [], name
+        assert (
+            _crafting_rule_bad_imports(
+                source, "astral_toolkit." + folder.replace("/", ".")
+            )
+            == []
+        ), name
 
 
 _GAMEDATA_REVERSE_ROOTS = ("astral_toolkit.crafting", "astral_toolkit.trade")
@@ -1897,7 +1907,8 @@ def test_crafting_presenters_only_format():
         assert _crafting_presenter_bad_imports(source) == [], name
     assert (
         _crafting_presenter_bad_imports(
-            "from ...crafting.labels import GEAR_ZH\nfrom ...crafting import quality, wikelo_rules\n"
+            "from ...contracts.crafting.labels import GEAR_ZH\n"
+            "from ...contracts.crafting import quality, wikelo_rules\n"
         )
         == []
     )
