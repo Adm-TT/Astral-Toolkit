@@ -9,7 +9,7 @@
 2026-11-26 拆出去三块（只搬家，行为不变），名字照旧从这里拿：
 - goal_list：目标清单存取（goals.json）
 - goal_needs：每个目标要什么
-- goal_market：去哪弄、市价
+- goal_market：市价（去哪弄 2026-11-26 挪到 tasks/goals）
 留在这里的是库存那几块（挑批次、认物品、按优先级分库存、完成时扣库存、入库），库存重做时一起处理。
 测试要换 goals.json 的位置，换 goal_list.FILE（换这里的没用）。
 """
