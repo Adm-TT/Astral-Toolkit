@@ -201,12 +201,17 @@ def _bind_platform_to_hud() -> None:
 
 def _bind_core_to_ui() -> None:
     """core 不反过来 import 界面（CL-C5）：截图时涂黑悬浮窗要的句柄 / 显示着没有、运行记录推到运行日志面板，都在这里接。
-    每次现读悬浮窗模块当时的 HWND / SHOWN；经名字调 bus.runtime_log（测试换掉也照样走到）"""
-    from ..app import bus, overlay
+    每次现读悬浮窗模块当时的 HWND / SHOWN；经名字调 bus.runtime_log（测试换掉也照样走到）。
+    采矿截图顺手更新截图预览也在这里接（领域层不碰界面，2026-11-26）；经名字调 preview.update_preview"""
+    from ..app import bus, overlay, preview
     from ..core import run_records
     from ..infrastructure.platform import capture
+    from ..mining import screen as mining_screen
 
     capture.set_overlay_state(lambda: (overlay.HWND, overlay.SHOWN))
+    mining_screen.set_preview_sink(
+        lambda img: preview.update_preview(img, source="live")
+    )
     run_records.set_ui_sink(
         lambda line, tag="SYS", level="INFO": bus.runtime_log(
             line, tag=tag, level=level
