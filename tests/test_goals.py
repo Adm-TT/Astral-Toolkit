@@ -24,9 +24,9 @@ def _trade(tmp_path, stock):
 
 
 def _setup(monkeypatch, tmp_path):
-    from astral_toolkit.crafting import goals
+    from astral_toolkit.crafting import goal_list, goals
 
-    monkeypatch.setattr(goals, "FILE", tmp_path / "goals.json")
+    monkeypatch.setattr(goal_list, "FILE", tmp_path / "goals.json")
     return goals
 
 
