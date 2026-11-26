@@ -162,6 +162,22 @@ def struct_facts(bp, note=""):
     return {"bp": bp, "note": note, "head": head, "mat_zh": mat_zh, "mine": mine}
 
 
+def _mine_line(mineral):
+    """蓝图说明「去哪挖」一行的正文：前两个船挖地点和占比、精炼后最高收购价（采矿那边的数据，业务层拼进制造的说明）"""
+    rows = where(mineral)[:2]
+    price, city = best_price(mineral)
+    spots = (
+        "，".join(f"{zh_name(loc)} {pct:.0f}%" for pct, loc in rows)
+        or "SCMiner 没有船挖地点"
+    )
+    return f"{spots}｜精炼后 {price:,}/SCU（{city or '无收购'}）"
+
+
+def describe_blueprint(bp, with_locations: bool = True) -> str:
+    """一份蓝图的完整中文说明，带「去哪挖」（产品代码走这里；crafting.describe 不传 mine_line 就不写去哪挖）"""
+    return describe(bp, with_locations, mine_line=_mine_line)
+
+
 def blueprint_detail(key=""):
     bp = _bp_cache.get(key) or by_key(key)
     if not bp:
@@ -170,7 +186,7 @@ def blueprint_detail(key=""):
     if not bp:
         return None
     note = variant_note(bp)
-    text = describe(bp)
+    text = describe_blueprint(bp)
     return {
         "key": bp_key(bp),
         "text": text,

@@ -21,7 +21,7 @@ from astral_toolkit.gamedata._types import GamedataError
 from astral_toolkit.gamedata.crafting import Blueprints
 from astral_toolkit.mining import data as mining_data
 from astral_toolkit.mining import locations as mining_locations
-from astral_toolkit.mining import quality as mining_quality
+from astral_toolkit.contracts import ore_tiers
 from astral_toolkit.tasks import crafting as TC
 from astral_toolkit.tasks import goals as G
 
@@ -295,7 +295,7 @@ def _install(monkeypatch):
     monkeypatch.setattr(mining_data, "best_price", _fake_best_price)
     monkeypatch.setattr(mining_locations, "where", _fake_where)
     monkeypatch.setattr(mining_locations, "zh_name", _fake_zh_name)
-    monkeypatch.setattr(mining_quality, "tier_values", _fake_tiers)
+    monkeypatch.setattr(ore_tiers, "tier_values", _fake_tiers)
     monkeypatch.setattr(TC, "best_price", _fake_best_price)
     monkeypatch.setattr(TC, "where", _fake_where)
     monkeypatch.setattr(TC, "zh_name", _fake_zh_name)
@@ -1762,7 +1762,15 @@ def _no_note(head):
 def test_crafting_helpers(monkeypatch):
     _install(monkeypatch)
     try:
-        assert C.describe(WEAPON) == _WEAPON_TEXT
+        from astral_toolkit.tasks.crafting import describe_blueprint
+
+        assert describe_blueprint(WEAPON) == _WEAPON_TEXT
+        # 领域层不传 mine_line：没有「去哪挖」那几行，其余一样（制造不引用采矿）
+        assert C.describe(WEAPON) == "\n".join(
+            line
+            for line in _WEAPON_TEXT.split("\n")
+            if line != "  去哪挖：" and "精炼后" not in line
+        )
         # header 本身不带 note（_craft_struct 才加），比的时候去掉
         assert C.header(WEAPON) == _no_note(_head_weapon())
         assert C.header(LASER) == _no_note(_head_laser())
