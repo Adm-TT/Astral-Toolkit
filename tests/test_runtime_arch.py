@@ -587,6 +587,7 @@ _MINING_ANALYSIS_ONLY = (
     "astral_toolkit.tasks.mining",
 )
 _NAV_MARKER_FORBIDDEN = (
+    "astral_toolkit.navigation",  # 2026-11-26 起投影由 bootstrap 接进来（tasks/navigation_views.marker_projection）
     "astral_toolkit.tasks",
     "astral_toolkit.runtime",
     "astral_toolkit.bootstrap",
