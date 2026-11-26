@@ -1013,7 +1013,7 @@ def _gamedata_textkey_imports(source, package):
 
 
 def _textkeys_package_for(path):
-    """文件所属包名：astral_toolkit/gamedata/_import.py → astral_toolkit.gamedata。"""
+    """文件所属包名：astral_toolkit/gamedata/_build.py → astral_toolkit.gamedata。"""
     rel = path.relative_to(_ROOT.parent).with_suffix("")
     return ".".join(
         rel.parts[:-1]
@@ -1037,8 +1037,12 @@ def test_gamedata_stops_reaching_into_crafting_and_trade():
     """gamedata 从 contracts.textkeys 拿名字键，不再直接拿 crafting / trade 的实现（函数里的 import 也算）。"""
     # 先自检解析：普通模块和 __init__.py 都按所在的包算相对导入（审查发现过这里形同虚设）
     assert (
-        _textkeys_package_for(_ROOT / "gamedata" / "_import.py")
+        _textkeys_package_for(_ROOT / "gamedata" / "_build.py")
         == "astral_toolkit.gamedata"
+    )
+    assert (
+        _textkeys_package_for(_ROOT / "gamedata" / "_import" / "items.py")
+        == "astral_toolkit.gamedata._import"
     )
     assert (
         _textkeys_package_for(_ROOT / "gamedata" / "__init__.py")

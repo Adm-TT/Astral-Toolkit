@@ -39,10 +39,14 @@ def _imports_in_source(source: str, pkg: str):
 
 def test_gamedata_core_does_not_import_tasks_or_app():
     bad = []
-    for p in sorted((_ROOT / "gamedata").glob("_*.py")):
+    gd = _ROOT / "gamedata"
+    # 下划线开头的文件，加上 _import 包里的（2026-11-26 拆成包，里面的文件名不带下划线也要查）
+    files = sorted(p for p in gd.rglob("*.py") if p.relative_to(gd).parts[0][0] == "_")
+    assert gd / "_import" / "items.py" in files
+    for p in files:
         for mod in _imports_in(p):
             if mod.startswith(_FORBIDDEN):
-                bad.append(f"{p.name}: {mod}")
+                bad.append(f"{p.relative_to(gd).as_posix()}: {mod}")
     assert bad == [], bad
 
 
