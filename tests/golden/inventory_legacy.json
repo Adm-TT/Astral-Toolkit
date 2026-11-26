@@ -1,0 +1,3282 @@
+[
+ {
+  "custom": [
+   {
+    "bins": [
+     {
+      "count": 1,
+      "default": true,
+      "desc": "",
+      "name": "总仓"
+     }
+    ],
+    "count": 1,
+    "kind": "其他",
+    "label": "金样测试仓甲",
+    "path": "金样测试仓甲",
+    "state": "custom",
+    "sys": "",
+    "value": 0
+   }
+  ],
+  "history": [
+   {
+    "batch": "B1",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   }
+  ],
+  "ledger": [
+   {
+    "batch": "B1",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   }
+  ],
+  "ledger_total": 1,
+  "rows": [
+   {
+    "avail": 1.0,
+    "bin": "总仓",
+    "en": "Golden Test Gadget",
+    "goal_qty": 2.0,
+    "id": "gad",
+    "kind": "物品",
+    "location": "金样测试仓甲",
+    "place": "金样测试仓甲",
+    "place_state": "custom",
+    "q": null,
+    "qkey": "unknown",
+    "qty": 3,
+    "quality": "未知",
+    "raw": 3,
+    "reserved": false,
+    "ukey": "unit",
+    "unit": "个",
+    "value": null
+   }
+  ],
+  "step": "入库 测试物品 3 个 @甲",
+  "tree": [],
+  "unmatched": []
+ },
+ {
+  "custom": [
+   {
+    "bins": [
+     {
+      "count": 2,
+      "default": true,
+      "desc": "",
+      "name": "总仓"
+     }
+    ],
+    "count": 2,
+    "kind": "其他",
+    "label": "金样测试仓甲",
+    "path": "金样测试仓甲",
+    "state": "custom",
+    "sys": "",
+    "value": 0
+   }
+  ],
+  "history": [
+   {
+    "batch": "B2",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B1",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   }
+  ],
+  "ledger": [
+   {
+    "batch": "B2",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B1",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   }
+  ],
+  "ledger_total": 2,
+  "rows": [
+   {
+    "avail": 1.0,
+    "bin": "总仓",
+    "en": "Golden Test Gadget",
+    "goal_qty": 2.0,
+    "id": "gad",
+    "kind": "物品",
+    "location": "金样测试仓甲",
+    "place": "金样测试仓甲",
+    "place_state": "custom",
+    "q": null,
+    "qkey": "unknown",
+    "qty": 3,
+    "quality": "未知",
+    "raw": 3,
+    "reserved": false,
+    "ukey": "unit",
+    "unit": "个",
+    "value": null
+   },
+   {
+    "avail": 2.5,
+    "bin": "总仓",
+    "en": "Titanium",
+    "goal_qty": 0.0,
+    "id": "tit",
+    "kind": "矿物",
+    "location": "金样测试仓甲",
+    "place": "金样测试仓甲",
+    "place_state": "custom",
+    "q": 950,
+    "qkey": "exact:950",
+    "qty": 2.5,
+    "quality": "品质 950",
+    "raw": 2500000,
+    "reserved": false,
+    "ukey": "uSCU",
+    "unit": "SCU",
+    "value": null
+   }
+  ],
+  "step": "入库 钛 2.5 SCU 品质 950 @甲",
+  "tree": [],
+  "unmatched": []
+ },
+ {
+  "custom": [
+   {
+    "bins": [
+     {
+      "count": 1,
+      "default": true,
+      "desc": "",
+      "name": "总仓"
+     }
+    ],
+    "count": 1,
+    "kind": "其他",
+    "label": "金样测试仓乙",
+    "path": "金样测试仓乙",
+    "state": "custom",
+    "sys": "",
+    "value": 0
+   },
+   {
+    "bins": [
+     {
+      "count": 2,
+      "default": true,
+      "desc": "",
+      "name": "总仓"
+     }
+    ],
+    "count": 2,
+    "kind": "其他",
+    "label": "金样测试仓甲",
+    "path": "金样测试仓甲",
+    "state": "custom",
+    "sys": "",
+    "value": 0
+   }
+  ],
+  "history": [
+   {
+    "batch": "B3",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B2",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B1",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   }
+  ],
+  "ledger": [
+   {
+    "batch": "B3",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B2",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B1",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   }
+  ],
+  "ledger_total": 3,
+  "rows": [
+   {
+    "avail": 0.0,
+    "bin": "总仓",
+    "en": "Golden Test Gadget",
+    "goal_qty": 2.0,
+    "id": "gad",
+    "kind": "物品",
+    "location": "金样测试仓乙",
+    "place": "金样测试仓乙",
+    "place_state": "custom",
+    "q": null,
+    "qkey": "unknown",
+    "qty": 2,
+    "quality": "未知",
+    "raw": 2,
+    "reserved": false,
+    "ukey": "unit",
+    "unit": "个",
+    "value": null
+   },
+   {
+    "avail": 2.5,
+    "bin": "总仓",
+    "en": "Titanium",
+    "goal_qty": 0.0,
+    "id": "tit",
+    "kind": "矿物",
+    "location": "金样测试仓甲",
+    "place": "金样测试仓甲",
+    "place_state": "custom",
+    "q": 950,
+    "qkey": "exact:950",
+    "qty": 2.5,
+    "quality": "品质 950",
+    "raw": 2500000,
+    "reserved": false,
+    "ukey": "uSCU",
+    "unit": "SCU",
+    "value": null
+   },
+   {
+    "avail": 3.0,
+    "bin": "总仓",
+    "en": "Golden Test Gadget",
+    "goal_qty": 0.0,
+    "id": "gad",
+    "kind": "物品",
+    "location": "金样测试仓甲",
+    "place": "金样测试仓甲",
+    "place_state": "custom",
+    "q": null,
+    "qkey": "unknown",
+    "qty": 3,
+    "quality": "未知",
+    "raw": 3,
+    "reserved": false,
+    "ukey": "unit",
+    "unit": "个",
+    "value": null
+   }
+  ],
+  "step": "入库 测试物品 2 个 @乙",
+  "tree": [],
+  "unmatched": []
+ },
+ {
+  "custom": [
+   {
+    "bins": [
+     {
+      "count": 1,
+      "default": true,
+      "desc": "",
+      "name": "总仓"
+     }
+    ],
+    "count": 1,
+    "kind": "其他",
+    "label": "金样测试仓乙",
+    "path": "金样测试仓乙",
+    "state": "custom",
+    "sys": "",
+    "value": 0
+   },
+   {
+    "bins": [
+     {
+      "count": 2,
+      "default": true,
+      "desc": "",
+      "name": "总仓"
+     }
+    ],
+    "count": 2,
+    "kind": "其他",
+    "label": "金样测试仓甲",
+    "path": "金样测试仓甲",
+    "state": "custom",
+    "sys": "",
+    "value": 0
+   }
+  ],
+  "history": [
+   {
+    "batch": "B4",
+    "lines": 1,
+    "mode": "out",
+    "note": "金样",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "卖了",
+    "source": "库存页",
+    "type": "出库",
+    "undone": false
+   },
+   {
+    "batch": "B3",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B2",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B1",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   }
+  ],
+  "ledger": [
+   {
+    "batch": "B4",
+    "lines": 1,
+    "mode": "out",
+    "note": "金样",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "卖了",
+    "source": "库存页",
+    "type": "出库",
+    "undone": false
+   },
+   {
+    "batch": "B3",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B2",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B1",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   }
+  ],
+  "ledger_total": 4,
+  "rows": [
+   {
+    "avail": 0.0,
+    "bin": "总仓",
+    "en": "Golden Test Gadget",
+    "goal_qty": 2.0,
+    "id": "gad",
+    "kind": "物品",
+    "location": "金样测试仓乙",
+    "place": "金样测试仓乙",
+    "place_state": "custom",
+    "q": null,
+    "qkey": "unknown",
+    "qty": 2,
+    "quality": "未知",
+    "raw": 2,
+    "reserved": false,
+    "ukey": "unit",
+    "unit": "个",
+    "value": null
+   },
+   {
+    "avail": 2.0,
+    "bin": "总仓",
+    "en": "Golden Test Gadget",
+    "goal_qty": 0.0,
+    "id": "gad",
+    "kind": "物品",
+    "location": "金样测试仓甲",
+    "place": "金样测试仓甲",
+    "place_state": "custom",
+    "q": null,
+    "qkey": "unknown",
+    "qty": 2,
+    "quality": "未知",
+    "raw": 2,
+    "reserved": false,
+    "ukey": "unit",
+    "unit": "个",
+    "value": null
+   },
+   {
+    "avail": 2.5,
+    "bin": "总仓",
+    "en": "Titanium",
+    "goal_qty": 0.0,
+    "id": "tit",
+    "kind": "矿物",
+    "location": "金样测试仓甲",
+    "place": "金样测试仓甲",
+    "place_state": "custom",
+    "q": 950,
+    "qkey": "exact:950",
+    "qty": 2.5,
+    "quality": "品质 950",
+    "raw": 2500000,
+    "reserved": false,
+    "ukey": "uSCU",
+    "unit": "SCU",
+    "value": null
+   }
+  ],
+  "step": "出库 测试物品 1 个 @甲",
+  "tree": [],
+  "unmatched": []
+ },
+ {
+  "custom": [
+   {
+    "bins": [
+     {
+      "count": 1,
+      "default": true,
+      "desc": "",
+      "name": "总仓"
+     }
+    ],
+    "count": 1,
+    "kind": "其他",
+    "label": "金样测试仓乙",
+    "path": "金样测试仓乙",
+    "state": "custom",
+    "sys": "",
+    "value": 0
+   },
+   {
+    "bins": [
+     {
+      "count": 2,
+      "default": true,
+      "desc": "",
+      "name": "总仓"
+     }
+    ],
+    "count": 2,
+    "kind": "其他",
+    "label": "金样测试仓甲",
+    "path": "金样测试仓甲",
+    "state": "custom",
+    "sys": "",
+    "value": 0
+   }
+  ],
+  "history": [
+   {
+    "batch": "B5",
+    "lines": 1,
+    "mode": "set",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "库存页",
+    "type": "改数量",
+    "undone": false
+   },
+   {
+    "batch": "B4",
+    "lines": 1,
+    "mode": "out",
+    "note": "金样",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "卖了",
+    "source": "库存页",
+    "type": "出库",
+    "undone": false
+   },
+   {
+    "batch": "B3",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B2",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B1",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   }
+  ],
+  "ledger": [
+   {
+    "batch": "B5",
+    "lines": 1,
+    "mode": "set",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "库存页",
+    "type": "改数量",
+    "undone": false
+   },
+   {
+    "batch": "B4",
+    "lines": 1,
+    "mode": "out",
+    "note": "金样",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "卖了",
+    "source": "库存页",
+    "type": "出库",
+    "undone": false
+   },
+   {
+    "batch": "B3",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B2",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B1",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   }
+  ],
+  "ledger_total": 5,
+  "rows": [
+   {
+    "avail": 2.0,
+    "bin": "总仓",
+    "en": "Golden Test Gadget",
+    "goal_qty": 0.0,
+    "id": "gad",
+    "kind": "物品",
+    "location": "金样测试仓甲",
+    "place": "金样测试仓甲",
+    "place_state": "custom",
+    "q": null,
+    "qkey": "unknown",
+    "qty": 2,
+    "quality": "未知",
+    "raw": 2,
+    "reserved": false,
+    "ukey": "unit",
+    "unit": "个",
+    "value": null
+   },
+   {
+    "avail": 2.5,
+    "bin": "总仓",
+    "en": "Titanium",
+    "goal_qty": 0.0,
+    "id": "tit",
+    "kind": "矿物",
+    "location": "金样测试仓甲",
+    "place": "金样测试仓甲",
+    "place_state": "custom",
+    "q": 950,
+    "qkey": "exact:950",
+    "qty": 2.5,
+    "quality": "品质 950",
+    "raw": 2500000,
+    "reserved": false,
+    "ukey": "uSCU",
+    "unit": "SCU",
+    "value": null
+   },
+   {
+    "avail": 3.0,
+    "bin": "总仓",
+    "en": "Golden Test Gadget",
+    "goal_qty": 2.0,
+    "id": "gad",
+    "kind": "物品",
+    "location": "金样测试仓乙",
+    "place": "金样测试仓乙",
+    "place_state": "custom",
+    "q": null,
+    "qkey": "unknown",
+    "qty": 5,
+    "quality": "未知",
+    "raw": 5,
+    "reserved": false,
+    "ukey": "unit",
+    "unit": "个",
+    "value": null
+   }
+  ],
+  "step": "改数量 测试物品 @乙 → 5",
+  "tree": [],
+  "unmatched": []
+ },
+ {
+  "custom": [
+   {
+    "bins": [
+     {
+      "count": 2,
+      "default": true,
+      "desc": "",
+      "name": "总仓"
+     }
+    ],
+    "count": 2,
+    "kind": "其他",
+    "label": "金样测试仓乙",
+    "path": "金样测试仓乙",
+    "state": "custom",
+    "sys": "",
+    "value": 0
+   },
+   {
+    "bins": [
+     {
+      "count": 2,
+      "default": true,
+      "desc": "",
+      "name": "总仓"
+     }
+    ],
+    "count": 2,
+    "kind": "其他",
+    "label": "金样测试仓甲",
+    "path": "金样测试仓甲",
+    "state": "custom",
+    "sys": "",
+    "value": 0
+   }
+  ],
+  "history": [
+   {
+    "batch": "B6",
+    "lines": 1,
+    "mode": "move",
+    "note": "",
+    "places": [
+     "金样测试仓乙",
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "库存页",
+    "type": "移库",
+    "undone": false
+   },
+   {
+    "batch": "B5",
+    "lines": 1,
+    "mode": "set",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "库存页",
+    "type": "改数量",
+    "undone": false
+   },
+   {
+    "batch": "B4",
+    "lines": 1,
+    "mode": "out",
+    "note": "金样",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "卖了",
+    "source": "库存页",
+    "type": "出库",
+    "undone": false
+   },
+   {
+    "batch": "B3",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B2",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B1",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   }
+  ],
+  "ledger": [
+   {
+    "batch": "B6",
+    "lines": 1,
+    "mode": "move",
+    "note": "",
+    "places": [
+     "金样测试仓乙",
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "库存页",
+    "type": "移库",
+    "undone": false
+   },
+   {
+    "batch": "B5",
+    "lines": 1,
+    "mode": "set",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "库存页",
+    "type": "改数量",
+    "undone": false
+   },
+   {
+    "batch": "B4",
+    "lines": 1,
+    "mode": "out",
+    "note": "金样",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "卖了",
+    "source": "库存页",
+    "type": "出库",
+    "undone": false
+   },
+   {
+    "batch": "B3",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B2",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B1",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   }
+  ],
+  "ledger_total": 6,
+  "rows": [
+   {
+    "avail": 1.0,
+    "bin": "总仓",
+    "en": "Titanium",
+    "goal_qty": 0.0,
+    "id": "tit",
+    "kind": "矿物",
+    "location": "金样测试仓乙",
+    "place": "金样测试仓乙",
+    "place_state": "custom",
+    "q": 950,
+    "qkey": "exact:950",
+    "qty": 1.0,
+    "quality": "品质 950",
+    "raw": 1000000,
+    "reserved": false,
+    "ukey": "uSCU",
+    "unit": "SCU",
+    "value": null
+   },
+   {
+    "avail": 1.5,
+    "bin": "总仓",
+    "en": "Titanium",
+    "goal_qty": 0.0,
+    "id": "tit",
+    "kind": "矿物",
+    "location": "金样测试仓甲",
+    "place": "金样测试仓甲",
+    "place_state": "custom",
+    "q": 950,
+    "qkey": "exact:950",
+    "qty": 1.5,
+    "quality": "品质 950",
+    "raw": 1500000,
+    "reserved": false,
+    "ukey": "uSCU",
+    "unit": "SCU",
+    "value": null
+   },
+   {
+    "avail": 2.0,
+    "bin": "总仓",
+    "en": "Golden Test Gadget",
+    "goal_qty": 0.0,
+    "id": "gad",
+    "kind": "物品",
+    "location": "金样测试仓甲",
+    "place": "金样测试仓甲",
+    "place_state": "custom",
+    "q": null,
+    "qkey": "unknown",
+    "qty": 2,
+    "quality": "未知",
+    "raw": 2,
+    "reserved": false,
+    "ukey": "unit",
+    "unit": "个",
+    "value": null
+   },
+   {
+    "avail": 3.0,
+    "bin": "总仓",
+    "en": "Golden Test Gadget",
+    "goal_qty": 2.0,
+    "id": "gad",
+    "kind": "物品",
+    "location": "金样测试仓乙",
+    "place": "金样测试仓乙",
+    "place_state": "custom",
+    "q": null,
+    "qkey": "unknown",
+    "qty": 5,
+    "quality": "未知",
+    "raw": 5,
+    "reserved": false,
+    "ukey": "unit",
+    "unit": "个",
+    "value": null
+   }
+  ],
+  "step": "移库 钛 1 SCU 甲 → 乙",
+  "tree": [],
+  "unmatched": []
+ },
+ {
+  "custom": [
+   {
+    "bins": [
+     {
+      "count": 2,
+      "default": true,
+      "desc": "",
+      "name": "总仓"
+     }
+    ],
+    "count": 2,
+    "kind": "其他",
+    "label": "金样测试仓乙",
+    "path": "金样测试仓乙",
+    "state": "custom",
+    "sys": "",
+    "value": 0
+   },
+   {
+    "bins": [
+     {
+      "count": 2,
+      "default": true,
+      "desc": "",
+      "name": "总仓"
+     }
+    ],
+    "count": 2,
+    "kind": "其他",
+    "label": "金样测试仓甲",
+    "path": "金样测试仓甲",
+    "state": "custom",
+    "sys": "",
+    "value": 0
+   }
+  ],
+  "history": [
+   {
+    "batch": "B7",
+    "lines": 1,
+    "mode": "quality",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "改品质",
+    "undone": false
+   },
+   {
+    "batch": "B6",
+    "lines": 1,
+    "mode": "move",
+    "note": "",
+    "places": [
+     "金样测试仓乙",
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "库存页",
+    "type": "移库",
+    "undone": false
+   },
+   {
+    "batch": "B5",
+    "lines": 1,
+    "mode": "set",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "库存页",
+    "type": "改数量",
+    "undone": false
+   },
+   {
+    "batch": "B4",
+    "lines": 1,
+    "mode": "out",
+    "note": "金样",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "卖了",
+    "source": "库存页",
+    "type": "出库",
+    "undone": false
+   },
+   {
+    "batch": "B3",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B2",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B1",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   }
+  ],
+  "ledger": [
+   {
+    "batch": "B7",
+    "lines": 1,
+    "mode": "quality",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "改品质",
+    "undone": false
+   },
+   {
+    "batch": "B6",
+    "lines": 1,
+    "mode": "move",
+    "note": "",
+    "places": [
+     "金样测试仓乙",
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "库存页",
+    "type": "移库",
+    "undone": false
+   },
+   {
+    "batch": "B5",
+    "lines": 1,
+    "mode": "set",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "库存页",
+    "type": "改数量",
+    "undone": false
+   },
+   {
+    "batch": "B4",
+    "lines": 1,
+    "mode": "out",
+    "note": "金样",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "卖了",
+    "source": "库存页",
+    "type": "出库",
+    "undone": false
+   },
+   {
+    "batch": "B3",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B2",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B1",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   }
+  ],
+  "ledger_total": 7,
+  "rows": [
+   {
+    "avail": 1.0,
+    "bin": "总仓",
+    "en": "Titanium",
+    "goal_qty": 0.0,
+    "id": "tit",
+    "kind": "矿物",
+    "location": "金样测试仓乙",
+    "place": "金样测试仓乙",
+    "place_state": "custom",
+    "q": 950,
+    "qkey": "exact:950",
+    "qty": 1.0,
+    "quality": "品质 950",
+    "raw": 1000000,
+    "reserved": false,
+    "ukey": "uSCU",
+    "unit": "SCU",
+    "value": null
+   },
+   {
+    "avail": 1.5,
+    "bin": "总仓",
+    "en": "Titanium",
+    "goal_qty": 0.0,
+    "id": "tit",
+    "kind": "矿物",
+    "location": "金样测试仓甲",
+    "place": "金样测试仓甲",
+    "place_state": "custom",
+    "q": 950,
+    "qkey": "exact:950",
+    "qty": 1.5,
+    "quality": "品质 950",
+    "raw": 1500000,
+    "reserved": false,
+    "ukey": "uSCU",
+    "unit": "SCU",
+    "value": null
+   },
+   {
+    "avail": 2.0,
+    "bin": "总仓",
+    "en": "Golden Test Gadget",
+    "goal_qty": 0.0,
+    "id": "gad",
+    "kind": "物品",
+    "location": "金样测试仓甲",
+    "place": "金样测试仓甲",
+    "place_state": "custom",
+    "q": 600,
+    "qkey": "exact:600",
+    "qty": 2,
+    "quality": "品质 600",
+    "raw": 2,
+    "reserved": false,
+    "ukey": "unit",
+    "unit": "个",
+    "value": null
+   },
+   {
+    "avail": 3.0,
+    "bin": "总仓",
+    "en": "Golden Test Gadget",
+    "goal_qty": 2.0,
+    "id": "gad",
+    "kind": "物品",
+    "location": "金样测试仓乙",
+    "place": "金样测试仓乙",
+    "place_state": "custom",
+    "q": null,
+    "qkey": "unknown",
+    "qty": 5,
+    "quality": "未知",
+    "raw": 5,
+    "reserved": false,
+    "ukey": "unit",
+    "unit": "个",
+    "value": null
+   }
+  ],
+  "step": "改品质 测试物品 @甲 → 600",
+  "tree": [],
+  "unmatched": []
+ },
+ {
+  "custom": [
+   {
+    "bins": [
+     {
+      "count": 2,
+      "default": true,
+      "desc": "",
+      "name": "总仓"
+     }
+    ],
+    "count": 2,
+    "kind": "其他",
+    "label": "金样测试仓乙",
+    "path": "金样测试仓乙",
+    "state": "custom",
+    "sys": "",
+    "value": 0
+   },
+   {
+    "bins": [
+     {
+      "count": 2,
+      "default": true,
+      "desc": "",
+      "name": "总仓"
+     }
+    ],
+    "count": 2,
+    "kind": "其他",
+    "label": "金样测试仓甲",
+    "path": "金样测试仓甲",
+    "state": "custom",
+    "sys": "",
+    "value": 0
+   }
+  ],
+  "history": [
+   {
+    "batch": "B8",
+    "lines": 2,
+    "mode": "undo:B7",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "撤销",
+    "undone": false
+   },
+   {
+    "batch": "B7",
+    "lines": 1,
+    "mode": "quality",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "改品质",
+    "undone": true
+   },
+   {
+    "batch": "B6",
+    "lines": 1,
+    "mode": "move",
+    "note": "",
+    "places": [
+     "金样测试仓乙",
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "库存页",
+    "type": "移库",
+    "undone": false
+   },
+   {
+    "batch": "B5",
+    "lines": 1,
+    "mode": "set",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "库存页",
+    "type": "改数量",
+    "undone": false
+   },
+   {
+    "batch": "B4",
+    "lines": 1,
+    "mode": "out",
+    "note": "金样",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "卖了",
+    "source": "库存页",
+    "type": "出库",
+    "undone": false
+   },
+   {
+    "batch": "B3",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B2",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B1",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   }
+  ],
+  "ledger": [
+   {
+    "batch": "B8",
+    "lines": 2,
+    "mode": "undo:B7",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "撤销",
+    "undone": false
+   },
+   {
+    "batch": "B7",
+    "lines": 1,
+    "mode": "quality",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "改品质",
+    "undone": true
+   },
+   {
+    "batch": "B6",
+    "lines": 1,
+    "mode": "move",
+    "note": "",
+    "places": [
+     "金样测试仓乙",
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "库存页",
+    "type": "移库",
+    "undone": false
+   },
+   {
+    "batch": "B5",
+    "lines": 1,
+    "mode": "set",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "库存页",
+    "type": "改数量",
+    "undone": false
+   },
+   {
+    "batch": "B4",
+    "lines": 1,
+    "mode": "out",
+    "note": "金样",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "卖了",
+    "source": "库存页",
+    "type": "出库",
+    "undone": false
+   },
+   {
+    "batch": "B3",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B2",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B1",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   }
+  ],
+  "ledger_total": 8,
+  "rows": [
+   {
+    "avail": 1.0,
+    "bin": "总仓",
+    "en": "Titanium",
+    "goal_qty": 0.0,
+    "id": "tit",
+    "kind": "矿物",
+    "location": "金样测试仓乙",
+    "place": "金样测试仓乙",
+    "place_state": "custom",
+    "q": 950,
+    "qkey": "exact:950",
+    "qty": 1.0,
+    "quality": "品质 950",
+    "raw": 1000000,
+    "reserved": false,
+    "ukey": "uSCU",
+    "unit": "SCU",
+    "value": null
+   },
+   {
+    "avail": 1.5,
+    "bin": "总仓",
+    "en": "Titanium",
+    "goal_qty": 0.0,
+    "id": "tit",
+    "kind": "矿物",
+    "location": "金样测试仓甲",
+    "place": "金样测试仓甲",
+    "place_state": "custom",
+    "q": 950,
+    "qkey": "exact:950",
+    "qty": 1.5,
+    "quality": "品质 950",
+    "raw": 1500000,
+    "reserved": false,
+    "ukey": "uSCU",
+    "unit": "SCU",
+    "value": null
+   },
+   {
+    "avail": 2.0,
+    "bin": "总仓",
+    "en": "Golden Test Gadget",
+    "goal_qty": 0.0,
+    "id": "gad",
+    "kind": "物品",
+    "location": "金样测试仓甲",
+    "place": "金样测试仓甲",
+    "place_state": "custom",
+    "q": null,
+    "qkey": "unknown",
+    "qty": 2,
+    "quality": "未知",
+    "raw": 2,
+    "reserved": false,
+    "ukey": "unit",
+    "unit": "个",
+    "value": null
+   },
+   {
+    "avail": 3.0,
+    "bin": "总仓",
+    "en": "Golden Test Gadget",
+    "goal_qty": 2.0,
+    "id": "gad",
+    "kind": "物品",
+    "location": "金样测试仓乙",
+    "place": "金样测试仓乙",
+    "place_state": "custom",
+    "q": null,
+    "qkey": "unknown",
+    "qty": 5,
+    "quality": "未知",
+    "raw": 5,
+    "reserved": false,
+    "ukey": "unit",
+    "unit": "个",
+    "value": null
+   }
+  ],
+  "step": "撤销上一笔（改品质）",
+  "tree": [],
+  "unmatched": []
+ },
+ {
+  "custom": [
+   {
+    "bins": [
+     {
+      "count": 2,
+      "default": true,
+      "desc": "",
+      "name": "总仓"
+     }
+    ],
+    "count": 2,
+    "kind": "其他",
+    "label": "金样测试仓乙",
+    "path": "金样测试仓乙",
+    "state": "custom",
+    "sys": "",
+    "value": 0
+   },
+   {
+    "bins": [
+     {
+      "count": 2,
+      "default": true,
+      "desc": "",
+      "name": "总仓"
+     }
+    ],
+    "count": 2,
+    "kind": "其他",
+    "label": "金样测试仓甲",
+    "path": "金样测试仓甲",
+    "state": "custom",
+    "sys": "",
+    "value": 0
+   }
+  ],
+  "history": [
+   {
+    "batch": "B8",
+    "lines": 2,
+    "mode": "undo:B7",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "撤销",
+    "undone": false
+   },
+   {
+    "batch": "B7",
+    "lines": 1,
+    "mode": "quality",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "改品质",
+    "undone": true
+   },
+   {
+    "batch": "B6",
+    "lines": 1,
+    "mode": "move",
+    "note": "",
+    "places": [
+     "金样测试仓乙",
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "库存页",
+    "type": "移库",
+    "undone": false
+   },
+   {
+    "batch": "B5",
+    "lines": 1,
+    "mode": "set",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "库存页",
+    "type": "改数量",
+    "undone": false
+   },
+   {
+    "batch": "B4",
+    "lines": 1,
+    "mode": "out",
+    "note": "金样",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "卖了",
+    "source": "库存页",
+    "type": "出库",
+    "undone": false
+   },
+   {
+    "batch": "B3",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B2",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B1",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   }
+  ],
+  "ledger": [
+   {
+    "batch": "B8",
+    "lines": 2,
+    "mode": "undo:B7",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "撤销",
+    "undone": false
+   },
+   {
+    "batch": "B7",
+    "lines": 1,
+    "mode": "quality",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "改品质",
+    "undone": true
+   },
+   {
+    "batch": "B6",
+    "lines": 1,
+    "mode": "move",
+    "note": "",
+    "places": [
+     "金样测试仓乙",
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "库存页",
+    "type": "移库",
+    "undone": false
+   },
+   {
+    "batch": "B5",
+    "lines": 1,
+    "mode": "set",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "库存页",
+    "type": "改数量",
+    "undone": false
+   },
+   {
+    "batch": "B4",
+    "lines": 1,
+    "mode": "out",
+    "note": "金样",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "卖了",
+    "source": "库存页",
+    "type": "出库",
+    "undone": false
+   },
+   {
+    "batch": "B3",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B2",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B1",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   }
+  ],
+  "ledger_total": 8,
+  "rows": [
+   {
+    "avail": 1.0,
+    "bin": "总仓",
+    "en": "Titanium",
+    "goal_qty": 0.0,
+    "id": "tit",
+    "kind": "矿物",
+    "location": "金样测试仓乙",
+    "place": "金样测试仓乙",
+    "place_state": "custom",
+    "q": 950,
+    "qkey": "exact:950",
+    "qty": 1.0,
+    "quality": "品质 950",
+    "raw": 1000000,
+    "reserved": true,
+    "ukey": "uSCU",
+    "unit": "SCU",
+    "value": null
+   },
+   {
+    "avail": 1.5,
+    "bin": "总仓",
+    "en": "Titanium",
+    "goal_qty": 0.0,
+    "id": "tit",
+    "kind": "矿物",
+    "location": "金样测试仓甲",
+    "place": "金样测试仓甲",
+    "place_state": "custom",
+    "q": 950,
+    "qkey": "exact:950",
+    "qty": 1.5,
+    "quality": "品质 950",
+    "raw": 1500000,
+    "reserved": false,
+    "ukey": "uSCU",
+    "unit": "SCU",
+    "value": null
+   },
+   {
+    "avail": 2.0,
+    "bin": "总仓",
+    "en": "Golden Test Gadget",
+    "goal_qty": 0.0,
+    "id": "gad",
+    "kind": "物品",
+    "location": "金样测试仓甲",
+    "place": "金样测试仓甲",
+    "place_state": "custom",
+    "q": null,
+    "qkey": "unknown",
+    "qty": 2,
+    "quality": "未知",
+    "raw": 2,
+    "reserved": false,
+    "ukey": "unit",
+    "unit": "个",
+    "value": null
+   },
+   {
+    "avail": 3.0,
+    "bin": "总仓",
+    "en": "Golden Test Gadget",
+    "goal_qty": 2.0,
+    "id": "gad",
+    "kind": "物品",
+    "location": "金样测试仓乙",
+    "place": "金样测试仓乙",
+    "place_state": "custom",
+    "q": null,
+    "qkey": "unknown",
+    "qty": 5,
+    "quality": "未知",
+    "raw": 5,
+    "reserved": false,
+    "ukey": "unit",
+    "unit": "个",
+    "value": null
+   }
+  ],
+  "step": "钛 @乙 标「不给目标用」",
+  "tree": [],
+  "unmatched": []
+ },
+ {
+  "custom": [
+   {
+    "bins": [
+     {
+      "count": 2,
+      "default": true,
+      "desc": "",
+      "name": "总仓"
+     }
+    ],
+    "count": 2,
+    "kind": "其他",
+    "label": "金样测试仓乙",
+    "path": "金样测试仓乙",
+    "state": "custom",
+    "sys": "",
+    "value": 0
+   },
+   {
+    "bins": [
+     {
+      "count": 2,
+      "default": true,
+      "desc": "",
+      "name": "总仓"
+     }
+    ],
+    "count": 2,
+    "kind": "其他",
+    "label": "金样测试仓甲",
+    "path": "金样测试仓甲",
+    "state": "custom",
+    "sys": "",
+    "value": 0
+   }
+  ],
+  "history": [
+   {
+    "batch": "B9",
+    "lines": 1,
+    "mode": "count",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "盘点",
+    "type": "盘点",
+    "undone": false
+   },
+   {
+    "batch": "B8",
+    "lines": 2,
+    "mode": "undo:B7",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "撤销",
+    "undone": false
+   },
+   {
+    "batch": "B7",
+    "lines": 1,
+    "mode": "quality",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "改品质",
+    "undone": true
+   },
+   {
+    "batch": "B6",
+    "lines": 1,
+    "mode": "move",
+    "note": "",
+    "places": [
+     "金样测试仓乙",
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "库存页",
+    "type": "移库",
+    "undone": false
+   },
+   {
+    "batch": "B5",
+    "lines": 1,
+    "mode": "set",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "库存页",
+    "type": "改数量",
+    "undone": false
+   },
+   {
+    "batch": "B4",
+    "lines": 1,
+    "mode": "out",
+    "note": "金样",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "卖了",
+    "source": "库存页",
+    "type": "出库",
+    "undone": false
+   },
+   {
+    "batch": "B3",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B2",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B1",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   }
+  ],
+  "ledger": [
+   {
+    "batch": "B9",
+    "lines": 1,
+    "mode": "count",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "盘点",
+    "type": "盘点",
+    "undone": false
+   },
+   {
+    "batch": "B8",
+    "lines": 2,
+    "mode": "undo:B7",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "撤销",
+    "undone": false
+   },
+   {
+    "batch": "B7",
+    "lines": 1,
+    "mode": "quality",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "改品质",
+    "undone": true
+   },
+   {
+    "batch": "B6",
+    "lines": 1,
+    "mode": "move",
+    "note": "",
+    "places": [
+     "金样测试仓乙",
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "库存页",
+    "type": "移库",
+    "undone": false
+   },
+   {
+    "batch": "B5",
+    "lines": 1,
+    "mode": "set",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "库存页",
+    "type": "改数量",
+    "undone": false
+   },
+   {
+    "batch": "B4",
+    "lines": 1,
+    "mode": "out",
+    "note": "金样",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "卖了",
+    "source": "库存页",
+    "type": "出库",
+    "undone": false
+   },
+   {
+    "batch": "B3",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B2",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B1",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   }
+  ],
+  "ledger_total": 9,
+  "rows": [
+   {
+    "avail": 1.0,
+    "bin": "总仓",
+    "en": "Titanium",
+    "goal_qty": 0.0,
+    "id": "tit",
+    "kind": "矿物",
+    "location": "金样测试仓乙",
+    "place": "金样测试仓乙",
+    "place_state": "custom",
+    "q": 950,
+    "qkey": "exact:950",
+    "qty": 1.0,
+    "quality": "品质 950",
+    "raw": 1000000,
+    "reserved": true,
+    "ukey": "uSCU",
+    "unit": "SCU",
+    "value": null
+   },
+   {
+    "avail": 1.5,
+    "bin": "总仓",
+    "en": "Titanium",
+    "goal_qty": 0.0,
+    "id": "tit",
+    "kind": "矿物",
+    "location": "金样测试仓甲",
+    "place": "金样测试仓甲",
+    "place_state": "custom",
+    "q": 950,
+    "qkey": "exact:950",
+    "qty": 1.5,
+    "quality": "品质 950",
+    "raw": 1500000,
+    "reserved": false,
+    "ukey": "uSCU",
+    "unit": "SCU",
+    "value": null
+   },
+   {
+    "avail": 3.0,
+    "bin": "总仓",
+    "en": "Golden Test Gadget",
+    "goal_qty": 2.0,
+    "id": "gad",
+    "kind": "物品",
+    "location": "金样测试仓乙",
+    "place": "金样测试仓乙",
+    "place_state": "custom",
+    "q": null,
+    "qkey": "unknown",
+    "qty": 5,
+    "quality": "未知",
+    "raw": 5,
+    "reserved": false,
+    "ukey": "unit",
+    "unit": "个",
+    "value": null
+   },
+   {
+    "avail": 4.0,
+    "bin": "总仓",
+    "en": "Golden Test Gadget",
+    "goal_qty": 0.0,
+    "id": "gad",
+    "kind": "物品",
+    "location": "金样测试仓甲",
+    "place": "金样测试仓甲",
+    "place_state": "custom",
+    "q": null,
+    "qkey": "unknown",
+    "qty": 4,
+    "quality": "未知",
+    "raw": 4,
+    "reserved": false,
+    "ukey": "unit",
+    "unit": "个",
+    "value": null
+   }
+  ],
+  "step": "盘点确认 @甲：测试物品 2 → 4",
+  "tree": [],
+  "unmatched": []
+ },
+ {
+  "custom": [
+   {
+    "bins": [
+     {
+      "count": 2,
+      "default": true,
+      "desc": "",
+      "name": "总仓"
+     }
+    ],
+    "count": 2,
+    "kind": "其他",
+    "label": "金样测试仓乙",
+    "path": "金样测试仓乙",
+    "state": "custom",
+    "sys": "",
+    "value": 0
+   },
+   {
+    "bins": [
+     {
+      "count": 2,
+      "default": true,
+      "desc": "",
+      "name": "总仓"
+     }
+    ],
+    "count": 2,
+    "kind": "其他",
+    "label": "金样测试仓甲",
+    "path": "金样测试仓甲",
+    "state": "custom",
+    "sys": "",
+    "value": 0
+   }
+  ],
+  "history": [
+   {
+    "batch": "B10",
+    "lines": 1,
+    "mode": "out",
+    "note": "金样目标",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "用于制造",
+    "source": "目标",
+    "type": "出库",
+    "undone": false
+   },
+   {
+    "batch": "B9",
+    "lines": 1,
+    "mode": "count",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "盘点",
+    "type": "盘点",
+    "undone": false
+   },
+   {
+    "batch": "B8",
+    "lines": 2,
+    "mode": "undo:B7",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "撤销",
+    "undone": false
+   },
+   {
+    "batch": "B7",
+    "lines": 1,
+    "mode": "quality",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "改品质",
+    "undone": true
+   },
+   {
+    "batch": "B6",
+    "lines": 1,
+    "mode": "move",
+    "note": "",
+    "places": [
+     "金样测试仓乙",
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "库存页",
+    "type": "移库",
+    "undone": false
+   },
+   {
+    "batch": "B5",
+    "lines": 1,
+    "mode": "set",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "库存页",
+    "type": "改数量",
+    "undone": false
+   },
+   {
+    "batch": "B4",
+    "lines": 1,
+    "mode": "out",
+    "note": "金样",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "卖了",
+    "source": "库存页",
+    "type": "出库",
+    "undone": false
+   },
+   {
+    "batch": "B3",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B2",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B1",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   }
+  ],
+  "ledger": [
+   {
+    "batch": "B10",
+    "lines": 1,
+    "mode": "out",
+    "note": "金样目标",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "用于制造",
+    "source": "目标",
+    "type": "出库",
+    "undone": false
+   },
+   {
+    "batch": "B9",
+    "lines": 1,
+    "mode": "count",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "盘点",
+    "type": "盘点",
+    "undone": false
+   },
+   {
+    "batch": "B8",
+    "lines": 2,
+    "mode": "undo:B7",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "撤销",
+    "undone": false
+   },
+   {
+    "batch": "B7",
+    "lines": 1,
+    "mode": "quality",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "改品质",
+    "undone": true
+   },
+   {
+    "batch": "B6",
+    "lines": 1,
+    "mode": "move",
+    "note": "",
+    "places": [
+     "金样测试仓乙",
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "库存页",
+    "type": "移库",
+    "undone": false
+   },
+   {
+    "batch": "B5",
+    "lines": 1,
+    "mode": "set",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "库存页",
+    "type": "改数量",
+    "undone": false
+   },
+   {
+    "batch": "B4",
+    "lines": 1,
+    "mode": "out",
+    "note": "金样",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "卖了",
+    "source": "库存页",
+    "type": "出库",
+    "undone": false
+   },
+   {
+    "batch": "B3",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B2",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B1",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   }
+  ],
+  "ledger_total": 10,
+  "rows": [
+   {
+    "avail": 1.0,
+    "bin": "总仓",
+    "en": "Titanium",
+    "goal_qty": 0.0,
+    "id": "tit",
+    "kind": "矿物",
+    "location": "金样测试仓乙",
+    "place": "金样测试仓乙",
+    "place_state": "custom",
+    "q": 950,
+    "qkey": "exact:950",
+    "qty": 1.0,
+    "quality": "品质 950",
+    "raw": 1000000,
+    "reserved": true,
+    "ukey": "uSCU",
+    "unit": "SCU",
+    "value": null
+   },
+   {
+    "avail": 1.5,
+    "bin": "总仓",
+    "en": "Titanium",
+    "goal_qty": 0.0,
+    "id": "tit",
+    "kind": "矿物",
+    "location": "金样测试仓甲",
+    "place": "金样测试仓甲",
+    "place_state": "custom",
+    "q": 950,
+    "qkey": "exact:950",
+    "qty": 1.5,
+    "quality": "品质 950",
+    "raw": 1500000,
+    "reserved": false,
+    "ukey": "uSCU",
+    "unit": "SCU",
+    "value": null
+   },
+   {
+    "avail": 3.0,
+    "bin": "总仓",
+    "en": "Golden Test Gadget",
+    "goal_qty": 1.0,
+    "id": "gad",
+    "kind": "物品",
+    "location": "金样测试仓乙",
+    "place": "金样测试仓乙",
+    "place_state": "custom",
+    "q": null,
+    "qkey": "unknown",
+    "qty": 4,
+    "quality": "未知",
+    "raw": 4,
+    "reserved": false,
+    "ukey": "unit",
+    "unit": "个",
+    "value": null
+   },
+   {
+    "avail": 4.0,
+    "bin": "总仓",
+    "en": "Golden Test Gadget",
+    "goal_qty": 0.0,
+    "id": "gad",
+    "kind": "物品",
+    "location": "金样测试仓甲",
+    "place": "金样测试仓甲",
+    "place_state": "custom",
+    "q": null,
+    "qkey": "unknown",
+    "qty": 4,
+    "quality": "未知",
+    "raw": 4,
+    "reserved": false,
+    "ukey": "unit",
+    "unit": "个",
+    "value": null
+   }
+  ],
+  "step": "目标完成一次：扣测试物品 1 个",
+  "tree": [],
+  "unmatched": []
+ },
+ {
+  "custom": [
+   {
+    "bins": [
+     {
+      "count": 2,
+      "default": true,
+      "desc": "",
+      "name": "总仓"
+     }
+    ],
+    "count": 2,
+    "kind": "其他",
+    "label": "金样测试仓乙",
+    "path": "金样测试仓乙",
+    "state": "custom",
+    "sys": "",
+    "value": 0
+   },
+   {
+    "bins": [
+     {
+      "count": 2,
+      "default": true,
+      "desc": "",
+      "name": "总仓"
+     }
+    ],
+    "count": 2,
+    "kind": "其他",
+    "label": "金样测试仓甲",
+    "path": "金样测试仓甲",
+    "state": "custom",
+    "sys": "",
+    "value": 0
+   }
+  ],
+  "history": [
+   {
+    "batch": "B11",
+    "lines": 1,
+    "mode": "undo:B10",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "撤销",
+    "undone": false
+   },
+   {
+    "batch": "B10",
+    "lines": 1,
+    "mode": "out",
+    "note": "金样目标",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "用于制造",
+    "source": "目标",
+    "type": "出库",
+    "undone": true
+   },
+   {
+    "batch": "B9",
+    "lines": 1,
+    "mode": "count",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "盘点",
+    "type": "盘点",
+    "undone": false
+   },
+   {
+    "batch": "B8",
+    "lines": 2,
+    "mode": "undo:B7",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "撤销",
+    "undone": false
+   },
+   {
+    "batch": "B7",
+    "lines": 1,
+    "mode": "quality",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "改品质",
+    "undone": true
+   },
+   {
+    "batch": "B6",
+    "lines": 1,
+    "mode": "move",
+    "note": "",
+    "places": [
+     "金样测试仓乙",
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "库存页",
+    "type": "移库",
+    "undone": false
+   },
+   {
+    "batch": "B5",
+    "lines": 1,
+    "mode": "set",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "库存页",
+    "type": "改数量",
+    "undone": false
+   },
+   {
+    "batch": "B4",
+    "lines": 1,
+    "mode": "out",
+    "note": "金样",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "卖了",
+    "source": "库存页",
+    "type": "出库",
+    "undone": false
+   },
+   {
+    "batch": "B3",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B2",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B1",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   }
+  ],
+  "ledger": [
+   {
+    "batch": "B11",
+    "lines": 1,
+    "mode": "undo:B10",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "撤销",
+    "undone": false
+   },
+   {
+    "batch": "B10",
+    "lines": 1,
+    "mode": "out",
+    "note": "金样目标",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "用于制造",
+    "source": "目标",
+    "type": "出库",
+    "undone": true
+   },
+   {
+    "batch": "B9",
+    "lines": 1,
+    "mode": "count",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "盘点",
+    "type": "盘点",
+    "undone": false
+   },
+   {
+    "batch": "B8",
+    "lines": 2,
+    "mode": "undo:B7",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "撤销",
+    "undone": false
+   },
+   {
+    "batch": "B7",
+    "lines": 1,
+    "mode": "quality",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "改品质",
+    "undone": true
+   },
+   {
+    "batch": "B6",
+    "lines": 1,
+    "mode": "move",
+    "note": "",
+    "places": [
+     "金样测试仓乙",
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "库存页",
+    "type": "移库",
+    "undone": false
+   },
+   {
+    "batch": "B5",
+    "lines": 1,
+    "mode": "set",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "库存页",
+    "type": "改数量",
+    "undone": false
+   },
+   {
+    "batch": "B4",
+    "lines": 1,
+    "mode": "out",
+    "note": "金样",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "卖了",
+    "source": "库存页",
+    "type": "出库",
+    "undone": false
+   },
+   {
+    "batch": "B3",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓乙"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B2",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   },
+   {
+    "batch": "B1",
+    "lines": 1,
+    "mode": "add",
+    "note": "",
+    "places": [
+     "金样测试仓甲"
+    ],
+    "reason": "",
+    "source": "",
+    "type": "入库",
+    "undone": false
+   }
+  ],
+  "ledger_total": 11,
+  "rows": [
+   {
+    "avail": 1.0,
+    "bin": "总仓",
+    "en": "Titanium",
+    "goal_qty": 0.0,
+    "id": "tit",
+    "kind": "矿物",
+    "location": "金样测试仓乙",
+    "place": "金样测试仓乙",
+    "place_state": "custom",
+    "q": 950,
+    "qkey": "exact:950",
+    "qty": 1.0,
+    "quality": "品质 950",
+    "raw": 1000000,
+    "reserved": true,
+    "ukey": "uSCU",
+    "unit": "SCU",
+    "value": null
+   },
+   {
+    "avail": 1.5,
+    "bin": "总仓",
+    "en": "Titanium",
+    "goal_qty": 0.0,
+    "id": "tit",
+    "kind": "矿物",
+    "location": "金样测试仓甲",
+    "place": "金样测试仓甲",
+    "place_state": "custom",
+    "q": 950,
+    "qkey": "exact:950",
+    "qty": 1.5,
+    "quality": "品质 950",
+    "raw": 1500000,
+    "reserved": false,
+    "ukey": "uSCU",
+    "unit": "SCU",
+    "value": null
+   },
+   {
+    "avail": 4.0,
+    "bin": "总仓",
+    "en": "Golden Test Gadget",
+    "goal_qty": 0.0,
+    "id": "gad",
+    "kind": "物品",
+    "location": "金样测试仓甲",
+    "place": "金样测试仓甲",
+    "place_state": "custom",
+    "q": null,
+    "qkey": "unknown",
+    "qty": 4,
+    "quality": "未知",
+    "raw": 4,
+    "reserved": false,
+    "ukey": "unit",
+    "unit": "个",
+    "value": null
+   },
+   {
+    "avail": 4.0,
+    "bin": "总仓",
+    "en": "Golden Test Gadget",
+    "goal_qty": 1.0,
+    "id": "gad",
+    "kind": "物品",
+    "location": "金样测试仓乙",
+    "place": "金样测试仓乙",
+    "place_state": "custom",
+    "q": null,
+    "qkey": "unknown",
+    "qty": 5,
+    "quality": "未知",
+    "raw": 5,
+    "reserved": false,
+    "ukey": "unit",
+    "unit": "个",
+    "value": null
+   }
+  ],
+  "step": "撤销目标扣料",
+  "tree": [],
+  "unmatched": []
+ }
+]

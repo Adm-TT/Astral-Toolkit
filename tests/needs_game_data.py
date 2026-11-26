@@ -63,4 +63,6 @@ NEEDS_GAME_DATA: dict[str, set[str]] = {
         "test_legacy_bin_default_and_unrelated_place_remain",
         "test_legacy_bin_default_and_desc_fill_official_blanks",
     },
+    # 矿物表（钛按 SCU 记、算「矿物」）
+    "tests.test_inventory_golden": {"test_inventory_legacy_golden"},
 }
