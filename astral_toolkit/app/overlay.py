@@ -28,6 +28,16 @@ ENABLED = True  # 不想要悬浮窗就改成 False
 from ..core.paths import USER  # noqa: E402
 
 POS_FILE = USER / "overlay_pos.json"
+
+
+def _displayinfo_box(size):
+    """游戏右上角调试信息那块（和导航读位置用的是同一个范围）：悬浮窗要让开它"""
+    from ..contracts.displayinfo_area import KEY, REGION
+    from ..core import screen_regions
+
+    return screen_regions.frac(KEY, REGION, size)
+
+
 LABEL = {
     "扫描": "采矿助手",
     "导航": "导航",
@@ -1371,8 +1381,6 @@ class Hud:
             self._mk_put(h2, None, 0, 0)
             return
         try:
-            from ..navigation.displayinfo import _region
-
             left, top, w, h = data["area"]
             m = dict(data["proj"], label=data["label"])
             scale = max(0.75, h / 1080) * self._settings()[0]
@@ -1383,7 +1391,9 @@ class Hud:
             else:
                 px, py = edge_point(m.get("angle", 0), w, h, EDGE_MARGIN * scale)
             x, y = px - ax, py - ay
-            x, y = avoid_box(x, y, img.width, img.height, w, h, _region((w, h)))
+            x, y = avoid_box(
+                x, y, img.width, img.height, w, h, _displayinfo_box((w, h))
+            )
             self._mk_put(h1, img, left + x, top + y)
             ring = ring_image(m, scale, plate)
             self._mk_put(h2, ring, left + w / 2 - ring.width / 2, top + h * 0.72)
@@ -1464,12 +1474,11 @@ class Hud:
         """(x, y) 放文案窗会不会盖住右上角读位置那块 → 让开后的位置；拿不到游戏窗口 / 区域就原样"""
         try:
             from ..infrastructure.platform.capture import game_area
-            from ..navigation.displayinfo import _region
 
             a = game_area()
             w, h = self._win_wh
             return keep_off_box(
-                x, y, w, h, a, _region((int(a["width"]), int(a["height"])))
+                x, y, w, h, a, _displayinfo_box((int(a["width"]), int(a["height"])))
             )
         except Exception:
             return int(x), int(y)

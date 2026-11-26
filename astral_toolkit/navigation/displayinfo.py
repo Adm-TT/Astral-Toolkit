@@ -13,12 +13,9 @@ import re
 import time
 from typing import Any
 
-REGION = (
-    0.66,
-    0.0,
-    1.0,
-    0.22,
-)  # 右上角：左、上、右、下（占屏幕比例）；只截用得到的几行，识别快一半
+from ..contracts.displayinfo_area import KEY as _AREA_KEY
+from ..contracts.displayinfo_area import REGION as REGION  # 测试和老代码照旧从这里拿
+
 UPSCALE = 2
 
 
@@ -26,7 +23,7 @@ def _region(size):
     """右上角调试信息的范围：区域文件 nav.displayinfo（读屏开发工作台里画），没有就用 REGION（2026-11-09）"""
     from ..core import screen_regions
 
-    return screen_regions.frac("nav.displayinfo", REGION, size)
+    return screen_regions.frac(_AREA_KEY, REGION, size)
 
 
 _NUM = r"(-?\d[\d,]*\.?\d*)"
