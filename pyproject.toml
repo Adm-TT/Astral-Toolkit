@@ -154,6 +154,4 @@ allow_indirect_imports = true
 ignore_imports = [
     "astral_toolkit.trade.console -> astral_toolkit.crafting.stockplaces",
     "astral_toolkit.trade.inspector -> astral_toolkit.crafting.crafting",
-    "astral_toolkit.trade.inspector -> astral_toolkit.mining.data",
-    "astral_toolkit.trade.names -> astral_toolkit.mining.data",
 ]

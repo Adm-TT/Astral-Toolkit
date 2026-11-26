@@ -7,38 +7,13 @@ grimhex.net（矿物信号）、UEX / cryon.rocks（精炼站加成、矿价）�
 
 import sys
 
+from ..contracts.minerals import SIGNATURES
+
 GAME_VERSION = "4.10.2"
 
 # ---------------------------------------------------------------- 矿物信号
-# 单块原矿的雷达信号值（以 SCMiner 矿物目录为准，4.10.2）。一簇 N 块 = 基础值 × N。
-SIGNATURES = {
-    "Quantainium": 3170,
-    "Stileron": 3185,
-    "Savrilium": 3200,
-    "Ouratite": 3370,
-    "Riccite": 3385,
-    "Lindinium": 3400,
-    "Beryl": 3540,
-    "Taranite": 3555,
-    "Borase": 3570,
-    "Gold": 3585,
-    "Bexalite": 3600,
-    "Laranite": 3825,
-    "Aslarite": 3840,
-    "Titanium": 3855,
-    "Tungsten": 3870,
-    "Agricium": 3885,
-    "Torite": 3900,
-    "Hephaestanite": 4180,
-    "Tin": 4195,
-    "Quartz": 4210,
-    "Corundum": 4225,
-    "Copper": 4240,
-    "Silicon": 4255,
-    "Iron": 4270,
-    "Aluminum": 4285,
-    "Ice": 4300,
-}
+# 单块原矿的雷达信号值 SIGNATURES 在 contracts/minerals.py（交易也用，领域之间不互相引用），文件顶上 import 进来；
+# data.SIGNATURES 照旧能用，是同一个 dict。这是长期保留的转发（采矿自己的数据入口），采矿和业务层的调用方不用迁
 
 
 # 关注里除了矿，还能选这两类雷达信号（老大 2026-11-08 批注验收单：也可以关注地面信号和太空残骸信号）。

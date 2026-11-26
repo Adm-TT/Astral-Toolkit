@@ -145,9 +145,9 @@ class _Img:
 def _fake_minerals(monkeypatch):
     """采矿信号表只有刚玉；中文矿名只在模糊时把「刚毅」配成刚玉（照 11-06 老大那次的真结果造的替身）。"""
     from astral_toolkit.core import i18n
-    from astral_toolkit.mining import data as mining_data
+    from astral_toolkit.contracts import minerals
 
-    monkeypatch.setattr(mining_data, "SIGNATURES", {"Corundum": None})
+    monkeypatch.setattr(minerals, "SIGNATURES", {"Corundum": None})
     monkeypatch.setattr(
         i18n,
         "mineral_en",
