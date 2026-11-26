@@ -862,7 +862,7 @@ def _is_mineral(zh, en, fuzzy=True):
     fuzzy=False：名字已经在汉化包里精确对上了（inspect_item 的 canon），矿名也只认精确的、不模糊兜底——
     「刚毅」（发电机）被配成「刚玉」、「冰块」（冷却器）配成「冰」都是模糊配的（2026-11-06 老大验收 F8）"""
     try:
-        from ..mining.data import SIGNATURES
+        from ..contracts.minerals import SIGNATURES
         from ..core.i18n import mineral_en
         from .names import raw_base
 

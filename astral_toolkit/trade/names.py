@@ -119,7 +119,7 @@ def _mineral(zh, en):
     原矿 / 矿石名（「铁原矿」「金矿石」）不在这里认：它和精炼的是两样东西（老大 2026-11-08 定分开），交给汉化包对照表
     （「铁原矿」Iron (Ore)）；以前这里认成「铁」Iron，F8 查的是精炼铁的价、盘点记成精炼铁"""
     try:
-        from ..mining.data import SIGNATURES
+        from ..contracts.minerals import SIGNATURES
         from ..core.i18n import _tables, mineral_en, mineral_zh
     except Exception:
         return None
