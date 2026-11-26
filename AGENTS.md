@@ -22,7 +22,7 @@
 - 用户数据（`userdata/`：设置、路标、库存、日志）永远不进仓库、不外传。游戏截图里的玩家信息不用处理。
 - 测试不依赖用户设置（monkeypatch 换掉设置文件）、不写真实日志（用 tmp_path）、不往服务器发反馈（`AT_FEEDBACK_OFF=1`）。
 - 每次改动完成后，创建一个对应的 Git commit，以便追踪和回滚：在功能分支上做，验证全绿后立即提交，不直接提交到 main。
-- 基线（`ruff --add-noqa` 加的 `# noqa`、`.basedpyright/baseline.json`）只用来登记接入前的老问题，不准用来掩盖新问题；改了基线要在 PR 里说明。
+- 基线（`ruff --add-noqa` 加的 `# noqa`、`.basedpyright/baseline.json`、`pyproject.toml` 里 `[tool.importlinter]` 的 `ignore_imports`）只用来登记接入前的老问题，不准用来掩盖新问题；改了基线要在 PR 里说明。
 - 修 bug 时先找根因，不要只压住症状。
 - 变更保持小而独立：一个 PR 解决一个问题。
 - 涉及方案的改动（新功能、架构调整、接口变化）先写方案文档再动手：放 `docs/superpowers/specs/`，一个方案一个 `.md`，文件名日期开头，顶部保留「变更记录」表；方案后续有改动先在表里加一行再改正文。该目录不进仓库，供负责人送外部复审和并行会话共用。
@@ -59,12 +59,16 @@ set "AT_FEEDBACK_OFF=1"
 rem 垃圾代码检查（CI 每个 PR 都跑，全量测试也带着它）：和 tools\junk_baseline.json 登记的老问题比，只许减不许加；清掉老问题后按提示加 --write-baseline 收紧
 .venv\Scripts\python.exe -X utf8 tools\junk_check.py
 
+rem 分层边界检查（CI 每个 PR 都跑）：规则和登记的老越界在 pyproject.toml [tool.importlinter]，只许减不许加；拆掉一处就删掉 ignore_imports 里对应那行
+set "PYTHONUTF8=1"
+.venv\Scripts\lint-imports.exe
+
 rem 构建（PyInstaller + ATShell；需打包依赖和 .NET SDK）
 .venv\Scripts\python.exe -m pip install --no-deps -r requirements-build.lock.txt
 .venv\Scripts\python.exe -X utf8 tools\build_standalone.py
 ```
 
-- CI（`.github/workflows/ci.yml`，Windows）推到 dev / main 和往 dev / main 开 PR 时自动跑（只推功能分支不跑） lint、格式、类型、垃圾代码检查和单元测试。云端没有 `data/`，单元测试带 `AT_NO_GAME_DATA=1`，跳过 `tests/needs_game_data.py` 登记的要游戏数据的测试；本机不设这个变量，照常全跑。新测试缺数据就过不了的，自己在缺数据时 skip，或登记进那个文件。
+- CI（`.github/workflows/ci.yml`，Windows）推到 dev / main 和往 dev / main 开 PR 时自动跑（只推功能分支不跑） lint、格式、类型、垃圾代码检查、分层边界检查和单元测试。云端没有 `data/`，单元测试带 `AT_NO_GAME_DATA=1`，跳过 `tests/needs_game_data.py` 登记的要游戏数据的测试；本机不设这个变量，照常全跑。新测试缺数据就过不了的，自己在缺数据时 skip，或登记进那个文件。
 - 说"完成"之前必须实际运行上面的命令，并展示结果，不接受口头确认。
 - 通过远程工具操作这台电脑时，单条命令 60 秒会断线：全量测试、建库这类长命令用 `Invoke-CimMethod Win32_Process Create` 起后台 `cmd /c … > 日志文件` 再读文件，别在前台等。
 - UI 变更：在 ATShell 窗口里跑一遍，截图并对照 `产品设计文档.md` 第 5 节；悬浮窗变更要在游戏里看。

@@ -1,7 +1,7 @@
 # 门禁：push / PR 时在 Windows 上自动跑 AGENTS.md「验证命令」里不需要游戏数据的部分。
 #
 # 为什么是 Windows：项目只跑 Windows（DirectML、ctypes.windll、ATShell），换平台类型检查的结论会变。
-# 两个 job 并行：gates（lint / 格式 / 类型 / 垃圾代码）和 tests（单元测试）。
+# 两个 job 并行：gates（lint / 格式 / 类型 / 垃圾代码 / 分层边界）和 tests（单元测试）。
 # 单元测试：云端没有 data/ 和截图样本，设 AT_NO_GAME_DATA=1 跳过 tests/needs_game_data.py 登记的要数据的测试，
 # 要截图的测试本来就会自己跳过；带数据的全量 tests.run_all 和 sample_sweep 仍在本机跑。
 # 目的：把「本地忘了跑」这一类漏网挡住（2026-11-02 包名替换后 16 个文件格式变红，就是没人重跑 formatter）。
@@ -62,6 +62,12 @@ jobs:
       # 和 tools/junk_baseline.json 登记的老问题比，只许减不许加（2026-11-05 老大定每个 PR 都查）。只用标准库，不要游戏数据
       - name: 垃圾代码检查
         run: ./.venv/Scripts/python.exe -X utf8 tools/junk_check.py
+
+      # 分层边界（AGENTS.md「分层」）：规则和登记的老越界在 pyproject.toml [tool.importlinter]，只许减不许加（2026-11-26 老大定）。只看 import，不要游戏数据
+      - name: 分层边界检查
+        env:
+          PYTHONUTF8: "1"
+        run: ./.venv/Scripts/lint-imports.exe
 
   tests:
     name: 单元测试（不要游戏数据的）
