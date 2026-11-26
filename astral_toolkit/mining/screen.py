@@ -476,23 +476,30 @@ def clusters(items):
     return list(groups.values())
 
 
+# 截到图以后顺手更新界面右下角的截图预览：装配时（bootstrap）接进来，领域层不碰界面（2026-11-26 边界拆分）。
+# 没接（工具、测试）就不更新预览
+_preview_sink = None
+
+
+def set_preview_sink(sink):
+    """装配时接一个 (img) -> None；grab 截到图后在后台小线程里调它"""
+    global _preview_sink
+    _preview_sink = sink
+
+
 def grab():
     """整屏截图；悬浮窗盖住的那块涂黑，不会读到悬浮窗自己的字"""
     from ..infrastructure.platform.capture import grab_screen
 
     img = grab_screen()
-    try:
-        import threading
-        from ..app import preview
+    sink = _preview_sink
+    if sink is not None:
+        try:
+            import threading
 
-        threading.Thread(
-            target=preview.update_preview,
-            args=(img,),
-            kwargs={"source": "live"},
-            daemon=True,
-        ).start()
-    except Exception:
-        pass
+            threading.Thread(target=sink, args=(img,), daemon=True).start()
+        except Exception:
+            pass
     return img
 
 

@@ -77,9 +77,6 @@ type = "forbidden"
 source_modules = ["astral_toolkit.mining", "astral_toolkit.navigation", "astral_toolkit.crafting", "astral_toolkit.trade"]
 forbidden_modules = ["astral_toolkit.app"]
 allow_indirect_imports = true
-ignore_imports = [
-    "astral_toolkit.mining.screen -> astral_toolkit.app.preview",
-]
 
 # 依赖只能往下：领域层不 import 业务层
 [[tool.importlinter.contracts]]

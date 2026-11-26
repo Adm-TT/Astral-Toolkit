@@ -221,13 +221,42 @@ def test_bind_all_wires_core_to_ui(monkeypatch):
 
     monkeypatch.setattr(capture, "_overlay_state", None)  # 测完还原
     monkeypatch.setattr(run_records, "_ui_sink", None)
+    monkeypatch.setattr(mining_screen, "_preview_sink", None)
     app = bootstrap.build("test")
     try:
         assert capture._overlay_state is None and run_records._ui_sink is None
+        assert mining_screen._preview_sink is None
     finally:
         bootstrap.shutdown(app, budget=0.2)
     with app_for_test():
         assert capture._overlay_state is not None and run_records._ui_sink is not None
+        assert mining_screen._preview_sink is not None
+
+
+def test_mining_grab_updates_preview_through_bound_sink(monkeypatch):
+    """采矿截图更新截图预览：mining/screen 不 import 界面，bind_all 接的 sink 调 preview.update_preview(source="live")；
+    没接就不更新"""
+    import threading
+
+    from astral_toolkit.app import preview
+    from astral_toolkit.infrastructure.platform import capture
+    from tests.bootstrap_helpers import app_for_test
+
+    monkeypatch.setattr(capture, "grab_screen", lambda: "图")
+    got, done = [], threading.Event()
+
+    def fake_update(img, source="live", force=False):
+        got.append((img, source, force))
+        done.set()
+
+    monkeypatch.setattr(preview, "update_preview", fake_update)
+    monkeypatch.setattr(mining_screen, "_preview_sink", None)
+    assert mining_screen.grab() == "图"
+    assert not done.wait(0.2) and got == []
+    with app_for_test():
+        assert mining_screen.grab() == "图"
+        assert done.wait(2)
+    assert got == [("图", "live", False)]
 
 
 def test_bind_all_wires_platform_to_hud(monkeypatch):
