@@ -59,12 +59,15 @@ set "AT_FEEDBACK_OFF=1"
 rem 垃圾代码检查（CI 每个 PR 都跑，全量测试也带着它）：和 tools\junk_baseline.json 登记的老问题比，只许减不许加；清掉老问题后按提示加 --write-baseline 收紧
 .venv\Scripts\python.exe -X utf8 tools\junk_check.py
 
+rem 分层边界检查（CI 每个 PR 都跑）：规则和登记的老越界在 pyproject.toml [tool.importlinter]，只许减不许加；拆掉一处就删掉 ignore_imports 里对应那行
+.venv\Scripts\lint-imports.exe
+
 rem 构建（PyInstaller + ATShell；需打包依赖和 .NET SDK）
 .venv\Scripts\python.exe -m pip install --no-deps -r requirements-build.lock.txt
 .venv\Scripts\python.exe -X utf8 tools\build_standalone.py
 ```
 
-- CI（`.github/workflows/ci.yml`，Windows）推到 dev / main 和往 dev / main 开 PR 时自动跑（只推功能分支不跑） lint、格式、类型、垃圾代码检查和单元测试。云端没有 `data/`，单元测试带 `AT_NO_GAME_DATA=1`，跳过 `tests/needs_game_data.py` 登记的要游戏数据的测试；本机不设这个变量，照常全跑。新测试缺数据就过不了的，自己在缺数据时 skip，或登记进那个文件。
+- CI（`.github/workflows/ci.yml`，Windows）推到 dev / main 和往 dev / main 开 PR 时自动跑（只推功能分支不跑） lint、格式、类型、垃圾代码检查、分层边界检查和单元测试。云端没有 `data/`，单元测试带 `AT_NO_GAME_DATA=1`，跳过 `tests/needs_game_data.py` 登记的要游戏数据的测试；本机不设这个变量，照常全跑。新测试缺数据就过不了的，自己在缺数据时 skip，或登记进那个文件。
 - 说"完成"之前必须实际运行上面的命令，并展示结果，不接受口头确认。
 - 通过远程工具操作这台电脑时，单条命令 60 秒会断线：全量测试、建库这类长命令用 `Invoke-CimMethod Win32_Process Create` 起后台 `cmd /c … > 日志文件` 再读文件，别在前台等。
 - UI 变更：在 ATShell 窗口里跑一遍，截图并对照 `产品设计文档.md` 第 5 节；悬浮窗变更要在游戏里看。

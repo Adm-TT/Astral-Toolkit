@@ -63,6 +63,12 @@ jobs:
       - name: 垃圾代码检查
         run: ./.venv/Scripts/python.exe -X utf8 tools/junk_check.py
 
+      # 分层边界（AGENTS.md「分层」）：规则和登记的老越界在 pyproject.toml [tool.importlinter]，只许减不许加（2026-11-26 老大定）。只看 import，不要游戏数据
+      - name: 分层边界检查
+        env:
+          PYTHONUTF8: "1"
+        run: ./.venv/Scripts/lint-imports.exe
+
   tests:
     name: 单元测试（不要游戏数据的）
     runs-on: windows-latest

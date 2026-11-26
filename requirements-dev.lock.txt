@@ -3,3 +3,11 @@
 ruff==0.17.3
 basedpyright==1.40.2
 nodejs-wheel-binaries==24.19.0
+# 分层边界检查 lint-imports（规则在 pyproject.toml [tool.importlinter]）；下面几个是它的依赖，--no-deps 装所以要列全
+import-linter==2.17
+grimp==3.20
+click==8.5.1
+rich==15.0.0
+markdown-it-py==4.3.0
+mdurl==0.1.2
+Pygments==2.21.0
