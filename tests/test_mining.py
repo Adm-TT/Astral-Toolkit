@@ -1195,6 +1195,14 @@ def test_quality_one_table_and_name_forms():
         assert quality.tier_of(name, 858) == ("B", 5, 7), name
     assert quality.tier_values("Ice") == quality.TIER_VALUES["Pressurized Ice"]
     assert quality.tier_values("没有这种矿") is None
+    # 档位表 2026-11-26 挪到 contracts/ore_tiers：采矿这边的名字还是同一个对象
+    from astral_toolkit.contracts import ore_tiers
+
+    assert (
+        quality.TIERS is ore_tiers.TIERS
+        and quality.TIER_VALUES is ore_tiers.TIER_VALUES
+    )
+    assert quality.tier_values is ore_tiers.tier_values
     assert len(quality.TIER_VALUES) == len(quality.TIERS) == 36
     for k, values in quality.TIER_VALUES.items():
         assert values == [*quality.TIERS[k], quality.PERFECT], k

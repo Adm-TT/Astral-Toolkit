@@ -266,11 +266,10 @@ def browse(
     )
 
 
-def describe(bp, with_locations: bool = True) -> str:
-    """一份蓝图的完整中文说明"""
-    from ..mining.data import best_price
-    from ..mining.locations import where, zh_name
-
+def describe(bp, with_locations: bool = True, mine_line=None) -> str:
+    """一份蓝图的完整中文说明。
+    「去哪挖」那几行要采矿的地点和收购价：由调用方（tasks/crafting.describe_blueprint）传 mine_line(矿英文名) → 那一行的正文，
+    领域层不引用采矿（2026-11-26 边界拆分）；不传或 with_locations=False 就不写「去哪挖」"""
     kind = _labels.GEAR_ZH.get((bp["g"], bp["t"]), bp["t"] or bp["g"])
     lines = [
         f"【{display_name(bp)}】{kind}｜{bp['m'] or '—'}｜制造 {bp['sec'] // 60} 分 {bp['sec'] % 60} 秒"
@@ -295,18 +294,10 @@ def describe(bp, with_locations: bool = True) -> str:
     total = _quality.laser_total(bp)
     if total:
         lines.append(f"  · {total}")
-    if with_locations and minerals:
+    if with_locations and mine_line is not None and minerals:
         lines.append("  去哪挖：")
         for m in dict.fromkeys(minerals):
-            rows = where(m)[:2]
-            price, city = best_price(m)
-            spots = (
-                "，".join(f"{zh_name(loc)} {pct:.0f}%" for pct, loc in rows)
-                or "SCMiner 没有船挖地点"
-            )
-            lines.append(
-                f"    {material_zh(m)}：{spots}｜精炼后 {price:,}/SCU（{city or '无收购'}）"
-            )
+            lines.append(f"    {material_zh(m)}：{mine_line(m)}")
     if bp["src"]:
         lines.append(
             f"  蓝图来源（{bp['nsrc']} 个任务，列出前 {min(len(bp['src']), 5)} 个）："
@@ -373,16 +364,16 @@ def mix_targets(bp):
 
 
 def solve_slots(bp, mods):
-    """按说明框里的加成倒推每个材料槽的品质：每个槽只在这种材料的固定几档品质里找（mining/quality 的 tier_values），
+    """按说明框里的加成倒推每个材料槽的品质：每个槽只在这种材料的固定几档品质里找（contracts/ore_tiers 的 tier_values），
     同一属性几个槽都影响时各槽百分比相加（和制造终端一致，那把枪验证过）。正负号怎么比、exact 什么意思见
     crafting.reverse.solve_slots。返回 {"slots": [{idx, slot, mat, q}], "avg": 平均品质, "exact": …}；对不上返回 None"""
-    from ..mining.quality import tier_values
+    from ..contracts.ore_tiers import tier_values
 
     return _reverse.solve_slots(bp, mods, tier_values, material_zh)
 
 
 def craft_slots(bp):
     """入库时手填：这个蓝图会影响属性的材料槽 [{idx, slot, mat, mat_en, tiers}]"""
-    from ..mining.quality import tier_values
+    from ..contracts.ore_tiers import tier_values
 
     return _reverse.craft_slots(bp, tier_values, material_zh)

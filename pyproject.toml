@@ -127,9 +127,6 @@ source_modules = ["astral_toolkit.crafting"]
 forbidden_modules = ["astral_toolkit.mining", "astral_toolkit.navigation", "astral_toolkit.trade"]
 allow_indirect_imports = true
 ignore_imports = [
-    "astral_toolkit.crafting.crafting -> astral_toolkit.mining.data",
-    "astral_toolkit.crafting.crafting -> astral_toolkit.mining.locations",
-    "astral_toolkit.crafting.crafting -> astral_toolkit.mining.quality",
     "astral_toolkit.crafting.goals -> astral_toolkit.trade.console",
     "astral_toolkit.crafting.goals -> astral_toolkit.trade.matching",
     "astral_toolkit.crafting.goals -> astral_toolkit.trade.models",
