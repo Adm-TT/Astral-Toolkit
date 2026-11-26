@@ -211,6 +211,8 @@ def test_commit_accepts_current_session_and_requires_a_stamp_for_a_slot():
     loop, worker, out = make_loop()
     try:
         sid = _started(loop, worker)
+        # 和下一条一样：worker.session 在第一次 tick 才记下，没等到就拿是 None、stamp 也是 None（11-26 全量偶发红过一次）
+        assert worker.ticked.wait(WAIT), "第一次 tick 还没记下会话"
         session = worker.session
         stamp = loop.stamp(session, 1.0)
         assert stamp is not None and stamp.session_id == sid
