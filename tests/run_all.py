@@ -166,7 +166,19 @@ MODULES = [
     "tests.test_screen_regions",
     "tests.test_readlab",
     "tests.test_stock_count_fixes",
+    "tests.test_needs_game_data",
 ]
 
+
+def _skip_without_game_data():
+    """AT_NO_GAME_DATA=1（云端 CI，没有 data/）：跳过 tests/needs_game_data.py 登记的测试；本机不设，全部照跑"""
+    if os.environ.get("AT_NO_GAME_DATA") != "1":
+        return {}
+    from tests.needs_game_data import NEEDS_GAME_DATA
+
+    why = "没有游戏数据（AT_NO_GAME_DATA=1）"
+    return {mod: dict.fromkeys(names, why) for mod, names in NEEDS_GAME_DATA.items()}
+
+
 if __name__ == "__main__":
-    sys.exit(1 if run_all(MODULES) else 0)
+    sys.exit(1 if run_all(MODULES, _skip_without_game_data()) else 0)

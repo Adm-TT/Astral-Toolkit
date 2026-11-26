@@ -1,0 +1,2 @@
+# 提交前钩子是 sh 脚本：开了 core.autocrlf 也要以 LF 签出，不然 sh 读到 \r 报错
+tools/git-hooks/* text eol=lf

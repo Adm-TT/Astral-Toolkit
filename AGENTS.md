@@ -34,6 +34,7 @@
 
 - 需要：Windows 10/11、Python 3.12（`py` 启动器）、.NET SDK（编 ATShell 用）。
 - 游戏数据 `data/` 和截图样本 `tests/samples/` 由项目负责人提供，放进对应目录；部分测试和截图回归需要它们。数据也可以运行 `.venv\Scripts\python.exe -X utf8 -m astral_toolkit.run update` 下载数据包。
+- 装提交前钩子（每个克隆装一次，同一克隆的 worktree 共用）：仓库根目录运行 `git config core.hooksPath tools/git-hooks`。之后每次 `git commit` 先跑 `ruff check` 和 `ruff format --check`，不过就不让提交；急着提交可以 `git commit --no-verify`，CI 照样会查。卸掉：`git config --unset core.hooksPath`。
 
 ## 验证命令（做完任何改动后必须跑，并把输出贴出来）
 
@@ -63,6 +64,7 @@ rem 构建（PyInstaller + ATShell；需打包依赖和 .NET SDK）
 .venv\Scripts\python.exe -X utf8 tools\build_standalone.py
 ```
 
+- CI（`.github/workflows/ci.yml`，Windows）推到 dev / main 和往 dev / main 开 PR 时自动跑（只推功能分支不跑） lint、格式、类型、垃圾代码检查和单元测试。云端没有 `data/`，单元测试带 `AT_NO_GAME_DATA=1`，跳过 `tests/needs_game_data.py` 登记的要游戏数据的测试；本机不设这个变量，照常全跑。新测试缺数据就过不了的，自己在缺数据时 skip，或登记进那个文件。
 - 说"完成"之前必须实际运行上面的命令，并展示结果，不接受口头确认。
 - 通过远程工具操作这台电脑时，单条命令 60 秒会断线：全量测试、建库这类长命令用 `Invoke-CimMethod Win32_Process Create` 起后台 `cmd /c … > 日志文件` 再读文件，别在前台等。
 - UI 变更：在 ATShell 窗口里跑一遍，截图并对照 `产品设计文档.md` 第 5 节；悬浮窗变更要在游戏里看。

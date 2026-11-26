@@ -1,0 +1,33 @@
+#!/bin/sh
+# 提交前检查：ruff check + ruff format --check（和 CI「门禁」的前两条一样），格式问题在推上去之前就拦下。
+# 装：在仓库根目录运行一次  git config core.hooksPath tools/git-hooks
+# 卸：git config --unset core.hooksPath
+# 临时跳过（比如只提交文档又急着走）：git commit --no-verify
+# 查的是工作区里的整个仓库，不只是这次暂存的文件；ruff 很快，全仓库也就一两秒。
+
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+# 先找本 worktree 的 .venv；没有就用主克隆的（worktree 一般不另建 venv）
+MAIN="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)"
+RUFF=
+for v in .venv "$MAIN/.venv"; do
+    for r in "$v/Scripts/ruff.exe" "$v/bin/ruff"; do
+        if [ -z "$RUFF" ] && [ -x "$r" ]; then
+            RUFF="$r"
+        fi
+    done
+done
+if [ -z "$RUFF" ]; then
+    echo "提交前检查：找不到 .venv 里的 ruff。先按 AGENTS.md「验证命令」建 .venv 装开发依赖；急着提交可以 git commit --no-verify" >&2
+    exit 1
+fi
+
+if ! "$RUFF" check .; then
+    echo "提交前检查：ruff check 没过。能自动修的运行 $RUFF check --fix .，改好再提交" >&2
+    exit 1
+fi
+
+if ! "$RUFF" format --check .; then
+    echo "提交前检查：格式不对。运行 $RUFF format . 改好，再 git add 后提交" >&2
+    exit 1
+fi
