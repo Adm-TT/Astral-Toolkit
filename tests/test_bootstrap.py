@@ -450,7 +450,7 @@ def _quiet_mining(monkeypatch):
     # 会话循环开 / 停时会写设置里的 live_on：换成只记录、不落盘的 RunFlag，别动真设置
     flag_writes = []
     monkeypatch.setattr(
-        bootstrap,
+        bootstrap.mining,
         "setting_run_flag",
         lambda key: RunFlag(key, lambda k, v: flag_writes.append((k, v))),
     )
@@ -942,13 +942,13 @@ def test_search_warmup_thread_builds_index_in_background(monkeypatch):
     from astral_toolkit.tasks.catalog_queries import search as item_search
 
     made = {}
-    real = bootstrap.OneShot
+    real = bootstrap.register.OneShot
 
     def record(name, phase, thread=None, *, factory=None):
         made[name] = factory
         return real(name, phase, thread, factory=factory)
 
-    monkeypatch.setattr(bootstrap, "OneShot", record)
+    monkeypatch.setattr(bootstrap.register, "OneShot", record)
     app = bootstrap.build("test")
     try:
         calls = []
@@ -1055,7 +1055,7 @@ def test_mining_analysis_views_and_links_are_wired_by_bootstrap(monkeypatch, tmp
         monkeypatch.setattr(mod, name, boom)
     flags = []
     monkeypatch.setattr(
-        bootstrap,
+        bootstrap.mining,
         "setting_run_flag",
         lambda key: flags.append(key) or RunFlag(key, lambda k, v: None),
     )

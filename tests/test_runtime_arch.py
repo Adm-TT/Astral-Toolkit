@@ -2963,7 +2963,7 @@ def test_fs_b5_tasks_without_module_binding():
         source = _fs_b5_tasks_source(name)
         assert not _fs_b5_first_arg_bad(source, expected), name
 
-    bootstrap_source = (_ROOT / "bootstrap.py").read_text(encoding="utf-8")
+    bootstrap_source = (_ROOT / "bootstrap" / "assemble.py").read_text(encoding="utf-8")
     assert not _fs_b5_bind_all_refs(
         bootstrap_source, ("mining", "hover", "system", "navigation")
     )

@@ -290,7 +290,9 @@ def test_live_scan_resumes_after_restart(monkeypatch, tmp_path):
         monkeypatch.setattr(cls, "start", lambda self: None)
     monkeypatch.setattr(monitor, "start", lambda: None)  # 不起 perfmon 常驻线程
     monkeypatch.setattr(OCR, "warmup", lambda: None)  # 不预热 OCR
-    monkeypatch.setattr(bootstrap, "_warm_search_index", lambda: None)  # 不预热搜索索引
+    monkeypatch.setattr(
+        bootstrap.register, "_warm_search_index", lambda: None
+    )  # 不预热搜索索引
     monkeypatch.setattr(gamedata, "warm_up", lambda: None)  # 不建游戏数据库
     monkeypatch.setattr(t_sys, "_online_loop", lambda *a: None)  # 测试里不联网检查更新
     # 新的一份（装配时登记的更新服务也用这份，所以在装配前换）：不永久置 loop；不补发真实反馈
@@ -392,7 +394,7 @@ def test_live_session_isolation(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(screen, "grab", lambda: frame)
     monkeypatch.setattr(
-        bootstrap,
+        bootstrap.mining,
         "setting_run_flag",
         lambda key: RunFlag(key, lambda k, v: None),
     )
@@ -1011,7 +1013,7 @@ def test_live_key_hint_says_stopping_when_refused(monkeypatch):
 
     flag_writes = []
     monkeypatch.setattr(
-        bootstrap,
+        bootstrap.mining,
         "setting_run_flag",
         lambda key: RunFlag(key, lambda k, v: flag_writes.append((k, v))),
     )
