@@ -14,7 +14,7 @@ import time
 from typing import Any
 
 from ..contracts.displayinfo_area import KEY as _AREA_KEY
-from ..contracts.displayinfo_area import REGION as REGION  # 测试和老代码照旧从这里拿
+from ..contracts.displayinfo_area import REGION
 
 UPSCALE = 2
 
