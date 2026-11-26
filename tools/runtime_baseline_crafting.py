@@ -199,7 +199,9 @@ def call_mineral_info(name=""):
 
 
 def call_wikelo_uses(name_en="", name_zh=""):
-    from astral_toolkit.crafting import wikelo
+    from astral_toolkit.tasks import (
+        wikelo,
+    )  # 全名判断在业务层传进领域层（2026-11-26 边界拆分），直接调 crafting.wikelo 会丢全名检查
 
     return wikelo.uses(name_en=name_en, name_zh=name_zh)
 

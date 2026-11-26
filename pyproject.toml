@@ -141,7 +141,6 @@ ignore_imports = [
     "astral_toolkit.crafting.goal_market -> astral_toolkit.trade.providers.http",
     "astral_toolkit.crafting.stockplaces -> astral_toolkit.navigation.navigate",
     "astral_toolkit.crafting.stockplaces -> astral_toolkit.navigation.position",
-    "astral_toolkit.crafting.wikelo -> astral_toolkit.trade.names",
 ]
 
 # 领域之间不互相引用：交易不 import 另外三个领域

@@ -130,18 +130,10 @@ def load():
         return []
 
 
-def _full_name(name_en, name_zh):
-    """汉化包 / 矿物表里精确对得上的全名（F8 认准了的、物品查询页点开的），不是 OCR 截断的半截名字"""
-    from ..trade.names import canonical_exact
-
-    try:
-        return canonical_exact(name_zh or "", name_en or "") is not None
-    except Exception:
-        return False
-
-
-def uses(name_en="", name_zh=""):
-    """这样东西（英文名/中文名）在哪些兑换里要用：[(兑换, 需要的数量, 单位)]"""
+def uses(name_en="", name_zh="", is_full=None):
+    """这样东西（英文名/中文名）在哪些兑换里要用：[(兑换, 需要的数量, 单位)]。
+    is_full：() → 是不是汉化包 / 矿物表里精确对得上的全名（是就不放宽成包含）。名字对照在交易那边，领域之间不互相引用，
+    所以由业务层传进来；不传当成不是全名，名字对不上就放宽成包含。产品代码一律调 tasks/wikelo.uses，别直接调这里"""
     from .. import gamedata
 
     fe, fz = _fold(name_en), _fold(name_zh)
@@ -151,9 +143,7 @@ def uses(name_en="", name_zh=""):
         )
     except gamedata.GamedataError:
         return []
-    return _rules.uses(
-        name_en, name_zh, pairs, load, lambda: _full_name(name_en, name_zh)
-    )
+    return _rules.uses(name_en, name_zh, pairs, load, is_full or (lambda: False))
 
 
 def search(text):
