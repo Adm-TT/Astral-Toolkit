@@ -4,7 +4,7 @@
 
 - 名称：AT（Astral Toolkit，中文名天枢 Dubhe）
 - 一句话：《星际公民》的免费、非官方中文玩家工具——读屏识别采矿信号和扫描面板、制造蓝图、导航、物品查询、库存和目标清单。给开着游戏边玩边看的中文玩家用。
-- 技术栈：Python 3.12（venv + pip，依赖锁版本）；本机 HTTP 服务 + 原生 JS 前端；窗口外壳 C# WinUI3 + WebView2（ATShell，退回 Edge `--app`）；识别用 RapidOCR + ONNX Runtime（CPU / DirectML）；打包 PyInstaller + Velopack；没有数据库，数据是本地 JSON 文件。
+- 技术栈：Python 3.12（venv + pip，依赖锁版本）；本机 HTTP 服务 + 原生 JS 前端；窗口外壳 C# WinUI3 + WebView2（ATShell，退回 Edge `--app`）；识别用 RapidOCR + ONNX Runtime（CPU / DirectML）；打包 PyInstaller + Velopack；数据：库存是本地 SQLite 数据库（`trade/storage.py`，升级走 `trade/migrate.py`），游戏数据建成只读 SQLite 库（`gamedata/`），设置和其余数据是本地 JSON 文件。
 - 目标：
   1. 1.1.3（新架构）正式版已发布（2026-11-01）；之后保持稳定，按模块继续拆分（OCR 已拆到 `astral_toolkit/ocr/`）。
   2. 导航（主城、空间站内设施）准确可用。
