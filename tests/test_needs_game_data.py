@@ -12,7 +12,12 @@ from tests.needs_game_data import NEEDS_GAME_DATA
 
 def test_list_names_real_tests_in_run_all():
     """名单里的模块都在 run_all 的 MODULES 里、测试函数都还在：改名或删了要同步改名单"""
-    from tests.run_all import MODULES
+    # 经 run_all 跑时它是 __main__：别再 import 一遍 tests.run_all，那会把临时目录、userdata 改道全重做一次
+    main = sys.modules.get("__main__")
+    MODULES = (
+        getattr(main, "MODULES", None)
+        or importlib.import_module("tests.run_all").MODULES
+    )
 
     for mod, names in NEEDS_GAME_DATA.items():
         assert mod in MODULES, mod

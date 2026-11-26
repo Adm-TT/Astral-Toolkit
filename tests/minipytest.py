@@ -154,8 +154,9 @@ def run_module(modname, skip=None):
     for name, fn in list(vars(m).items()):
         if not (name.startswith("test_") and callable(fn)):
             continue
-        if name in skip:
-            skips += 1
+        if name in skip:  # 参数化的按组数算，和本机全跑时的计数对得上
+            params = getattr(fn, "_params", None)
+            skips += len(params[1]) if params else 1
             print("SKIP", modname, name, skip[name])
             continue
         cases = [{}]
