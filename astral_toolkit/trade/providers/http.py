@@ -7,7 +7,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-# 挂牌品质档位的规则 2026-11-26 挪到 contracts（制造查市价也用，不再引用交易）；这里照旧能 import
+# 挂牌品质档位的规则 2026-11-26 挪到 contracts（制造查市价也用，不再引用交易）。
+# 交易内部（scm / pricing / market_text）和 tasks 照旧从这里拿，长期保留这个入口
 from ...contracts.market_quality import quality_group as quality_group
 
 
