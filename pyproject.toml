@@ -36,3 +36,124 @@ exclude = [
     "tools/shell/ATShell/obj",
     "tools/publish_hk.py",
 ]
+
+# 分层边界检查（import-linter，2026-11-26 接入）：把 AGENTS.md「分层」那条写成规则。
+# 运行：.venv\Scripts\lint-imports.exe（在仓库根目录，自动读这里）。只看代码里的 import，不运行代码，不要游戏数据。
+# 只拦直接 import（allow_indirect_imports）：经过 gamedata / update 这些公共层绕过去的间接依赖现在 12 个方向全连着，先不管。
+# ignore_imports 是接入前的老越界（2026-11-26 dev，模块对为单位），只用来登记老问题，不准往里加新的；
+# 拆掉一处就把对应那行删掉。删了还留着的那行会报错（unmatched_ignore_imports_alerting 默认 error），所以名单只会越来越短。
+# 注意：登记是按「模块 → 模块」，已登记的一对里再多写一个 import 拦不住，审查时留意。
+[tool.importlinter]
+root_package = "astral_toolkit"
+
+# 界面层只调业务层（tasks），不直接 import 领域层：接口 app/api 现在 0 处；
+# presenters / overlay / nav_marker 绕开接口层的 18 处 import（11 对模块）是老问题（2026-11-26 老大定也要管）
+[[tool.importlinter.contracts]]
+id = "app-no-domain"
+name = "界面层（app，含 api / presenters / overlay）不直接调领域层"
+type = "forbidden"
+source_modules = ["astral_toolkit.app"]
+forbidden_modules = ["astral_toolkit.mining", "astral_toolkit.navigation", "astral_toolkit.crafting", "astral_toolkit.trade"]
+allow_indirect_imports = true
+ignore_imports = [
+    "astral_toolkit.app.nav_marker -> astral_toolkit.navigation.marker",
+    "astral_toolkit.app.nav_marker -> astral_toolkit.navigation.navigate",
+    "astral_toolkit.app.overlay -> astral_toolkit.navigation.displayinfo",
+    "astral_toolkit.app.presenters.crafting -> astral_toolkit.crafting.classify",
+    "astral_toolkit.app.presenters.crafting -> astral_toolkit.crafting.labels",
+    "astral_toolkit.app.presenters.crafting -> astral_toolkit.crafting.materials",
+    "astral_toolkit.app.presenters.crafting -> astral_toolkit.crafting.quality",
+    "astral_toolkit.app.presenters.mining -> astral_toolkit.mining.analysis",
+    "astral_toolkit.app.presenters.nav -> astral_toolkit.navigation.navigate",
+    "astral_toolkit.app.presenters.nav -> astral_toolkit.navigation.views",
+    "astral_toolkit.app.presenters.wikelo -> astral_toolkit.crafting.wikelo_rules",
+]
+
+# 领域层不 import 界面（app）
+[[tool.importlinter.contracts]]
+id = "domain-no-ui"
+name = "领域层不碰界面（app）"
+type = "forbidden"
+source_modules = ["astral_toolkit.mining", "astral_toolkit.navigation", "astral_toolkit.crafting", "astral_toolkit.trade"]
+forbidden_modules = ["astral_toolkit.app"]
+allow_indirect_imports = true
+ignore_imports = [
+    "astral_toolkit.mining.screen -> astral_toolkit.app.preview",
+]
+
+# 依赖只能往下：领域层不 import 业务层
+[[tool.importlinter.contracts]]
+id = "domain-no-tasks"
+name = "领域层不往上调业务层（tasks）"
+type = "forbidden"
+source_modules = ["astral_toolkit.mining", "astral_toolkit.navigation", "astral_toolkit.crafting", "astral_toolkit.trade"]
+forbidden_modules = ["astral_toolkit.tasks"]
+allow_indirect_imports = true
+ignore_imports = [
+    "astral_toolkit.crafting.goals -> astral_toolkit.tasks.trade",
+    "astral_toolkit.trade.console -> astral_toolkit.tasks.catalog_queries.acquire",
+]
+
+# 领域之间不互相引用：采矿不 import 另外三个领域
+[[tool.importlinter.contracts]]
+id = "mining-independent"
+name = "领域之间不互相引用：采矿（mining）"
+type = "forbidden"
+source_modules = ["astral_toolkit.mining"]
+forbidden_modules = ["astral_toolkit.navigation", "astral_toolkit.crafting", "astral_toolkit.trade"]
+allow_indirect_imports = true
+ignore_imports = [
+    "astral_toolkit.mining.laser -> astral_toolkit.crafting.crafting",
+    "astral_toolkit.mining.laser -> astral_toolkit.crafting.labels",
+    "astral_toolkit.mining.laser -> astral_toolkit.crafting.quality",
+    "astral_toolkit.mining.mining_area -> astral_toolkit.navigation.halo",
+    "astral_toolkit.mining.mining_area -> astral_toolkit.navigation.navigate",
+]
+
+# 领域之间不互相引用：导航不 import 另外三个领域
+[[tool.importlinter.contracts]]
+id = "navigation-independent"
+name = "领域之间不互相引用：导航（navigation）"
+type = "forbidden"
+source_modules = ["astral_toolkit.navigation"]
+forbidden_modules = ["astral_toolkit.mining", "astral_toolkit.crafting", "astral_toolkit.trade"]
+allow_indirect_imports = true
+ignore_imports = [
+    "astral_toolkit.navigation.navigate -> astral_toolkit.mining.mining_area",
+]
+
+# 领域之间不互相引用：制造不 import 另外三个领域
+[[tool.importlinter.contracts]]
+id = "crafting-independent"
+name = "领域之间不互相引用：制造（crafting）"
+type = "forbidden"
+source_modules = ["astral_toolkit.crafting"]
+forbidden_modules = ["astral_toolkit.mining", "astral_toolkit.navigation", "astral_toolkit.trade"]
+allow_indirect_imports = true
+ignore_imports = [
+    "astral_toolkit.crafting.crafting -> astral_toolkit.mining.data",
+    "astral_toolkit.crafting.crafting -> astral_toolkit.mining.locations",
+    "astral_toolkit.crafting.crafting -> astral_toolkit.mining.quality",
+    "astral_toolkit.crafting.goals -> astral_toolkit.trade.console",
+    "astral_toolkit.crafting.goals -> astral_toolkit.trade.matching",
+    "astral_toolkit.crafting.goals -> astral_toolkit.trade.models",
+    "astral_toolkit.crafting.goals -> astral_toolkit.trade.providers.http",
+    "astral_toolkit.crafting.stockplaces -> astral_toolkit.navigation.navigate",
+    "astral_toolkit.crafting.stockplaces -> astral_toolkit.navigation.position",
+    "astral_toolkit.crafting.wikelo -> astral_toolkit.trade.names",
+]
+
+# 领域之间不互相引用：交易不 import 另外三个领域
+[[tool.importlinter.contracts]]
+id = "trade-independent"
+name = "领域之间不互相引用：交易（trade）"
+type = "forbidden"
+source_modules = ["astral_toolkit.trade"]
+forbidden_modules = ["astral_toolkit.mining", "astral_toolkit.navigation", "astral_toolkit.crafting"]
+allow_indirect_imports = true
+ignore_imports = [
+    "astral_toolkit.trade.console -> astral_toolkit.crafting.stockplaces",
+    "astral_toolkit.trade.inspector -> astral_toolkit.crafting.crafting",
+    "astral_toolkit.trade.inspector -> astral_toolkit.mining.data",
+    "astral_toolkit.trade.names -> astral_toolkit.mining.data",
+]
