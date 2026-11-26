@@ -5,7 +5,7 @@
 
 规矩：
 - 只登记「缺数据就过不了」的测试，按模块分组写清缺什么；写错名字、测试改名或删掉了，CI 会报错，不会悄悄不跑。
-- 新写的测试最好自己在缺数据时 skip（像「没有星图数据」那样），不用往这里加。
+- 新写的测试最好自己在缺数据时 skip（像「没有星图数据」那样），不用往这里加；登记过的测试改成自己会 skip 了，就从这里删掉。
 """
 
 NEEDS_GAME_DATA: dict[str, set[str]] = {
@@ -13,7 +13,6 @@ NEEDS_GAME_DATA: dict[str, set[str]] = {
     "tests.test_mining": {
         "test_crafting_dataset_and_links",
         "test_nav_matches_starmap",
-        "test_overlay_paint_rules",
         "test_crafted_head_quality",
         "test_laser_power_naming_on_craft_page",
         "test_craft_stats_and_detail_structure",

@@ -7,11 +7,17 @@
 
 cd "$(git rev-parse --show-toplevel)" || exit 1
 
-if [ -x .venv/Scripts/ruff.exe ]; then
-    RUFF=.venv/Scripts/ruff.exe
-elif [ -x .venv/bin/ruff ]; then
-    RUFF=.venv/bin/ruff
-else
+# 先找本 worktree 的 .venv；没有就用主克隆的（worktree 一般不另建 venv）
+MAIN="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)"
+RUFF=
+for v in .venv "$MAIN/.venv"; do
+    for r in "$v/Scripts/ruff.exe" "$v/bin/ruff"; do
+        if [ -z "$RUFF" ] && [ -x "$r" ]; then
+            RUFF="$r"
+        fi
+    done
+done
+if [ -z "$RUFF" ]; then
     echo "提交前检查：找不到 .venv 里的 ruff。先按 AGENTS.md「验证命令」建 .venv 装开发依赖；急着提交可以 git commit --no-verify" >&2
     exit 1
 fi

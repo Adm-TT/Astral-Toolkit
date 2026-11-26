@@ -94,10 +94,3 @@ jobs:
           AT_NO_GAME_DATA: "1"
         run: ./.venv/Scripts/python.exe -X utf8 -m tests.run_all
 
-      # PROBE（临时，开 PR 前删）：不跳过跑一遍，看 Windows 上缺数据到底挂哪些
-      - name: probe 不跳过
-        if: always()
-        continue-on-error: true
-        env:
-          AT_FEEDBACK_OFF: "1"
-        run: ./.venv/Scripts/python.exe -X utf8 -m tests.run_all

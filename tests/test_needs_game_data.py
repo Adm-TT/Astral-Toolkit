@@ -1,6 +1,8 @@
 """云端 CI 跳过名单（tests/needs_game_data.py）和 minipytest 的跳过参数"""
 
+import contextlib
 import importlib
+import io
 import sys
 import types
 
@@ -32,16 +34,21 @@ def _run_fake(skip):
 
     m.test_a, m.test_b = test_a, test_b  # type: ignore[attr-defined]
     sys.modules[m.__name__] = m
+    out = io.StringIO()
     try:
-        return minipytest.run_module(m.__name__, skip), sorted(ran)
+        with contextlib.redirect_stdout(out):  # 别往全量日志里打这里故意造的 FAIL
+            got = minipytest.run_module(m.__name__, skip)
+        return got, sorted(ran), out.getvalue()
     finally:
         del sys.modules[m.__name__]
 
 
 def test_run_module_skips_listed_tests():
-    assert _run_fake({"test_b": "没有数据"}) == ((1, 0, 1), ["a"])
+    got, ran, out = _run_fake({"test_b": "没有数据"})
+    assert (got, ran) == ((1, 0, 1), ["a"]) and "SKIP" in out and "没有数据" in out
 
 
 def test_run_module_fails_on_stale_skip_name():
     """名单里写了不存在的测试：记一个失败，其余照跑"""
-    assert _run_fake({"test_gone": "没有数据"}) == ((2, 1, 0), ["a", "b"])
+    got, ran, out = _run_fake({"test_gone": "没有数据"})
+    assert (got, ran) == ((2, 1, 0), ["a", "b"]) and "test_gone" in out
