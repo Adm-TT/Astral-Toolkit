@@ -1806,15 +1806,9 @@ def test_crafting_reaches_up_into_tasks_only_where_listed():
 
 
 def test_trade_reaches_up_into_tasks_only_where_listed():
-    """trade 在 tasks 下层，不该反过来导入 tasks，只许减不许加：console.material_source 转给
-    tasks/catalog_queries/acquire 是目录迁移 Q3b 搬走获取途径以后留的转发（目标链 crafting/goals 还在用；
-    老大 11-07 定留着转发、钉住这一条），目标改用新实现时删。字符串导入本项目的模块、裸 import astral_toolkit 一律算"""
-    allowed = {
-        "console.py": {
-            "astral_toolkit.tasks.catalog_queries.acquire",
-            "astral_toolkit.tasks.catalog_queries.acquire.material_source",
-        },
-    }
+    """trade 在 tasks 下层，不该反过来导入 tasks：console.material_source 那条转发 2026-11-26 删了（目标改由 tasks/goals
+    直接调 acquire），现在一处都不许有。字符串导入本项目的模块、裸 import astral_toolkit 一律算"""
+    allowed = {}
     seen, sneaky = {}, []
     files = sorted((_ROOT / "trade").rglob("*.py"))
     assert files
@@ -2465,7 +2459,6 @@ def test_mining_worker_does_not_start_its_own_scan_loop():
 _FS_B1_CONSOLE = "astral_toolkit.trade.console"
 _FS_B1_OLD_ALIASES = {
     f"{_FS_B1_CONSOLE}.SOURCE_ZH": {"astral_toolkit/tasks/goals.py"},
-    f"{_FS_B1_CONSOLE}.material_source": {"astral_toolkit/crafting/goal_market.py"},
 }
 _FS_B1_DELETED = {
     f"{_FS_B1_CONSOLE}.{name}"
@@ -2485,6 +2478,7 @@ _FS_B1_DELETED = {
         "tooltip_name",
         "plausible_name",
         "_cursor_on_image",  # 盘点（目录迁移 R5）改从 trade.inspector 拿，旧名字删了
+        "material_source",  # 目标改由 tasks/goals 直接调 acquire（2026-11-26 边界拆分），转发删了
     )
 }
 

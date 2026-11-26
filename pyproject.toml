@@ -91,7 +91,6 @@ forbidden_modules = ["astral_toolkit.tasks"]
 allow_indirect_imports = true
 ignore_imports = [
     "astral_toolkit.crafting.goals -> astral_toolkit.tasks.trade",
-    "astral_toolkit.trade.console -> astral_toolkit.tasks.catalog_queries.acquire",
 ]
 
 # 领域之间不互相引用：采矿不 import 另外三个领域
@@ -137,7 +136,6 @@ ignore_imports = [
     "astral_toolkit.crafting.goals -> astral_toolkit.trade.console",
     "astral_toolkit.crafting.goals -> astral_toolkit.trade.matching",
     "astral_toolkit.crafting.goals -> astral_toolkit.trade.models",
-    "astral_toolkit.crafting.goal_market -> astral_toolkit.trade.console",
     "astral_toolkit.crafting.goal_market -> astral_toolkit.trade.providers.http",
     "astral_toolkit.crafting.stockplaces -> astral_toolkit.navigation.navigate",
     "astral_toolkit.crafting.stockplaces -> astral_toolkit.navigation.position",

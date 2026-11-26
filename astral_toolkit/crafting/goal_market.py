@@ -1,23 +1,8 @@
-"""去哪弄、多少钱：材料的获取途径和玩家市场最低挂牌价（2026-11-26 从 crafting/goals.py 搬出来，只搬家）"""
-
-from functools import lru_cache
-
-
-# ---------------------------------------------------------------- 去哪弄、多少钱
+"""多少钱：玩家市场最低挂牌价（2026-11-26 从 crafting/goals.py 搬出来，只搬家）。
+「去哪弄」（where_to_get）同日挪到 tasks/goals：它要调业务层的 acquire，领域层不往上调（边界拆分）"""
 
 
-@lru_cache(maxsize=512)
-def where_to_get(en):
-    """去哪弄的事实：商店最便宜在哪 / 去哪挖 / 维科洛特殊材料说明 / 开箱掉落（tasks/catalog_queries/acquire.material_source，
-    经 trade/console 转过来）；查不到、出错给 None。那一句话由目标页用例拼（tasks/goals 调 app/presenters/wikelo.source_text，
-    目录迁移收尾）"""
-    try:
-        from ..trade.console import material_source
-
-        return material_source(en) or None
-    except Exception:
-        return None
-
+# ---------------------------------------------------------------- 多少钱
 
 # 挂牌单位 → 每 SCU 要乘几（按 SCU 算的需求只认这些；按「个」算的只认 unit）
 PER_SCU = {"SCU": 1, "cSCU": 100, "uSCU": 1_000_000}

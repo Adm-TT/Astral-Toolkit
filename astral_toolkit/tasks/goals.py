@@ -8,6 +8,7 @@
 """
 
 from concurrent.futures import ThreadPoolExecutor
+from functools import lru_cache
 import re
 import time
 
@@ -47,6 +48,7 @@ def clear_caches():
     _crafting_uc.clear_caches()
     _wikelo_uc.clear_caches()
     _SHORT.update(t=0.0, map={})
+    where_to_get.cache_clear()
 
 
 try:
@@ -148,6 +150,19 @@ def crafting_zh(opt):
     return material_zh(name)
 
 
+@lru_cache(maxsize=512)
+def where_to_get(en):
+    """去哪弄的事实：商店最便宜在哪 / 去哪挖 / 维科洛特殊材料说明 / 开箱掉落（catalog_queries/acquire.material_source）；
+    查不到、出错给 None。那一句话由 _goals_view 调 app/presenters/wikelo.source_text 拼。
+    2026-11-26 从 crafting/goal_market 挪上来：以前领域层经 trade/console.material_source 转发往上调 tasks（边界拆分删了转发）"""
+    try:
+        from .catalog_queries.acquire import material_source
+
+        return material_source(en) or None
+    except Exception:
+        return None
+
+
 def _goals_view():
     t = trade()
     p = G.plan(t)
@@ -158,9 +173,9 @@ def _goals_view():
     for g in p["goals"]:
         for r in g["rows"]:
             if r["short"] > 0:
-                r["tip"] = _present_wikelo.source_text(G.where_to_get(r["en"]))
+                r["tip"] = _present_wikelo.source_text(where_to_get(r["en"]))
     for t_item in p["shortfall"]:
-        t_item["tip"] = _present_wikelo.source_text(G.where_to_get(t_item["en"]))
+        t_item["tip"] = _present_wikelo.source_text(where_to_get(t_item["en"]))
     for g in p["goals"]:
         if g.get("kind") != "craft" or g.get("missing"):
             continue

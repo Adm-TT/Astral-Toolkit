@@ -9,7 +9,7 @@
 2026-11-26 拆出去三块（只搬家，行为不变），名字照旧从这里拿：
 - goal_list：目标清单存取（goals.json）
 - goal_needs：每个目标要什么
-- goal_market：去哪弄、市价
+- goal_market：市价（去哪弄 2026-11-26 挪到 tasks/goals）
 留在这里的是库存那几块（挑批次、认物品、按优先级分库存、完成时扣库存、入库），库存重做时一起处理。
 测试要换 goals.json 的位置，换 goal_list.FILE（换这里的没用）。
 """
@@ -17,7 +17,7 @@
 from .goal_list import _LOCK, _load_strict, _update, load
 from .goal_list import add as add, save as save, update as update  # 只是转出去
 from .goal_market import PER_SCU as PER_SCU  # 只是转出去
-from .goal_market import market_price as market_price, where_to_get as where_to_get
+from .goal_market import market_price as market_price
 from .goal_needs import requirements
 
 # 交易模块的品质档 → 这一档最低品质（qN 只知道在哪一档，按下限算才不会高估）

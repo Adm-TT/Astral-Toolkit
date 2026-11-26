@@ -1,5 +1,6 @@
 """交易的旧总入口里库存那半边：Trade（库存库 + 物品目录 + 行情查询）、data_directory、ore_item、_quality，
-和给冻结调用方（目标）留的两个旧名字（SOURCE_ZH、material_source；盘点那个 _cursor_on_image 目录迁移 R5 删了）。
+和给冻结调用方（目标）留的旧名字 SOURCE_ZH（material_source 2026-11-26 删了：目标改由 tasks/goals 直接调 acquire；
+盘点那个 _cursor_on_image 目录迁移 R5 删了）。
 
 命令行版 2026-11-06 删了（F 段 B3）；行情显示搬到 trade/market_text，名字比较搬到 trade/matching，
 维科洛材料来源搬到 crafting/acquire（F 段 B1；目录迁移 Q3b 起在 tasks/catalog_queries/acquire）；库存这半边等新库存。
@@ -25,15 +26,6 @@ from .storage import Database
 from .market_text import (
     SOURCE_ZH as SOURCE_ZH,
 )  # 目标（tasks/goals）：目标链改从 trade.market_text 拿时删
-
-
-def material_source(name_en):
-    """目标（crafting/goals）用的旧名字：目标改用新实现时删。目录迁移 Q3b 起转给 tasks/catalog_queries/acquire——
-    trade 往上调 tasks 只许这一处（老大 11-07 定：留着转发、钉住这一条；门禁 test_trade_reaches_up_into_tasks_only_where_listed）。
-    目录迁移收尾起转过来的是事实，那一句话由 tasks/goals 调 app/presenters/wikelo.source_text 拼"""
-    from ..tasks.catalog_queries.acquire import material_source as f
-
-    return f(name_en)
 
 
 def data_directory():
