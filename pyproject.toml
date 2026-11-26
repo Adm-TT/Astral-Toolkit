@@ -136,7 +136,6 @@ ignore_imports = [
     "astral_toolkit.crafting.goals -> astral_toolkit.trade.console",
     "astral_toolkit.crafting.goals -> astral_toolkit.trade.matching",
     "astral_toolkit.crafting.goals -> astral_toolkit.trade.models",
-    "astral_toolkit.crafting.goal_market -> astral_toolkit.trade.providers.http",
     "astral_toolkit.crafting.stockplaces -> astral_toolkit.navigation.navigate",
     "astral_toolkit.crafting.stockplaces -> astral_toolkit.navigation.position",
 ]

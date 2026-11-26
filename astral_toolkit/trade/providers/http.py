@@ -7,6 +7,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+# 挂牌品质档位的规则 2026-11-26 挪到 contracts（制造查市价也用，不再引用交易）。
+# 交易内部（scm / pricing / market_text）和 tasks 照旧从这里拿，长期保留这个入口
+from ...contracts.market_quality import quality_group as quality_group
+
 
 class SourceError(Exception):
     def __init__(self, state: str, message: str, retry_after: datetime | None = None):
@@ -25,34 +29,6 @@ def decimal_price(value) -> Decimal | None:
         return result
     except (InvalidOperation, ValueError):
         return None
-
-
-def quality_group(value) -> str:
-    if value is None or isinstance(value, bool):
-        return "unknown"
-    try:
-        n = int(value)
-        if n != float(value) or not 0 <= n <= 1000:
-            return "unknown"
-        return "q" + str(
-            0
-            if n == 0
-            else 1
-            if n < 500
-            else 2
-            if n < 600
-            else 3
-            if n < 700
-            else 4
-            if n < 800
-            else 5
-            if n < 900
-            else 6
-            if n < 950
-            else 7
-        )
-    except (ValueError, TypeError, OverflowError):
-        return "unknown"
 
 
 class HTTPStatusError(Exception):

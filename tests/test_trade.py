@@ -795,6 +795,33 @@ def test_scientific_decimal():
     assert decimal_price("0.123456789") == Decimal("0.123456789")
 
 
+def test_quality_group_tiers_and_reexport():
+    """挂牌品质档位挪到 contracts 后：档位边界不变，trade.providers.http 拿到的还是同一个函数"""
+    from astral_toolkit.contracts.market_quality import quality_group
+    from astral_toolkit.trade.providers import http
+
+    assert http.quality_group is quality_group
+    cases = {
+        0: "q0",
+        1: "q1",
+        499: "q1",
+        500: "q2",
+        599: "q2",
+        600: "q3",
+        700: "q4",
+        800: "q5",
+        900: "q6",
+        949: "q6",
+        950: "q7",
+        1000: "q7",
+        "650": "q3",
+    }
+    for value, group in cases.items():
+        assert quality_group(value) == group, value
+    for bad in (None, True, -1, 1001, 1.5, "bad"):
+        assert quality_group(bad) == "unknown", bad
+
+
 def test_scm_empty_is_not_zero():
     def handle(req):
         name = "scm-items.json" if "item-search" in req.url.path else "scm-list2.json"

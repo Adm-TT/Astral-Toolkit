@@ -93,6 +93,8 @@ def test_read_calls_diag_only_when_asked(monkeypatch):
     monkeypatch.setattr("astral_toolkit.navigation.gridtext.note", lambda ok: None)
     calls = []
     monkeypatch.setattr(displayinfo, "_diag", lambda *args, **kwargs: calls.append(1))
+    # 前面的测试跑过真的采矿助手会留下 6 秒「让路」窗口（全局 _YIELD），这里不能受它影响
+    monkeypatch.setattr(displayinfo, "yielding", lambda: False)
     mode = {"miss": False}
     good = {**displayinfo.parse([]), "global": (1.0, 2.0, 3.0)}
 
