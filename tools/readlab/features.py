@@ -181,9 +181,12 @@ def _radar(img: Any, point: "tuple[int, int] | None" = None) -> Result:
 
 # ---------------------------------------------------------------- 右上角调试信息（导航用）
 def _nav(img: Any, point: "tuple[int, int] | None" = None) -> Result:
+    from astral_toolkit.contracts import displayinfo_area
     from astral_toolkit.navigation import displayinfo
 
-    r = Result(shapes=[_region("nav.displayinfo", displayinfo.REGION, img, "调试信息")])
+    r = Result(
+        shapes=[_region(displayinfo_area.KEY, displayinfo_area.REGION, img, "调试信息")]
+    )
     info = displayinfo.parse(displayinfo.lines_of(img)) or {}
     if info.get("global") or info.get("location") or info.get("zone"):
         r.lines.append(f"地点 {info.get('location')}｜区域 {info.get('zone')}")

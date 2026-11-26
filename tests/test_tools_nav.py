@@ -1686,7 +1686,8 @@ def test_nav_marker_projection():
     import math
     from astral_toolkit.navigation import navigate as n
     from astral_toolkit.app import overlay as o
-    from astral_toolkit.navigation.displayinfo import parse, REGION
+    from astral_toolkit.contracts.displayinfo_area import REGION
+    from astral_toolkit.navigation.displayinfo import parse
 
     assert parse(["CamDir: 23 9 -142 FOV: 78 Focal: 0.10"])["fov"] == 78
     assert parse(["CamDir: 23 9 -142 FOV: 999"])["fov"] is None

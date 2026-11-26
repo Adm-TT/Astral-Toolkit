@@ -1535,11 +1535,16 @@ def test_hotkeys_worker_and_keyboard_entry_stay_apart():
 
 def test_navigation_views_and_marker_stay_pure():
     """视图和记号只算数：不反向拿 app / tasks / runtime / 设置；记号还不读时间。"""
-    for name in ("views.py", "marker.py"):
-        path = _ROOT / "navigation" / name
+    for path in (
+        _ROOT / "navigation" / "views.py",
+        _ROOT / "contracts" / "nav_marker.py",
+    ):
         source = path.read_text(encoding="utf-8")
-        assert _pure_navigation_violations(source) == [], name
-    marker = (_ROOT / "navigation" / "marker.py").read_text(encoding="utf-8")
+        assert _pure_navigation_violations(source) == [], path.name
+    assert not (
+        _ROOT / "navigation" / "marker.py"
+    ).exists()  # 挪到 contracts 了，老路径不许回来
+    marker = (_ROOT / "contracts" / "nav_marker.py").read_text(encoding="utf-8")
     marker_mods = list(_imports_in_source(marker, "astral_toolkit.navigation"))
     assert _forbidden(marker_mods, ("time",)) == []
     for bad in (

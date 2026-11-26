@@ -5,7 +5,7 @@ bootstrap._nav_marker 造好交给导航线程（线程不认识悬浮窗和 nav
 import time
 from typing import Any, Callable
 
-from ..navigation import marker as _marker
+from ..contracts import nav_marker as _marker
 from .presenters import nav as _present_nav
 
 MARKER_STALE = 4.0  # 右上角多少秒没读到就收起导航记号（城里偶尔几次读不到，1.5 秒就收会一直闪，2026-10-27 实测）

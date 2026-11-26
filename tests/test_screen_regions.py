@@ -161,8 +161,8 @@ SHIPPED = {
 
 
 def test_shipped_regions_equal_code_defaults():
+    from astral_toolkit.contracts import displayinfo_area
     from astral_toolkit.mining import screen, signals
-    from astral_toolkit.navigation import displayinfo
     from astral_toolkit.trade import inspector
 
     data = json.loads(sr.PATH.read_text(encoding="utf-8"))
@@ -187,7 +187,7 @@ def test_shipped_regions_equal_code_defaults():
     assert (inspector.BODY_Y0, inspector.BODY_Y1) == inv.BODY_ROWS
     assert screen.SEARCH == SHIPPED["mining.search"]
     assert signals.CENTER_TAG == SHIPPED["mining.center_tag"]
-    assert displayinfo.REGION == SHIPPED["nav.displayinfo"]
+    assert displayinfo_area.REGION == SHIPPED[displayinfo_area.KEY]
 
 
 def test_readers_follow_the_region_file(tmp_path, monkeypatch):
