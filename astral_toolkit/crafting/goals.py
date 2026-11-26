@@ -17,7 +17,7 @@
 from .goal_list import _LOCK, _load_strict, _update, load
 from .goal_list import add as add, save as save, update as update  # 只是转出去
 from .goal_market import PER_SCU as PER_SCU  # 只是转出去
-from .goal_market import market_price as market_price, where_to_get as where_to_get
+from .goal_market import market_price as market_price
 from .goal_needs import requirements
 
 # 交易模块的品质档 → 这一档最低品质（qN 只知道在哪一档，按下限算才不会高估）

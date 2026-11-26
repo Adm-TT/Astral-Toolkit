@@ -1096,10 +1096,10 @@ def test_nav_goals_router_roundtrip(monkeypatch, tmp_path):
     assert got["data"] == want and any(w["name"] == "测试点" for w in want)
 
 
-def test_where_to_get_goes_through_console_to_material_source(monkeypatch):
-    """目标的「去哪弄」经 trade/console 的转发拿物品查询内部实现的 material_source（目录迁移 Q3b 起；老大 11-07 定
-    留着转发、门禁钉住，goals 换新实现时删）：转错函数、转错路径（where_to_get 的 try 会吞成空）都要红"""
-    from astral_toolkit.crafting import goals
+def test_where_to_get_calls_material_source(monkeypatch):
+    """目标的「去哪弄」由 tasks/goals 直接调物品查询的 material_source（2026-11-26 删了 trade/console 的转发）：
+    转错函数、转错路径（where_to_get 的 try 会吞成空）都要红"""
+    from astral_toolkit.tasks import goals
     from astral_toolkit.tasks.catalog_queries import acquire
 
     monkeypatch.setattr(acquire, "material_source", lambda en: {"note": "来源：" + en})
@@ -1134,7 +1134,7 @@ def test_goals_view_tip_written_by_presenter(monkeypatch):
         },
     )
     facts = {"A": {"note": "说明甲"}, "C": {"buy": (5, "店", "地")}}
-    monkeypatch.setattr(G, "where_to_get", lambda en: facts.get(en))
+    monkeypatch.setattr(T, "where_to_get", lambda en: facts.get(en))
     p = T._goals_view()
     rows = p["goals"][0]["rows"]
     assert rows[0]["tip"] == "说明甲" and "tip" not in rows[1]

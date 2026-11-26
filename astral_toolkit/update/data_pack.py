@@ -259,7 +259,6 @@ def clear_caches():
         )  # 矿价 / 精炼站加成（prices.json）→ 内置表（2026-10-28 整体审查：以前窗口从没读过它）
     except Exception:
         pass
-    _clear("crafting.goals", "where_to_get")
     try:
         from .. import gamedata
 
