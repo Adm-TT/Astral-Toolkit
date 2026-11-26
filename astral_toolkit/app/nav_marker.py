@@ -40,6 +40,7 @@ class _NavMarker:
         settings: Callable[[], dict[str, Any]],
         hud: Callable[[], Any],
         diag: Callable[[Any], None],
+        project: Callable[..., tuple[dict[str, Any], str]],
         clock: Callable[[], float] | None = None,
     ) -> None:
         self._pos = positions
@@ -50,6 +51,7 @@ class _NavMarker:
         self._settings = settings
         self._hud = hud
         self._diag = diag
+        self._project = project  # 目标投到屏幕上的位置和距离文字（tasks/navigation_views.marker_projection）
         self._clock = clock if clock is not None else time.time
         self.cfg: dict[str, Any] = {"on": True, "at": 0.0}
         self.cam_last: dict[str, Any] = {"t": 0.0, "cam": None}
@@ -69,8 +71,6 @@ class _NavMarker:
         """导航记号（2026-10-27）：每圈先判断该不该显示（还没算出位置、到了、跨星系、1.5 秒没读到、切出游戏、玩家关了、
         采矿助手开着——记号窗口读屏时会被涂黑，会挡住扫描面板和雷达信号），不该显示就收起；
         该显示且右上角有新截图（停着只转镜头也算）就按镜头朝向和视角重算位置。返回这次画的截图时间，收起了返回 None"""
-        from ..navigation import navigate as n
-
         t, g, info = self._pos.snapshot().current
         h = state.get("here")
         # 镜头方向来自读屏，没有类型；走到投影那一步时一定有值
@@ -104,17 +104,18 @@ class _NavMarker:
         try:
             a = self._game_area()
             fov = _marker.pick_fov(info.get("fov"), self._last_fov)
-            tg = n.target_global(target, data, info.get("t"), ref)
-            pr = n.project(
+            pr, label = self._project(
+                target,
+                data,
+                info.get("t"),
+                ref,
                 g,
                 cam,
                 fov,
-                tg,
                 a["width"],
                 a["height"],
                 vertical=self._setting("fov_axis", "v") != "h",
             )
-            label = _present_nav.marker_label(pr["dist"])
             model = _present_nav.marker_model(a, pr, label)
             self._draw(model)
             return t

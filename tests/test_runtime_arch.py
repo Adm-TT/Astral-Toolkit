@@ -1421,6 +1421,7 @@ _NAV_PURE_FORBIDDEN = (
     "astral_toolkit.system",
 )
 _NAV_PRESENTER_FORBIDDEN = (
+    "astral_toolkit.navigation",  # 2026-11-26 起要查游戏数据的文字在 tasks/navigation_views，展示层不碰导航
     "astral_toolkit.runtime",
     "astral_toolkit.infrastructure",
     "astral_toolkit.tasks",
@@ -1560,7 +1561,7 @@ def test_navigation_views_and_marker_stay_pure():
 
 
 def test_nav_presenter_imports():
-    """导航展示层只读展示模型和 navigation 纯计算，不回头拿运行环境 / 任务 / 引擎。"""
+    """导航展示层只读展示模型，不碰 navigation（查游戏数据的文字在 tasks/navigation_views），不回头拿运行环境 / 任务 / 引擎。"""
     path = _ROOT / "app/presenters/nav.py"
     source = path.read_text(encoding="utf-8")
     assert _nav_presenter_violations(source) == [], path.name
@@ -1571,6 +1572,7 @@ def test_nav_presenter_imports():
         "from ..overlay import Overlay",
         "from ..hud_state import _hud",
         "from ...core.settings import load",
+        "def f():\n    from ...navigation import navigate as n\n",
         "import importlib\nimportlib.import_module('astral_toolkit.tasks.navigation')",
     ):
         assert _nav_presenter_violations(bad), bad

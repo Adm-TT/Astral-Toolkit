@@ -5,7 +5,7 @@ NV-B3 / NV-B4（2026-11-05）：HUD 记号（_NavMarker）、三个视图和导�
 tasks/navigation 取的东西，现在由 bootstrap 造对象时传进来（_NavMarker 的依赖、NavLinks），本模块不再动态导入 tasks。
 
 目录迁移 R2（2026-11-07）：本模块只留线程、会话和一轮的先后。导航分析（analysis：tasks/navigation_analysis）、
-排版（views：app/presenters/nav 的三个视图、活动磁贴、读位置的说法）、导航日志那一行（NavLinks.trace）都由
+排版（views：三个视图在 tasks/navigation_views，活动磁贴、读位置的说法在 app/presenters/nav）、导航日志那一行（NavLinks.trace）都由
 bootstrap 接进来；HUD 记号搬到 app/nav_marker.py，游戏事件线程搬到 runtime/workers/game_events.py。
 
 RT-B5b：导航线程 / 停止 / 提交边界 / 重试全部交给 runtime/session.py 的 SessionLoop；
@@ -115,7 +115,7 @@ class NavAnalysis(Protocol):
 
 @dataclass(frozen=True)
 class NavViews:
-    """导航线程要的排版（目录迁移 R2）：app/presenters/nav 实现，bootstrap 接进来"""
+    """导航线程要的排版（目录迁移 R2）：三个视图在 tasks/navigation_views，磁贴和读位置说法在 app/presenters/nav，bootstrap 接进来"""
 
     space: Callable[..., Any]  # 太空路标（实时定位）：space_view_of
     station: Callable[..., Any]  # 空间站里走路：station_view_of

@@ -46,6 +46,7 @@ def _nav_marker(pos: Any, live: Any, mode: str, view: Any) -> _NavMarker:
     from ..app import hud_state
     from ..infrastructure.platform import window
     from ..navigation import displayinfo
+    from ..tasks import navigation_views
 
     return _NavMarker(
         pos,
@@ -56,6 +57,7 @@ def _nav_marker(pos: Any, live: Any, mode: str, view: Any) -> _NavMarker:
         settings=view.all,
         hud=hud_state._hud if mode == "desktop" else _no_hud,
         diag=_debug_only(marker_diag, _debug_on(view)),
+        project=navigation_views.marker_projection,
     )
 
 
@@ -140,15 +142,27 @@ def _nav_analysis() -> NavAnalysis:
     return navigation_analysis
 
 
-def _nav_views() -> NavViews:
-    """导航线程要的排版（目录迁移 R2）：太空 / 空间站 / 地面三个视图、活动磁贴、右上角读位置的说法，都在 app/presenters/nav"""
+def _nav_activity(session_id: Any, payload: Any, state_view: Any) -> Any:
+    """导航活动磁贴：展示层排，payload 没带好目标名字时用业务层 navigation_views.target_label 现查"""
     from ..app.presenters import nav as present_nav
+    from ..tasks import navigation_views
+
+    return present_nav.activity(
+        session_id, payload, state_view, label_of=navigation_views.target_label
+    )
+
+
+def _nav_views() -> NavViews:
+    """导航线程要的排版（目录迁移 R2）：太空 / 空间站 / 地面三个视图在业务层 tasks/navigation_views（要查游戏数据配文字），
+    活动磁贴、右上角读位置的说法在 app/presenters/nav；磁贴见 _nav_activity"""
+    from ..app.presenters import nav as present_nav
+    from ..tasks import navigation_views
 
     return NavViews(
-        space=present_nav.space_view_of,
-        station=present_nav.station_view_of,
-        ground=present_nav.ground_view_of,
-        activity=present_nav.activity,
+        space=navigation_views.space_view_of,
+        station=navigation_views.station_view_of,
+        ground=navigation_views.ground_view_of,
+        activity=_nav_activity,
         tip=present_nav.nav_tip,
         di_help=present_nav.DI_HELP,
     )
