@@ -11,7 +11,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 from ..contracts.textkeys import fold_mixed_loose as _fold  # noqa: E402
 from ..core.paths import DATA  # noqa: E402
-from . import wikelo_rules as _rules  # noqa: E402
+from ..contracts.crafting import wikelo_rules as _rules  # noqa: E402
 
 OUT = DATA / "wikelo.json"
 TYPE_ZH = {

@@ -217,7 +217,7 @@ def test_b5_has_blueprint_matches_old_hover(monkeypatch):
 def test_b5_wikelo_rewards_match_old_hover(monkeypatch):
     """CR-B5：F8「可通过维科洛兑换获得」和原来 hover 里那个列表推导一样"""
     from astral_toolkit.crafting import wikelo as wikelo_mod
-    from astral_toolkit.crafting import wikelo_rules
+    from astral_toolkit.contracts.crafting import wikelo_rules
 
     contracts = [
         {"t": "甲", "rz": "极地涂装 巡逻车", "rewards": []},

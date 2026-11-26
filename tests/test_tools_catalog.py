@@ -192,7 +192,7 @@ def test_wikelo_data_and_lookup():
     assert wikelo.uses("", "纯净科力晶")
     asg = wikelo.search("Asgard")
     assert asg and "Wikelo Favor" in [r["n"] for r in asg[0]["req"]]
-    from astral_toolkit.crafting import wikelo_rules
+    from astral_toolkit.contracts.crafting import wikelo_rules
 
     text = wikelo_rules.describe(
         asg[0], lambda n: "可买：某店" if n == "ASD Secure Drive" else ""
@@ -798,7 +798,7 @@ def test_names_follow_game_localization(tmp_path, monkeypatch):
     舰船部件按类名取名字（同名不同物品不再张冠李戴），双语包才拿来用"""
     from astral_toolkit.update import localization
     from astral_toolkit.crafting import build_crafting as B
-    from astral_toolkit.crafting import labels
+    from astral_toolkit.contracts.crafting import labels
 
     assert (
         labels.SUB_ZH["size3"] == "S3"

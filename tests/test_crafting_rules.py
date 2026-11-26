@@ -7,15 +7,8 @@
 from types import SimpleNamespace
 from typing import Any
 
-from astral_toolkit.crafting import (
-    classify,
-    labels,
-    listing,
-    materials,
-    mix,
-    quality,
-    reverse,
-)
+from astral_toolkit.contracts.crafting import classify, labels, materials, quality
+from astral_toolkit.crafting import listing, mix, reverse
 
 
 def _bp(n, z, g, t, s, u, m, sec, d, slots, src=None, nsrc=0):

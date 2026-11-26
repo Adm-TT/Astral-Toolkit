@@ -9,15 +9,15 @@ describe、header、uses_report 是取数据 + 排版，外面（目标、F8、�
 """
 
 from ..contracts.textkeys import blueprint_norm, blueprint_search_norm
-from . import labels as _labels
+from ..contracts.crafting import labels as _labels
 from . import listing as _listing
-from . import materials as _materials
+from ..contracts.crafting import materials as _materials
 from . import mix as _mix
-from . import quality as _quality
+from ..contracts.crafting import quality as _quality
 from . import reverse as _reverse
 
 # 旧名字：只留给还冻着的调用方，别处一律从纯规则文件拿（test_runtime_arch 管着）
-# 目标（crafting/goals、tasks/goals）：目标链改从 crafting.labels / crafting.quality 拿时删
+# 目标（crafting/goals、tasks/goals）：目标链改从 contracts.crafting.labels / quality 拿时删
 slot_zh = _labels.slot_zh
 laser_total = _quality.laser_total
 # 读屏（trade/inspector，熊老师的模块）：他改成从 crafting.reverse 拿时删

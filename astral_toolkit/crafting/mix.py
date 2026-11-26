@@ -5,7 +5,7 @@
 
 import math
 
-from .labels import PROP_ZH, slot_zh
+from ..contracts.crafting.labels import PROP_ZH, slot_zh
 
 # ---------------------------------------------------------------- 混料计算器
 # 制造机里同一种材料可以投好几箱不同品质的，成品这一项的品质 = 按投入量（SCU）加权平均。

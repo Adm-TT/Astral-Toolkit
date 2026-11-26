@@ -4,7 +4,7 @@
 
 import re
 
-from ...crafting.wikelo_rules import req_label
+from ...contracts.crafting.wikelo_rules import req_label
 
 
 def _loot_text(lt):

@@ -98,7 +98,7 @@
                 }
             }
         ],
-        "./astral_toolkit/crafting/materials.py": [
+        "./astral_toolkit/contracts/crafting/materials.py": [
             {
                 "code": "reportOptionalOperand",
                 "range": {
@@ -108,7 +108,7 @@
                 }
             }
         ],
-        "./astral_toolkit/crafting/quality.py": [
+        "./astral_toolkit/contracts/crafting/quality.py": [
             {
                 "code": "reportCallIssue",
                 "range": {

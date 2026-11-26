@@ -337,7 +337,7 @@ def test_where_to_mine():
 
 def test_crafting_dataset_and_links():
     from astral_toolkit.crafting import crafting as C
-    from astral_toolkit.crafting import quality
+    from astral_toolkit.contracts.crafting import quality
 
     bps = C.blueprints()
     assert len(bps) == 1634  # 4.10.3（2026-11-13 换新数据；4.10.2 是 1618）
@@ -1381,7 +1381,7 @@ def test_laser_power_naming_on_craft_page():
         and "×1.40" in text
         and "相加" in text
     )
-    from astral_toolkit.crafting import quality
+    from astral_toolkit.contracts.crafting import quality
 
     eff = C.effect(bp, {1: 971, 2: 958})
     assert [p["name"] for x in eff for p in x["props"]] == [
