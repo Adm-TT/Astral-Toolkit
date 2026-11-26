@@ -6,8 +6,8 @@ NV-B1～B4 拆走 `tasks/mining.py` 里的导航函数时，这些字面量应�
 from types import SimpleNamespace
 
 from astral_toolkit.app import nav_marker
-from astral_toolkit.app.presenters import nav as present_nav
 from astral_toolkit.tasks import navigation as navigation_tasks
+from astral_toolkit.tasks import navigation_views
 from astral_toolkit.navigation import navigate as N
 
 
@@ -106,6 +106,7 @@ def _install_marker(
         settings=lambda: settings,
         hud=lambda: SimpleNamespace(marker=lambda data: _REC.hud.append(data)),
         diag=lambda why: _REC.diag.append(why),
+        project=navigation_views.marker_projection,
         clock=clock.time,
     )
     monkeypatch.setattr(marker, "enabled", lambda: ctl["marker_on"])
@@ -122,6 +123,7 @@ def _blank_marker(*, settings, clock=None, hud=lambda: None):
         settings=settings,
         hud=hud,
         diag=lambda _why: None,
+        project=navigation_views.marker_projection,
         clock=clock,
     )
 
@@ -141,7 +143,7 @@ def test_nav_view_far_city_and_plain(monkeypatch):
         "city": True,
         "city_zh": "目标城",
     }
-    assert present_nav.ground_view_of(here, city_target, {}) == {
+    assert navigation_views.ground_view_of(here, city_target, {}) == {
         "text": "这里",
         "inside": True,
         "body": "本星",
@@ -150,7 +152,7 @@ def test_nav_view_far_city_and_plain(monkeypatch):
     }
 
     plain_target = {"b": "B2"}
-    assert present_nav.ground_view_of(here, plain_target, {}) == {
+    assert navigation_views.ground_view_of(here, plain_target, {}) == {
         "text": "这里",
         "inside": True,
         "body": "本星",
@@ -178,7 +180,7 @@ def test_nav_view_same_body_steady_and_arrived(monkeypatch):
         "lon": 2.0,
     }
     target = {"b": "B1", "p": (4.0, 5.0, 6.0)}
-    assert present_nav.ground_view_of(here, target, {}) == {
+    assert navigation_views.ground_view_of(here, target, {}) == {
         "text": "这里",
         "inside": True,
         "body": "本星",
@@ -195,7 +197,7 @@ def test_nav_view_same_body_steady_and_arrived(monkeypatch):
         "arrived": False,
         "near": None,
     }
-    assert present_nav.ground_view_of(
+    assert navigation_views.ground_view_of(
         here, target, {}, steady=lambda brg: brg - 20.0
     ) == {
         "text": "这里",
@@ -220,7 +222,7 @@ def test_nav_view_same_body_steady_and_arrived(monkeypatch):
         surface_km=lambda a, t, r: 0.5,
         compass=lambda brg: "东",
     )
-    assert present_nav.ground_view_of(here, target, {}) == {
+    assert navigation_views.ground_view_of(here, target, {}) == {
         "text": "这里",
         "inside": True,
         "body": "本星",
@@ -257,7 +259,7 @@ def test_nav_view_city_uses_prev(monkeypatch):
     }
     target = {"b": "B1", "city": True, "up": (0.0, 1.0, 0.0)}
     prev = {"city": True, "arrived": True}
-    assert present_nav.ground_view_of(here, target, {}, prev=prev) == {
+    assert navigation_views.ground_view_of(here, target, {}, prev=prev) == {
         "text": "这里",
         "inside": True,
         "body": "本星",
@@ -301,7 +303,7 @@ def test_nav_view_hint_boundary(monkeypatch):
         deg_text=lambda brg: "88.8",
         nearby=lambda here, data: (3.2, {"n": "附近点"}),
     )
-    out = present_nav.ground_view_of(here, target, {})
+    out = navigation_views.ground_view_of(here, target, {})
     assert out["near"] == {"name": "附近点", "km": 3.2}
     assert (
         out["hint"]
@@ -315,7 +317,7 @@ def test_nav_view_hint_boundary(monkeypatch):
         label=lambda p: p["n"],
         deg_text=lambda brg: "88.8",
     )
-    assert "hint" not in present_nav.ground_view_of(here, target, {})
+    assert "hint" not in navigation_views.ground_view_of(here, target, {})
 
     _install_nav(
         monkeypatch,
@@ -324,7 +326,7 @@ def test_nav_view_hint_boundary(monkeypatch):
         label=lambda p: p["n"],
         deg_text=lambda brg: "88.8",
     )
-    assert "hint" not in present_nav.ground_view_of(here, target, {})
+    assert "hint" not in navigation_views.ground_view_of(here, target, {})
 
 
 def test_space_view_same_and_other_system(monkeypatch):
@@ -341,7 +343,7 @@ def test_space_view_same_and_other_system(monkeypatch):
         space_text=lambda g, target, data: "同一星系",
         SYS_ZH={"S1": "一号"},
     )
-    assert present_nav.space_view_of((0.0, 0.0, 0.0), {"b": "@S1"}, {}) == {
+    assert navigation_views.space_view_of((0.0, 0.0, 0.0), {"b": "@S1"}, {}) == {
         "space": True,
         "same_body": False,
         "inside": False,
@@ -361,7 +363,7 @@ def test_space_view_same_and_other_system(monkeypatch):
         space_text=lambda g, target, data: "另一星系",
         SYS_ZH={"S1": "一号"},
     )
-    assert present_nav.space_view_of((0.0, 0.0, 0.0), {"b": "@S1"}, {}) == {
+    assert navigation_views.space_view_of((0.0, 0.0, 0.0), {"b": "@S1"}, {}) == {
         "space": True,
         "same_body": False,
         "inside": False,
@@ -375,7 +377,7 @@ def test_space_view_same_and_other_system(monkeypatch):
         space_text=lambda g, target, data: "另一星系",
         SYS_ZH={},
     )
-    assert present_nav.space_view_of((0.0, 0.0, 0.0), {"b": "@S1"}, {})["far"] == (
+    assert navigation_views.space_view_of((0.0, 0.0, 0.0), {"b": "@S1"}, {})["far"] == (
         "目标位于 S1星系，需先跃迁到该星系"
     )
 
@@ -396,7 +398,7 @@ def test_station_view_branches(monkeypatch):
         station_text=lambda g, target, data, when, arrived: "到站",
         CITY_NEAR_M=500.0,
     )
-    assert present_nav.station_view_of(g, target_same, {}) == {
+    assert navigation_views.station_view_of(g, target_same, {}) == {
         "space": True,
         "city": True,
         "station": True,
@@ -416,7 +418,7 @@ def test_station_view_branches(monkeypatch):
         target_global=lambda target, data, when=None, ref=None: (999999.0, 0.0, 0.0),
         SYS_ZH={"S2": "二号"},
     )
-    assert present_nav.station_view_of(g, target_other, {}) == {
+    assert navigation_views.station_view_of(g, target_other, {}) == {
         "space": True,
         "city": True,
         "station": True,
@@ -430,7 +432,7 @@ def test_station_view_branches(monkeypatch):
         system_info=lambda g, data, **kw: ("S1", True),
         target_global=lambda target, data, when=None, ref=None: (60000.0, 0.0, 0.0),
     )
-    assert present_nav.station_view_of(g, {"city_zh": "远站"}, {}) == {
+    assert navigation_views.station_view_of(g, {"city_zh": "远站"}, {}) == {
         "space": True,
         "city": True,
         "station": True,
@@ -449,7 +451,7 @@ def test_station_view_branches(monkeypatch):
         station_text=lambda g, target, data, when, arrived: f"到了 {arrived}",
         CITY_NEAR_M=20000.0,
     )
-    assert present_nav.station_view_of(g, target_same, {}) == {
+    assert navigation_views.station_view_of(g, target_same, {}) == {
         "space": True,
         "city": True,
         "station": True,
@@ -471,7 +473,7 @@ def test_station_view_branches(monkeypatch):
         station_text=lambda g, target, data, when, arrived: f"到了 {arrived}",
         CITY_NEAR_M=20000.0,
     )
-    assert present_nav.station_view_of(g, target_same, {}) == {
+    assert navigation_views.station_view_of(g, target_same, {}) == {
         "space": True,
         "city": True,
         "station": True,
@@ -493,7 +495,7 @@ def test_station_view_branches(monkeypatch):
         station_text=lambda g, target, data, when, arrived: "没到",
         CITY_NEAR_M=1000.0,
     )
-    assert present_nav.station_view_of(g, {"b": "@S1"}, {}) == {
+    assert navigation_views.station_view_of(g, {"b": "@S1"}, {}) == {
         "space": True,
         "city": True,
         "station": True,
@@ -986,7 +988,7 @@ def test_nav_view_hint_needs_more_than_30_km(monkeypatch):
         label=lambda p: p["n"],
         deg_text=lambda brg: "88.8",
     )
-    assert present_nav.ground_view_of(here, target, {})["hint"] == (
+    assert navigation_views.ground_view_of(here, target, {})["hint"] == (
         "距离过远：先量子跳跃到 量子点（距目标 1.0 km），再朝 88.8° 飞行"
     )
 
@@ -1003,7 +1005,7 @@ def test_station_view_50_km_boundary(monkeypatch):
             station_text=lambda g, target, data, when, arrived: "到站",
             CITY_NEAR_M=500.0,
         )
-        out = present_nav.station_view_of(g, {"city_zh": "远站", "sys": "S1"}, {})
+        out = navigation_views.station_view_of(g, {"city_zh": "远站", "sys": "S1"}, {})
         assert ("far" in out) is far, d
         assert out["direct_m"] == d
 
@@ -1034,7 +1036,7 @@ def test_station_view_updown_sign(monkeypatch):
         station_text=lambda g, target, data, when, arrived: "到站",
         CITY_NEAR_M=500.0,
     )
-    out = present_nav.station_view_of(
+    out = navigation_views.station_view_of(
         (0.0, 0.0, 0.0), {"sys": "S1", "up": (0.0, 1.0, 0.0)}, {}
     )
     assert out["updown"] == 300.0
@@ -1053,9 +1055,9 @@ def test_nav_view_arrived_needs_less_than_1_km(monkeypatch):
     }
     for surface, arrived in ((1.0, False), (0.999, True), (1.5, False)):
         _install_nav(monkeypatch, surface_km=lambda a, t, r, s=surface: s)
-        assert present_nav.ground_view_of(here, target, {})["arrived"] is arrived, (
-            surface
-        )
+        assert (
+            navigation_views.ground_view_of(here, target, {})["arrived"] is arrived
+        ), surface
 
 
 def test_station_view_passes_reading_time_to_target_global(monkeypatch):
@@ -1067,5 +1069,30 @@ def test_station_view_passes_reading_time_to_target_global(monkeypatch):
             seen.append(when) or (0.0, 0.0, 0.0)
         ),
     )
-    present_nav.station_view_of((0.0, 0.0, 0.0), {"sys": "S1"}, {}, when=123.0)
+    navigation_views.station_view_of((0.0, 0.0, 0.0), {"sys": "S1"}, {}, when=123.0)
     assert seen == [123.0]
+
+
+def test_activity_label_falls_back_to_injected_lookup():
+    """活动磁贴上的目标名字：payload 带了好名字就用；没带时按目标点现查（bootstrap 接 tasks/navigation_views.target_label），
+    没接现查或现查出错就空着（展示层自己不碰 navigation，2026-11-26）"""
+    from astral_toolkit.app.presenters import nav as present_nav
+
+    named = SimpleNamespace(target_row={"label": "好名字"}, target={"n": "X"})
+    bare = SimpleNamespace(target_row=None, target={"n": "X"})
+    view = {"state": "running"}
+
+    def boom(_t):
+        raise KeyError("n")
+
+    assert present_nav.activity(1, named, view)["primary"]["value"] == "好名字"
+    assert (
+        present_nav.activity(1, bare, view, label_of=lambda t: f"查到 {t['n']}")[
+            "primary"
+        ]["value"]
+        == "查到 X"
+    )
+    assert present_nav.activity(1, bare, view)["primary"]["value"] is None
+    assert (
+        present_nav.activity(1, bare, view, label_of=boom)["primary"]["value"] is None
+    )

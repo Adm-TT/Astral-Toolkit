@@ -1003,28 +1003,35 @@ def test_search_warmup_thread_builds_index_in_background(monkeypatch):
 
 
 def test_nav_analysis_views_trace_and_game_events_are_wired_by_bootstrap(monkeypatch):
-    """导航线程（目录迁移 R2）要的东西都由 bootstrap 接：分析是 tasks/navigation_analysis 这个模块，排版是
-    app/presenters/nav 那几个，导航日志那一行接 tasks/navigation.nav_log；游戏事件线程只在 Windows 起、
+    """导航线程（目录迁移 R2）要的东西都由 bootstrap 接：分析是 tasks/navigation_analysis 这个模块，三个视图是
+    tasks/navigation_views 那几个、磁贴和读位置说法是 app/presenters/nav 的（磁贴现查名字接 navigation_views.target_label），导航日志那一行接 tasks/navigation.nav_log；游戏事件线程只在 Windows 起、
     量子到达让定位马上读、事件推总线「gamelog」、读日志的东西到线程开始时才造"""
     import sys
 
     from astral_toolkit import bootstrap
     from astral_toolkit.app import bus
+    from astral_toolkit.bootstrap import nav as bootstrap_nav
     from astral_toolkit.app.presenters import nav as present_nav
     from astral_toolkit.system import gamelog
     from astral_toolkit.tasks import navigation as navigation_tasks
-    from astral_toolkit.tasks import navigation_analysis
+    from astral_toolkit.tasks import navigation_analysis, navigation_views
 
     assert bootstrap._nav_analysis() is navigation_analysis
     v = bootstrap._nav_views()
-    assert (v.space, v.station, v.ground, v.activity, v.tip, v.di_help) == (
-        present_nav.space_view_of,
-        present_nav.station_view_of,
-        present_nav.ground_view_of,
-        present_nav.activity,
+    assert (v.space, v.station, v.ground, v.tip, v.di_help) == (
+        navigation_views.space_view_of,
+        navigation_views.station_view_of,
+        navigation_views.ground_view_of,
         present_nav.nav_tip,
         present_nav.DI_HELP,
     )
+    assert v.activity is bootstrap_nav._nav_activity
+    seen = []
+    monkeypatch.setattr(
+        present_nav, "activity", lambda *a, **k: seen.append((a, k)) or "磁贴"
+    )
+    assert v.activity(1, "p", {}) == "磁贴"
+    assert seen == [((1, "p", {}), {"label_of": navigation_views.target_label})]
     assert bootstrap._nav_links(object()).trace is navigation_tasks.nav_log
 
     made, sent = [], []

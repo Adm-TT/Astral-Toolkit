@@ -367,7 +367,7 @@ def test_nav_bearing_is_steady_when_standing_still(monkeypatch, tmp_path):
     """站着不动：右上角那行有时认不出，位置也不在「游戏给的」和「推算的」之间来回跳，显示的方位不变"""
     from astral_toolkit.navigation import navigate as n
     import astral_toolkit.runtime.workers.navigation as nav_mod
-    from astral_toolkit.app.presenters import nav as present_nav
+    from astral_toolkit.tasks import navigation_views
 
     if not n.CACHE.exists():
         import pytest
@@ -405,7 +405,9 @@ def test_nav_bearing_is_steady_when_standing_still(monkeypatch, tmp_path):
             )
             shown.add(
                 n.deg_text(
-                    present_nav.ground_view_of(h, target, n.load(), steady)["bearing"]
+                    navigation_views.ground_view_of(h, target, n.load(), steady)[
+                        "bearing"
+                    ]
                 )
             )
         assert len(shown) == 1
@@ -1776,7 +1778,7 @@ def test_game_events_from_log(tmp_path):
 def test_city_nav(monkeypatch, tmp_path):
     """城内导航：读 city_places.json（坏行跳过、改了文件重读），按米显示、8 米内到达、上下楼层提示"""
     import json  # noqa: F811
-    from astral_toolkit.app.presenters import nav as present_nav
+    from astral_toolkit.tasks import navigation_views
     from astral_toolkit.navigation import navigate as n
 
     rows = [
@@ -1845,11 +1847,11 @@ def test_city_nav(monkeypatch, tmp_path):
     assert n._short(dict(here, body="Hurston"), t).startswith("先量子跳到")
 
     monkeypatch.setattr(n, "here_text", lambda h, data: "")
-    v = present_nav.ground_view_of(here, t, {})
+    v = navigation_views.ground_view_of(here, t, {})
     assert (
         v["city"] and not v["arrived"] and 45 < v["direct_m"] < 60 and v["updown"] > 10
     )
-    assert present_nav.ground_view_of(near, t, {})["arrived"]
+    assert navigation_views.ground_view_of(near, t, {})["arrived"]
 
 
 def test_city_nav_review(monkeypatch, tmp_path):

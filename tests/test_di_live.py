@@ -204,6 +204,7 @@ def test_grid_miss_still_yields_to_mining(monkeypatch):
 def test_marker_keeps_last_camdir_for_one_frame():
     """坐标有、这一帧镜头方向没读出：1 秒内读到的接着用，记号不闪；超过 1 秒才收起，并记下收起原因（老大 11-03 实测）"""
     from astral_toolkit.app import nav_marker
+    from astral_toolkit.tasks import navigation_views
 
     hud, diag = [], []
     pos = SimpleNamespace(current=(0.0, None, None))
@@ -217,6 +218,7 @@ def test_marker_keeps_last_camdir_for_one_frame():
         settings=lambda: {"nav_marker": True, "fov_axis": "v"},
         hud=lambda: SimpleNamespace(marker=hud.append),
         diag=diag.append,
+        project=navigation_views.marker_projection,
     )
     tgt = {"space": True, "n": "1", "x": 1.0, "y": 0.0, "z": 0.0}
     state = {"here": {}}

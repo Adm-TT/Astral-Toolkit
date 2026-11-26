@@ -90,23 +90,25 @@ STATION_NAMES = [
 
 # ---------------------------------------------------------------- 调用适配
 def call_nav_view(here, target, data, steady=None, prev=None):
-    from astral_toolkit.app.presenters import (
-        nav as present_nav,
-    )  # R2 起三个视图在展示层
+    from astral_toolkit.tasks import (
+        navigation_views,
+    )  # 三个视图 2026-11-26 起在业务层（R2 时在展示层）
 
-    return present_nav.ground_view_of(here, target, data, steady=steady, prev=prev)
+    return navigation_views.ground_view_of(here, target, data, steady=steady, prev=prev)
 
 
 def call_station_view(g, target, data, when=None, prev=None, info=None):
-    from astral_toolkit.app.presenters import nav as present_nav
+    from astral_toolkit.tasks import navigation_views
 
-    return present_nav.station_view_of(g, target, data, when=when, prev=prev, info=info)
+    return navigation_views.station_view_of(
+        g, target, data, when=when, prev=prev, info=info
+    )
 
 
 def call_space_view(g, target, data):
-    from astral_toolkit.app.presenters import nav as present_nav
+    from astral_toolkit.tasks import navigation_views
 
-    return present_nav.space_view_of(g, target, data)
+    return navigation_views.space_view_of(g, target, data)
 
 
 def make_marker(positions, live):

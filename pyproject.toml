@@ -48,7 +48,7 @@ root_package = "astral_toolkit"
 
 # 界面层只调业务层（tasks），不直接 import 领域层：接口 app/api 现在 0 处；
 # presenters / overlay / nav_marker 绕开接口层的是老问题（接入时 18 处 import、11 对模块；2026-11-26 老大定也要管）。
-# 制造的标签排版纯规则已挪到 contracts/crafting，导航记号的纯计算挪到 contracts/nav_marker、右上角调试信息默认范围挪到 contracts/displayinfo_area，界面层从那里拿不算越界
+# 制造的标签排版纯规则已挪到 contracts/crafting，导航记号的纯计算挪到 contracts/nav_marker、右上角调试信息默认范围挪到 contracts/displayinfo_area，界面层从那里拿不算越界；导航三个视图要查游戏数据的文字、记号投影挪到业务层 tasks/navigation_views
 [[tool.importlinter.contracts]]
 id = "app-no-domain"
 name = "界面层（app，含 api / presenters / overlay）不直接调领域层"
@@ -57,10 +57,7 @@ source_modules = ["astral_toolkit.app"]
 forbidden_modules = ["astral_toolkit.mining", "astral_toolkit.navigation", "astral_toolkit.crafting", "astral_toolkit.trade"]
 allow_indirect_imports = true
 ignore_imports = [
-    "astral_toolkit.app.nav_marker -> astral_toolkit.navigation.navigate",
     "astral_toolkit.app.presenters.mining -> astral_toolkit.mining.analysis",
-    "astral_toolkit.app.presenters.nav -> astral_toolkit.navigation.navigate",
-    "astral_toolkit.app.presenters.nav -> astral_toolkit.navigation.views",
 ]
 
 # 领域层不 import 界面（app）

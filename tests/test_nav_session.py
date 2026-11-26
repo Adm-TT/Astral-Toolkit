@@ -8,6 +8,7 @@ from typing import Any
 from astral_toolkit.runtime.workers import navigation as navmod
 from astral_toolkit.app.presenters import nav as present_nav
 from astral_toolkit.tasks import navigation as navigation_tasks
+from astral_toolkit.tasks import navigation_views
 from astral_toolkit.runtime.session import RunState, Session, StopAttempt, StopInfo
 from tests.bootstrap_helpers import nav_deps
 from tests import nav_helpers
@@ -477,7 +478,9 @@ def test_space_steer_follows_camera_while_hovering(monkeypatch):
     monkeypatch.setattr(n, "locate", lambda *a, **k: {"inside": False, "body": None})
     monkeypatch.setattr(n, "read_clipboard", lambda: "")
     monkeypatch.setattr(
-        present_nav, "space_view_of", lambda g, t, d: {"space": True, "arrived": False}
+        navigation_views,
+        "space_view_of",
+        lambda g, t, d: {"space": True, "arrived": False},
     )
     monkeypatch.setattr(n, "space_text", lambda g, t, d: "直线 13.8 km")
     huds = []
@@ -613,7 +616,7 @@ def test_ground_tick_logs_nav_line_only_when_position_changes(monkeypatch):
         navigation_tasks, "nav_log", lambda here, info, view: logs.append(here)
     )
     monkeypatch.setattr(
-        present_nav,
+        navigation_views,
         "ground_view_of",
         lambda here, goal, data, steady=None, prev=None: {
             "bearing": 10.0,
@@ -745,7 +748,7 @@ def test_nav_log_at_most_every_0_2_seconds(monkeypatch):
         navigation_tasks, "nav_log", lambda here, info, view: logs.append(here)
     )
     monkeypatch.setattr(
-        present_nav,
+        navigation_views,
         "ground_view_of",
         lambda here, goal, data, steady=None, prev=None: {
             "bearing": 10.0,
@@ -874,7 +877,7 @@ def test_ground_tick_no_steer_when_close_in_city(monkeypatch):
         "m": 30.0
     }  # 在真值 15 和换的 50 之间：线程写死 15、或不经分析取阈值，这次就会给转向
     monkeypatch.setattr(
-        present_nav,
+        navigation_views,
         "ground_view_of",
         lambda here, goal, data, steady=None, prev=None: {
             "bearing": 10.0,
@@ -925,7 +928,9 @@ def test_nav_target_label_goes_through_analysis(monkeypatch):
 def test_start_ops_emits_starting_activity(monkeypatch):
     """开始导航那一刻的钩子 start_ops（SessionLoop 在锁里调，锁序由上面几条测着）先给一条「正在开始」的活动磁贴；
     payload 不对不给（R2 改坏检查补的，以前没人测）"""
-    monkeypatch.setattr(present_nav, "activity", lambda sid, p, v: ("活动", sid, p, v))
+    monkeypatch.setattr(
+        present_nav, "activity", lambda sid, p, v, **_k: ("活动", sid, p, v)
+    )
     worker = nav_helpers.worker(_FakePos(), _FakeCam(), threading.Lock())
     payload = navmod.NavPayload({"n": "X"}, {"key": "x"}, False)
     view = {

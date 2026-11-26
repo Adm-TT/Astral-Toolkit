@@ -1,6 +1,6 @@
 """导航视图的「算数」部分（NV-B1，从 tasks/mining.py 的 _space_view / _station_view / _nav_view 拆出）
 
-只放数、元组和布尔；中文文案都在 app/presenters/nav.py。navigate 的函数一律经 n.xxx 调（测试会换模块上的属性）。
+只放数、元组和布尔；中文文案在 tasks/navigation_views.py（2026-11-26 前在 app/presenters/nav.py）。navigate 的函数一律经 n.xxx 调（测试会换模块上的属性）。
 """
 
 import math
