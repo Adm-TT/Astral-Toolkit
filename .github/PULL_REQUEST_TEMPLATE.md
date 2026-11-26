@@ -34,5 +34,5 @@
 - [ ] 未提交 `data/`（游戏数据由负责人提供，不进仓库）
 - [ ] 没跑的验证及原因：
 - [ ] `tools/junk_check.py`（垃圾代码检查）通过：没有新加没人用的函数、复制粘贴、只给测试用的产品代码
-- [ ] 基线变化（`.basedpyright/baseline.json`、`tools/junk_baseline.json`、新增 `# noqa`）及原因：
+- [ ] 基线变化（`.basedpyright/baseline.json`、`tools/junk_baseline.json`、新增 `# noqa`、`pyproject.toml` 的 importlinter `ignore_imports`）及原因：
 - [ ] 发起人签字：我对这个 PR 的内容负责 —— @
