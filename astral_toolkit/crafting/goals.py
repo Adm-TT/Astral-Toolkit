@@ -5,17 +5,21 @@
 - 几个目标要同一种东西时，按优先级先满足排在前面的，同一份库存不重复算
 - 制造的品质门槛：库存里品质够的才算；品质「未知」的单独提示，不算进已有
 - 制造的某个部件有几种材料可选时，挑「还差得最少」的那种
+
+2026-11-26 拆出去三块（只搬家，行为不变），名字照旧从这里拿：
+- goal_list：目标清单存取（goals.json）
+- goal_needs：每个目标要什么
+- goal_market：去哪弄、市价
+留在这里的是库存那几块（挑批次、认物品、按优先级分库存、完成时扣库存、入库），库存重做时一起处理。
+测试要换 goals.json 的位置，换 goal_list.FILE（换这里的没用）。
 """
 
-import json
-import time
-import uuid
-from functools import lru_cache
+from .goal_list import _LOCK, _load_strict, _update, load
+from .goal_list import add as add, save as save, update as update  # 只是转出去
+from .goal_market import PER_SCU as PER_SCU  # 只是转出去
+from .goal_market import market_price as market_price, where_to_get as where_to_get
+from .goal_needs import requirements
 
-from ..core.paths import USER
-
-FILE = USER / "goals.json"
-MAX_TIMES = 99
 # 交易模块的品质档 → 这一档最低品质（qN 只知道在哪一档，按下限算才不会高估）
 GROUP_FLOOR = {
     "q0": 0,
@@ -27,166 +31,6 @@ GROUP_FLOOR = {
     "q6": 900,
     "q7": 950,
 }
-
-
-# ---------------------------------------------------------------- 存取
-
-
-def load():
-    """目标表（查询用：读不到就当没有）"""
-    try:
-        return _load_strict()
-    except RuntimeError:
-        return []
-
-
-def _load_strict():
-    """目标表（改写前用）：文件读不到或坏了就抛错，别当成空表（细查 2026-10-28：否则接着加一个目标会把整份覆盖掉）"""
-    try:
-        data = json.loads(FILE.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return []
-    except OSError as e:
-        raise RuntimeError(f"目标文件暂时读不到：{e}")
-    except ValueError as e:
-        raise RuntimeError(f"目标文件损坏（userdata 里的 goals.json）：{e}")
-    return (
-        [
-            g
-            for g in data
-            if isinstance(g, dict) and g.get("kind") in ("wikelo", "craft")
-        ]
-        if isinstance(data, list)
-        else []
-    )
-
-
-def save(goals):
-    from ..core.paths import write_json
-
-    write_json(FILE, goals, indent=1)
-
-
-def add(kind, ref, times=1):
-    if kind not in ("wikelo", "craft"):
-        raise ValueError("目标仅支持维科洛兑换或制造")
-    src = _source(kind, ref)
-    if not src:
-        raise ValueError("未找到此兑换或蓝图")
-    with _LOCK:
-        return _add(kind, ref, times, src)
-
-
-def _add(kind, ref, times, src):
-    goals = _load_strict()
-    for g in goals:  # 同一个目标再加一次：次数 +1
-        if g["kind"] == kind and g["ref"] == ref:
-            g["times"] = min(MAX_TIMES, g["times"] + max(1, int(times)))
-            save(goals)
-            return goals
-    goals.append(
-        {
-            "id": uuid.uuid4().hex[:10],
-            "kind": kind,
-            "ref": ref,
-            "times": max(1, min(MAX_TIMES, int(times))),
-            "title": _title(kind, src),
-            "at": time.time(),
-        }
-    )
-    save(goals)
-    return goals
-
-
-_LOCK = __import__(
-    "threading"
-).RLock()  # 读-改-写连在一起（审查 2026-10-28：两个请求同时改会丢一个）
-
-
-def update(gid, times=None, move=0, remove=False):
-    with _LOCK:
-        return _update(gid, times, move, remove)
-
-
-def _update(gid, times=None, move=0, remove=False):
-    goals = _load_strict()
-    i = next((n for n, g in enumerate(goals) if g["id"] == gid), None)
-    if i is None:
-        raise ValueError("未找到此目标")
-    if remove:
-        goals.pop(i)
-    else:
-        if times is not None:
-            goals[i]["times"] = max(1, min(MAX_TIMES, int(times)))
-        if move:
-            j = max(0, min(len(goals) - 1, i + (1 if move > 0 else -1)))
-            goals[i], goals[j] = goals[j], goals[i]
-    save(goals)
-    return goals
-
-
-# ---------------------------------------------------------------- 目标要什么
-
-
-def _source(kind, ref):
-    if kind == "wikelo":
-        from . import wikelo
-
-        return next((c for c in wikelo.load() if c["id"] == ref), None)
-    from .crafting import by_key
-
-    return by_key(ref)
-
-
-def _title(kind, src):
-    if kind == "wikelo":
-        reward = src["rz"] or "、".join(src["rewards"][:2]) or src["te"]
-        return f"维科洛：{src['t']}（换 {reward}）"
-    from .crafting import display_name
-
-    return f"制造：{display_name(src)}"
-
-
-def requirements(goal):
-    """[{"slot": 部件名或空, "alts": [{en, zh, qty, unit, minq}]}]，数量已乘次数"""
-    src = _source(goal["kind"], goal["ref"])
-    if not src:
-        return None
-    n = goal["times"]
-    out = []
-    if goal["kind"] == "wikelo":
-        for r in src["req"]:
-            out.append(
-                {
-                    "slot": "",
-                    "alts": [
-                        {
-                            "en": r["n"],
-                            "zh": r["z"],
-                            "qty": (r["q"] or 1) * n,
-                            "unit": r["u"],
-                            "minq": 0,
-                        }
-                    ],
-                }
-            )
-    else:
-        from .crafting import material_zh
-
-        for slot, opts, _mods in src["slots"]:
-            alts = [
-                {
-                    "en": name,
-                    "zh": material_zh(name),
-                    "qty": qty * n,
-                    "unit": "SCU" if k == "r" else "个",
-                    "minq": minq if minq > 1 else 0,
-                }
-                for k, name, qty, minq in opts
-            ]
-            if alts:
-                out.append({"slot": slot, "alts": alts})
-    return out
 
 
 # ---------------------------------------------------------------- 库存
@@ -608,56 +452,6 @@ def finish(trade, gid):
         "title": g["title"],
         "left": max(0, g["times"] - 1),
     }
-
-
-# ---------------------------------------------------------------- 去哪弄、多少钱
-
-
-@lru_cache(maxsize=512)
-def where_to_get(en):
-    """去哪弄的事实：商店最便宜在哪 / 去哪挖 / 维科洛特殊材料说明 / 开箱掉落（tasks/catalog_queries/acquire.material_source，
-    经 trade/console 转过来）；查不到、出错给 None。那一句话由目标页用例拼（tasks/goals 调 app/presenters/wikelo.source_text，
-    目录迁移收尾）"""
-    try:
-        from ..trade.console import material_source
-
-        return material_source(en) or None
-    except Exception:
-        return None
-
-
-# 挂牌单位 → 每 SCU 要乘几（按 SCU 算的需求只认这些；按「个」算的只认 unit）
-PER_SCU = {"SCU": 1, "cSCU": 100, "uSCU": 1_000_000}
-
-
-def market_price(trade, item_id, minq=0, unit=None):
-    """玩家市场（UEX / SCM）出售挂牌里最便宜的单价；没有挂牌返回 None。
-    unit 是需求的单位（「SCU」「个」）：给了就只比单位对得上的挂牌，并换算成每 SCU / 每个的价（单位对不上的不猜）"""
-    from decimal import Decimal
-    from ..trade.providers.http import quality_group
-
-    item = trade.catalog.get(item_id)
-    if not item:
-        return None
-    group = quality_group(minq) if minq else "q0"
-    best = None
-    for r in trade.prices(item, group, "sell"):
-        for s in r.stats or []:
-            v = s.minimum if s.minimum is not None else s.mean
-            if v is None:
-                continue
-            v, u = Decimal(v), s.key.unit
-            if unit == "SCU":
-                if u not in PER_SCU:
-                    continue
-                v, u = v * PER_SCU[u], "SCU"
-            elif unit is not None:
-                if u != "unit":
-                    continue
-                u = unit
-            if best is None or v < best[0]:
-                best = (v, r.source, u, s.key.currency)
-    return best
 
 
 def stock_line(trade, en, zh, qty, unit, quality, location, item_id=None):

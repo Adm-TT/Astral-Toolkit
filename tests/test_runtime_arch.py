@@ -2461,7 +2461,7 @@ def test_mining_worker_does_not_start_its_own_scan_loop():
 _FS_B1_CONSOLE = "astral_toolkit.trade.console"
 _FS_B1_OLD_ALIASES = {
     f"{_FS_B1_CONSOLE}.SOURCE_ZH": {"astral_toolkit/tasks/goals.py"},
-    f"{_FS_B1_CONSOLE}.material_source": {"astral_toolkit/crafting/goals.py"},
+    f"{_FS_B1_CONSOLE}.material_source": {"astral_toolkit/crafting/goal_market.py"},
 }
 _FS_B1_DELETED = {
     f"{_FS_B1_CONSOLE}.{name}"
