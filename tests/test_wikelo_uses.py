@@ -3,6 +3,7 @@
 
 from astral_toolkit.crafting import wikelo
 from astral_toolkit.gamedata import wikelo as gd_wikelo
+from astral_toolkit.tasks import wikelo as t_wikelo
 from astral_toolkit.trade import names
 
 _POLARIS = {
@@ -38,26 +39,26 @@ def _setup(monkeypatch, exact=()):
 def test_full_name_is_not_loosened_to_contains(monkeypatch):
     """极地冷却器不配「Polaris 点数」，岩层臂甲琥珀不配「岩层 臂甲」（11-06 老大截图）。"""
     _setup(monkeypatch)
-    assert wikelo.uses("Polar", "极地") == []
-    assert wikelo.uses("Strata Arms Amber", "岩层 臂甲 琥珀") == []
+    assert t_wikelo.uses("Polar", "极地") == []
+    assert t_wikelo.uses("Strata Arms Amber", "岩层 臂甲 琥珀") == []
 
 
 def test_full_name_does_not_match_the_ore(monkeypatch):
     """全名只认一样的：精炼的「杰金」不对维科洛要的「杰金矿石」（原矿和精炼分开，老大 2026-11-08 定）；原矿名一样就对上。"""
     _setup(monkeypatch)
-    assert wikelo.uses("Jaclium", "杰金") == []
-    assert wikelo.uses("", "杰金") == []
+    assert t_wikelo.uses("Jaclium", "杰金") == []
+    assert t_wikelo.uses("", "杰金") == []
     _setup(monkeypatch, exact=[(_ORE, _ORE["req"][0])])
-    assert wikelo.uses("Jaclium (Ore)", "杰金矿石") == [(_ORE, 20, "个")]
+    assert t_wikelo.uses("Jaclium (Ore)", "杰金矿石") == [(_ORE, 20, "个")]
 
 
 def test_truncated_name_is_still_loosened(monkeypatch):
     """OCR 截断的半截名字（汉化包里对不上）照旧放宽成包含。"""
     _setup(monkeypatch)
-    assert wikelo.uses("Polaris Bi", "") == [(_POLARIS, 15, "个")]
+    assert t_wikelo.uses("Polaris Bi", "") == [(_POLARIS, 15, "个")]
 
 
 def test_equal_name_found_first(monkeypatch):
     """名字相等的照旧最先用，不走放宽。"""
     _setup(monkeypatch, exact=[(_POLARIS, _POLARIS["req"][0])])
-    assert wikelo.uses("Polaris Bit", "Polaris 点数") == [(_POLARIS, 15, "个")]
+    assert t_wikelo.uses("Polaris Bit", "Polaris 点数") == [(_POLARIS, 15, "个")]

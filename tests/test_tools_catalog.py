@@ -5,6 +5,7 @@ import time
 from astral_toolkit.tasks.catalog_queries import shops
 from astral_toolkit.update import shops as shop_prices
 from astral_toolkit.crafting import wikelo
+from astral_toolkit.tasks import wikelo as t_wikelo
 from astral_toolkit.tasks.catalog_queries import loot
 from astral_toolkit.tasks.catalog_queries import acquire
 from astral_toolkit.navigation import position
@@ -335,7 +336,7 @@ def test_info_wires_lookups_into_facts(monkeypatch, tmp_path):
     )
     used = []
     monkeypatch.setattr(
-        wikelo,
+        t_wikelo,
         "uses",
         lambda en, zh="": (
             used.append((en, zh))

@@ -7,6 +7,23 @@ from ..crafting.wikelo_rules import note_for, rewarding
 _wk_cache = {}
 
 
+def uses(name_en="", name_zh=""):
+    """这样东西在哪些兑换里要用：[(兑换, 需要的数量, 单位)]。汉化包里精确对得上的全名（F8 认准了的、物品查询页点开的）
+    不放宽成包含，OCR 截断的半截名字照旧放宽（IQ-C1）；全名用交易的名字对照判断，再交给 crafting.wikelo"""
+    return wikelo.uses(
+        name_en, name_zh, is_full=lambda: _is_full_name(name_en, name_zh)
+    )
+
+
+def _is_full_name(name_en, name_zh):
+    from ..trade.names import canonical_exact
+
+    try:
+        return canonical_exact(name_zh or "", name_en or "") is not None
+    except Exception:
+        return False
+
+
 def clear_caches():
     """更新数据后清掉接口层的缓存"""
     _wk_cache.clear()

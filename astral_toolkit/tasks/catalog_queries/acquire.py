@@ -141,7 +141,7 @@ def info(name_en="", name_zh="", item_id=None, show_loot=True, exact=False):
         except Exception as e:
             out["loot"] = {"error": f"掉落数据出错：{e}"}
     try:
-        from ...crafting.wikelo import uses
+        from ..wikelo import uses
 
         out["wikelo"] = _rules.wikelo_rows(uses(name_en or name, name_zh))
     except Exception:

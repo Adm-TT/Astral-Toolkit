@@ -11,6 +11,7 @@ from astral_toolkit.crafting import wikelo
 from astral_toolkit.crafting import wikelo_rules
 from astral_toolkit.gamedata import wikelo as gd_wikelo
 from astral_toolkit.tasks import goals
+from astral_toolkit.tasks import wikelo as t_wikelo
 from astral_toolkit.tasks.catalog_queries import acquire as QA
 from astral_toolkit.trade import names
 
@@ -491,10 +492,10 @@ def test_wikelo_module_search(monkeypatch):
 def test_wikelo_uses_exact_names(monkeypatch):
     with _clean_caches():
         _install(monkeypatch)
-        assert wikelo.uses("Kopion Horn", "寇骈角") == [(_GEAR, 2, "个")]
-        assert wikelo.uses("Kopion Horn", "") == [(_GEAR, 2, "个")]
-        assert wikelo.uses("", "寇骈角") == [(_GEAR, 2, "个")]
-        assert wikelo.uses("", "") == []
+        assert t_wikelo.uses("Kopion Horn", "寇骈角") == [(_GEAR, 2, "个")]
+        assert t_wikelo.uses("Kopion Horn", "") == [(_GEAR, 2, "个")]
+        assert t_wikelo.uses("", "寇骈角") == [(_GEAR, 2, "个")]
+        assert t_wikelo.uses("", "") == []
 
 
 def test_wikelo_uses_empty_chinese_not_compared(monkeypatch):
@@ -510,15 +511,15 @@ def test_wikelo_uses_empty_chinese_not_compared(monkeypatch):
     }
     with _clean_caches():
         _install(monkeypatch, [row])
-        assert wikelo.uses("", " ") == []
-        assert wikelo.uses("Some Item", "") == [(row, 1, "个")]
+        assert t_wikelo.uses("", " ") == []
+        assert t_wikelo.uses("Some Item", "") == [(row, 1, "个")]
 
 
 def test_wikelo_uses_containment_min_length(monkeypatch):
     with _clean_caches():
         _install(monkeypatch)
-        assert wikelo.uses("aris", "") == [(_VEHICLE, 15, "个")]
-        assert wikelo.uses("Bit", "") == []
+        assert t_wikelo.uses("aris", "") == [(_VEHICLE, 15, "个")]
+        assert t_wikelo.uses("Bit", "") == []
 
 
 def test_wikelo_uses_full_name_not_loosened_distinct(monkeypatch):
@@ -531,7 +532,7 @@ def test_wikelo_uses_full_name_not_loosened_distinct(monkeypatch):
             return None
 
         monkeypatch.setattr(names, "canonical_exact", exact)
-        assert wikelo.uses("Polaris Bit Extra", "Polaris 点数 扩展") == []
+        assert t_wikelo.uses("Polaris Bit Extra", "Polaris 点数 扩展") == []
 
 
 def test_wikelo_uses_full_name_does_not_match_the_ore(monkeypatch):
@@ -555,9 +556,9 @@ def test_wikelo_uses_full_name_does_not_match_the_ore(monkeypatch):
             return None
 
         monkeypatch.setattr(names, "canonical_exact", exact)
-        assert wikelo.uses("Saldynium", "萨德宁") == []
-        assert wikelo.uses("", "萨德宁") == []
-        assert wikelo.uses("Saldynium (Ore)", "萨德宁矿石") == [(row, 7, "个")]
+        assert t_wikelo.uses("Saldynium", "萨德宁") == []
+        assert t_wikelo.uses("", "萨德宁") == []
+        assert t_wikelo.uses("Saldynium (Ore)", "萨德宁矿石") == [(row, 7, "个")]
 
 
 def test_wikelo_uses_keeps_order_and_units(monkeypatch):
@@ -584,7 +585,7 @@ def test_wikelo_uses_keeps_order_and_units(monkeypatch):
     ]
     with _clean_caches():
         _install(monkeypatch, rows)
-        got = [(c["t"], q, u) for c, q, u in wikelo.uses("Kopion Horn", "寇骈角")]
+        got = [(c["t"], q, u) for c, q, u in t_wikelo.uses("Kopion Horn", "寇骈角")]
         assert got == [
             (f"兑换{i}", i + 1, "个" if i % 2 == 0 else "SCU") for i in range(6)
         ]
