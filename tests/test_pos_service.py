@@ -168,7 +168,7 @@ def test_bootstrap_gives_reader_the_debug_switch(monkeypatch):
     def on():
         return True
 
-    monkeypatch.setattr(bootstrap, "_debug_on", lambda view: on)
+    monkeypatch.setattr(bootstrap.nav, "_debug_on", lambda view: on)
     p = bootstrap._pos_service("test", None)
     assert isinstance(p.reader, displayinfo.Reader)
     assert p.reader.debug is on and p.reader.every == 1.0

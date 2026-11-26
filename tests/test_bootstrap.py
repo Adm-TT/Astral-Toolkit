@@ -450,7 +450,7 @@ def _quiet_mining(monkeypatch):
     # 会话循环开 / 停时会写设置里的 live_on：换成只记录、不落盘的 RunFlag，别动真设置
     flag_writes = []
     monkeypatch.setattr(
-        bootstrap,
+        bootstrap.mining,
         "setting_run_flag",
         lambda key: RunFlag(key, lambda k, v: flag_writes.append((k, v))),
     )
@@ -939,16 +939,17 @@ def test_logwatch_reads_game_log_through_tasks_position():
 def test_search_warmup_thread_builds_index_in_background(monkeypatch):
     """搜索预热（Q1 起线程由 bootstrap 起，搜索模块 import 时不起）：后台 daemon 线程、名字 search-warmup，
     跑 _warm_search_index → tasks/catalog_queries/search.build_index；建索引出错不往外抛"""
+    from astral_toolkit.bootstrap import register as boot_register
     from astral_toolkit.tasks.catalog_queries import search as item_search
 
     made = {}
-    real = bootstrap.OneShot
+    real = boot_register.OneShot
 
     def record(name, phase, thread=None, *, factory=None):
         made[name] = factory
         return real(name, phase, thread, factory=factory)
 
-    monkeypatch.setattr(bootstrap, "OneShot", record)
+    monkeypatch.setattr(boot_register, "OneShot", record)
     app = bootstrap.build("test")
     try:
         calls = []
@@ -1055,7 +1056,7 @@ def test_mining_analysis_views_and_links_are_wired_by_bootstrap(monkeypatch, tmp
         monkeypatch.setattr(mod, name, boom)
     flags = []
     monkeypatch.setattr(
-        bootstrap,
+        bootstrap.mining,
         "setting_run_flag",
         lambda key: flags.append(key) or RunFlag(key, lambda k, v: None),
     )
